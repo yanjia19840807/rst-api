@@ -1,0 +1,70 @@
+package com.cmacgm.gbs.rst.api.cycletime.api;
+
+import java.util.UUID;
+
+import jakarta.validation.Valid;
+
+import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService;
+import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService.BaselineView;
+import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService.ManualBaselineRequest;
+import com.cmacgm.gbs.rst.api.security.RstPrincipal;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * Supervisor Cycle Time minimal endpoints (manual baseline + active read).
+ */
+@RestController
+@RequestMapping("/api/v1/supervisor/exercises/{exerciseId}/cycle-time")
+@PreAuthorize("hasRole('SUPERVISOR')")
+public class CycleTimeController {
+
+    private final CycleTimeService service;
+
+    /**
+     * Creates the Cycle Time controller.
+     *
+     * @param service Cycle Time service
+     */
+    public CycleTimeController(CycleTimeService service) {
+        this.service = service;
+    }
+
+    /**
+     * Creates an active MANUAL Cycle Time baseline.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @param request manual baseline payload
+     * @return created baseline
+     */
+    @PostMapping("/manual")
+    @ResponseStatus(HttpStatus.CREATED)
+    public BaselineView createManual(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @Valid @RequestBody ManualBaselineRequest request) {
+        return service.createManual(principal.userId(), exerciseId, request);
+    }
+
+    /**
+     * Returns the active Cycle Time baseline.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @return active baseline
+     */
+    @GetMapping("/active")
+    public BaselineView getActive(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return service.getActive(principal.userId(), exerciseId);
+    }
+}

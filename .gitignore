@@ -179,6 +179,10 @@ build/
 ### VS Code ###
 .vscode/
 
+### Local secrets (never commit) ###
+.env
+.env.*
+!.env.example
 ### Some additional ignores (sort later)
 *.DS_Store
 *.sw?

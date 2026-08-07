@@ -1,0 +1,293 @@
+package com.cmacgm.gbs.rst.api.associateddata.api;
+
+import java.util.List;
+import java.util.UUID;
+
+import jakarta.validation.Valid;
+
+import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService;
+import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.CalendarRequest;
+import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.CalendarView;
+import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.DailyVolumeRequest;
+import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.DailyVolumeView;
+import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.MonthlyVolumeRequest;
+import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.MonthlyVolumeView;
+import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.ShiftRequest;
+import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.ShiftView;
+import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.SlotVolumeRequest;
+import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.SlotVolumeView;
+import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.SupportItemRequest;
+import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.SupportItemView;
+import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.TeamSetupRequest;
+import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.TeamSetupView;
+import com.cmacgm.gbs.rst.api.security.RstPrincipal;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * Supervisor Associated Data endpoints under an Exercise.
+ */
+@RestController
+@RequestMapping("/api/v1/supervisor/exercises/{exerciseId}")
+@PreAuthorize("hasRole('SUPERVISOR')")
+public class ExerciseAssociatedDataController {
+
+    private final AssociatedDataService service;
+
+    /**
+     * Creates the Associated Data controller.
+     *
+     * @param service Associated Data service
+     */
+    public ExerciseAssociatedDataController(AssociatedDataService service) {
+        this.service = service;
+    }
+
+    /**
+     * Returns Team Setup.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @return Team Setup
+     */
+    @GetMapping("/team-setup")
+    public TeamSetupView getTeamSetup(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return service.getTeamSetup(principal.userId(), exerciseId);
+    }
+
+    /**
+     * Replaces Team Setup inputs.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @param request Team Setup payload
+     * @return updated Team Setup
+     */
+    @PutMapping("/team-setup")
+    public TeamSetupView putTeamSetup(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @RequestBody TeamSetupRequest request) {
+        return service.putTeamSetup(principal.userId(), exerciseId, request);
+    }
+
+    /**
+     * Lists shifts.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @return shifts
+     */
+    @GetMapping("/shifts")
+    public List<ShiftView> getShifts(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return service.getShifts(principal.userId(), exerciseId);
+    }
+
+    /**
+     * Replaces the full shift list.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @param request shifts
+     * @return active shifts
+     */
+    @PutMapping("/shifts")
+    public List<ShiftView> putShifts(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @RequestBody List<@Valid ShiftRequest> request) {
+        return service.putShifts(principal.userId(), exerciseId, request);
+    }
+
+    /**
+     * Lists production support items.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @return support items
+     */
+    @GetMapping("/production-support")
+    public List<SupportItemView> listSupport(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return service.listSupport(principal.userId(), exerciseId);
+    }
+
+    /**
+     * Creates a production support item.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @param request support payload
+     * @return created item
+     */
+    @PostMapping("/production-support")
+    @ResponseStatus(HttpStatus.CREATED)
+    public SupportItemView createSupport(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @Valid @RequestBody SupportItemRequest request) {
+        return service.createSupport(principal.userId(), exerciseId, request);
+    }
+
+    /**
+     * Updates a production support item.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @param itemId support item id
+     * @param request support payload
+     * @return updated item
+     */
+    @PutMapping("/production-support/{itemId}")
+    public SupportItemView updateSupport(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @PathVariable UUID itemId,
+            @Valid @RequestBody SupportItemRequest request) {
+        return service.updateSupport(principal.userId(), exerciseId, itemId, request);
+    }
+
+    /**
+     * Soft-deletes a production support item.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @param itemId support item id
+     */
+    @DeleteMapping("/production-support/{itemId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteSupport(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @PathVariable UUID itemId) {
+        service.deleteSupport(principal.userId(), exerciseId, itemId);
+    }
+
+    /**
+     * Returns calendar and holidays.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @return calendar
+     */
+    @GetMapping("/calendar")
+    public CalendarView getCalendar(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return service.getCalendar(principal.userId(), exerciseId);
+    }
+
+    /**
+     * Replaces calendar header and holidays.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @param request calendar payload
+     * @return updated calendar
+     */
+    @PutMapping("/calendar")
+    public CalendarView putCalendar(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @RequestBody CalendarRequest request) {
+        return service.putCalendar(principal.userId(), exerciseId, request);
+    }
+
+    /**
+     * Lists monthly volumes.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @return monthly volumes
+     */
+    @GetMapping("/volumes/monthly")
+    public List<MonthlyVolumeView> getMonthly(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return service.getMonthlyVolumes(principal.userId(), exerciseId);
+    }
+
+    /**
+     * Replaces monthly volumes.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @param request monthly rows
+     * @return replaced list
+     */
+    @PutMapping("/volumes/monthly")
+    public List<MonthlyVolumeView> putMonthly(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @RequestBody List<MonthlyVolumeRequest> request) {
+        return service.putMonthlyVolumes(principal.userId(), exerciseId, request);
+    }
+
+    /**
+     * Lists daily volumes.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @return daily volumes
+     */
+    @GetMapping("/volumes/daily")
+    public List<DailyVolumeView> getDaily(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return service.getDailyVolumes(principal.userId(), exerciseId);
+    }
+
+    /**
+     * Replaces daily volumes.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @param request daily rows
+     * @return replaced list
+     */
+    @PutMapping("/volumes/daily")
+    public List<DailyVolumeView> putDaily(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @RequestBody List<DailyVolumeRequest> request) {
+        return service.putDailyVolumes(principal.userId(), exerciseId, request);
+    }
+
+    /**
+     * Lists slot volumes.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @return slot volumes
+     */
+    @GetMapping("/volumes/slot")
+    public List<SlotVolumeView> getSlot(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return service.getSlotVolumes(principal.userId(), exerciseId);
+    }
+
+    /**
+     * Replaces slot volumes.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @param request slot rows
+     * @return replaced list
+     */
+    @PutMapping("/volumes/slot")
+    public List<SlotVolumeView> putSlot(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @RequestBody List<SlotVolumeRequest> request) {
+        return service.putSlotVolumes(principal.userId(), exerciseId, request);
+    }
+}
