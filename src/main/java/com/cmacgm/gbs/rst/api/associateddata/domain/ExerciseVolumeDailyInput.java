@@ -12,8 +12,8 @@ import jakarta.persistence.Table;
 
 /** Daily volume input grain for an Exercise. */
 @Entity
-@Table(name = "volume_daily_input")
-public class VolumeDailyInput {
+@Table(name = "exercise_volume_daily_input")
+public class ExerciseVolumeDailyInput {
 
     @Id
     private UUID id;
@@ -51,7 +51,7 @@ public class VolumeDailyInput {
     @Column(name = "updated_by")
     private UUID updatedBy;
 
-    protected VolumeDailyInput() {
+    protected ExerciseVolumeDailyInput() {
     }
 
     /**
@@ -66,7 +66,7 @@ public class VolumeDailyInput {
      * @param now creation timestamp
      * @return new daily volume row
      */
-    public static VolumeDailyInput create(
+    public static ExerciseVolumeDailyInput create(
             UUID exerciseId,
             LocalDate volumeDate,
             BigDecimal actualVolume,
@@ -74,7 +74,7 @@ public class VolumeDailyInput {
             BigDecimal manualForecastVolume,
             UUID actorUserId,
             Instant now) {
-        VolumeDailyInput row = new VolumeDailyInput();
+        ExerciseVolumeDailyInput row = new ExerciseVolumeDailyInput();
         row.id = UUID.randomUUID();
         row.exerciseId = exerciseId;
         row.volumeDate = volumeDate;

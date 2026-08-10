@@ -3,6 +3,7 @@ package com.cmacgm.gbs.rst.api.tms.persistence;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.UUID;
 
 import jakarta.persistence.criteria.Predicate;
@@ -16,6 +17,9 @@ public final class TmsSessionSpecification {
     private TmsSessionSpecification() {
     }
 
+    /**
+     * Agent-owned session list filter (single user).
+     */
     public static Specification<TmsSession> filtered(
             UUID userId,
             TmsSessionStatus status,
@@ -24,37 +28,100 @@ public final class TmsSessionSpecification {
             String queryText,
             LocalDate dateFrom,
             LocalDate dateTo) {
+        return filtered(new Filter(
+                userId,
+                null,
+                null,
+                null,
+                status,
+                sessionNo,
+                reference,
+                queryText,
+                dateFrom,
+                dateTo));
+    }
+
+    /**
+     * Flexible session list filter for Agent or Supervisor scopes.
+     *
+     * @param filter query criteria
+     * @return JPA specification
+     */
+    public static Specification<TmsSession> filtered(Filter filter) {
         return (root, query, builder) -> {
             var predicates = new ArrayList<Predicate>();
-            predicates.add(builder.equal(root.get("user").get("id"), userId));
-            if (status != null) {
-                predicates.add(builder.equal(root.get("status"), status));
+            if (filter.userId() != null) {
+                predicates.add(builder.equal(root.get("user").get("id"), filter.userId()));
             }
-            if (sessionNo != null && !sessionNo.isBlank()) {
-                String pattern = "%" + sessionNo.trim().toLowerCase() + "%";
+            if (filter.toolkitIds() != null) {
+                if (filter.toolkitIds().isEmpty()) {
+                    predicates.add(builder.disjunction());
+                } else {
+                    predicates.add(root.get("toolkit").get("id").in(filter.toolkitIds()));
+                }
+            }
+            if (filter.toolkitId() != null) {
+                predicates.add(builder.equal(root.get("toolkit").get("id"), filter.toolkitId()));
+            }
+            if (filter.pl3Code() != null && !filter.pl3Code().isBlank()) {
+                predicates.add(builder.equal(
+                        root.get("pl3CodeSnapshot"), filter.pl3Code().trim()));
+            }
+            if (filter.status() != null) {
+                predicates.add(builder.equal(root.get("status"), filter.status()));
+            }
+            if (filter.sessionNo() != null && !filter.sessionNo().isBlank()) {
+                String pattern = "%" + filter.sessionNo().trim().toLowerCase() + "%";
                 predicates.add(builder.like(builder.lower(root.get("sessionNo")), pattern));
             }
-            if (reference != null && !reference.isBlank()) {
-                String pattern = "%" + reference.trim().toLowerCase() + "%";
+            if (filter.reference() != null && !filter.reference().isBlank()) {
+                String pattern = "%" + filter.reference().trim().toLowerCase() + "%";
                 predicates.add(builder.like(builder.lower(root.get("reference")), pattern));
             }
-            if (queryText != null && !queryText.isBlank()) {
-                String pattern = "%" + queryText.trim().toLowerCase() + "%";
+            if (filter.queryText() != null && !filter.queryText().isBlank()) {
+                String pattern = "%" + filter.queryText().trim().toLowerCase() + "%";
                 predicates.add(builder.or(
                         builder.like(builder.lower(root.get("sessionNo")), pattern),
                         builder.like(builder.lower(root.get("reference")), pattern)));
             }
-            if (dateFrom != null) {
+            if (filter.dateFrom() != null) {
                 predicates.add(builder.greaterThanOrEqualTo(
                         root.get("startedAt"),
-                        dateFrom.atStartOfDay(ZoneOffset.UTC).toInstant()));
+                        filter.dateFrom().atStartOfDay(ZoneOffset.UTC).toInstant()));
             }
-            if (dateTo != null) {
+            if (filter.dateTo() != null) {
                 predicates.add(builder.lessThan(
                         root.get("startedAt"),
-                        dateTo.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant()));
+                        filter.dateTo().plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant()));
             }
             return builder.and(predicates.toArray(Predicate[]::new));
         };
+    }
+
+    /**
+     * Session list filter criteria.
+     *
+     * @param userId when set, restrict to this agent (Agent list or Supervisor agent filter)
+     * @param toolkitIds when set, restrict to these toolkits (Supervisor org scope)
+     * @param toolkitId optional single toolkit filter within scope
+     * @param pl3Code optional PL3 code filter (snapshot)
+     * @param status optional status
+     * @param sessionNo optional session number contains
+     * @param reference optional reference contains
+     * @param queryText optional sessionNo∪reference contains
+     * @param dateFrom optional started-at lower bound (inclusive)
+     * @param dateTo optional started-at upper bound (inclusive day)
+     */
+    public record Filter(
+            UUID userId,
+            Collection<UUID> toolkitIds,
+            UUID toolkitId,
+            String pl3Code,
+            TmsSessionStatus status,
+            String sessionNo,
+            String reference,
+            String queryText,
+            LocalDate dateFrom,
+            LocalDate dateTo) {
     }
 }

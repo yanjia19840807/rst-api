@@ -15,8 +15,8 @@ import jakarta.persistence.Version;
  * Production support activity line under an Exercise.
  */
 @Entity
-@Table(name = "production_support_item")
-public class ProductionSupportItem {
+@Table(name = "exercise_production_support_item")
+public class ExerciseProductionSupportItem {
 
     @Id
     private UUID id;
@@ -80,7 +80,7 @@ public class ProductionSupportItem {
     @Version
     private long version;
 
-    protected ProductionSupportItem() {
+    protected ExerciseProductionSupportItem() {
     }
 
     /**
@@ -103,7 +103,7 @@ public class ProductionSupportItem {
      * @param now creation timestamp
      * @return new support item
      */
-    public static ProductionSupportItem create(
+    public static ExerciseProductionSupportItem create(
             UUID exerciseId,
             String category,
             String activity,
@@ -115,7 +115,7 @@ public class ProductionSupportItem {
             String comments,
             UUID actorUserId,
             Instant now) {
-        ProductionSupportItem item = new ProductionSupportItem();
+        ExerciseProductionSupportItem item = new ExerciseProductionSupportItem();
         item.id = UUID.randomUUID();
         item.exerciseId = exerciseId;
         item.lineageId = item.id;
@@ -127,24 +127,25 @@ public class ProductionSupportItem {
         item.workloadPerUnitMinutes = workloadPerUnitMinutes;
         item.annualMultiplier = annualMultiplier;
         item.comments = comments;
-        item.calculationVersion = "v1";
+        item.calculationVersion = "v1.2";
         item.createdAt = now;
         item.createdBy = actorUserId;
         item.updatedAt = now;
         item.updatedBy = actorUserId;
-        item.recalculateDerived(new BigDecimal("2080"));
         return item;
     }
 
     /**
      * Copies a support item from an archived Exercise, preserving lineage.
      */
-    public static ProductionSupportItem createFromArchive(
+    public static ExerciseProductionSupportItem createFromArchive(
             UUID exerciseId,
-            ProductionSupportItem source,
+            ExerciseProductionSupportItem source,
+            BigDecimal annualMultiplier,
+            BigDecimal fteAnnualHours,
             UUID actorUserId,
             Instant now) {
-        ProductionSupportItem item = create(
+        ExerciseProductionSupportItem item = create(
                 exerciseId,
                 source.getCategory(),
                 source.getActivity(),
@@ -152,11 +153,12 @@ public class ProductionSupportItem {
                 source.getVolume(),
                 source.getUnitOfMeasure(),
                 source.getWorkloadPerUnitMinutes(),
-                source.getAnnualMultiplier(),
+                annualMultiplier,
                 source.getComments(),
                 actorUserId,
                 now);
         item.lineageId = source.getLineageId() != null ? source.getLineageId() : source.getId();
+        item.applyDerived(annualMultiplier, fteAnnualHours);
         return item;
     }
 
@@ -193,26 +195,28 @@ public class ProductionSupportItem {
         this.workloadPerUnitMinutes = workloadPerUnitMinutes;
         this.annualMultiplier = annualMultiplier;
         this.comments = comments;
-        this.recalculateDerived(new BigDecimal("2080"));
         this.updatedAt = now;
         this.updatedBy = actorUserId;
     }
 
     /**
-     * Derives annual workload hours and Support FTE.
+     * Applies annual multiplier and derives Hours/year + FTE (BRD).
      *
-     * <p>Formula: hours = volume * minutesPerUnit * annualMultiplier / 60;
-     * FTE = hours / annualWorkingHours.
+     * <p>hours = volume × mins/unit × multiplier / 60;
+     * FTE = hours / (workingHours × availability × workingDays × capacityRatio).
      *
-     * @param annualWorkingHours denominator hours for FTE (typically 2080)
+     * @param annualMultiplier frequency annualization factor
+     * @param fteAnnualHours FTE denominator hours
      */
-    public void recalculateDerived(BigDecimal annualWorkingHours) {
+    public void applyDerived(BigDecimal annualMultiplier, BigDecimal fteAnnualHours) {
+        this.annualMultiplier = annualMultiplier;
         this.workloadPerYearHours = volume
                 .multiply(workloadPerUnitMinutes)
                 .multiply(annualMultiplier)
                 .divide(new BigDecimal("60"), 6, RoundingMode.HALF_UP);
         this.supportFte = this.workloadPerYearHours
-                .divide(annualWorkingHours, 6, RoundingMode.HALF_UP);
+                .divide(fteAnnualHours, 6, RoundingMode.HALF_UP);
+        this.calculationVersion = "v1.2";
     }
 
     /**

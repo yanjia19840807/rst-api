@@ -3,26 +3,23 @@ package com.cmacgm.gbs.rst.api.security.dev;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Dev identity selection ({@code application-dev.yml}). Point {@code ccgid} at a real
- * ACTIVE Timesheet person (usually a {@code supervisor_ccgid}).
+ * Dev identity selection ({@code application-dev.yml}).
+ *
+ * <p>Set {@code ccgid} + {@code role} to simulate one user login. Allowed roles:
+ * {@code AGENT}, {@code SUPERVISOR}, {@code MANAGER}, {@code CDH}, {@code LTH}, {@code HO}.
  */
 @ConfigurationProperties(prefix = "app.security.dev-identity")
 public class DevIdentityProperties {
 
     /**
-     * Default walkthrough identity CCGID (loaded when {@code X-Dev-Role} is absent).
+     * Simulated user CCGID.
      */
     private String ccgid = "SUPERVISOR001";
 
     /**
-     * Default role label: {@code SUPERVISOR} or {@code AGENT}.
+     * Simulated RST role (one of the six product roles).
      */
     private String role = "SUPERVISOR";
-
-    /**
-     * Optional Agent CCGID used when request sends {@code X-Dev-Role: AGENT}.
-     */
-    private String agentCcgid = "AGENT001";
 
     public String getCcgid() {
         return ccgid;
@@ -38,13 +35,5 @@ public class DevIdentityProperties {
 
     public void setRole(String role) {
         this.role = role;
-    }
-
-    public String getAgentCcgid() {
-        return agentCcgid;
-    }
-
-    public void setAgentCcgid(String agentCcgid) {
-        this.agentCcgid = agentCcgid;
     }
 }

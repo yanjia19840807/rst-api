@@ -68,6 +68,16 @@ public class ExerciseTmsSession {
         return row;
     }
 
+    /**
+     * Updates inclusion in the Cycle Time population. Exclusion does not require a reason.
+     *
+     * @param included whether the session counts toward SYSTEM median
+     */
+    public void setIncluded(boolean included) {
+        this.included = included;
+        this.exclusionReason = null;
+    }
+
     public UUID getExerciseId() { return exerciseId; }
     public UUID getTmsSessionId() { return tmsSessionId; }
     public boolean isIncluded() { return included; }

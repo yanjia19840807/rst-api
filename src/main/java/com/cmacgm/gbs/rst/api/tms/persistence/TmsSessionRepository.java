@@ -27,6 +27,9 @@ public interface TmsSessionRepository
     @EntityGraph(attributePaths = {"toolkit", "toolkitSubtask", "pauseIntervals"})
     Optional<TmsSession> findBySessionNoAndUserId(String sessionNo, UUID userId);
 
+    @EntityGraph(attributePaths = {"user", "toolkit", "toolkitSubtask", "pauseIntervals"})
+    Optional<TmsSession> findBySessionNo(String sessionNo);
+
     long countByUserIdAndStatusAndEndedAtGreaterThanEqualAndEndedAtLessThan(
             UUID userId,
             TmsSessionStatus status,

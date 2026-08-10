@@ -29,14 +29,8 @@ public class CycleTimeBaseline {
     @Column(name = "sample_count")
     private Integer sampleCount;
 
-    @Column(name = "coverage_ratio", precision = 12, scale = 8)
-    private BigDecimal coverageRatio;
-
     @Column(name = "calculation_method", length = 80)
     private String calculationMethod;
-
-    @Column(name = "method_version", length = 40)
-    private String methodVersion;
 
     @Column(name = "manual_reason")
     private String manualReason;
@@ -76,7 +70,35 @@ public class CycleTimeBaseline {
         baseline.medianSeconds = medianSeconds;
         baseline.manualReason = manualReason;
         baseline.calculationMethod = "MANUAL_ENTRY";
-        baseline.methodVersion = "v1";
+        baseline.active = true;
+        baseline.calculatedAt = now;
+        baseline.calculatedBy = actorUserId;
+        return baseline;
+    }
+
+    /**
+     * Creates an active SYSTEM baseline from included TMS samples.
+     *
+     * @param exerciseId owning Exercise
+     * @param medianSeconds median seconds per unit from included samples
+     * @param sampleCount number of included samples used for the median
+     * @param actorUserId calculating Supervisor
+     * @param now calculation timestamp
+     * @return active system baseline
+     */
+    public static CycleTimeBaseline createSystem(
+            UUID exerciseId,
+            BigDecimal medianSeconds,
+            int sampleCount,
+            UUID actorUserId,
+            Instant now) {
+        CycleTimeBaseline baseline = new CycleTimeBaseline();
+        baseline.id = UUID.randomUUID();
+        baseline.exerciseId = exerciseId;
+        baseline.baselineType = "SYSTEM";
+        baseline.medianSeconds = medianSeconds;
+        baseline.sampleCount = sampleCount;
+        baseline.calculationMethod = "MEDIAN";
         baseline.active = true;
         baseline.calculatedAt = now;
         baseline.calculatedBy = actorUserId;
@@ -95,9 +117,7 @@ public class CycleTimeBaseline {
     public String getBaselineType() { return baselineType; }
     public BigDecimal getMedianSeconds() { return medianSeconds; }
     public Integer getSampleCount() { return sampleCount; }
-    public BigDecimal getCoverageRatio() { return coverageRatio; }
     public String getCalculationMethod() { return calculationMethod; }
-    public String getMethodVersion() { return methodVersion; }
     public String getManualReason() { return manualReason; }
     public boolean isActive() { return active; }
     public Instant getCalculatedAt() { return calculatedAt; }

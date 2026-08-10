@@ -2,10 +2,12 @@ package com.cmacgm.gbs.rst.api.security.dev;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +24,8 @@ import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSnapshotRowReposito
 
 /**
  * Resolves a configured CCGID into an {@link RstPrincipal}, ensuring a matching {@code app_user}
- * exists. Display names are taken from {@code app_user} or the ACTIVE Timesheet snapshot.
+ * exists. Display names are taken from {@code app_user} or the ACTIVE Timesheet snapshot; when
+ * neither exists (e.g. assumed LTH / HO), a synthetic app user is created.
  */
 @Service
 @Profile({"dev", "test"})
@@ -65,13 +68,14 @@ public class DevIdentityService {
                     "app.security.dev-identity.ccgid is not configured.");
         }
         String key = ccgid.trim().toUpperCase(Locale.ROOT);
-        return cache.computeIfAbsent(key, ignored -> loadOrCreate(key, roles));
+        String cacheKey = key + "|" + roles.stream().sorted().collect(Collectors.joining(","));
+        return cache.computeIfAbsent(cacheKey, ignored -> loadOrCreate(key, roles));
     }
 
     private RstPrincipal loadOrCreate(String ccgid, Set<String> roles) {
-        AppUser user = users.findByCcgidAndActiveTrue(ccgid).orElseGet(() -> createFromTimesheet(ccgid));
-        log.info("Dev identity ready: ccgid={} userId={} name={}",
-                user.getCcgid(), user.getId(), user.getDisplayName());
+        AppUser user = users.findByCcgidAndActiveTrue(ccgid).orElseGet(() -> createUser(ccgid));
+        log.info("Dev identity ready: ccgid={} userId={} name={} roles={}",
+                user.getCcgid(), user.getId(), user.getDisplayName(), roles);
         return new RstPrincipal(
                 user.getId(),
                 user.getCcgid(),
@@ -81,36 +85,33 @@ public class DevIdentityService {
                 Set.of("TIMESHEET", "SELF"));
     }
 
-    private AppUser createFromTimesheet(String ccgid) {
+    private AppUser createUser(String ccgid) {
         String displayName = firstNonBlank(
+                snapshotRows.findEmployeeNamesByCcgid(ccgid),
                 snapshotRows.findSupervisorNamesByCcgid(ccgid),
-                snapshotRows.findEmployeeNamesByCcgid(ccgid));
+                snapshotRows.findSrManagerNamesByCcgid(ccgid),
+                snapshotRows.findDomainHeadNamesByCcgid(ccgid));
         if (displayName == null) {
-            throw new ApiException(
-                    HttpStatus.CONFLICT,
-                    "dev-identity-not-in-timesheet",
-                    "CCG ID " + ccgid
-                            + " was not found in app_user or ACTIVE Timesheet. "
-                            +                     "Set app.security.dev-identity.ccgid in application-dev.yml "
-                            + "to a supervisor_ccgid from the synced Monthly Report.");
+            displayName = "Dev User " + ccgid;
+            log.warn(
+                    "CCG ID {} not found in ACTIVE Timesheet; creating synthetic app_user for dev login",
+                    ccgid);
         }
         Instant now = clock.instant();
         String email = ccgid.toLowerCase(Locale.ROOT) + "@dev.local";
         AppUser created = new AppUser(UUID.randomUUID(), ccgid, displayName, email, now);
         users.save(created);
-        log.info("Created app_user from Timesheet for dev identity: {} ({})", displayName, ccgid);
+        log.info("Created app_user for dev identity: {} ({})", displayName, ccgid);
         return created;
     }
 
-    private static String firstNonBlank(java.util.List<String> first, java.util.List<String> second) {
-        for (String value : first) {
-            if (value != null && !value.isBlank()) {
-                return value.trim();
-            }
-        }
-        for (String value : second) {
-            if (value != null && !value.isBlank()) {
-                return value.trim();
+    @SafeVarargs
+    private static String firstNonBlank(List<String>... groups) {
+        for (List<String> group : groups) {
+            for (String value : group) {
+                if (value != null && !value.isBlank()) {
+                    return value.trim();
+                }
             }
         }
         return null;

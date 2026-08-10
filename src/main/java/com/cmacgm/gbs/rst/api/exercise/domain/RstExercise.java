@@ -148,6 +148,34 @@ public class RstExercise {
     }
 
     /**
+     * Updates sizing / slot / TMS period fields while the Exercise remains editable.
+     *
+     * @param sizingMonth YYYY-MM sizing month
+     * @param slotStartDate slot window start
+     * @param slotWeeks slot window length in weeks
+     * @param tmsFrom TMS history from date
+     * @param tmsTo TMS history to date
+     * @param actorUserId updating Supervisor
+     * @param now update timestamp
+     */
+    public void updatePeriods(
+            String sizingMonth,
+            LocalDate slotStartDate,
+            short slotWeeks,
+            LocalDate tmsFrom,
+            LocalDate tmsTo,
+            UUID actorUserId,
+            Instant now) {
+        this.sizingMonth = sizingMonth;
+        this.slotStartDate = slotStartDate;
+        this.slotWeeks = slotWeeks;
+        this.tmsFrom = tmsFrom;
+        this.tmsTo = tmsTo;
+        this.updatedAt = now;
+        this.updatedBy = actorUserId;
+    }
+
+    /**
      * Soft-deletes an unsubmitted Exercise.
      *
      * @param actorUserId deleting Supervisor

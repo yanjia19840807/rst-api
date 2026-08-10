@@ -60,15 +60,15 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update("delete from cycle_time_baseline_sample");
         jdbcTemplate.update("delete from cycle_time_baseline");
         jdbcTemplate.update("delete from exercise_tms_session");
-        jdbcTemplate.update("delete from volume_slot_input");
-        jdbcTemplate.update("delete from volume_daily_input");
-        jdbcTemplate.update("delete from volume_monthly_input");
+        jdbcTemplate.update("delete from exercise_volume_slot_input");
+        jdbcTemplate.update("delete from exercise_volume_daily_input");
+        jdbcTemplate.update("delete from exercise_volume_monthly_input");
         jdbcTemplate.update("delete from data_import_batch");
         jdbcTemplate.update("delete from file_artifact");
         jdbcTemplate.update("delete from exercise_holiday");
         jdbcTemplate.update("delete from exercise_calendar");
-        jdbcTemplate.update("delete from production_support_item_scope");
-        jdbcTemplate.update("delete from production_support_item");
+        jdbcTemplate.update("delete from exercise_production_support_item_scope");
+        jdbcTemplate.update("delete from exercise_production_support_item");
         jdbcTemplate.update("delete from exercise_shift");
         jdbcTemplate.update("delete from exercise_team_setup");
         jdbcTemplate.update("delete from exercise_shared_kpi_line");
@@ -198,11 +198,15 @@ class TmsSessionApiIntegrationTests {
 
     @Test
     void completesTheAgentSessionLifecycle() throws Exception {
-        mockMvc.perform(get("/api/v1/toolkits"))
+        mockMvc.perform(get("/api/v1/toolkits")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(TOOLKIT_ID.toString()));
 
         String response = mockMvc.perform(post("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -221,6 +225,8 @@ class TmsSessionApiIntegrationTests {
         String sessionId = JsonPath.read(response, "$.id");
 
         mockMvc.perform(post("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -232,19 +238,27 @@ class TmsSessionApiIntegrationTests {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").exists());
 
-        mockMvc.perform(post("/api/v1/tms/sessions/{id}/pause", sessionId))
+        mockMvc.perform(post("/api/v1/tms/sessions/{id}/pause", sessionId)
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("paused"));
 
-        mockMvc.perform(post("/api/v1/tms/sessions/{id}/resume", sessionId))
+        mockMvc.perform(post("/api/v1/tms/sessions/{id}/resume", sessionId)
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("running"));
 
-        mockMvc.perform(post("/api/v1/tms/sessions/{id}/end", sessionId))
+        mockMvc.perform(post("/api/v1/tms/sessions/{id}/end", sessionId)
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("completed"));
 
         mockMvc.perform(get("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
                         .queryParam("status", "completed")
                         .queryParam("reference", "INV-100")
                         .queryParam("page", "1")
@@ -265,11 +279,13 @@ class TmsSessionApiIntegrationTests {
     @Test
     void freezesAnExerciseForTheDevSupervisor() throws Exception {
         mockMvc.perform(get("/api/v1/timesheet/supervisor/hierarchy")
+                        .header("X-Dev-Ccgid", "SUPERVISOR001")
                         .header("X-Dev-Role", "SUPERVISOR"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].supervisorPositionId").value("POS-SUP-001"));
 
         String response = mockMvc.perform(post("/api/v1/supervisor/exercises")
+                        .header("X-Dev-Ccgid", "SUPERVISOR001")
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -289,6 +305,7 @@ class TmsSessionApiIntegrationTests {
         String exerciseId = JsonPath.read(response, "$.id");
 
         mockMvc.perform(get("/api/v1/supervisor/exercises/{id}", exerciseId)
+                        .header("X-Dev-Ccgid", "SUPERVISOR001")
                         .header("X-Dev-Role", "SUPERVISOR"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.snapshot.timesheetSyncDate").exists());

@@ -20,19 +20,20 @@ import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseHoliday;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseShift;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup.TeamSetupInput;
-import com.cmacgm.gbs.rst.api.associateddata.domain.ProductionSupportItem;
-import com.cmacgm.gbs.rst.api.associateddata.domain.ProductionSupportItemScope;
-import com.cmacgm.gbs.rst.api.associateddata.domain.VolumeDailyInput;
-import com.cmacgm.gbs.rst.api.associateddata.domain.VolumeMonthlyInput;
-import com.cmacgm.gbs.rst.api.associateddata.domain.VolumeSlotInput;
+import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseProductionSupportItem;
+import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseProductionSupportItemScope;
+import com.cmacgm.gbs.rst.api.associateddata.domain.SupportWorkloadMath;
+import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeDailyInput;
+import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeMonthlyInput;
+import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeSlotInput;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseHolidayRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseShiftRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ProductionSupportItemRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ProductionSupportItemScopeRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.VolumeDailyInputRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.VolumeMonthlyInputRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.VolumeSlotInputRepository;
+import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSupportItemRepository;
+import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSupportItemScopeRepository;
+import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeDailyInputRepository;
+import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeMonthlyInputRepository;
+import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeSlotInputRepository;
 import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
@@ -57,11 +58,11 @@ public class ExerciseInitializationService {
     private final RstExerciseRepository exercises;
     private final ExerciseTeamSetupRepository teamSetups;
     private final ExerciseShiftRepository shifts;
-    private final ProductionSupportItemRepository supportItems;
-    private final ProductionSupportItemScopeRepository supportScopes;
-    private final VolumeMonthlyInputRepository monthlyVolumes;
-    private final VolumeDailyInputRepository dailyVolumes;
-    private final VolumeSlotInputRepository slotVolumes;
+    private final ExerciseProductionSupportItemRepository supportItems;
+    private final ExerciseProductionSupportItemScopeRepository supportScopes;
+    private final ExerciseVolumeMonthlyInputRepository monthlyVolumes;
+    private final ExerciseVolumeDailyInputRepository dailyVolumes;
+    private final ExerciseVolumeSlotInputRepository slotVolumes;
     private final ExerciseHolidayRepository holidays;
     private final CycleTimeBaselineRepository cycleTimeBaselines;
     private final HolidayTemplateService holidayTemplates;
@@ -71,11 +72,11 @@ public class ExerciseInitializationService {
             RstExerciseRepository exercises,
             ExerciseTeamSetupRepository teamSetups,
             ExerciseShiftRepository shifts,
-            ProductionSupportItemRepository supportItems,
-            ProductionSupportItemScopeRepository supportScopes,
-            VolumeMonthlyInputRepository monthlyVolumes,
-            VolumeDailyInputRepository dailyVolumes,
-            VolumeSlotInputRepository slotVolumes,
+            ExerciseProductionSupportItemRepository supportItems,
+            ExerciseProductionSupportItemScopeRepository supportScopes,
+            ExerciseVolumeMonthlyInputRepository monthlyVolumes,
+            ExerciseVolumeDailyInputRepository dailyVolumes,
+            ExerciseVolumeSlotInputRepository slotVolumes,
             ExerciseHolidayRepository holidays,
             CycleTimeBaselineRepository cycleTimeBaselines,
             HolidayTemplateService holidayTemplates,
@@ -151,8 +152,26 @@ public class ExerciseInitializationService {
         if (archive.isPresent()) {
             copyCustomHolidays(archive.get().getId(), exercise.getId(), holidayYears, actorUserId, now);
             holidayTemplates.refreshWorkingDaysForExercise(exercise.getId(), actorUserId);
+            refreshSupportDerived(exercise.getId());
         }
         return notices;
+    }
+
+    private void refreshSupportDerived(UUID exerciseId) {
+        ExerciseTeamSetup setup = teamSetups.findById(exerciseId).orElse(null);
+        BigDecimal workingDays = setup != null ? setup.getWorkingDaysPerYear() : null;
+        BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup);
+        for (ExerciseProductionSupportItem item : supportItems
+                .findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(exerciseId)) {
+            try {
+                BigDecimal multiplier = SupportWorkloadMath.annualMultiplier(
+                        item.getFrequencyCode(), workingDays);
+                item.applyDerived(multiplier, fteHours);
+                supportItems.save(item);
+            } catch (IllegalArgumentException ignored) {
+                // Keep historical rows with unrecognized frequency codes.
+            }
+        }
     }
 
     private Optional<RstExercise> findLatestArchive(UUID toolkitId) {
@@ -167,7 +186,15 @@ public class ExerciseInitializationService {
         if (target == null || source == null) {
             return;
         }
-        target.replaceInputs(toInput(source), actorUserId, now);
+        BigDecimal cycleTimeSeconds = cycleTimeBaselines
+                .findByExerciseIdAndActiveTrue(sourceId)
+                .map(baseline -> baseline.getMedianSeconds())
+                .orElse(null);
+        target.replaceInputs(toInput(source), cycleTimeSeconds, actorUserId, now);
+        if (source.getWorkingDaysPerYear() != null) {
+            target.applyCalendarWorkingDays(
+                    source.getWorkingDaysPerYear(), cycleTimeSeconds, actorUserId, now);
+        }
         teamSetups.save(target);
     }
 
@@ -188,15 +215,24 @@ public class ExerciseInitializationService {
     private void copySupport(RstExercise source, RstExercise target, UUID actorUserId, Instant now) {
         Map<String, UUID> sourceKpiKeys = kpiKeyMap(source);
         Map<String, UUID> targetKpiKeys = kpiKeyMap(target);
-        for (ProductionSupportItem item : supportItems
+        ExerciseTeamSetup targetSetup = teamSetups.findById(target.getId()).orElse(null);
+        BigDecimal workingDays = targetSetup != null ? targetSetup.getWorkingDaysPerYear() : null;
+        BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(targetSetup);
+        for (ExerciseProductionSupportItem item : supportItems
                 .findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(source.getId())) {
-            ProductionSupportItem copy = ProductionSupportItem.createFromArchive(
-                    target.getId(), item, actorUserId, now);
+            BigDecimal multiplier;
+            try {
+                multiplier = SupportWorkloadMath.annualMultiplier(item.getFrequencyCode(), workingDays);
+            } catch (IllegalArgumentException ex) {
+                multiplier = item.getAnnualMultiplier();
+            }
+            ExerciseProductionSupportItem copy = ExerciseProductionSupportItem.createFromArchive(
+                    target.getId(), item, multiplier, fteHours, actorUserId, now);
             supportItems.save(copy);
-            List<ProductionSupportItemScope> scopes =
-                    supportScopes.findByProductionSupportItemId(item.getId());
+            List<ExerciseProductionSupportItemScope> scopes =
+                    supportScopes.findByExerciseProductionSupportItemId(item.getId());
             List<UUID> mapped = new ArrayList<>();
-            for (ProductionSupportItemScope scope : scopes) {
+            for (ExerciseProductionSupportItemScope scope : scopes) {
                 String key = reverseLookup(sourceKpiKeys, scope.getExerciseSharedKpiLineId());
                 if (key != null && targetKpiKeys.containsKey(key)) {
                     mapped.add(targetKpiKeys.get(key));
@@ -209,7 +245,7 @@ public class ExerciseInitializationService {
                 BigDecimal ratio = BigDecimal.ONE.divide(
                         BigDecimal.valueOf(mapped.size()), 8, java.math.RoundingMode.HALF_UP);
                 for (UUID kpiId : mapped) {
-                    supportScopes.save(ProductionSupportItemScope.assign(copy.getId(), kpiId, ratio));
+                    supportScopes.save(ExerciseProductionSupportItemScope.assign(copy.getId(), kpiId, ratio));
                 }
             }
         }
@@ -221,9 +257,9 @@ public class ExerciseInitializationService {
         Set<String> months = monthsCovered(windowStart, windowEnd);
         months.add(target.getSizingMonth());
 
-        for (VolumeMonthlyInput row : monthlyVolumes.findByExerciseIdOrderByMonthAsc(sourceId)) {
+        for (ExerciseVolumeMonthlyInput row : monthlyVolumes.findByExerciseIdOrderByMonthAsc(sourceId)) {
             if (months.contains(row.getMonth())) {
-                monthlyVolumes.save(VolumeMonthlyInput.create(
+                monthlyVolumes.save(ExerciseVolumeMonthlyInput.create(
                         target.getId(),
                         row.getMonth(),
                         row.getActualVolume(),
@@ -233,10 +269,10 @@ public class ExerciseInitializationService {
                         now));
             }
         }
-        for (VolumeDailyInput row : dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(sourceId)) {
+        for (ExerciseVolumeDailyInput row : dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(sourceId)) {
             LocalDate date = row.getVolumeDate();
             if (date != null && !date.isBefore(windowStart) && !date.isAfter(windowEnd)) {
-                dailyVolumes.save(VolumeDailyInput.create(
+                dailyVolumes.save(ExerciseVolumeDailyInput.create(
                         target.getId(),
                         date,
                         row.getActualVolume(),
@@ -248,11 +284,11 @@ public class ExerciseInitializationService {
         }
         Instant slotFrom = windowStart.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant slotTo = windowEnd.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
-        for (VolumeSlotInput row : slotVolumes.findByExerciseIdOrderBySlotStartAtAsc(sourceId)) {
+        for (ExerciseVolumeSlotInput row : slotVolumes.findByExerciseIdOrderBySlotStartAtAsc(sourceId)) {
             if (row.getSlotStartAt() != null
                     && !row.getSlotStartAt().isBefore(slotFrom)
                     && row.getSlotStartAt().isBefore(slotTo)) {
-                slotVolumes.save(VolumeSlotInput.create(
+                slotVolumes.save(ExerciseVolumeSlotInput.create(
                         target.getId(),
                         row.getSlotStartAt(),
                         row.getSlotEndAt(),

@@ -32,22 +32,21 @@ Create database `rst` if needed. This project does **not** use Docker Compose / 
 
 IDE Run Configuration: leave Active profiles empty — `application.yml` already defaults to `dev`.
 
-### Dev identity (walkthrough as a real Timesheet user)
+### Dev identity (simulate one user login)
 
-In `application-dev.yml` set:
+In `application-dev.yml` set only `ccgid` + `role`:
 
 ```yaml
 app:
   security:
     dev-identity:
-      ccgid: S00628182        # real supervisor_ccgid from ACTIVE Timesheet
-      role: SUPERVISOR
-      # agent-ccgid: S00...   # optional; used when request sends X-Dev-Role: AGENT
+      ccgid: S00628182   # Timesheet person, or any CCGID for assumed LTH/HO
+      role: SUPERVISOR   # AGENT | SUPERVISOR | MANAGER | CDH | LTH | HO
 ```
 
-On first API call the backend ensures an `app_user` row exists (created from Timesheet name if
-needed). Toolkit hierarchy / Shared KPI then resolve against that CCGID’s ACTIVE snapshot rows.
-Restart the API after changing `ccgid`.
+On first API call the backend ensures an `app_user` row exists (from Timesheet name when
+available, otherwise a synthetic display name). Optional request overrides:
+`X-Dev-Ccgid`, `X-Dev-Role`. Restart the API after changing config.
 
 - API: `http://localhost:8080/api/v1`
 - Health: `http://localhost:8080/actuator/health`

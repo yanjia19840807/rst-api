@@ -9,10 +9,10 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
-/** Monthly volume input grain for an Exercise. */
+/** Slot volume input grain for an Exercise. */
 @Entity
-@Table(name = "volume_monthly_input")
-public class VolumeMonthlyInput {
+@Table(name = "exercise_volume_slot_input")
+public class ExerciseVolumeSlotInput {
 
     @Id
     private UUID id;
@@ -20,17 +20,17 @@ public class VolumeMonthlyInput {
     @Column(name = "exercise_id", nullable = false)
     private UUID exerciseId;
 
-    @Column(nullable = false, length = 7)
-    private String month;
+    @Column(name = "slot_start_at", nullable = false)
+    private Instant slotStartAt;
 
-    @Column(name = "actual_volume", precision = 24, scale = 6)
-    private BigDecimal actualVolume;
+    @Column(name = "slot_end_at", nullable = false)
+    private Instant slotEndAt;
 
-    @Column(name = "commercial_ratio", precision = 12, scale = 8)
-    private BigDecimal commercialRatio;
+    @Column(name = "raw_volume", nullable = false, precision = 24, scale = 6)
+    private BigDecimal rawVolume;
 
-    @Column(name = "manual_forecast_volume", precision = 24, scale = 6)
-    private BigDecimal manualForecastVolume;
+    @Column(nullable = false, length = 64)
+    private String timezone;
 
     @Column(name = "source_type", nullable = false, length = 30)
     private String sourceType;
@@ -50,36 +50,36 @@ public class VolumeMonthlyInput {
     @Column(name = "updated_by")
     private UUID updatedBy;
 
-    protected VolumeMonthlyInput() {
+    protected ExerciseVolumeSlotInput() {
     }
 
     /**
-     * Creates a monthly volume row.
+     * Creates a slot volume row.
      *
      * @param exerciseId owning Exercise
-     * @param month YYYY-MM
-     * @param actualVolume optional actual volume
-     * @param commercialRatio optional commercial ratio
-     * @param manualForecastVolume optional manual forecast
+     * @param slotStartAt inclusive slot start
+     * @param slotEndAt exclusive/end bound (must be after start)
+     * @param rawVolume non-negative raw volume
+     * @param timezone IANA timezone
      * @param actorUserId creating Supervisor
      * @param now creation timestamp
-     * @return new monthly volume row
+     * @return new slot volume row
      */
-    public static VolumeMonthlyInput create(
+    public static ExerciseVolumeSlotInput create(
             UUID exerciseId,
-            String month,
-            BigDecimal actualVolume,
-            BigDecimal commercialRatio,
-            BigDecimal manualForecastVolume,
+            Instant slotStartAt,
+            Instant slotEndAt,
+            BigDecimal rawVolume,
+            String timezone,
             UUID actorUserId,
             Instant now) {
-        VolumeMonthlyInput row = new VolumeMonthlyInput();
+        ExerciseVolumeSlotInput row = new ExerciseVolumeSlotInput();
         row.id = UUID.randomUUID();
         row.exerciseId = exerciseId;
-        row.month = month;
-        row.actualVolume = actualVolume;
-        row.commercialRatio = commercialRatio;
-        row.manualForecastVolume = manualForecastVolume;
+        row.slotStartAt = slotStartAt;
+        row.slotEndAt = slotEndAt;
+        row.rawVolume = rawVolume;
+        row.timezone = timezone;
         row.sourceType = "MANUAL";
         row.createdAt = now;
         row.createdBy = actorUserId;
@@ -90,9 +90,9 @@ public class VolumeMonthlyInput {
 
     public UUID getId() { return id; }
     public UUID getExerciseId() { return exerciseId; }
-    public String getMonth() { return month; }
-    public BigDecimal getActualVolume() { return actualVolume; }
-    public BigDecimal getCommercialRatio() { return commercialRatio; }
-    public BigDecimal getManualForecastVolume() { return manualForecastVolume; }
+    public Instant getSlotStartAt() { return slotStartAt; }
+    public Instant getSlotEndAt() { return slotEndAt; }
+    public BigDecimal getRawVolume() { return rawVolume; }
+    public String getTimezone() { return timezone; }
     public String getSourceType() { return sourceType; }
 }

@@ -24,6 +24,8 @@ import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarReposit
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseHolidayRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
+import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateExcelService.LineDraft;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.CenterCountryDefaults;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.CenterHolidayTemplate;
@@ -51,6 +53,7 @@ public class HolidayTemplateService {
     private final ExerciseCalendarRepository calendars;
     private final ExerciseHolidayRepository holidays;
     private final ExerciseTeamSetupRepository teamSetups;
+    private final CycleTimeBaselineRepository cycleTimeBaselines;
     private final WorkingDaysCalculator workingDaysCalculator;
     private final HolidayTemplateExcelService excel;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -63,6 +66,7 @@ public class HolidayTemplateService {
             ExerciseCalendarRepository calendars,
             ExerciseHolidayRepository holidays,
             ExerciseTeamSetupRepository teamSetups,
+            CycleTimeBaselineRepository cycleTimeBaselines,
             WorkingDaysCalculator workingDaysCalculator,
             HolidayTemplateExcelService excel,
             Clock clock) {
@@ -72,6 +76,7 @@ public class HolidayTemplateService {
         this.calendars = calendars;
         this.holidays = holidays;
         this.teamSetups = teamSetups;
+        this.cycleTimeBaselines = cycleTimeBaselines;
         this.workingDaysCalculator = workingDaysCalculator;
         this.excel = excel;
         this.clock = clock;
@@ -446,9 +451,13 @@ public class HolidayTemplateService {
 
     private void syncTeamSetupWorkingDays(
             UUID exerciseId, ExerciseCalendar calendar, UUID actorUserId, Instant now) {
+        BigDecimal cycleTimeSeconds = cycleTimeBaselines.findByExerciseIdAndActiveTrue(exerciseId)
+                .map(CycleTimeBaseline::getMedianSeconds)
+                .orElse(null);
         teamSetups.findById(exerciseId).ifPresent(setup -> {
             setup.syncWeekendFromCalendar(calendar.getWeekendCode(), actorUserId, now);
-            setup.applyCalendarWorkingDays(calendar.getWorkingDaysPerYear(), actorUserId, now);
+            setup.applyCalendarWorkingDays(
+                    calendar.getWorkingDaysPerYear(), cycleTimeSeconds, actorUserId, now);
             teamSetups.save(setup);
         });
     }

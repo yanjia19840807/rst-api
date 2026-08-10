@@ -4,23 +4,29 @@ import java.util.UUID;
 
 import jakarta.validation.Valid;
 
+import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
+import com.cmacgm.gbs.rst.api.cycletime.api.dto.ExerciseTmsSessionResponse;
 import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService;
 import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService.BaselineView;
 import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService.ManualBaselineRequest;
+import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService.PatchTmsSessionRequest;
+import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService.PatchTmsSessionResult;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Supervisor Cycle Time minimal endpoints (manual baseline + active read).
+ * Supervisor Cycle Time endpoints (manual baseline, active read, Embedded TMS browse / exclusion).
  */
 @RestController
 @RequestMapping("/api/v1/supervisor/exercises/{exerciseId}/cycle-time")
@@ -66,5 +72,42 @@ public class CycleTimeController {
     public BaselineView getActive(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
         return service.getActive(principal.userId(), exerciseId);
+    }
+
+    /**
+     * Lists TMS sessions linked to this Exercise for Embedded TMS review.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @param page 1-based page
+     * @param pageSize page size
+     * @return paged session rows
+     */
+    @GetMapping("/sessions")
+    public PageResponse<ExerciseTmsSessionResponse> listSessions(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        return service.listTmsSessions(principal.userId(), exerciseId, page, pageSize);
+    }
+
+    /**
+     * Includes or excludes a linked TMS session from the SYSTEM median population.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @param sessionNo TMS session number
+     * @param request inclusion flag (no reason)
+     * @return updated session and active baseline
+     */
+    @PatchMapping("/sessions/{sessionNo}")
+    public PatchTmsSessionResult patchSessionIncluded(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @PathVariable String sessionNo,
+            @Valid @RequestBody PatchTmsSessionRequest request) {
+        return service.patchTmsSessionIncluded(
+                principal.userId(), exerciseId, sessionNo, request);
     }
 }

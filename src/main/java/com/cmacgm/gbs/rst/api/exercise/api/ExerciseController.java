@@ -11,6 +11,8 @@ import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService.CreateExercise;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService.CreateExerciseResult;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService.Exercise;
+import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService.UpdateExercisePeriods;
+import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService.UpdateExercisePeriodsResult;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.submission.application.SubmissionService;
 import com.cmacgm.gbs.rst.api.submission.application.SubmissionService.SubmitPreviewView;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -106,6 +109,22 @@ public class ExerciseController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
         service.softDelete(principal.userId(), id);
+    }
+
+    /**
+     * Updates sizing / slot / TMS periods on an editable Exercise.
+     *
+     * @param principal authenticated Supervisor
+     * @param id Exercise id
+     * @param request period payload
+     * @return updated Exercise and notices
+     */
+    @PutMapping("/{id}/periods")
+    public UpdateExercisePeriodsResult updatePeriods(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateExercisePeriods request) {
+        return service.updatePeriods(principal.userId(), id, request);
     }
 
     /**

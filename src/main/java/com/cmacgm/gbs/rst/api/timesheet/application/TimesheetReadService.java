@@ -96,7 +96,28 @@ public class TimesheetReadService {
         return snapshotRows.existsActiveScopeForAgent(ccgid, supervisorPositionId, pl3Code);
     }
 
+    /**
+     * Lists distinct team agents under a supervisor from the ACTIVE Timesheet snapshot.
+     *
+     * @param supervisorCcgid supervisor CCGID
+     * @return agents ordered by display name
+     */
+    @Transactional(readOnly = true)
+    public List<TeamAgent> teamAgents(String supervisorCcgid) {
+        return snapshotRows.findDistinctAgentsBySupervisorCcgid(supervisorCcgid).stream()
+                .map(row -> new TeamAgent(
+                        row.getEmpCcgid(),
+                        row.getEmpName() == null || row.getEmpName().isBlank()
+                                ? row.getEmpCcgid()
+                                : row.getEmpName()))
+                .toList();
+    }
+
     public record ActiveSnapshot(UUID id, LocalDate syncDate, int rowCount) {
+    }
+
+    /** Team agent option for Supervisor TMS filters. */
+    public record TeamAgent(String ccgid, String name) {
     }
 
     public record HierarchyCandidate(

@@ -35,11 +35,11 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * Center legal-holiday template management endpoints.
- * Role assignment can be narrowed later; currently Supervisor (+ Approver/LTH roles).
+ * Center legal-holiday template management endpoints (LTH only).
  */
 @RestController
 @RequestMapping("/api/v1/holiday-templates")
+@PreAuthorize("hasRole('LTH')")
 public class HolidayTemplateController {
 
     private final HolidayTemplateService service;
@@ -49,7 +49,6 @@ public class HolidayTemplateController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
     public List<TemplateSummary> list(
             @RequestParam(required = false) String center,
             @RequestParam(required = false) Short year,
@@ -58,7 +57,6 @@ public class HolidayTemplateController {
     }
 
     @GetMapping("/by-center")
-    @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
     public TemplateDetail byCenter(
             @RequestParam String center,
             @RequestParam short year) {
@@ -70,20 +68,17 @@ public class HolidayTemplateController {
     }
 
     @GetMapping("/export-blank")
-    @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
     public ResponseEntity<byte[]> exportBlank() {
         return excelResponse(service.blankExcel(), "holiday-template-blank.xlsx");
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
     public TemplateDetail detail(@PathVariable UUID id) {
         return service.get(id);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
     public TemplateDetail create(
             @AuthenticationPrincipal RstPrincipal principal,
             @Valid @RequestBody CreateBody request) {
@@ -91,7 +86,6 @@ public class HolidayTemplateController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
     public TemplateDetail update(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id,
@@ -100,7 +94,6 @@ public class HolidayTemplateController {
     }
 
     @PostMapping("/{id}/publish")
-    @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
     public TemplateDetail publish(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID id) {
         return service.publish(principal.userId(), id);
@@ -108,14 +101,12 @@ public class HolidayTemplateController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
     public void delete(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID id) {
         service.softDelete(principal.userId(), id);
     }
 
     @GetMapping("/{id}/export")
-    @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
     public ResponseEntity<byte[]> export(@PathVariable UUID id) {
         TemplateDetail detail = service.get(id);
         String filename = "holiday-template-"
@@ -125,7 +116,6 @@ public class HolidayTemplateController {
     }
 
     @PostMapping(path = "/{id}/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
     public TemplateDetail importExcel(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id,

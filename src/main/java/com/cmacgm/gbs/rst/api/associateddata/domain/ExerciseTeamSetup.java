@@ -151,16 +151,18 @@ public class ExerciseTeamSetup {
      * derived fields null.
      *
      * @param input editable Team Setup values
+     * @param cycleTimeSeconds active Cycle Time median (seconds); null clears daily capacity
      * @param actorUserId updating Supervisor
      * @param now update timestamp
      */
-    public void replaceInputs(TeamSetupInput input, UUID actorUserId, Instant now) {
+    public void replaceInputs(
+            TeamSetupInput input, BigDecimal cycleTimeSeconds, UUID actorUserId, Instant now) {
         this.agentsLt6m = input.agentsLt6m();
         this.agents6To24m = input.agents6To24m();
         this.agents24To48m = input.agents24To48m();
         this.agentsGt48m = input.agentsGt48m();
         this.deliveryHc = input.deliveryHc();
-        this.workingHoursPerDay = input.workingHoursPerDay();
+        // workingHoursPerDay is derived from SLA clock start/end in recalculateDerived().
         this.paidLeaveDays = input.paidLeaveDays();
         this.otherLeaveDays = input.otherLeaveDays();
         this.weekendCode = input.weekendCode();
@@ -176,23 +178,29 @@ public class ExerciseTeamSetup {
         this.slaWeekendEnabled = input.slaWeekendEnabled();
         this.weekendShiftHc = input.weekendShiftHc();
         this.skeletonRatio = input.skeletonRatio();
-        recalculateDerived();
-        this.calculationVersion = "v1";
+        recalculateDerived(cycleTimeSeconds);
+        this.calculationVersion = "v1.2";
         this.updatedAt = now;
         this.updatedBy = actorUserId;
     }
 
     /**
-     * Applies Calendar NETWORKDAYS result and refreshes Max Capacity / Capacity Ratio.
+     * Applies Calendar NETWORKDAYS result and refreshes Max Capacity / Capacity Ratio /
+     * Daily capacity.
      *
      * @param calendarWorkingDays working days from weekend + holidays
+     * @param cycleTimeSeconds active Cycle Time median (seconds); null clears daily capacity
      * @param actorUserId updating user
      * @param now update timestamp
      */
-    public void applyCalendarWorkingDays(BigDecimal calendarWorkingDays, UUID actorUserId, Instant now) {
+    public void applyCalendarWorkingDays(
+            BigDecimal calendarWorkingDays,
+            BigDecimal cycleTimeSeconds,
+            UUID actorUserId,
+            Instant now) {
         this.workingDaysPerYear = calendarWorkingDays;
         recalculateCapacityFromWorkingDays();
-        recalculateDailyCapacity();
+        recalculateDailyCapacity(cycleTimeSeconds);
         this.updatedAt = now;
         this.updatedBy = actorUserId;
     }
@@ -213,13 +221,16 @@ public class ExerciseTeamSetup {
      * <ul>
      *   <li>totalAgents = sum of tenure buckets</li>
      *   <li>averageTenureYears = weighted midpoints (0.25, 1.25, 3, 5) / totalAgents</li>
+     *   <li>workingHoursPerDay = SLA clock end − start (overnight wraps +24h)</li>
      *   <li>workingDaysPerYear comes from Calendar (NETWORKDAYS); not recomputed here</li>
      *   <li>maxCapacityDays = workingDays - paidLeave - otherLeave</li>
      *   <li>capacityRatio = maxCapacityDays / workingDays when working days present</li>
-     *   <li>dailyCapacityPerAgent = workingHours * availability * (1 - automation) * capacity</li>
+     *   <li>dailyCapacityPerAgent = workingHours × availability × 3600 / cycleTime (BRD)</li>
      * </ul>
+     *
+     * @param cycleTimeSeconds active Cycle Time median in seconds
      */
-    public void recalculateDerived() {
+    public void recalculateDerived(BigDecimal cycleTimeSeconds) {
         BigDecimal total = nz(agentsLt6m).add(nz(agents6To24m)).add(nz(agents24To48m)).add(nz(agentsGt48m));
         this.totalAgents = total.compareTo(BigDecimal.ZERO) > 0 ? total : null;
         if (this.totalAgents != null) {
@@ -231,8 +242,26 @@ public class ExerciseTeamSetup {
         } else {
             this.averageTenureYears = null;
         }
+        recalculateWorkingHoursFromSlaClock();
         recalculateCapacityFromWorkingDays();
-        recalculateDailyCapacity();
+        recalculateDailyCapacity(cycleTimeSeconds);
+    }
+
+    /**
+     * Derives working hours / day from SLA clock window.
+     * When end ≤ start, treats the window as overnight (+24h).
+     */
+    private void recalculateWorkingHoursFromSlaClock() {
+        if (slaStartTime == null || slaEndTime == null) {
+            this.workingHoursPerDay = null;
+            return;
+        }
+        long seconds = (long) slaEndTime.toSecondOfDay() - slaStartTime.toSecondOfDay();
+        if (seconds <= 0) {
+            seconds += 24L * 60 * 60;
+        }
+        this.workingHoursPerDay = BigDecimal.valueOf(seconds)
+                .divide(BigDecimal.valueOf(3600), 6, RoundingMode.HALF_UP);
     }
 
     private void recalculateCapacityFromWorkingDays() {
@@ -246,14 +275,18 @@ public class ExerciseTeamSetup {
         }
     }
 
-    private void recalculateDailyCapacity() {
-        if (workingHoursPerDay != null && availabilityRatio != null
-                && automationRatio != null && capacityRatio != null) {
+    /**
+     * BRD: WorkingHoursPerDay × AvailabilityRatio × 3600 / CycleTime.
+     */
+    private void recalculateDailyCapacity(BigDecimal cycleTimeSeconds) {
+        if (workingHoursPerDay != null
+                && availabilityRatio != null
+                && cycleTimeSeconds != null
+                && cycleTimeSeconds.compareTo(BigDecimal.ZERO) > 0) {
             this.dailyCapacityPerAgent = workingHoursPerDay
                     .multiply(availabilityRatio)
-                    .multiply(BigDecimal.ONE.subtract(automationRatio))
-                    .multiply(capacityRatio)
-                    .setScale(6, RoundingMode.HALF_UP);
+                    .multiply(BigDecimal.valueOf(3600))
+                    .divide(cycleTimeSeconds, 6, RoundingMode.HALF_UP);
         } else {
             this.dailyCapacityPerAgent = null;
         }

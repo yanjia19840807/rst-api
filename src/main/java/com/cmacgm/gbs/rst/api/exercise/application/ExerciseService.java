@@ -25,6 +25,8 @@ import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
+import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
+import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService.ApplyTemplatesResult;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
 import com.cmacgm.gbs.rst.api.toolkit.persistence.ToolkitRepository;
@@ -46,6 +48,7 @@ public class ExerciseService {
     private final ExerciseTeamSetupRepository teamSetups;
     private final ExerciseCalendarRepository calendars;
     private final ExerciseInitializationService initialization;
+    private final HolidayTemplateService holidayTemplates;
     private final Clock clock;
 
     /**
@@ -59,6 +62,7 @@ public class ExerciseService {
             ExerciseTeamSetupRepository teamSetups,
             ExerciseCalendarRepository calendars,
             ExerciseInitializationService initialization,
+            HolidayTemplateService holidayTemplates,
             Clock clock) {
         this.exercises = exercises;
         this.toolkits = toolkits;
@@ -67,6 +71,7 @@ public class ExerciseService {
         this.teamSetups = teamSetups;
         this.calendars = calendars;
         this.initialization = initialization;
+        this.holidayTemplates = holidayTemplates;
         this.clock = clock;
     }
 
@@ -229,6 +234,77 @@ public class ExerciseService {
         }
         exercise.softDelete(ownerId, clock.instant());
         exercises.save(exercise);
+    }
+
+    /**
+     * Updates sizing / slot / TMS periods on an editable Exercise.
+     * When the sizing year changes, re-applies Center holiday templates (CUSTOM rows kept).
+     *
+     * @param ownerId Supervisor user id
+     * @param exerciseId Exercise id
+     * @param request period payload
+     * @return updated Exercise and notices
+     */
+    @Transactional
+    public UpdateExercisePeriodsResult updatePeriods(
+            UUID ownerId, UUID exerciseId, UpdateExercisePeriods request) {
+        validatePeriods(request.sizingMonth(), request.tmsFrom(), request.tmsTo());
+        RstExercise exercise = requireOwned(ownerId, exerciseId);
+        if (!exercise.canEdit()) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "exercise-not-editable",
+                    "Exercise periods can only be changed while In Progress or Returned.");
+        }
+        short previousYear = Short.parseShort(exercise.getSizingMonth().substring(0, 4));
+        short nextYear = Short.parseShort(request.sizingMonth().substring(0, 4));
+        exercise.updatePeriods(
+                request.sizingMonth(),
+                request.slotStartDate(),
+                request.slotWeeks(),
+                request.tmsFrom(),
+                request.tmsTo(),
+                ownerId,
+                clock.instant());
+        exercises.saveAndFlush(exercise);
+
+        List<String> notices = new ArrayList<>();
+        if (previousYear != nextYear) {
+            String center = exercise.getToolkitSnapshot() != null
+                    ? exercise.getToolkitSnapshot().getCenter()
+                    : null;
+            ApplyTemplatesResult applied = holidayTemplates.applyPublishedTemplates(
+                    exercise.getId(),
+                    center,
+                    nextYear,
+                    ExerciseInitializationService.resolveHolidayYears(exercise),
+                    ownerId,
+                    true);
+            holidayTemplates.refreshWorkingDaysForExercise(exercise.getId(), ownerId);
+            notices.add(
+                    "Sizing year changed ("
+                            + previousYear
+                            + " → "
+                            + nextYear
+                            + "). Holiday templates were re-applied.");
+            notices.addAll(applied.notices());
+        }
+        return new UpdateExercisePeriodsResult(toResponse(exercise), notices);
+    }
+
+    private static void validatePeriods(String sizingMonth, LocalDate tmsFrom, LocalDate tmsTo) {
+        if (tmsTo.isBefore(tmsFrom)) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "invalid-tms-period",
+                    "tmsTo cannot be before tmsFrom.");
+        }
+        if (sizingMonth == null || !sizingMonth.matches("^[0-9]{4}-(0[1-9]|1[0-2])$")) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "invalid-sizing-month",
+                    "sizingMonth must be YYYY-MM.");
+        }
     }
 
     /**
@@ -409,6 +485,23 @@ public class ExerciseService {
      * Create Exercise response with initialization notices for the Supervisor.
      */
     public record CreateExerciseResult(Exercise exercise, List<String> notices) {
+    }
+
+    /**
+     * Update Exercise period payload (Toolkit is immutable after create).
+     */
+    public record UpdateExercisePeriods(
+            @NotBlank @Pattern(regexp = "^[0-9]{4}-(0[1-9]|1[0-2])$") String sizingMonth,
+            @NotNull LocalDate slotStartDate,
+            @Min(1) @Max(12) short slotWeeks,
+            @NotNull LocalDate tmsFrom,
+            @NotNull LocalDate tmsTo) {
+    }
+
+    /**
+     * Update periods response with optional holiday re-apply notices.
+     */
+    public record UpdateExercisePeriodsResult(Exercise exercise, List<String> notices) {
     }
 
     /**

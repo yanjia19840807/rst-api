@@ -17,21 +17,24 @@ import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseHoliday;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseShift;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup.TeamSetupInput;
-import com.cmacgm.gbs.rst.api.associateddata.domain.ProductionSupportItem;
-import com.cmacgm.gbs.rst.api.associateddata.domain.ProductionSupportItemScope;
-import com.cmacgm.gbs.rst.api.associateddata.domain.VolumeDailyInput;
-import com.cmacgm.gbs.rst.api.associateddata.domain.VolumeMonthlyInput;
-import com.cmacgm.gbs.rst.api.associateddata.domain.VolumeSlotInput;
+import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseProductionSupportItem;
+import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseProductionSupportItemScope;
+import com.cmacgm.gbs.rst.api.associateddata.domain.SupportWorkloadMath;
+import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeDailyInput;
+import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeMonthlyInput;
+import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeSlotInput;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseHolidayRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseShiftRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ProductionSupportItemRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ProductionSupportItemScopeRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.VolumeDailyInputRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.VolumeMonthlyInputRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.VolumeSlotInputRepository;
+import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSupportItemRepository;
+import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSupportItemScopeRepository;
+import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeDailyInputRepository;
+import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeMonthlyInputRepository;
+import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeSlotInputRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
+import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseInitializationService;
@@ -51,14 +54,15 @@ public class AssociatedDataService {
     private final ExerciseService exercises;
     private final ExerciseTeamSetupRepository teamSetups;
     private final ExerciseShiftRepository shifts;
-    private final ProductionSupportItemRepository supportItems;
-    private final ProductionSupportItemScopeRepository supportScopes;
+    private final ExerciseProductionSupportItemRepository supportItems;
+    private final ExerciseProductionSupportItemScopeRepository supportScopes;
     private final ExerciseCalendarRepository calendars;
     private final ExerciseHolidayRepository holidays;
-    private final VolumeMonthlyInputRepository monthlyVolumes;
-    private final VolumeDailyInputRepository dailyVolumes;
-    private final VolumeSlotInputRepository slotVolumes;
+    private final ExerciseVolumeMonthlyInputRepository monthlyVolumes;
+    private final ExerciseVolumeDailyInputRepository dailyVolumes;
+    private final ExerciseVolumeSlotInputRepository slotVolumes;
     private final HolidayTemplateService holidayTemplates;
+    private final CycleTimeBaselineRepository cycleTimeBaselines;
     private final Clock clock;
 
     /**
@@ -68,14 +72,15 @@ public class AssociatedDataService {
             ExerciseService exercises,
             ExerciseTeamSetupRepository teamSetups,
             ExerciseShiftRepository shifts,
-            ProductionSupportItemRepository supportItems,
-            ProductionSupportItemScopeRepository supportScopes,
+            ExerciseProductionSupportItemRepository supportItems,
+            ExerciseProductionSupportItemScopeRepository supportScopes,
             ExerciseCalendarRepository calendars,
             ExerciseHolidayRepository holidays,
-            VolumeMonthlyInputRepository monthlyVolumes,
-            VolumeDailyInputRepository dailyVolumes,
-            VolumeSlotInputRepository slotVolumes,
+            ExerciseVolumeMonthlyInputRepository monthlyVolumes,
+            ExerciseVolumeDailyInputRepository dailyVolumes,
+            ExerciseVolumeSlotInputRepository slotVolumes,
             HolidayTemplateService holidayTemplates,
+            CycleTimeBaselineRepository cycleTimeBaselines,
             Clock clock) {
         this.exercises = exercises;
         this.teamSetups = teamSetups;
@@ -88,6 +93,7 @@ public class AssociatedDataService {
         this.dailyVolumes = dailyVolumes;
         this.slotVolumes = slotVolumes;
         this.holidayTemplates = holidayTemplates;
+        this.cycleTimeBaselines = cycleTimeBaselines;
         this.clock = clock;
     }
 
@@ -119,11 +125,16 @@ public class AssociatedDataService {
         BigDecimal calendarWorkingDays = calendars.findById(exerciseId)
                 .map(ExerciseCalendar::getWorkingDaysPerYear)
                 .orElse(null);
-        setup.replaceInputs(request.toInput(), ownerId, clock.instant());
+        BigDecimal cycleTimeSeconds = activeCycleTimeSeconds(exerciseId);
+        Instant now = clock.instant();
+        setup.replaceInputs(request.toInput(), cycleTimeSeconds, ownerId, now);
         if (calendarWorkingDays != null) {
-            setup.applyCalendarWorkingDays(calendarWorkingDays, ownerId, clock.instant());
+            setup.applyCalendarWorkingDays(
+                    calendarWorkingDays, cycleTimeSeconds, ownerId, now);
         }
-        return toTeamSetup(teamSetups.save(setup));
+        TeamSetupView view = toTeamSetup(teamSetups.save(setup));
+        refreshSupportDerived(exerciseId);
+        return view;
     }
 
     /**
@@ -192,10 +203,20 @@ public class AssociatedDataService {
     public SupportItemView createSupport(UUID ownerId, UUID exerciseId, SupportItemRequest request) {
         RstExercise exercise = editable(ownerId, exerciseId);
         Instant now = clock.instant();
-        ProductionSupportItem item = ProductionSupportItem.create(
+        ExerciseTeamSetup setup = requireTeamSetup(exerciseId);
+        BigDecimal multiplier;
+        try {
+            multiplier = SupportWorkloadMath.annualMultiplier(
+                    request.frequencyCode(), setup.getWorkingDaysPerYear());
+        } catch (IllegalArgumentException ex) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-frequency", ex.getMessage());
+        }
+        ExerciseProductionSupportItem item = ExerciseProductionSupportItem.create(
                 exercise.getId(), request.category(), request.activity(), request.frequencyCode(),
                 request.volume(), request.unitOfMeasure(), request.workloadPerUnitMinutes(),
-                request.annualMultiplier(), request.comments(), ownerId, now);
+                multiplier, request.comments(), ownerId, now);
+        item.applyDerived(multiplier, SupportWorkloadMath.fteAnnualHours(setup));
         supportItems.save(item);
         replaceScopes(item.getId(), resolveKpiIds(exercise, request.kpiLineIds()));
         return toSupport(item);
@@ -214,14 +235,24 @@ public class AssociatedDataService {
     public SupportItemView updateSupport(
             UUID ownerId, UUID exerciseId, UUID itemId, SupportItemRequest request) {
         RstExercise exercise = editable(ownerId, exerciseId);
-        ProductionSupportItem item = supportItems.findByIdAndExerciseIdAndDeletedAtIsNull(itemId, exerciseId)
+        ExerciseProductionSupportItem item = supportItems.findByIdAndExerciseIdAndDeletedAtIsNull(itemId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "support-item-not-found", "The support item was not found."));
         Instant now = clock.instant();
+        ExerciseTeamSetup setup = requireTeamSetup(exerciseId);
+        BigDecimal multiplier;
+        try {
+            multiplier = SupportWorkloadMath.annualMultiplier(
+                    request.frequencyCode(), setup.getWorkingDaysPerYear());
+        } catch (IllegalArgumentException ex) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-frequency", ex.getMessage());
+        }
         item.update(
                 request.category(), request.activity(), request.frequencyCode(), request.volume(),
-                request.unitOfMeasure(), request.workloadPerUnitMinutes(), request.annualMultiplier(),
+                request.unitOfMeasure(), request.workloadPerUnitMinutes(), multiplier,
                 request.comments(), ownerId, now);
+        item.applyDerived(multiplier, SupportWorkloadMath.fteAnnualHours(setup));
         supportItems.save(item);
         replaceScopes(item.getId(), resolveKpiIds(exercise, request.kpiLineIds()));
         return toSupport(item);
@@ -237,7 +268,7 @@ public class AssociatedDataService {
     @Transactional
     public void deleteSupport(UUID ownerId, UUID exerciseId, UUID itemId) {
         editable(ownerId, exerciseId);
-        ProductionSupportItem item = supportItems.findByIdAndExerciseIdAndDeletedAtIsNull(itemId, exerciseId)
+        ExerciseProductionSupportItem item = supportItems.findByIdAndExerciseIdAndDeletedAtIsNull(itemId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "support-item-not-found", "The support item was not found."));
         item.softDelete(ownerId, clock.instant());
@@ -309,6 +340,7 @@ public class AssociatedDataService {
             }
         }
         holidayTemplates.refreshWorkingDaysForExercise(exerciseId, ownerId);
+        refreshSupportDerived(exerciseId);
         return getCalendar(ownerId, exerciseId);
     }
 
@@ -330,6 +362,7 @@ public class AssociatedDataService {
                 ExerciseInitializationService.resolveHolidayYears(exercise),
                 ownerId,
                 true);
+        refreshSupportDerived(exerciseId);
         return new ReapplyCalendarResult(getCalendar(ownerId, exerciseId), applied.notices());
     }
 
@@ -366,7 +399,7 @@ public class AssociatedDataService {
         monthlyVolumes.deleteByExerciseId(exerciseId);
         monthlyVolumes.flush();
         for (MonthlyVolumeRequest row : request) {
-            monthlyVolumes.save(VolumeMonthlyInput.create(
+            monthlyVolumes.save(ExerciseVolumeMonthlyInput.create(
                     exerciseId, row.month(), row.actualVolume(), row.commercialRatio(),
                     row.manualForecastVolume(), ownerId, now));
         }
@@ -406,7 +439,7 @@ public class AssociatedDataService {
         dailyVolumes.deleteByExerciseId(exerciseId);
         dailyVolumes.flush();
         for (DailyVolumeRequest row : request) {
-            dailyVolumes.save(VolumeDailyInput.create(
+            dailyVolumes.save(ExerciseVolumeDailyInput.create(
                     exerciseId, row.volumeDate(), row.actualVolume(), row.dailyAdjustmentRatio(),
                     row.manualForecastVolume(), ownerId, now));
         }
@@ -454,7 +487,7 @@ public class AssociatedDataService {
         slotVolumes.deleteByExerciseId(exerciseId);
         slotVolumes.flush();
         for (SlotVolumeRequest row : request) {
-            slotVolumes.save(VolumeSlotInput.create(
+            slotVolumes.save(ExerciseVolumeSlotInput.create(
                     exerciseId, row.slotStartAt(), row.slotEndAt(), row.rawVolume(),
                     row.timezone(), ownerId, now));
         }
@@ -471,6 +504,32 @@ public class AssociatedDataService {
         return teamSetups.findById(exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "team-setup-not-found", "Team Setup was not found."));
+    }
+
+    private BigDecimal activeCycleTimeSeconds(UUID exerciseId) {
+        return cycleTimeBaselines.findByExerciseIdAndActiveTrue(exerciseId)
+                .map(CycleTimeBaseline::getMedianSeconds)
+                .orElse(null);
+    }
+
+    /**
+     * Recomputes Hours/year and FTE for all active support rows from current Team Setup.
+     */
+    private void refreshSupportDerived(UUID exerciseId) {
+        ExerciseTeamSetup setup = teamSetups.findById(exerciseId).orElse(null);
+        BigDecimal workingDays = setup != null ? setup.getWorkingDaysPerYear() : null;
+        BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup);
+        for (ExerciseProductionSupportItem item : supportItems
+                .findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(exerciseId)) {
+            try {
+                BigDecimal multiplier = SupportWorkloadMath.annualMultiplier(
+                        item.getFrequencyCode(), workingDays);
+                item.applyDerived(multiplier, fteHours);
+                supportItems.save(item);
+            } catch (IllegalArgumentException ignored) {
+                // Keep existing derived values for unrecognized historical frequency codes.
+            }
+        }
     }
 
     private ExerciseCalendar requireCalendar(UUID exerciseId) {
@@ -496,7 +555,7 @@ public class AssociatedDataService {
     }
 
     private void replaceScopes(UUID itemId, List<UUID> kpiLineIds) {
-        supportScopes.deleteByProductionSupportItemId(itemId);
+        supportScopes.deleteByExerciseProductionSupportItemId(itemId);
         supportScopes.flush();
         if (kpiLineIds.isEmpty()) {
             return;
@@ -504,7 +563,7 @@ public class AssociatedDataService {
         BigDecimal ratio = BigDecimal.ONE.divide(
                 BigDecimal.valueOf(kpiLineIds.size()), 8, RoundingMode.HALF_UP);
         for (UUID kpiLineId : kpiLineIds) {
-            supportScopes.save(ProductionSupportItemScope.assign(itemId, kpiLineId, ratio));
+            supportScopes.save(ExerciseProductionSupportItemScope.assign(itemId, kpiLineId, ratio));
         }
     }
 
@@ -528,8 +587,8 @@ public class AssociatedDataService {
                 shift.getHeadcount(), shift.isWorksOnWeekend());
     }
 
-    private SupportItemView toSupport(ProductionSupportItem item) {
-        List<SupportScopeView> scopes = supportScopes.findByProductionSupportItemId(item.getId()).stream()
+    private SupportItemView toSupport(ExerciseProductionSupportItem item) {
+        List<SupportScopeView> scopes = supportScopes.findByExerciseProductionSupportItemId(item.getId()).stream()
                 .map(s -> new SupportScopeView(s.getExerciseSharedKpiLineId(), s.getAllocationRatio()))
                 .toList();
         return new SupportItemView(
@@ -608,7 +667,7 @@ public class AssociatedDataService {
     public record SupportScopeView(UUID exerciseSharedKpiLineId, BigDecimal allocationRatio) {
     }
 
-    /** Support item write payload. */
+    /** Support item write payload. {@code annualMultiplier} is ignored; server derives it. */
     public record SupportItemRequest(
             @NotBlank String category,
             @NotBlank String activity,
@@ -616,7 +675,7 @@ public class AssociatedDataService {
             @NotNull BigDecimal volume,
             @NotBlank String unitOfMeasure,
             @NotNull BigDecimal workloadPerUnitMinutes,
-            @NotNull BigDecimal annualMultiplier,
+            BigDecimal annualMultiplier,
             String comments,
             List<UUID> kpiLineIds) {
     }

@@ -28,7 +28,8 @@ public class CorsConfig {
                 "Content-Type",
                 "X-Request-ID",
                 "Idempotency-Key",
-                "X-Dev-Role"));
+                "X-Dev-Role",
+                "X-Dev-Ccgid"));
         configuration.setExposedHeaders(List.of("X-Request-ID"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

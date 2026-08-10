@@ -37,8 +37,33 @@ public class CycleTimeBaselineSample {
     protected CycleTimeBaselineSample() {
     }
 
+    /**
+     * Freezes a TMS session membership snapshot for a SYSTEM baseline.
+     *
+     * @param baselineId SYSTEM baseline id
+     * @param tmsSessionId TMS session id
+     * @param included whether the session was included in the median
+     * @param secondsPerUnitSnapshot cycle-time seconds per unit at freeze time; null if invalid
+     * @return frozen sample row
+     */
+    public static CycleTimeBaselineSample freeze(
+            UUID baselineId,
+            UUID tmsSessionId,
+            boolean included,
+            BigDecimal secondsPerUnitSnapshot) {
+        CycleTimeBaselineSample sample = new CycleTimeBaselineSample();
+        sample.cycleTimeBaselineId = baselineId;
+        sample.tmsSessionId = tmsSessionId;
+        sample.included = included;
+        sample.secondsPerUnitSnapshot = secondsPerUnitSnapshot;
+        sample.exclusionReason = null;
+        return sample;
+    }
+
     public UUID getCycleTimeBaselineId() { return cycleTimeBaselineId; }
     public UUID getTmsSessionId() { return tmsSessionId; }
+    public boolean isIncluded() { return included; }
+    public BigDecimal getSecondsPerUnitSnapshot() { return secondsPerUnitSnapshot; }
 
     /** Composite PK. */
     public static class Pk implements Serializable {

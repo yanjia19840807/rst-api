@@ -14,17 +14,19 @@ import com.cmacgm.gbs.rst.api.security.RstAuthenticationToken;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Profile;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.cmacgm.gbs.rst.api.common.error.ApiException;
+
 /**
  * Injects a configurable demo principal in {@code dev}/{@code test}.
  *
- * <p>Set {@code app.security.dev-identity.ccgid} in {@code application-dev.yml} to a real
- * ACTIVE Timesheet {@code supervisor_ccgid} (or employee CCGID). Send
- * {@code X-Dev-Role: AGENT} to switch to {@code app.security.dev-identity.agent-ccgid}.
+ * <p>Configure {@code app.security.dev-identity.ccgid} and {@code role} to simulate one login.
+ * Optional request overrides: {@code X-Dev-Ccgid}, {@code X-Dev-Role}.
  */
 @Component
 @Profile({"dev", "test"})
@@ -56,36 +58,38 @@ public class DevAuthenticationFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
         if (SecurityContextHolder.getContext().getAuthentication() == null) {
-            String header = request.getHeader("X-Dev-Role");
-            boolean agentRole = header != null && "AGENT".equalsIgnoreCase(header.trim());
-            String configuredRole = properties.getRole() == null
-                    ? "SUPERVISOR"
-                    : properties.getRole().trim().toUpperCase(Locale.ROOT);
-            boolean useAgent = agentRole || "AGENT".equals(configuredRole);
+            String ccgid = firstNonBlank(
+                    request.getHeader("X-Dev-Ccgid"),
+                    properties.getCcgid(),
+                    "SUPERVISOR001");
+            String role;
+            try {
+                role = DevRoles.requireValid(firstNonBlank(
+                        request.getHeader("X-Dev-Role"),
+                        properties.getRole(),
+                        "SUPERVISOR"));
+            } catch (IllegalArgumentException ex) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "dev-identity-role", ex.getMessage());
+            }
 
-            String ccgid = useAgent
-                    ? firstNonBlank(properties.getAgentCcgid(), "AGENT001")
-                    : firstNonBlank(properties.getCcgid(), "SUPERVISOR001");
-            Set<String> roles = useAgent
-                    ? Set.of("AGENT", "SUPERVISOR")
-                    : Set.of("SUPERVISOR", "AGENT");
-
+            Set<String> roles = Set.of(role);
             RstPrincipal principal = identities.resolve(ccgid, roles);
             var authentication = new RstAuthenticationToken(
                     principal,
                     "dev-profile",
-                    List.of(
-                            new SimpleGrantedAuthority("ROLE_SUPERVISOR"),
-                            new SimpleGrantedAuthority("ROLE_AGENT")));
+                    List.of(new SimpleGrantedAuthority("ROLE_" + role)));
             SecurityContextHolder.getContext().setAuthentication(authentication);
         }
         filterChain.doFilter(request, response);
     }
 
-    private static String firstNonBlank(String value, String fallback) {
-        if (value == null || value.isBlank()) {
-            return fallback;
+    private static String firstNonBlank(String first, String second, String fallback) {
+        if (first != null && !first.isBlank()) {
+            return first.trim().toUpperCase(Locale.ROOT);
         }
-        return value.trim();
+        if (second != null && !second.isBlank()) {
+            return second.trim().toUpperCase(Locale.ROOT);
+        }
+        return fallback;
     }
 }

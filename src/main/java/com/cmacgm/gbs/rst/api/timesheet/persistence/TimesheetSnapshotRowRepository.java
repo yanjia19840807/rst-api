@@ -41,6 +41,36 @@ public interface TimesheetSnapshotRowRepository extends JpaRepository<TimesheetS
             """)
     List<String> findEmployeeNamesByCcgid(@Param("ccgid") String ccgid);
 
+    /**
+     * Resolves a display name for a senior manager CCGID from the ACTIVE snapshot.
+     *
+     * @param ccgid senior manager CCGID
+     * @return distinct senior manager names
+     */
+    @Query("""
+            select distinct r.srManagerName
+            from TimesheetSnapshotRow r
+            where r.syncRun.status = 'ACTIVE'
+              and upper(r.srManagerCcgid) = upper(:ccgid)
+              and r.srManagerName is not null
+            """)
+    List<String> findSrManagerNamesByCcgid(@Param("ccgid") String ccgid);
+
+    /**
+     * Resolves a display name for a domain head CCGID from the ACTIVE snapshot.
+     *
+     * @param ccgid domain head CCGID
+     * @return distinct domain head names
+     */
+    @Query("""
+            select distinct r.domainHeadName
+            from TimesheetSnapshotRow r
+            where r.syncRun.status = 'ACTIVE'
+              and upper(r.domainHeadCcgid) = upper(:ccgid)
+              and r.domainHeadName is not null
+            """)
+    List<String> findDomainHeadNamesByCcgid(@Param("ccgid") String ccgid);
+
     interface HierarchyRow {
         String getSupervisorPositionId();
 
@@ -156,4 +186,27 @@ public interface TimesheetSnapshotRowRepository extends JpaRepository<TimesheetS
             @Param("ccgid") String ccgid,
             @Param("positionId") String supervisorPositionId,
             @Param("pl3Code") String pl3Code);
+
+    /**
+     * Lists distinct employees reporting to a supervisor in the ACTIVE snapshot.
+     *
+     * @param ccgid supervisor CCGID
+     * @return agent rows ordered by name then CCGID
+     */
+    @Query("""
+            select distinct r.empCcgid as empCcgid, r.empName as empName
+            from TimesheetSnapshotRow r
+            where r.syncRun.status = 'ACTIVE'
+              and upper(r.supervisorCcgid) = upper(:ccgid)
+              and r.empCcgid is not null
+            order by r.empName, r.empCcgid
+            """)
+    List<TeamAgentRow> findDistinctAgentsBySupervisorCcgid(@Param("ccgid") String ccgid);
+
+    /** Projection for supervisor team agent filter options. */
+    interface TeamAgentRow {
+        String getEmpCcgid();
+
+        String getEmpName();
+    }
 }
