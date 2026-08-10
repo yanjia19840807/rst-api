@@ -34,6 +34,10 @@ import com.cmacgm.gbs.rst.api.associateddata.persistence.VolumeSlotInputReposito
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
+import com.cmacgm.gbs.rst.api.exercise.application.ExerciseInitializationService;
+import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
+import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService.ApplyTemplatesResult;
+import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService.TemplateUpdateHint;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,22 +58,11 @@ public class AssociatedDataService {
     private final VolumeMonthlyInputRepository monthlyVolumes;
     private final VolumeDailyInputRepository dailyVolumes;
     private final VolumeSlotInputRepository slotVolumes;
+    private final HolidayTemplateService holidayTemplates;
     private final Clock clock;
 
     /**
      * Creates the Associated Data service.
-     *
-     * @param exercises Exercise service
-     * @param teamSetups Team Setup repository
-     * @param shifts Shift repository
-     * @param supportItems Support item repository
-     * @param supportScopes Support scope repository
-     * @param calendars Calendar repository
-     * @param holidays Holiday repository
-     * @param monthlyVolumes Monthly volume repository
-     * @param dailyVolumes Daily volume repository
-     * @param slotVolumes Slot volume repository
-     * @param clock clock
      */
     public AssociatedDataService(
             ExerciseService exercises,
@@ -82,6 +75,7 @@ public class AssociatedDataService {
             VolumeMonthlyInputRepository monthlyVolumes,
             VolumeDailyInputRepository dailyVolumes,
             VolumeSlotInputRepository slotVolumes,
+            HolidayTemplateService holidayTemplates,
             Clock clock) {
         this.exercises = exercises;
         this.teamSetups = teamSetups;
@@ -93,6 +87,7 @@ public class AssociatedDataService {
         this.monthlyVolumes = monthlyVolumes;
         this.dailyVolumes = dailyVolumes;
         this.slotVolumes = slotVolumes;
+        this.holidayTemplates = holidayTemplates;
         this.clock = clock;
     }
 
@@ -121,7 +116,13 @@ public class AssociatedDataService {
     public TeamSetupView putTeamSetup(UUID ownerId, UUID exerciseId, TeamSetupRequest request) {
         RstExercise exercise = editable(ownerId, exerciseId);
         ExerciseTeamSetup setup = requireTeamSetup(exercise.getId());
+        BigDecimal calendarWorkingDays = calendars.findById(exerciseId)
+                .map(ExerciseCalendar::getWorkingDaysPerYear)
+                .orElse(null);
         setup.replaceInputs(request.toInput(), ownerId, clock.instant());
+        if (calendarWorkingDays != null) {
+            setup.applyCalendarWorkingDays(calendarWorkingDays, ownerId, clock.instant());
+        }
         return toTeamSetup(teamSetups.save(setup));
     }
 
@@ -252,17 +253,29 @@ public class AssociatedDataService {
      */
     @Transactional(readOnly = true)
     public CalendarView getCalendar(UUID ownerId, UUID exerciseId) {
-        exercises.requireOwned(ownerId, exerciseId);
+        RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
         ExerciseCalendar calendar = requireCalendar(exerciseId);
         List<HolidayView> holidayViews = holidays
                 .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)
                 .stream()
                 .map(this::toHoliday)
                 .toList();
+        String center = exercise.getToolkitSnapshot() != null
+                ? exercise.getToolkitSnapshot().getCenter()
+                : null;
+        boolean editable = exercise.canEdit();
+        TemplateUpdateHint update = editable
+                ? holidayTemplates.findTemplateUpdate(exerciseId, center).orElse(null)
+                : null;
         return new CalendarView(
-                calendar.getCountryCode(), calendar.getTimezone(), calendar.getWeekendCode(),
-                calendar.getBaselineSource(), calendar.getBaselineVersion(), calendar.getVersion(),
-                holidayViews);
+                calendar.getWeekendCode(),
+                calendar.getBaselineSource(), calendar.getBaselineVersion(),
+                calendar.getSourceTemplateId(), calendar.getSourceTemplateVersion(),
+                calendar.getBaselineYear(), calendar.getWorkingDaysPerYear(),
+                calendar.getVersion(), holidayViews,
+                update != null,
+                update != null ? update.publishedVersion() : null,
+                update != null ? update.message() : null);
     }
 
     /**
@@ -279,21 +292,45 @@ public class AssociatedDataService {
         Instant now = clock.instant();
         ExerciseCalendar calendar = requireCalendar(exerciseId);
         calendar.replace(
-                request.countryCode(), request.timezone(), request.weekendCode(),
+                request.weekendCode(),
                 request.baselineSource(), request.baselineVersion(), ownerId, now);
         calendars.save(calendar);
         for (ExerciseHoliday existing : holidays
                 .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)) {
             existing.softDelete(ownerId, now);
+            holidays.save(existing);
         }
+        holidays.flush();
         if (request.holidays() != null) {
             for (HolidayRequest holiday : request.holidays()) {
                 holidays.save(ExerciseHoliday.create(
                         exerciseId, holiday.holidayDate(), holiday.holidayName(),
-                        holiday.holidayType(), holiday.workingDayOverride(), ownerId, now));
+                        holiday.holidayType(), null, ownerId, now));
             }
         }
+        holidayTemplates.refreshWorkingDaysForExercise(exerciseId, ownerId);
         return getCalendar(ownerId, exerciseId);
+    }
+
+    /**
+     * Re-applies the published Center holiday template for the Exercise sizing year.
+     * Preserves CUSTOM holidays.
+     */
+    @Transactional
+    public ReapplyCalendarResult reapplyHolidayTemplate(UUID ownerId, UUID exerciseId) {
+        RstExercise exercise = editable(ownerId, exerciseId);
+        String center = exercise.getToolkitSnapshot() != null
+                ? exercise.getToolkitSnapshot().getCenter()
+                : null;
+        short primaryYear = Short.parseShort(exercise.getSizingMonth().substring(0, 4));
+        ApplyTemplatesResult applied = holidayTemplates.applyPublishedTemplates(
+                exerciseId,
+                center,
+                primaryYear,
+                ExerciseInitializationService.resolveHolidayYears(exercise),
+                ownerId,
+                true);
+        return new ReapplyCalendarResult(getCalendar(ownerId, exerciseId), applied.notices());
     }
 
     /**
@@ -481,7 +518,8 @@ public class AssociatedDataService {
                 setup.getSlaTurnaroundMinutes(), setup.getSlaStartTime(), setup.getSlaEndTime(),
                 setup.getSlaWeekendEnabled(), setup.getWeekendShiftHc(), setup.getSkeletonRatio(),
                 setup.getTotalAgents(), setup.getAverageTenureYears(), setup.getWorkingDaysPerYear(),
-                setup.getDailyCapacityPerAgent(), setup.getCalculationVersion(), setup.getVersion());
+                setup.getMaxCapacityDays(), setup.getDailyCapacityPerAgent(),
+                setup.getCalculationVersion(), setup.getVersion());
     }
 
     private ShiftView toShift(ExerciseShift shift) {
@@ -518,7 +556,8 @@ public class AssociatedDataService {
             Integer slaTurnaroundMinutes, LocalTime slaStartTime, LocalTime slaEndTime,
             Boolean slaWeekendEnabled, BigDecimal weekendShiftHc, BigDecimal skeletonRatio,
             BigDecimal totalAgents, BigDecimal averageTenureYears, BigDecimal workingDaysPerYear,
-            BigDecimal dailyCapacityPerAgent, String calculationVersion, long version) {
+            BigDecimal maxCapacityDays, BigDecimal dailyCapacityPerAgent,
+            String calculationVersion, long version) {
     }
 
     /** Team Setup PUT payload. */
@@ -584,13 +623,22 @@ public class AssociatedDataService {
 
     /** Calendar response. */
     public record CalendarView(
-            String countryCode, String timezone, String weekendCode, String baselineSource,
-            String baselineVersion, long version, List<HolidayView> holidays) {
+            String weekendCode, String baselineSource,
+            String baselineVersion, UUID sourceTemplateId, Integer sourceTemplateVersion,
+            Short baselineYear, BigDecimal workingDaysPerYear, long version,
+            List<HolidayView> holidays,
+            boolean templateUpdateAvailable,
+            Integer publishedTemplateVersion,
+            String templateUpdateMessage) {
+    }
+
+    /** Re-apply template response with initialization notices. */
+    public record ReapplyCalendarResult(CalendarView calendar, List<String> notices) {
     }
 
     /** Calendar PUT payload. */
     public record CalendarRequest(
-            String countryCode, String timezone, String weekendCode, String baselineSource,
+            String weekendCode, String baselineSource,
             String baselineVersion, List<HolidayRequest> holidays) {
     }
 

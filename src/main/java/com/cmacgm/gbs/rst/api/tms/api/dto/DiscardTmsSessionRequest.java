@@ -1,8 +1,7 @@
 package com.cmacgm.gbs.rst.api.tms.api.dto;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-public record DiscardTmsSessionRequest(
-        @NotBlank @Size(max = 500) String reason) {
+/** Discard body; reason is optional (UI confirm-only delete). */
+public record DiscardTmsSessionRequest(@Size(max = 500) String reason) {
 }

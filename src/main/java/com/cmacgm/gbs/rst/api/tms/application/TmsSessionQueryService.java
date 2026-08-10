@@ -41,9 +41,22 @@ public class TmsSessionQueryService {
     }
 
     @Transactional(readOnly = true)
+    public TmsSessionResponse get(UUID userId, String sessionNo) {
+        var now = clock.instant();
+        return sessionRepository.findBySessionNoAndUserId(sessionNo, userId)
+                .map(session -> TmsSessionResponse.from(session, now))
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        "tms-session-not-found",
+                        "The TMS session was not found."));
+    }
+
+    @Transactional(readOnly = true)
     public PageResponse<TmsSessionResponse> sessions(
             UUID userId,
             String status,
+            String sessionNo,
+            String reference,
             String query,
             LocalDate dateFrom,
             LocalDate dateTo,
@@ -66,6 +79,8 @@ public class TmsSessionQueryService {
                 TmsSessionSpecification.filtered(
                         userId,
                         resolvedStatus,
+                        sessionNo,
+                        reference,
                         query,
                         dateFrom,
                         dateTo),

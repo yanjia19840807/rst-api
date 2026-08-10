@@ -63,19 +63,16 @@ public class TmsSessionCommandService {
                     "toolkit-out-of-scope",
                     "The Agent is not currently assigned to the Toolkit scope by Timesheet.");
         }
-        var subtask = toolkit.getSubtasks().stream()
-                .filter(item -> item.getId().equals(request.subtaskId()))
-                .findFirst()
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.UNPROCESSABLE_ENTITY,
-                        "invalid-subtask",
-                        "The selected active Subtask does not belong to the Toolkit."));
-        if (toolkit.isCombineSubtasksTime() && toolkit.getSubtasks().isEmpty()) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY,
-                    "invalid-subtask",
-                    "The Toolkit has no active Subtask.");
-        }
+        var subtask = request.subtaskId() == null
+                ? null
+                : toolkit.getSubtasks().stream()
+                        .filter(item -> item.getId().equals(request.subtaskId()))
+                        .filter(item -> item.getDeletedAt() == null)
+                        .findFirst()
+                        .orElseThrow(() -> new ApiException(
+                                HttpStatus.UNPROCESSABLE_ENTITY,
+                                "invalid-subtask",
+                                "The selected active Subtask does not belong to the Toolkit."));
 
         var now = clock.instant();
         TmsSession session = TmsSession.start(
@@ -120,7 +117,7 @@ public class TmsSessionCommandService {
     public TmsSessionResponse discard(UUID userId, String sessionNo, String reason) {
         TmsSession session = ownedSession(userId, sessionNo);
         var now = clock.instant();
-        session.discard(reason.trim(), now);
+        session.discard(reason == null ? "" : reason.trim(), now);
         return TmsSessionResponse.from(session, now);
     }
 

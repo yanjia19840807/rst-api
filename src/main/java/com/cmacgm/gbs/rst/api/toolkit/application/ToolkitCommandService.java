@@ -51,16 +51,14 @@ public class ToolkitCommandService {
     @Transactional
     public ToolkitResponse create(UUID userId, String ccgid, Create request) {
         ensureScope(ccgid, request);
-        if (toolkits.existsBySupervisorPositionIdAndPrimaryPl3Code(
-                request.supervisorPositionId(), request.pl3Code())) {
-            throw conflict("toolkit-identity-exists",
-                    "The Supervisor Position and PL3 combination has already been used.");
-        }
+        String name = request.name().trim();
+        ensureNameAvailable(request.supervisorPositionId(), name, null);
+        ensureHierarchyAvailable(request);
         var now = clock.instant();
         var owner = users.findByIdAndActiveTrue(userId)
                 .orElseThrow(() -> forbidden("inactive-user", "The current user is inactive."));
         Toolkit toolkit = Toolkit.create(
-                request.name(), request.description(), request.supervisorPositionId(),
+                name, request.description(), request.supervisorPositionId(),
                 request.center(), request.domain(), request.pl1(), request.pl2(),
                 request.pl3Code(), request.pl3Name(), request.combineSubtasksTime(), owner, now);
         if (request.subtasks() != null) {
@@ -85,10 +83,12 @@ public class ToolkitCommandService {
             throw conflict("optimistic-lock-conflict",
                     "The Toolkit was changed by another request; reload and retry.");
         }
+        String name = request.name().trim();
+        ensureNameAvailable(toolkit.getSupervisorPositionId(), name, toolkitId);
         var owner = users.findByIdAndActiveTrue(userId)
                 .orElseThrow(() -> forbidden("inactive-user", "The current user is inactive."));
         toolkit.update(
-                request.name(), request.description(), request.combineSubtasksTime(),
+                name, request.description(), request.combineSubtasksTime(),
                 owner, clock.instant());
         var now = clock.instant();
         var requestedIds = request.subtasks() == null
@@ -199,6 +199,32 @@ public class ToolkitCommandService {
         if (!exactPath) {
             throw forbidden("toolkit-out-of-scope",
                     "The selected hierarchy is outside the current Supervisor scope.");
+        }
+    }
+
+    private void ensureNameAvailable(String supervisorPositionId, String name, UUID toolkitId) {
+        boolean taken = toolkitId == null
+                ? toolkits.existsBySupervisorPositionIdAndName(supervisorPositionId, name)
+                : toolkits.existsBySupervisorPositionIdAndNameAndIdNot(
+                        supervisorPositionId, name, toolkitId);
+        if (taken) {
+            throw conflict(
+                    "toolkit-name-exists",
+                    "A Toolkit with this name already exists for the Supervisor Position.");
+        }
+    }
+
+    private void ensureHierarchyAvailable(Create request) {
+        if (toolkits.existsBySupervisorPositionIdAndCenterAndDomainAndPl1AndPl2AndPrimaryPl3Code(
+                request.supervisorPositionId(),
+                request.center(),
+                request.domain(),
+                request.pl1(),
+                request.pl2(),
+                request.pl3Code())) {
+            throw conflict(
+                    "toolkit-hierarchy-exists",
+                    "A Toolkit already exists for this Supervisor Position and hierarchy path.");
         }
     }
 

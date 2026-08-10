@@ -8,8 +8,8 @@ import jakarta.validation.constraints.Size;
 
 public record StartTmsSessionRequest(
         @NotNull UUID toolkitId,
-        @NotNull UUID subtaskId,
-        @Positive int processedVolume,
+        UUID subtaskId,
+        @Positive Integer processedVolume,
         @Size(max = 100) String reference,
         @Size(max = 500) String remarks) {
 }

@@ -105,6 +105,12 @@ public class ApprovalService {
             } else {
                 requiredRole = roleForStep(currentStep);
             }
+            var snapshot = exercise.getToolkitSnapshot();
+            String toolkitName = snapshot != null ? snapshot.getToolkitName() : "";
+            String pl3Name = snapshot != null ? snapshot.getPl3Name() : "";
+            Instant archivedAt = exercise.getValidatedAt() != null
+                    ? exercise.getValidatedAt()
+                    : submission.getSubmittedAt();
             items.add(new ApprovalQueueItem(
                     submission.getId(),
                     exercise.getExerciseCode(),
@@ -112,7 +118,10 @@ public class ApprovalService {
                     currentStep,
                     requiredRole,
                     submission.getStatus(),
-                    submission.getSubmittedAt()));
+                    submission.getSubmittedAt(),
+                    toolkitName,
+                    pl3Name,
+                    archivedAt));
         }
         return items;
     }
@@ -465,7 +474,10 @@ public class ApprovalService {
             Short currentStep,
             String requiredRole,
             String status,
-            Instant submittedAt) {
+            Instant submittedAt,
+            String toolkitName,
+            String pl3Name,
+            Instant archivedAt) {
     }
 
     /** Approver review detail (extends Submitted Details fields). */

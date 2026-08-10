@@ -19,6 +19,8 @@ public final class TmsSessionSpecification {
     public static Specification<TmsSession> filtered(
             UUID userId,
             TmsSessionStatus status,
+            String sessionNo,
+            String reference,
             String queryText,
             LocalDate dateFrom,
             LocalDate dateTo) {
@@ -27,6 +29,14 @@ public final class TmsSessionSpecification {
             predicates.add(builder.equal(root.get("user").get("id"), userId));
             if (status != null) {
                 predicates.add(builder.equal(root.get("status"), status));
+            }
+            if (sessionNo != null && !sessionNo.isBlank()) {
+                String pattern = "%" + sessionNo.trim().toLowerCase() + "%";
+                predicates.add(builder.like(builder.lower(root.get("sessionNo")), pattern));
+            }
+            if (reference != null && !reference.isBlank()) {
+                String pattern = "%" + reference.trim().toLowerCase() + "%";
+                predicates.add(builder.like(builder.lower(root.get("reference")), pattern));
             }
             if (queryText != null && !queryText.isBlank()) {
                 String pattern = "%" + queryText.trim().toLowerCase() + "%";

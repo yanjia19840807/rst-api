@@ -50,10 +50,18 @@ public class TmsSessionController {
         return queryService.current(principal.userId());
     }
 
+    @GetMapping("/sessions/{id}")
+    public TmsSessionResponse get(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable String id) {
+        return queryService.get(principal.userId(), id);
+    }
+
     @GetMapping("/sessions")
     public PageResponse<TmsSessionResponse> sessions(
             @AuthenticationPrincipal RstPrincipal principal,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String sessionNo,
+            @RequestParam(required = false) String reference,
             @RequestParam(required = false) String query,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
@@ -66,6 +74,8 @@ public class TmsSessionController {
         return queryService.sessions(
                 principal.userId(),
                 status,
+                sessionNo,
+                reference,
                 query,
                 dateFrom,
                 dateTo,
@@ -106,7 +116,8 @@ public class TmsSessionController {
     public TmsSessionResponse discard(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable String id,
-            @Valid @RequestBody DiscardTmsSessionRequest request) {
-        return commandService.discard(principal.userId(), id, request.reason());
+            @RequestBody(required = false) DiscardTmsSessionRequest request) {
+        String reason = request == null ? null : request.reason();
+        return commandService.discard(principal.userId(), id, reason);
     }
 }

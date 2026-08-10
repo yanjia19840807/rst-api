@@ -18,7 +18,7 @@ public record TmsSessionResponse(
         String pl2,
         String pl3Code,
         String pl3Name,
-        int processedVolume,
+        Integer processedVolume,
         String reference,
         String remarks,
         String status,

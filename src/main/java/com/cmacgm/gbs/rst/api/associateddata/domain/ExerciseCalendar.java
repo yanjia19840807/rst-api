@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.associateddata.domain;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -20,12 +21,6 @@ public class ExerciseCalendar {
     @Column(name = "exercise_id")
     private UUID exerciseId;
 
-    @Column(name = "country_code", length = 8)
-    private String countryCode;
-
-    @Column(length = 64)
-    private String timezone;
-
     @Column(name = "weekend_code", length = 40)
     private String weekendCode;
 
@@ -34,6 +29,18 @@ public class ExerciseCalendar {
 
     @Column(name = "baseline_version", length = 40)
     private String baselineVersion;
+
+    @Column(name = "source_template_id")
+    private UUID sourceTemplateId;
+
+    @Column(name = "source_template_version")
+    private Integer sourceTemplateVersion;
+
+    @Column(name = "baseline_year")
+    private Short baselineYear;
+
+    @Column(name = "working_days_per_year")
+    private BigDecimal workingDaysPerYear;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -55,11 +62,6 @@ public class ExerciseCalendar {
 
     /**
      * Creates an empty calendar shell for a newly created Exercise.
-     *
-     * @param exerciseId owning Exercise id
-     * @param actorUserId creating Supervisor
-     * @param now creation timestamp
-     * @return empty calendar ready for later PUT edits
      */
     public static ExerciseCalendar emptyShell(UUID exerciseId, UUID actorUserId, Instant now) {
         ExerciseCalendar calendar = new ExerciseCalendar();
@@ -72,38 +74,61 @@ public class ExerciseCalendar {
     }
 
     /**
-     * Replaces calendar header fields.
-     *
-     * @param countryCode ISO-like country code
-     * @param timezone IANA timezone id
-     * @param weekendCode weekend pattern code
-     * @param baselineSource optional baseline catalogue source
-     * @param baselineVersion optional baseline catalogue version
-     * @param actorUserId updating Supervisor
-     * @param now update timestamp
+     * Replaces calendar header fields editable by Supervisor.
      */
     public void replace(
-            String countryCode,
-            String timezone,
             String weekendCode,
             String baselineSource,
             String baselineVersion,
             UUID actorUserId,
             Instant now) {
-        this.countryCode = countryCode;
-        this.timezone = timezone;
         this.weekendCode = weekendCode;
+        if (baselineSource != null) {
+            this.baselineSource = baselineSource;
+        }
+        if (baselineVersion != null) {
+            this.baselineVersion = baselineVersion;
+        }
+        touch(actorUserId, now);
+    }
+
+    /**
+     * Applies metadata copied from a Center holiday template (or no-template defaults).
+     */
+    public void applyTemplateMeta(
+            String weekendCode,
+            UUID sourceTemplateId,
+            Integer sourceTemplateVersion,
+            Short baselineYear,
+            String baselineSource,
+            String baselineVersion,
+            UUID actorUserId,
+            Instant now) {
+        this.weekendCode = weekendCode;
+        this.sourceTemplateId = sourceTemplateId;
+        this.sourceTemplateVersion = sourceTemplateVersion;
+        this.baselineYear = baselineYear;
         this.baselineSource = baselineSource;
         this.baselineVersion = baselineVersion;
+        touch(actorUserId, now);
+    }
+
+    public void setWorkingDaysPerYear(BigDecimal workingDaysPerYear) {
+        this.workingDaysPerYear = workingDaysPerYear;
+    }
+
+    public void touch(UUID actorUserId, Instant now) {
         this.updatedAt = now;
         this.updatedBy = actorUserId;
     }
 
     public UUID getExerciseId() { return exerciseId; }
-    public String getCountryCode() { return countryCode; }
-    public String getTimezone() { return timezone; }
     public String getWeekendCode() { return weekendCode; }
     public String getBaselineSource() { return baselineSource; }
     public String getBaselineVersion() { return baselineVersion; }
+    public UUID getSourceTemplateId() { return sourceTemplateId; }
+    public Integer getSourceTemplateVersion() { return sourceTemplateVersion; }
+    public Short getBaselineYear() { return baselineYear; }
+    public BigDecimal getWorkingDaysPerYear() { return workingDaysPerYear; }
     public long getVersion() { return version; }
 }

@@ -18,12 +18,29 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 
 import com.cmacgm.gbs.rst.api.identity.domain.AppUser;
 
 @Entity
-@Table(name = "toolkit")
+@Table(
+        name = "toolkit",
+        uniqueConstraints = {
+            @UniqueConstraint(
+                    name = "uk_toolkit_hierarchy",
+                    columnNames = {
+                        "supervisor_position_id",
+                        "center",
+                        "domain",
+                        "pl1",
+                        "pl2",
+                        "primary_pl3_code"
+                    }),
+            @UniqueConstraint(
+                    name = "uk_toolkit_name_per_position",
+                    columnNames = {"supervisor_position_id", "name"})
+        })
 public class Toolkit {
 
     @Id

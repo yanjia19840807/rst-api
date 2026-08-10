@@ -49,8 +49,8 @@ public class TmsSession {
     @JoinColumn(name = "toolkit_subtask_id")
     private ToolkitSubtask toolkitSubtask;
 
-    @Column(name = "processed_volume", nullable = false)
-    private int processedVolume;
+    @Column(name = "processed_volume")
+    private Integer processedVolume;
 
     @Column(nullable = false, length = 100)
     private String reference;
@@ -129,7 +129,7 @@ public class TmsSession {
             AppUser user,
             Toolkit toolkit,
             ToolkitSubtask subtask,
-            int processedVolume,
+            Integer processedVolume,
             String reference,
             String remarks,
             Instant now) {
@@ -146,7 +146,7 @@ public class TmsSession {
         session.runningSince = now;
         session.netDurationSeconds = 0;
         session.toolkitNameSnapshot = toolkit.getName();
-        session.subtaskNameSnapshot = subtask.getName();
+        session.subtaskNameSnapshot = subtask == null ? "—" : subtask.getName();
         session.domainSnapshot = toolkit.getDomain();
         session.pl1Snapshot = toolkit.getPl1();
         session.pl2Snapshot = toolkit.getPl2();
@@ -257,7 +257,7 @@ public class TmsSession {
         return toolkitSubtask;
     }
 
-    public int getProcessedVolume() {
+    public Integer getProcessedVolume() {
         return processedVolume;
     }
 

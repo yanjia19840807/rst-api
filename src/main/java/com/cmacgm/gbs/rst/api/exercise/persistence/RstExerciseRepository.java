@@ -1,12 +1,16 @@
 package com.cmacgm.gbs.rst.api.exercise.persistence;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /**
  * Persistence for Exercise aggregates with snapshot graphs.
@@ -41,4 +45,20 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
      * @return true when referenced
      */
     boolean existsByToolkitId(UUID toolkitId);
+
+    /**
+     * Archived/validated Exercises for a Toolkit, newest first (use Pageable for top-N).
+     */
+    @EntityGraph(attributePaths = {"toolkitSnapshot"})
+    @Query("""
+            select e from RstExercise e
+            where e.toolkitId = :toolkitId
+              and e.deletedAt is null
+              and e.workflowStatus in :statuses
+            order by coalesce(e.validatedAt, e.updatedAt) desc, e.updatedAt desc, e.id desc
+            """)
+    List<RstExercise> findArchivedByToolkit(
+            @Param("toolkitId") UUID toolkitId,
+            @Param("statuses") Collection<String> statuses,
+            Pageable pageable);
 }

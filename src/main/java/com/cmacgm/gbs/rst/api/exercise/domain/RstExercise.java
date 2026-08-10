@@ -239,6 +239,15 @@ public class RstExercise {
     }
 
     /**
+     * Records that Associated Data was initialized from another Exercise.
+     */
+    public void markInitializedFrom(UUID sourceExerciseId, UUID actorUserId, Instant now) {
+        this.initializedFromExerciseId = sourceExerciseId;
+        this.updatedAt = now;
+        this.updatedBy = actorUserId;
+    }
+
+    /**
      * Returns whether soft-delete is allowed for the current workflow status.
      *
      * @return true when status is IN_PROGRESS or RETURNED

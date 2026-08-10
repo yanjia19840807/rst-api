@@ -246,7 +246,7 @@ class TmsSessionApiIntegrationTests {
 
         mockMvc.perform(get("/api/v1/tms/sessions")
                         .queryParam("status", "completed")
-                        .queryParam("query", "INV-100")
+                        .queryParam("reference", "INV-100")
                         .queryParam("page", "1")
                         .queryParam("pageSize", "10"))
                 .andExpect(status().isOk())

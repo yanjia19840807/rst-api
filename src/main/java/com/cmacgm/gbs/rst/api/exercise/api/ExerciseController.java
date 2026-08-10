@@ -9,6 +9,7 @@ import com.cmacgm.gbs.rst.api.approval.application.ApprovalService;
 import com.cmacgm.gbs.rst.api.approval.application.ApprovalService.ApprovalDetailView;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService.CreateExercise;
+import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService.CreateExerciseResult;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService.Exercise;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.submission.application.SubmissionService;
@@ -65,15 +66,15 @@ public class ExerciseController {
     }
 
     /**
-     * Creates an Exercise with empty Associated Data shells.
+     * Creates an Exercise and seeds Associated Data (archive-first + holiday templates).
      *
      * @param principal authenticated Supervisor
      * @param request create payload
-     * @return created Exercise
+     * @return created Exercise and initialization notices
      */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public Exercise create(
+    public CreateExerciseResult create(
             @AuthenticationPrincipal RstPrincipal principal,
             @Valid @RequestBody CreateExercise request) {
         return service.create(principal.userId(), principal.ccgid(), request);

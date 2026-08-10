@@ -182,7 +182,7 @@ class SupervisorApiIntegrationTests {
                         .content(createToolkitRequest("Duplicate Toolkit", true)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.type")
-                        .value("https://rst.cmacgm.com/problems/toolkit-identity-exists"));
+                        .value("https://rst.cmacgm.com/problems/toolkit-hierarchy-exists"));
     }
 
     @Test

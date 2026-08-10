@@ -40,6 +40,16 @@ public interface ToolkitRepository extends JpaRepository<Toolkit, UUID> {
     List<Toolkit> findBySupervisorPositionIdAndDeletedAtIsNullOrderByName(
             String supervisorPositionId);
 
-    boolean existsBySupervisorPositionIdAndPrimaryPl3Code(
-            String supervisorPositionId, String primaryPl3Code);
+    boolean existsBySupervisorPositionIdAndCenterAndDomainAndPl1AndPl2AndPrimaryPl3Code(
+            String supervisorPositionId,
+            String center,
+            String domain,
+            String pl1,
+            String pl2,
+            String primaryPl3Code);
+
+    boolean existsBySupervisorPositionIdAndName(String supervisorPositionId, String name);
+
+    boolean existsBySupervisorPositionIdAndNameAndIdNot(
+            String supervisorPositionId, String name, UUID id);
 }

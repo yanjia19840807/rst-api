@@ -96,6 +96,9 @@ public class ExerciseTeamSetup {
     @Column(name = "working_days_per_year", precision = 18, scale = 6)
     private BigDecimal workingDaysPerYear;
 
+    @Column(name = "max_capacity_days", precision = 18, scale = 6)
+    private BigDecimal maxCapacityDays;
+
     @Column(name = "daily_capacity_per_agent", precision = 18, scale = 6)
     private BigDecimal dailyCapacityPerAgent;
 
@@ -180,16 +183,41 @@ public class ExerciseTeamSetup {
     }
 
     /**
+     * Applies Calendar NETWORKDAYS result and refreshes Max Capacity / Capacity Ratio.
+     *
+     * @param calendarWorkingDays working days from weekend + holidays
+     * @param actorUserId updating user
+     * @param now update timestamp
+     */
+    public void applyCalendarWorkingDays(BigDecimal calendarWorkingDays, UUID actorUserId, Instant now) {
+        this.workingDaysPerYear = calendarWorkingDays;
+        recalculateCapacityFromWorkingDays();
+        recalculateDailyCapacity();
+        this.updatedAt = now;
+        this.updatedBy = actorUserId;
+    }
+
+    /**
+     * Mirrors Calendar weekend code onto Team Setup (Calendar is the source of truth).
+     */
+    public void syncWeekendFromCalendar(String calendarWeekendCode, UUID actorUserId, Instant now) {
+        this.weekendCode = calendarWeekendCode;
+        this.updatedAt = now;
+        this.updatedBy = actorUserId;
+    }
+
+    /**
      * Recalculates derived Team Setup metrics from currently stored inputs.
      *
-     * <p>Formulas (v1):
+     * <p>Formulas (v1.1):
      * <ul>
      *   <li>totalAgents = sum of tenure buckets</li>
      *   <li>averageTenureYears = weighted midpoints (0.25, 1.25, 3, 5) / totalAgents</li>
-     *   <li>workingDaysPerYear = 260 - paidLeave - otherLeave</li>
+     *   <li>workingDaysPerYear comes from Calendar (NETWORKDAYS); not recomputed here</li>
+     *   <li>maxCapacityDays = workingDays - paidLeave - otherLeave</li>
+     *   <li>capacityRatio = maxCapacityDays / workingDays when working days present</li>
      *   <li>dailyCapacityPerAgent = workingHours * availability * (1 - automation) * capacity</li>
      * </ul>
-     * Missing required inputs leave the related derived field null.
      */
     public void recalculateDerived() {
         BigDecimal total = nz(agentsLt6m).add(nz(agents6To24m)).add(nz(agents24To48m)).add(nz(agentsGt48m));
@@ -203,13 +231,22 @@ public class ExerciseTeamSetup {
         } else {
             this.averageTenureYears = null;
         }
-        if (paidLeaveDays != null || otherLeaveDays != null) {
-            this.workingDaysPerYear = new BigDecimal("260")
-                    .subtract(nz(paidLeaveDays))
-                    .subtract(nz(otherLeaveDays));
-        } else {
-            this.workingDaysPerYear = null;
+        recalculateCapacityFromWorkingDays();
+        recalculateDailyCapacity();
+    }
+
+    private void recalculateCapacityFromWorkingDays() {
+        if (workingDaysPerYear == null) {
+            this.maxCapacityDays = null;
+            return;
         }
+        this.maxCapacityDays = workingDaysPerYear.subtract(nz(paidLeaveDays)).subtract(nz(otherLeaveDays));
+        if (workingDaysPerYear.compareTo(BigDecimal.ZERO) > 0) {
+            this.capacityRatio = maxCapacityDays.divide(workingDaysPerYear, 8, RoundingMode.HALF_UP);
+        }
+    }
+
+    private void recalculateDailyCapacity() {
         if (workingHoursPerDay != null && availabilityRatio != null
                 && automationRatio != null && capacityRatio != null) {
             this.dailyCapacityPerAgent = workingHoursPerDay
@@ -251,6 +288,7 @@ public class ExerciseTeamSetup {
     public BigDecimal getTotalAgents() { return totalAgents; }
     public BigDecimal getAverageTenureYears() { return averageTenureYears; }
     public BigDecimal getWorkingDaysPerYear() { return workingDaysPerYear; }
+    public BigDecimal getMaxCapacityDays() { return maxCapacityDays; }
     public BigDecimal getDailyCapacityPerAgent() { return dailyCapacityPerAgent; }
     public String getCalculationVersion() { return calculationVersion; }
     public long getVersion() { return version; }

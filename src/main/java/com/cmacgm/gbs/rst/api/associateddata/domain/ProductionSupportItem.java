@@ -137,6 +137,30 @@ public class ProductionSupportItem {
     }
 
     /**
+     * Copies a support item from an archived Exercise, preserving lineage.
+     */
+    public static ProductionSupportItem createFromArchive(
+            UUID exerciseId,
+            ProductionSupportItem source,
+            UUID actorUserId,
+            Instant now) {
+        ProductionSupportItem item = create(
+                exerciseId,
+                source.getCategory(),
+                source.getActivity(),
+                source.getFrequencyCode(),
+                source.getVolume(),
+                source.getUnitOfMeasure(),
+                source.getWorkloadPerUnitMinutes(),
+                source.getAnnualMultiplier(),
+                source.getComments(),
+                actorUserId,
+                now);
+        item.lineageId = source.getLineageId() != null ? source.getLineageId() : source.getId();
+        return item;
+    }
+
+    /**
      * Updates editable fields and recalculates derived values.
      *
      * @param category support category

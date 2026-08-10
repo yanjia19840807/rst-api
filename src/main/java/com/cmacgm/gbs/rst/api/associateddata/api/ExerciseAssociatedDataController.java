@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService;
 import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.CalendarRequest;
 import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.CalendarView;
+import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.ReapplyCalendarResult;
 import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.DailyVolumeRequest;
 import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.DailyVolumeView;
 import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.MonthlyVolumeRequest;
@@ -202,6 +203,15 @@ public class ExerciseAssociatedDataController {
             @PathVariable UUID exerciseId,
             @RequestBody CalendarRequest request) {
         return service.putCalendar(principal.userId(), exerciseId, request);
+    }
+
+    /**
+     * Re-applies the published Center holiday template for this Exercise (keeps CUSTOM rows).
+     */
+    @PostMapping("/calendar/reapply-template")
+    public ReapplyCalendarResult reapplyHolidayTemplate(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return service.reapplyHolidayTemplate(principal.userId(), exerciseId);
     }
 
     /**

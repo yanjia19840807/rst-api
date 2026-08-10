@@ -9,10 +9,9 @@ app:
     # ACTIVE Timesheet supervisor_ccgid used as the walkthrough identity.
     # Restart API after changing. Optional agent-ccgid for X-Dev-Role: AGENT.
     dev-identity:
-      ccgid: S00734522
-      role: AGENT
-      agent-ccgid: S00734522
-      # agent-ccgid: S00734522
+      ccgid: S00628182
+      role: SUPERVISOR
+      agent-ccgid: S00734522  
 
 logging:
   level:

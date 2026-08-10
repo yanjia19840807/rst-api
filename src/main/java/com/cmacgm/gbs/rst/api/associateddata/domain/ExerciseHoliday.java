@@ -33,6 +33,9 @@ public class ExerciseHoliday {
     @Column(name = "is_working_day_override")
     private Boolean workingDayOverride;
 
+    @Column(name = "source_template_line_id")
+    private UUID sourceTemplateLineId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -92,6 +95,23 @@ public class ExerciseHoliday {
     }
 
     /**
+     * Creates a BASELINE holiday copied from a Center template line.
+     */
+    public static ExerciseHoliday createFromTemplate(
+            UUID exerciseId,
+            LocalDate holidayDate,
+            String holidayName,
+            Boolean workingDayOverride,
+            UUID sourceTemplateLineId,
+            UUID actorUserId,
+            Instant now) {
+        ExerciseHoliday holiday = create(
+                exerciseId, holidayDate, holidayName, "BASELINE", workingDayOverride, actorUserId, now);
+        holiday.sourceTemplateLineId = sourceTemplateLineId;
+        return holiday;
+    }
+
+    /**
      * Soft-deletes this holiday.
      *
      * @param actorUserId deleting Supervisor
@@ -110,5 +130,6 @@ public class ExerciseHoliday {
     public String getHolidayName() { return holidayName; }
     public String getHolidayType() { return holidayType; }
     public Boolean getWorkingDayOverride() { return workingDayOverride; }
+    public UUID getSourceTemplateLineId() { return sourceTemplateLineId; }
     public Instant getDeletedAt() { return deletedAt; }
 }

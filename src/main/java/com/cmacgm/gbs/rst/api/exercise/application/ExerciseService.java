@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.ArrayList;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -44,18 +45,11 @@ public class ExerciseService {
     private final TimesheetSyncRunRepository syncRuns;
     private final ExerciseTeamSetupRepository teamSetups;
     private final ExerciseCalendarRepository calendars;
+    private final ExerciseInitializationService initialization;
     private final Clock clock;
 
     /**
      * Creates the Exercise service.
-     *
-     * @param exercises Exercise repository
-     * @param toolkits Toolkit repository
-     * @param timesheet Timesheet read service
-     * @param syncRuns Timesheet sync run repository
-     * @param teamSetups Team Setup repository
-     * @param calendars Calendar repository
-     * @param clock clock for timestamps
      */
     public ExerciseService(
             RstExerciseRepository exercises,
@@ -64,6 +58,7 @@ public class ExerciseService {
             TimesheetSyncRunRepository syncRuns,
             ExerciseTeamSetupRepository teamSetups,
             ExerciseCalendarRepository calendars,
+            ExerciseInitializationService initialization,
             Clock clock) {
         this.exercises = exercises;
         this.toolkits = toolkits;
@@ -71,19 +66,21 @@ public class ExerciseService {
         this.syncRuns = syncRuns;
         this.teamSetups = teamSetups;
         this.calendars = calendars;
+        this.initialization = initialization;
         this.clock = clock;
     }
 
     /**
-     * Creates an Exercise, freezes Toolkit/KPI snapshots, and seeds empty Team Setup + Calendar shells.
+     * Creates an Exercise, freezes Toolkit/KPI snapshots, and seeds Associated Data
+     * (archive-first copy + multi-year holiday templates).
      *
      * @param ownerId Supervisor user id
      * @param ccgid Supervisor CCGID
      * @param request create payload
-     * @return created Exercise response
+     * @return created Exercise response with initialization notices
      */
     @Transactional(isolation = Isolation.REPEATABLE_READ)
-    public Exercise create(UUID ownerId, String ccgid, CreateExercise request) {
+    public CreateExerciseResult create(UUID ownerId, String ccgid, CreateExercise request) {
         // Recompute under a repeatable-read transaction so an ACTIVE switch cannot mix snapshots.
         preview(ccgid, request);
         var toolkit = toolkits.findActiveById(request.toolkitId())
@@ -183,10 +180,10 @@ public class ExerciseService {
                     now);
         }
         exercises.saveAndFlush(exercise);
-        // Empty AD shells: no Approved archive to clone in this slice.
         teamSetups.save(ExerciseTeamSetup.emptyShell(exerciseId, ownerId, now));
         calendars.save(ExerciseCalendar.emptyShell(exerciseId, ownerId, now));
-        return toResponse(exercise);
+        List<String> notices = new ArrayList<>(initialization.initialize(exercise, ownerId));
+        return new CreateExerciseResult(toResponse(exercise), notices);
     }
 
     /**
@@ -406,6 +403,12 @@ public class ExerciseService {
             @Min(1) @Max(53) short slotWeeks,
             @NotNull LocalDate tmsFrom,
             @NotNull LocalDate tmsTo) {
+    }
+
+    /**
+     * Create Exercise response with initialization notices for the Supervisor.
+     */
+    public record CreateExerciseResult(Exercise exercise, List<String> notices) {
     }
 
     /**
