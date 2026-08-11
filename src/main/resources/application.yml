@@ -41,3 +41,11 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   security:
     azure-tenant-id: ${AZURE_TENANT_ID:}
+
+rst:
+  forecast:
+    base-url: ${RST_FORECAST_BASE_URL:http://localhost:8000}
+    connect-timeout-ms: ${RST_FORECAST_CONNECT_TIMEOUT_MS:3000}
+    read-timeout-ms: ${RST_FORECAST_READ_TIMEOUT_MS:60000}
+    enabled: ${RST_FORECAST_ENABLED:true}
+    confidence-level: ${RST_FORECAST_CONFIDENCE:0.95}

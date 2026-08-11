@@ -62,7 +62,10 @@ public class CycleTimeBaselineFile {
         return row;
     }
 
+    public UUID getCycleTimeBaselineId() { return cycleTimeBaselineId; }
     public UUID getFileArtifactId() { return fileArtifactId; }
+    public int getDisplayOrder() { return displayOrder; }
+    public Instant getCreatedAt() { return createdAt; }
 
     /** Composite PK. */
     public static class Pk implements Serializable {

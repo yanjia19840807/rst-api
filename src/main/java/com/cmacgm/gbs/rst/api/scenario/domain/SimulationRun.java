@@ -65,21 +65,16 @@ public class SimulationRun {
     }
 
     /**
-     * Creates an ACCEPTED stub simulation run.
-     *
-     * @param scenarioId owning scenario
-     * @param forecastRunId optional forecast reference
-     * @param runType MONTHLY_SIZING / DAILY / SLOT
-     * @param runNo sequential number per type
-     * @param actorUserId creating user
-     * @param now timestamp
-     * @return accepted stub run
+     * Creates an ACCEPTED real calculation run.
      */
-    public static SimulationRun stubAccepted(
+    public static SimulationRun accepted(
             UUID scenarioId,
             UUID forecastRunId,
             String runType,
             int runNo,
+            String calculationVersion,
+            String inputHash,
+            String summaryJson,
             UUID actorUserId,
             Instant now) {
         SimulationRun run = new SimulationRun();
@@ -88,11 +83,10 @@ public class SimulationRun {
         run.forecastRunId = forecastRunId;
         run.runType = runType;
         run.runNo = runNo;
-        String hashSeed = ("stub-sim-" + runType + "-" + scenarioId + "-" + runNo).replace("-", "");
-        run.inputHash = (hashSeed + "0".repeat(64)).substring(0, 64);
-        run.calculationVersion = "stub-v1";
+        run.inputHash = inputHash;
+        run.calculationVersion = calculationVersion;
         run.status = "ACCEPTED";
-        run.summaryJson = "{\"stub\":true,\"runType\":\"" + runType + "\"}";
+        run.summaryJson = summaryJson;
         run.startedAt = now;
         run.completedAt = now;
         run.createdBy = actorUserId;
@@ -101,6 +95,9 @@ public class SimulationRun {
     }
 
     public UUID getId() { return id; }
+    public String getCalculationVersion() { return calculationVersion; }
+    public Instant getStartedAt() { return startedAt; }
+    public Instant getCompletedAt() { return completedAt; }
     public UUID getScenarioId() { return scenarioId; }
     public UUID getForecastRunId() { return forecastRunId; }
     public String getRunType() { return runType; }

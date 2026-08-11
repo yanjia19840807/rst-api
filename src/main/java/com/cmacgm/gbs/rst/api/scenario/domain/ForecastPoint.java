@@ -48,16 +48,33 @@ public class ForecastPoint {
     protected ForecastPoint() {
     }
 
-    static ForecastPoint stub(ForecastRun run, LocalDate start, LocalDate end, java.time.Instant ignored) {
+    /**
+     * Creates a forecast point for a monthly period.
+     *
+     * @param run owning run
+     * @param start period start (month start)
+     * @param end period end (month end)
+     * @param mean forecast mean
+     * @param lower lower bound
+     * @param upper upper bound
+     * @return point
+     */
+    public static ForecastPoint create(
+            ForecastRun run,
+            LocalDate start,
+            LocalDate end,
+            BigDecimal mean,
+            BigDecimal lower,
+            BigDecimal upper) {
         ForecastPoint point = new ForecastPoint();
         point.id = UUID.randomUUID();
         point.forecastRun = run;
         point.periodStart = start;
         point.periodEnd = end;
-        point.forecastMean = new BigDecimal("1000.000000");
-        point.lowerBound = new BigDecimal("900.000000");
-        point.upperBound = new BigDecimal("1100.000000");
-        point.acceptedValue = point.forecastMean;
+        point.forecastMean = mean;
+        point.lowerBound = lower;
+        point.upperBound = upper;
+        point.acceptedValue = mean;
         return point;
     }
 
@@ -65,5 +82,7 @@ public class ForecastPoint {
     public LocalDate getPeriodStart() { return periodStart; }
     public LocalDate getPeriodEnd() { return periodEnd; }
     public BigDecimal getForecastMean() { return forecastMean; }
+    public BigDecimal getLowerBound() { return lowerBound; }
+    public BigDecimal getUpperBound() { return upperBound; }
     public BigDecimal getAcceptedValue() { return acceptedValue; }
 }

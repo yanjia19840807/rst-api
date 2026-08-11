@@ -22,7 +22,10 @@ import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.S
 import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.TeamSetupRequest;
 import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.TeamSetupView;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -32,8 +35,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Supervisor Associated Data endpoints under an Exercise.
@@ -299,5 +304,88 @@ public class ExerciseAssociatedDataController {
             @PathVariable UUID exerciseId,
             @RequestBody List<SlotVolumeRequest> request) {
         return service.putSlotVolumes(principal.userId(), exerciseId, request);
+    }
+
+    @GetMapping("/volumes/monthly/export-template")
+    public ResponseEntity<byte[]> exportMonthlyTemplate(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return excelResponse(
+                service.exportMonthlyTemplate(principal.userId(), exerciseId),
+                "volume-monthly-template.xlsx");
+    }
+
+    @GetMapping("/volumes/monthly/export")
+    public ResponseEntity<byte[]> exportMonthly(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return excelResponse(
+                service.exportMonthlyExcel(principal.userId(), exerciseId),
+                "volume-monthly.xlsx");
+    }
+
+    @PostMapping(value = "/volumes/monthly/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public List<MonthlyVolumeView> importMonthly(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @RequestParam("file") MultipartFile file) throws Exception {
+        return service.importMonthlyExcel(
+                principal.userId(), exerciseId, file.getInputStream(), file.getOriginalFilename());
+    }
+
+    @GetMapping("/volumes/daily/export-template")
+    public ResponseEntity<byte[]> exportDailyTemplate(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return excelResponse(
+                service.exportDailyTemplate(principal.userId(), exerciseId),
+                "volume-daily-template.xlsx");
+    }
+
+    @GetMapping("/volumes/daily/export")
+    public ResponseEntity<byte[]> exportDaily(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return excelResponse(
+                service.exportDailyExcel(principal.userId(), exerciseId),
+                "volume-daily.xlsx");
+    }
+
+    @PostMapping(value = "/volumes/daily/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public List<DailyVolumeView> importDaily(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @RequestParam("file") MultipartFile file) throws Exception {
+        return service.importDailyExcel(
+                principal.userId(), exerciseId, file.getInputStream(), file.getOriginalFilename());
+    }
+
+    @GetMapping("/volumes/slot/export-template")
+    public ResponseEntity<byte[]> exportSlotTemplate(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return excelResponse(
+                service.exportSlotTemplate(principal.userId(), exerciseId),
+                "volume-slot-template.xlsx");
+    }
+
+    @GetMapping("/volumes/slot/export")
+    public ResponseEntity<byte[]> exportSlot(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return excelResponse(
+                service.exportSlotExcel(principal.userId(), exerciseId),
+                "volume-slot.xlsx");
+    }
+
+    @PostMapping(value = "/volumes/slot/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public List<SlotVolumeView> importSlot(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @RequestParam("file") MultipartFile file) throws Exception {
+        return service.importSlotExcel(
+                principal.userId(), exerciseId, file.getInputStream(), file.getOriginalFilename());
+    }
+
+    private static ResponseEntity<byte[]> excelResponse(byte[] body, String filename) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(body);
     }
 }

@@ -6,6 +6,8 @@ import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /** Persistence for scenarios. */
 public interface ScenarioRepository extends JpaRepository<Scenario, UUID> {
@@ -36,11 +38,13 @@ public interface ScenarioRepository extends JpaRepository<Scenario, UUID> {
     Optional<Scenario> findByExerciseIdAndStatusAndDeletedAtIsNull(UUID exerciseId, String status);
 
     /**
-     * Returns whether a scenario code already exists for an Exercise.
-     *
-     * @param exerciseId Exercise id
-     * @param scenarioCode scenario code
-     * @return true when present (including soft-deleted rows that still occupy the unique key)
+     * Returns whether an active (non-deleted) scenario code already exists for an Exercise.
      */
-    boolean existsByExerciseIdAndScenarioCode(UUID exerciseId, String scenarioCode);
+    boolean existsByExerciseIdAndScenarioCodeAndDeletedAtIsNull(UUID exerciseId, String scenarioCode);
+
+    /**
+     * Lists all scenario codes for an Exercise (including soft-deleted) for next-code allocation.
+     */
+    @Query("select s.scenarioCode from Scenario s where s.exerciseId = :exerciseId")
+    List<String> findScenarioCodesByExerciseId(@Param("exerciseId") UUID exerciseId);
 }

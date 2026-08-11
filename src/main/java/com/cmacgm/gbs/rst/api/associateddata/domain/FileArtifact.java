@@ -75,6 +75,39 @@ public class FileArtifact {
             String mimeType,
             UUID actorUserId,
             Instant now) {
+        return createStub(
+                artifactType,
+                businessObjectType,
+                businessObjectId,
+                fileName,
+                mimeType,
+                null,
+                actorUserId,
+                now);
+    }
+
+    /**
+     * Creates an AVAILABLE file artifact stub with optional size.
+     *
+     * @param artifactType artifact classification
+     * @param businessObjectType owning business type
+     * @param businessObjectId owning business id
+     * @param fileName display file name
+     * @param mimeType MIME type
+     * @param sizeBytes optional byte size
+     * @param actorUserId creating user
+     * @param now creation timestamp
+     * @return new file artifact
+     */
+    public static FileArtifact createStub(
+            String artifactType,
+            String businessObjectType,
+            UUID businessObjectId,
+            String fileName,
+            String mimeType,
+            Long sizeBytes,
+            UUID actorUserId,
+            Instant now) {
         FileArtifact artifact = new FileArtifact();
         artifact.id = UUID.randomUUID();
         artifact.artifactType = artifactType;
@@ -84,6 +117,7 @@ public class FileArtifact {
         artifact.webUrl = "https://example.local/files/" + artifact.id;
         artifact.fileName = fileName;
         artifact.mimeType = mimeType;
+        artifact.sizeBytes = sizeBytes;
         artifact.status = "AVAILABLE";
         artifact.createdAt = now;
         artifact.createdBy = actorUserId;
@@ -91,6 +125,12 @@ public class FileArtifact {
     }
 
     public UUID getId() { return id; }
+    public String getArtifactType() { return artifactType; }
+    public String getBusinessObjectType() { return businessObjectType; }
+    public UUID getBusinessObjectId() { return businessObjectId; }
     public String getFileName() { return fileName; }
+    public String getMimeType() { return mimeType; }
+    public Long getSizeBytes() { return sizeBytes; }
+    public String getWebUrl() { return webUrl; }
     public String getStatus() { return status; }
 }

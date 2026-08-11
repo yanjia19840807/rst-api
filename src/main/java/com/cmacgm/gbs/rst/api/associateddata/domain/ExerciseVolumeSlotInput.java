@@ -73,6 +73,34 @@ public class ExerciseVolumeSlotInput {
             String timezone,
             UUID actorUserId,
             Instant now) {
+        return create(
+                exerciseId,
+                slotStartAt,
+                slotEndAt,
+                rawVolume,
+                timezone,
+                "MANUAL",
+                null,
+                actorUserId,
+                now);
+    }
+
+    /**
+     * Creates a slot volume row with an explicit source and optional import batch.
+     *
+     * @param sourceType MANUAL / ARCHIVE / IMPORT
+     * @param importBatchId optional import batch
+     */
+    public static ExerciseVolumeSlotInput create(
+            UUID exerciseId,
+            Instant slotStartAt,
+            Instant slotEndAt,
+            BigDecimal rawVolume,
+            String timezone,
+            String sourceType,
+            UUID importBatchId,
+            UUID actorUserId,
+            Instant now) {
         ExerciseVolumeSlotInput row = new ExerciseVolumeSlotInput();
         row.id = UUID.randomUUID();
         row.exerciseId = exerciseId;
@@ -80,7 +108,8 @@ public class ExerciseVolumeSlotInput {
         row.slotEndAt = slotEndAt;
         row.rawVolume = rawVolume;
         row.timezone = timezone;
-        row.sourceType = "MANUAL";
+        row.sourceType = sourceType == null || sourceType.isBlank() ? "MANUAL" : sourceType;
+        row.importBatchId = importBatchId;
         row.createdAt = now;
         row.createdBy = actorUserId;
         row.updatedAt = now;

@@ -1,0 +1,85 @@
+package com.cmacgm.gbs.rst.api.associateddata.application;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Derives Volume Input training windows from Exercise periods (forecast windows excluded).
+ *
+ * <p>Per-slot rows follow the prototype business-day grid: 09:00–22:00 in 30-minute steps
+ * (not a full 24-hour clock).
+ */
+public final class VolumeTrainWindows {
+
+    public static final String DEFAULT_SLOT_TIMEZONE = "Asia/Shanghai";
+    private static final int SLOT_MINUTES = 30;
+    /** Inclusive start of the first slot each day (09:00). */
+    private static final int SLOT_DAY_START_MINUTES = 9 * 60;
+    /** Exclusive end of the last slot each day (22:00 → last slot 21:30–22:00). */
+    private static final int SLOT_DAY_END_MINUTES = 22 * 60;
+
+    private VolumeTrainWindows() {
+    }
+
+    /** Monthly train months: sizingMonth-2 … sizingMonth. */
+    public static List<String> monthlyTrainMonths(String sizingMonth) {
+        YearMonth ym = YearMonth.parse(sizingMonth);
+        List<String> months = new ArrayList<>(3);
+        for (int delta = -2; delta <= 0; delta++) {
+            months.add(ym.plusMonths(delta).toString());
+        }
+        return months;
+    }
+
+    /** Daily train dates: every day in the sizing month. */
+    public static List<LocalDate> dailyTrainDates(String sizingMonth) {
+        YearMonth ym = YearMonth.parse(sizingMonth);
+        List<LocalDate> dates = new ArrayList<>();
+        LocalDate cursor = ym.atDay(1);
+        LocalDate end = ym.atEndOfMonth();
+        while (!cursor.isAfter(end)) {
+            dates.add(cursor);
+            cursor = cursor.plusDays(1);
+        }
+        return dates;
+    }
+
+    /** Inclusive end date of the slot training window. */
+    public static LocalDate slotTrainEnd(LocalDate slotStartDate, short slotWeeks) {
+        int weeks = Math.max(1, slotWeeks);
+        return slotStartDate.plusDays(weeks * 7L - 1);
+    }
+
+    /**
+     * 30-minute slot bounds covering the slot training window.
+     * Each day generates slots from 09:00 through 21:30–22:00 (prototype rule).
+     */
+    public static List<SlotBound> slotTrainBounds(LocalDate slotStartDate, short slotWeeks) {
+        LocalDate endDate = slotTrainEnd(slotStartDate, slotWeeks);
+        List<SlotBound> bounds = new ArrayList<>();
+        LocalDate cursor = slotStartDate;
+        while (!cursor.isAfter(endDate)) {
+            Instant dayStart = cursor.atStartOfDay().toInstant(ZoneOffset.UTC);
+            for (int minutes = SLOT_DAY_START_MINUTES; minutes < SLOT_DAY_END_MINUTES; minutes += SLOT_MINUTES) {
+                Instant start = dayStart.plusSeconds(minutes * 60L);
+                Instant end = start.plusSeconds(SLOT_MINUTES * 60L);
+                bounds.add(new SlotBound(start, end));
+            }
+            cursor = cursor.plusDays(1);
+        }
+        return bounds;
+    }
+
+    public static Set<String> monthlyTrainMonthSet(String sizingMonth) {
+        return new LinkedHashSet<>(monthlyTrainMonths(sizingMonth));
+    }
+
+    public record SlotBound(Instant start, Instant end) {
+    }
+}

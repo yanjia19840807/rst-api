@@ -56,31 +56,49 @@ public class MonthlySizingResult {
     }
 
     /**
-     * Creates a stub monthly sizing result for Official readiness.
-     *
-     * @param simulationRunId parent ACCEPTED MONTHLY_SIZING run
-     * @param month YYYY-MM
-     * @return stub result row
+     * Creates a real monthly sizing result row.
      */
-    public static MonthlySizingResult stub(UUID simulationRunId, String month) {
+    public static MonthlySizingResult create(
+            UUID simulationRunId,
+            String month,
+            BigDecimal forecastVolume,
+            BigDecimal manualVolume,
+            BigDecimal workdays,
+            BigDecimal weekendDays,
+            BigDecimal cycleTimeSeconds,
+            BigDecimal nominalHcWithoutOt,
+            BigDecimal nominalHcWithOt,
+            BigDecimal productionSupportFte,
+            BigDecimal rightSizingHc,
+            BigDecimal capacityCreation) {
         MonthlySizingResult row = new MonthlySizingResult();
         row.id = UUID.randomUUID();
         row.simulationRunId = simulationRunId;
         row.month = month;
-        row.forecastVolume = new BigDecimal("1000.000000");
-        row.workdays = new BigDecimal("22");
-        row.weekendDays = new BigDecimal("8");
-        row.cycleTimeSeconds = new BigDecimal("120.000000");
-        row.nominalHcWithoutOt = new BigDecimal("10.000000");
-        row.nominalHcWithOt = new BigDecimal("9.500000");
-        row.productionSupportFte = new BigDecimal("0.500000");
-        row.rightSizingHc = new BigDecimal("10.500000");
-        row.capacityCreation = new BigDecimal("0.250000");
+        row.forecastVolume = forecastVolume;
+        row.manualVolume = manualVolume;
+        row.workdays = workdays;
+        row.weekendDays = weekendDays;
+        row.cycleTimeSeconds = cycleTimeSeconds;
+        row.nominalHcWithoutOt = nominalHcWithoutOt;
+        row.nominalHcWithOt = nominalHcWithOt;
+        row.productionSupportFte = productionSupportFte;
+        row.rightSizingHc = rightSizingHc;
+        row.capacityCreation = capacityCreation;
         return row;
     }
 
     public UUID getId() { return id; }
     public UUID getSimulationRunId() { return simulationRunId; }
     public String getMonth() { return month; }
+    public BigDecimal getForecastVolume() { return forecastVolume; }
+    public BigDecimal getManualVolume() { return manualVolume; }
+    public BigDecimal getWorkdays() { return workdays; }
+    public BigDecimal getWeekendDays() { return weekendDays; }
+    public BigDecimal getCycleTimeSeconds() { return cycleTimeSeconds; }
+    public BigDecimal getNominalHcWithoutOt() { return nominalHcWithoutOt; }
+    public BigDecimal getNominalHcWithOt() { return nominalHcWithOt; }
+    public BigDecimal getProductionSupportFte() { return productionSupportFte; }
     public BigDecimal getRightSizingHc() { return rightSizingHc; }
+    public BigDecimal getCapacityCreation() { return capacityCreation; }
 }

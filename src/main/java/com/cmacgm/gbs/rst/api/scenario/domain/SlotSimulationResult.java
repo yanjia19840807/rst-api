@@ -63,31 +63,55 @@ public class SlotSimulationResult {
     }
 
     /**
-     * Creates a stub slot simulation result for Official readiness.
-     *
-     * @param simulationRunId parent ACCEPTED SLOT run
-     * @param slotStartAt slot start
-     * @param slotEndAt slot end
-     * @return stub result row
+     * Creates a real slot simulation result row.
      */
-    public static SlotSimulationResult stub(UUID simulationRunId, Instant slotStartAt, Instant slotEndAt) {
+    public static SlotSimulationResult create(
+            UUID simulationRunId,
+            Instant slotStartAt,
+            Instant slotEndAt,
+            BigDecimal rawVolume,
+            BigDecimal manualVolume,
+            BigDecimal theoreticalFte,
+            BigDecimal shiftFte,
+            BigDecimal casesPerFte,
+            BigDecimal teamCapacity,
+            BigDecimal backlogStart,
+            BigDecimal backlogEnd,
+            BigDecimal volumeOutsideSla,
+            BigDecimal tatResult,
+            BigDecimal slaResult) {
         SlotSimulationResult row = new SlotSimulationResult();
         row.id = UUID.randomUUID();
         row.simulationRunId = simulationRunId;
         row.slotStartAt = slotStartAt;
         row.slotEndAt = slotEndAt;
-        row.rawVolume = new BigDecimal("50.000000");
-        row.theoreticalFte = new BigDecimal("2.000000");
-        row.shiftFte = new BigDecimal("2.000000");
-        row.casesPerFte = new BigDecimal("25.000000");
-        row.teamCapacity = new BigDecimal("50.000000");
-        row.backlogStart = BigDecimal.ZERO;
-        row.backlogEnd = BigDecimal.ZERO;
-        row.volumeOutsideSla = BigDecimal.ZERO;
-        row.slaResult = new BigDecimal("0.98000000");
+        row.rawVolume = rawVolume;
+        row.manualVolume = manualVolume;
+        row.theoreticalFte = theoreticalFte;
+        row.shiftFte = shiftFte;
+        row.casesPerFte = casesPerFte;
+        row.teamCapacity = teamCapacity;
+        row.backlogStart = backlogStart;
+        row.backlogEnd = backlogEnd;
+        row.volumeOutsideSla = volumeOutsideSla;
+        row.tatResult = tatResult;
+        row.slaResult = slaResult;
         return row;
     }
 
     public UUID getId() { return id; }
     public UUID getSimulationRunId() { return simulationRunId; }
+    public Instant getSlotStartAt() { return slotStartAt; }
+    public Instant getSlotEndAt() { return slotEndAt; }
+    public BigDecimal getRawVolume() { return rawVolume; }
+    public BigDecimal getManualVolume() { return manualVolume; }
+    public BigDecimal getTheoreticalFte() { return theoreticalFte; }
+    public BigDecimal getShiftFte() { return shiftFte; }
+    public BigDecimal getCasesPerFte() { return casesPerFte; }
+    public BigDecimal getTeamCapacity() { return teamCapacity; }
+    public BigDecimal getBacklogStart() { return backlogStart; }
+    public BigDecimal getBacklogEnd() { return backlogEnd; }
+    public BigDecimal getVolumeOutsideSla() { return volumeOutsideSla; }
+    public BigDecimal getTatResult() { return tatResult; }
+    public BigDecimal getSlaResult() { return slaResult; }
 }

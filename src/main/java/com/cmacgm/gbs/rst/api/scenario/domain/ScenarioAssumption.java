@@ -123,6 +123,19 @@ public class ScenarioAssumption {
         this.scenario = scenario;
     }
 
+    /**
+     * Copies typed values from another assumption (keeps this row's id for unique-key upserts).
+     */
+    void overwriteValues(ScenarioAssumption source, UUID actorUserId, Instant now) {
+        this.numericValue = source.numericValue;
+        this.textValue = source.textValue;
+        this.booleanValue = source.booleanValue;
+        this.dateValue = source.dateValue;
+        this.unit = source.unit;
+        this.updatedAt = now;
+        this.updatedBy = actorUserId;
+    }
+
     public UUID getId() { return id; }
     public String getParameterCode() { return parameterCode; }
     public BigDecimal getNumericValue() { return numericValue; }

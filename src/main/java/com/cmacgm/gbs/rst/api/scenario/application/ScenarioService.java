@@ -79,12 +79,46 @@ public class ScenarioService {
         RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
         exercises.requireEditable(exercise);
         Instant now = clock.instant();
+        String scenarioCode = resolveScenarioCode(exerciseId, request.scenarioCode());
+        String name = request.name();
+        if (name != null && request.scenarioCode() != null && name.contains(request.scenarioCode())) {
+            // Keep display name aligned when server allocates a different code.
+            name = name.replace(request.scenarioCode(), scenarioCode);
+        }
         Scenario scenario = Scenario.createDraft(
-                exerciseId, request.scenarioCode(), request.name(), request.description(), ownerId, now);
+                exerciseId, scenarioCode, name, request.description(), ownerId, now);
         if (request.assumptions() != null && !request.assumptions().isEmpty()) {
             scenario.replaceAssumptions(toAssumptions(request.assumptions(), ownerId, now), ownerId, now);
         }
         return toView(scenarios.save(scenario));
+    }
+
+    /**
+     * Uses the requested code when free; otherwise allocates the next {@code S{n}} across all
+     * historical codes for the exercise (including soft-deleted).
+     */
+    private String resolveScenarioCode(UUID exerciseId, String requested) {
+        String trimmed = requested == null ? "" : requested.trim();
+        if (!trimmed.isBlank()
+                && !scenarios.existsByExerciseIdAndScenarioCodeAndDeletedAtIsNull(exerciseId, trimmed)) {
+            return trimmed;
+        }
+        int max = 0;
+        for (String code : scenarios.findScenarioCodesByExerciseId(exerciseId)) {
+            if (code == null) {
+                continue;
+            }
+            String normalized = code.trim();
+            if (normalized.length() > 1
+                    && (normalized.charAt(0) == 'S' || normalized.charAt(0) == 's')) {
+                try {
+                    max = Math.max(max, Integer.parseInt(normalized.substring(1)));
+                } catch (NumberFormatException ignored) {
+                    // non-numeric codes are ignored for allocation
+                }
+            }
+        }
+        return "S" + (max + 1);
     }
 
     /**

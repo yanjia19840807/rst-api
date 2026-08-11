@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -16,6 +17,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.cmacgm.gbs.rst.api.associateddata.application.VolumeTrainWindows;
+import com.cmacgm.gbs.rst.api.associateddata.application.VolumeTrainWindows.SlotBound;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseHoliday;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseShift;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
@@ -122,7 +125,10 @@ public class ExerciseInitializationService {
             exercise.markInitializedFrom(source.getId(), actorUserId, now);
             exercises.save(exercise);
             notices.add("Associated Data initialized from archived exercise " + source.getExerciseCode() + ".");
-
+            notices.add(
+                    "Volume seeded from "
+                            + source.getExerciseCode()
+                            + " for overlapping training periods.");
             short archivePrimary = primaryYear(source.getSizingMonth());
             if (archivePrimary != primaryYear) {
                 notices.add(
@@ -139,6 +145,9 @@ public class ExerciseInitializationService {
         } else {
             notices.add("No validated/archived exercise found for this Toolkit. Calendar seeded from Center templates.");
         }
+
+        ensureTrainVolumeGrids(exercise, actorUserId);
+        notices.add("Volume Input rows generated for training windows (monthly / daily / per-slot).");
 
         ApplyTemplatesResult applied = holidayTemplates.applyPublishedTemplates(
                 exercise.getId(),
@@ -251,11 +260,122 @@ public class ExerciseInitializationService {
         }
     }
 
+    /**
+     * Rebuilds Volume Input grids to the Exercise training windows, keeping values for overlapping keys.
+     */
+    @Transactional
+    public void ensureTrainVolumeGrids(RstExercise exercise, UUID actorUserId) {
+        Instant now = clock.instant();
+        UUID exerciseId = exercise.getId();
+        syncMonthlyTrainGrid(exercise, actorUserId, now);
+        syncDailyTrainGrid(exercise, actorUserId, now);
+        syncSlotTrainGrid(exercise, actorUserId, now);
+    }
+
+    private void syncMonthlyTrainGrid(RstExercise exercise, UUID actorUserId, Instant now) {
+        UUID exerciseId = exercise.getId();
+        List<String> expected = VolumeTrainWindows.monthlyTrainMonths(exercise.getSizingMonth());
+        Map<String, ExerciseVolumeMonthlyInput> existing = new HashMap<>();
+        for (ExerciseVolumeMonthlyInput row : monthlyVolumes.findByExerciseIdOrderByMonthAsc(exerciseId)) {
+            existing.put(row.getMonth(), row);
+        }
+        monthlyVolumes.deleteByExerciseId(exerciseId);
+        monthlyVolumes.flush();
+        for (String month : expected) {
+            ExerciseVolumeMonthlyInput prior = existing.get(month);
+            if (prior != null) {
+                monthlyVolumes.save(ExerciseVolumeMonthlyInput.create(
+                        exerciseId,
+                        month,
+                        prior.getActualVolume(),
+                        prior.getCommercialRatio(),
+                        prior.getManualForecastVolume(),
+                        prior.getSourceType(),
+                        null,
+                        actorUserId,
+                        now));
+            } else {
+                monthlyVolumes.save(ExerciseVolumeMonthlyInput.create(
+                        exerciseId, month, null, null, null, "MANUAL", null, actorUserId, now));
+            }
+        }
+    }
+
+    private void syncDailyTrainGrid(RstExercise exercise, UUID actorUserId, Instant now) {
+        UUID exerciseId = exercise.getId();
+        List<LocalDate> expected = VolumeTrainWindows.dailyTrainDates(exercise.getSizingMonth());
+        Map<LocalDate, ExerciseVolumeDailyInput> existing = new HashMap<>();
+        for (ExerciseVolumeDailyInput row : dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(exerciseId)) {
+            existing.put(row.getVolumeDate(), row);
+        }
+        dailyVolumes.deleteByExerciseId(exerciseId);
+        dailyVolumes.flush();
+        for (LocalDate date : expected) {
+            ExerciseVolumeDailyInput prior = existing.get(date);
+            if (prior != null) {
+                dailyVolumes.save(ExerciseVolumeDailyInput.create(
+                        exerciseId,
+                        date,
+                        prior.getActualVolume(),
+                        prior.getDailyAdjustmentRatio(),
+                        prior.getManualForecastVolume(),
+                        prior.getSourceType(),
+                        null,
+                        actorUserId,
+                        now));
+            } else {
+                dailyVolumes.save(ExerciseVolumeDailyInput.create(
+                        exerciseId, date, null, null, null, "MANUAL", null, actorUserId, now));
+            }
+        }
+    }
+
+    private void syncSlotTrainGrid(RstExercise exercise, UUID actorUserId, Instant now) {
+        UUID exerciseId = exercise.getId();
+        List<SlotBound> expected = VolumeTrainWindows.slotTrainBounds(
+                exercise.getSlotStartDate(), exercise.getSlotWeeks());
+        Map<String, ExerciseVolumeSlotInput> existing = new HashMap<>();
+        for (ExerciseVolumeSlotInput row : slotVolumes.findByExerciseIdOrderBySlotStartAtAsc(exerciseId)) {
+            existing.put(row.getSlotStartAt() + "|" + row.getSlotEndAt(), row);
+        }
+        slotVolumes.deleteByExerciseId(exerciseId);
+        slotVolumes.flush();
+        for (SlotBound bound : expected) {
+            String key = bound.start() + "|" + bound.end();
+            ExerciseVolumeSlotInput prior = existing.get(key);
+            if (prior != null) {
+                slotVolumes.save(ExerciseVolumeSlotInput.create(
+                        exerciseId,
+                        bound.start(),
+                        bound.end(),
+                        prior.getRawVolume(),
+                        prior.getTimezone(),
+                        prior.getSourceType(),
+                        null,
+                        actorUserId,
+                        now));
+            } else {
+                slotVolumes.save(ExerciseVolumeSlotInput.create(
+                        exerciseId,
+                        bound.start(),
+                        bound.end(),
+                        BigDecimal.ZERO,
+                        VolumeTrainWindows.DEFAULT_SLOT_TIMEZONE,
+                        "MANUAL",
+                        null,
+                        actorUserId,
+                        now));
+            }
+        }
+    }
+
     private void copyVolumes(UUID sourceId, RstExercise target, UUID actorUserId, Instant now) {
-        LocalDate windowStart = earliest(target.getTmsFrom(), target.getSlotStartDate());
-        LocalDate windowEnd = latest(target.getTmsTo(), slotEnd(target));
-        Set<String> months = monthsCovered(windowStart, windowEnd);
-        months.add(target.getSizingMonth());
+        Set<String> months = VolumeTrainWindows.monthlyTrainMonthSet(target.getSizingMonth());
+        Set<LocalDate> dates = new LinkedHashSet<>(VolumeTrainWindows.dailyTrainDates(target.getSizingMonth()));
+        LocalDate slotStart = target.getSlotStartDate();
+        LocalDate slotEndDate = VolumeTrainWindows.slotTrainEnd(slotStart, target.getSlotWeeks());
+        Instant slotFrom = slotStart.atStartOfDay().toInstant(ZoneOffset.UTC);
+        Instant slotTo = slotEndDate.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
 
         for (ExerciseVolumeMonthlyInput row : monthlyVolumes.findByExerciseIdOrderByMonthAsc(sourceId)) {
             if (months.contains(row.getMonth())) {
@@ -265,25 +385,27 @@ public class ExerciseInitializationService {
                         row.getActualVolume(),
                         row.getCommercialRatio(),
                         row.getManualForecastVolume(),
+                        "ARCHIVE",
+                        null,
                         actorUserId,
                         now));
             }
         }
         for (ExerciseVolumeDailyInput row : dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(sourceId)) {
             LocalDate date = row.getVolumeDate();
-            if (date != null && !date.isBefore(windowStart) && !date.isAfter(windowEnd)) {
+            if (date != null && dates.contains(date)) {
                 dailyVolumes.save(ExerciseVolumeDailyInput.create(
                         target.getId(),
                         date,
                         row.getActualVolume(),
                         row.getDailyAdjustmentRatio(),
                         row.getManualForecastVolume(),
+                        "ARCHIVE",
+                        null,
                         actorUserId,
                         now));
             }
         }
-        Instant slotFrom = windowStart.atStartOfDay().toInstant(ZoneOffset.UTC);
-        Instant slotTo = windowEnd.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
         for (ExerciseVolumeSlotInput row : slotVolumes.findByExerciseIdOrderBySlotStartAtAsc(sourceId)) {
             if (row.getSlotStartAt() != null
                     && !row.getSlotStartAt().isBefore(slotFrom)
@@ -294,6 +416,8 @@ public class ExerciseInitializationService {
                         row.getSlotEndAt(),
                         row.getRawVolume(),
                         row.getTimezone(),
+                        "ARCHIVE",
+                        null,
                         actorUserId,
                         now));
             }

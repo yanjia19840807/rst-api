@@ -73,6 +73,34 @@ public class ExerciseVolumeMonthlyInput {
             BigDecimal manualForecastVolume,
             UUID actorUserId,
             Instant now) {
+        return create(
+                exerciseId,
+                month,
+                actualVolume,
+                commercialRatio,
+                manualForecastVolume,
+                "MANUAL",
+                null,
+                actorUserId,
+                now);
+    }
+
+    /**
+     * Creates a monthly volume row with an explicit source and optional import batch.
+     *
+     * @param sourceType MANUAL / ARCHIVE / IMPORT
+     * @param importBatchId optional import batch
+     */
+    public static ExerciseVolumeMonthlyInput create(
+            UUID exerciseId,
+            String month,
+            BigDecimal actualVolume,
+            BigDecimal commercialRatio,
+            BigDecimal manualForecastVolume,
+            String sourceType,
+            UUID importBatchId,
+            UUID actorUserId,
+            Instant now) {
         ExerciseVolumeMonthlyInput row = new ExerciseVolumeMonthlyInput();
         row.id = UUID.randomUUID();
         row.exerciseId = exerciseId;
@@ -80,7 +108,8 @@ public class ExerciseVolumeMonthlyInput {
         row.actualVolume = actualVolume;
         row.commercialRatio = commercialRatio;
         row.manualForecastVolume = manualForecastVolume;
-        row.sourceType = "MANUAL";
+        row.sourceType = sourceType == null || sourceType.isBlank() ? "MANUAL" : sourceType;
+        row.importBatchId = importBatchId;
         row.createdAt = now;
         row.createdBy = actorUserId;
         row.updatedAt = now;

@@ -14,13 +14,17 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
+import com.cmacgm.gbs.rst.api.associateddata.domain.FileArtifact;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
+import com.cmacgm.gbs.rst.api.associateddata.persistence.FileArtifactRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.cycletime.api.dto.ExerciseTmsSessionResponse;
 import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
+import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaselineFile;
 import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaselineSample;
 import com.cmacgm.gbs.rst.api.cycletime.domain.ExerciseTmsSession;
+import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineFileRepository;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineSampleRepository;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.ExerciseTmsSessionRepository;
@@ -32,6 +36,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Cycle Time service: MANUAL / SYSTEM baselines and Embedded TMS session inclusion.
@@ -39,9 +44,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CycleTimeService {
 
+    private static final String SUPPORT_ARTIFACT_TYPE = "CYCLE_TIME_SUPPORT";
+    private static final String SUPPORT_BUSINESS_TYPE = "EXERCISE";
+    private static final long MAX_SUPPORT_FILE_BYTES = 20L * 1024 * 1024;
+
     private final ExerciseService exercises;
     private final CycleTimeBaselineRepository baselines;
     private final CycleTimeBaselineSampleRepository baselineSamples;
+    private final CycleTimeBaselineFileRepository baselineFiles;
+    private final FileArtifactRepository fileArtifacts;
     private final ExerciseTmsSessionRepository exerciseTmsSessions;
     private final ExerciseTeamSetupRepository teamSetups;
     private final Clock clock;
@@ -52,6 +63,8 @@ public class CycleTimeService {
      * @param exercises Exercise service
      * @param baselines baseline repository
      * @param baselineSamples SYSTEM baseline sample freeze repository
+     * @param baselineFiles MANUAL baseline evidence links
+     * @param fileArtifacts file artifact repository
      * @param exerciseTmsSessions Exercise ↔ TMS session selections
      * @param teamSetups Team Setup repository (refresh daily capacity)
      * @param clock clock
@@ -60,12 +73,16 @@ public class CycleTimeService {
             ExerciseService exercises,
             CycleTimeBaselineRepository baselines,
             CycleTimeBaselineSampleRepository baselineSamples,
+            CycleTimeBaselineFileRepository baselineFiles,
+            FileArtifactRepository fileArtifacts,
             ExerciseTmsSessionRepository exerciseTmsSessions,
             ExerciseTeamSetupRepository teamSetups,
             Clock clock) {
         this.exercises = exercises;
         this.baselines = baselines;
         this.baselineSamples = baselineSamples;
+        this.baselineFiles = baselineFiles;
+        this.fileArtifacts = fileArtifacts;
         this.exerciseTmsSessions = exerciseTmsSessions;
         this.teamSetups = teamSetups;
         this.clock = clock;
@@ -74,9 +91,9 @@ public class CycleTimeService {
     /**
      * Creates an active MANUAL baseline, deactivating any previous active baseline.
      *
-     * <p>Inputs: positive median seconds and a non-blank manual reason.
+     * <p>Inputs: positive median seconds and a non-blank reason; support file ids are optional.
      * Intent: satisfy Official package prerequisites without SYSTEM median calculation.
-     * Failure: blank reason or non-positive median rejected with 422.
+     * Failure: blank reason, non-positive median, or invalid file ids rejected with 422.
      *
      * @param ownerId Supervisor id
      * @param exerciseId Exercise id
@@ -93,16 +110,70 @@ public class CycleTimeService {
                     "manual-reason-required",
                     "Manual cycle-time baseline requires a reason.");
         }
+        List<UUID> fileIds = request.fileArtifactIds() == null
+                ? List.of()
+                : request.fileArtifactIds().stream().distinct().toList();
+
         Instant now = clock.instant();
         deactivateActiveBaseline(exerciseId);
         CycleTimeBaseline baseline = CycleTimeBaseline.createManual(
                 exerciseId, request.medianSeconds(), request.manualReason().trim(), ownerId, now);
-        BaselineView view = toView(baselines.save(baseline));
+        baselines.save(baseline);
+        if (!fileIds.isEmpty()) {
+            linkSupportFiles(baseline.getId(), exerciseId, fileIds, ownerId, now);
+        }
+
         teamSetups.findById(exerciseId).ifPresent(setup -> {
             setup.recalculateDerived(request.medianSeconds());
             teamSetups.save(setup);
         });
-        return view;
+        return toView(baseline);
+    }
+
+    /**
+     * Uploads a support-file artifact stub for a MANUAL median (SharePoint deferred).
+     *
+     * @param ownerId Supervisor id
+     * @param exerciseId Exercise id
+     * @param file uploaded file
+     * @return created file artifact metadata
+     */
+    @Transactional
+    public BaselineFileView uploadSupportFile(UUID ownerId, UUID exerciseId, MultipartFile file) {
+        RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
+        exercises.requireEditable(exercise);
+        if (file == null || file.isEmpty()) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "support-file-required",
+                    "A support file is required.");
+        }
+        if (file.getSize() > MAX_SUPPORT_FILE_BYTES) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "support-file-too-large",
+                    "Support file must be 20 MB or smaller.");
+        }
+        String fileName = file.getOriginalFilename();
+        if (fileName == null || fileName.isBlank()) {
+            fileName = "support-file";
+        }
+        String mimeType = file.getContentType();
+        if (mimeType == null || mimeType.isBlank()) {
+            mimeType = "application/octet-stream";
+        }
+
+        Instant now = clock.instant();
+        FileArtifact artifact = fileArtifacts.save(FileArtifact.createStub(
+                SUPPORT_ARTIFACT_TYPE,
+                SUPPORT_BUSINESS_TYPE,
+                exerciseId,
+                fileName.trim(),
+                mimeType,
+                file.getSize(),
+                ownerId,
+                now));
+        return toFileView(artifact, 0);
     }
 
     /**
@@ -333,7 +404,50 @@ public class CycleTimeService {
                 row.getEndedAt());
     }
 
+    private void linkSupportFiles(
+            UUID baselineId,
+            UUID exerciseId,
+            List<UUID> fileIds,
+            UUID actorUserId,
+            Instant now) {
+        int order = 0;
+        for (UUID fileId : fileIds) {
+            FileArtifact artifact = fileArtifacts.findById(fileId)
+                    .orElseThrow(() -> new ApiException(
+                            HttpStatus.UNPROCESSABLE_ENTITY,
+                            "support-file-not-found",
+                            "Support file was not found: " + fileId));
+            if (!"AVAILABLE".equals(artifact.getStatus())) {
+                throw new ApiException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "support-file-unavailable",
+                        "Support file is not available: " + artifact.getFileName());
+            }
+            if (!SUPPORT_ARTIFACT_TYPE.equals(artifact.getArtifactType())
+                    || !SUPPORT_BUSINESS_TYPE.equals(artifact.getBusinessObjectType())
+                    || !exerciseId.equals(artifact.getBusinessObjectId())) {
+                throw new ApiException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "support-file-mismatch",
+                        "Support file does not belong to this exercise: " + artifact.getFileName());
+            }
+            baselineFiles.save(CycleTimeBaselineFile.link(
+                    baselineId, fileId, order++, actorUserId, now));
+        }
+    }
+
     private BaselineView toView(CycleTimeBaseline baseline) {
+        List<BaselineFileView> files = List.of();
+        if ("MANUAL".equals(baseline.getBaselineType())) {
+            files = baselineFiles
+                    .findByCycleTimeBaselineIdOrderByDisplayOrderAsc(baseline.getId())
+                    .stream()
+                    .map(link -> fileArtifacts.findById(link.getFileArtifactId())
+                            .map(artifact -> toFileView(artifact, link.getDisplayOrder()))
+                            .orElse(null))
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+        }
         return new BaselineView(
                 baseline.getId(),
                 baseline.getBaselineType(),
@@ -342,7 +456,18 @@ public class CycleTimeService {
                 baseline.getCalculationMethod(),
                 baseline.getManualReason(),
                 baseline.isActive(),
-                baseline.getCalculatedAt());
+                baseline.getCalculatedAt(),
+                files);
+    }
+
+    private static BaselineFileView toFileView(FileArtifact artifact, int displayOrder) {
+        return new BaselineFileView(
+                artifact.getId(),
+                artifact.getFileName(),
+                artifact.getMimeType(),
+                artifact.getSizeBytes(),
+                artifact.getWebUrl(),
+                displayOrder);
     }
 
     private record ZScoreStats(double mean, double stdev, boolean available) {
@@ -364,13 +489,25 @@ public class CycleTimeService {
             String calculationMethod,
             String manualReason,
             boolean active,
-            Instant calculatedAt) {
+            Instant calculatedAt,
+            List<BaselineFileView> files) {
+    }
+
+    /** Support file metadata on a MANUAL baseline. */
+    public record BaselineFileView(
+            UUID id,
+            String fileName,
+            String mimeType,
+            Long sizeBytes,
+            String webUrl,
+            int displayOrder) {
     }
 
     /** Manual baseline create payload. */
     public record ManualBaselineRequest(
             @NotNull @Positive BigDecimal medianSeconds,
-            @NotBlank String manualReason) {
+            @NotBlank String manualReason,
+            List<UUID> fileArtifactIds) {
     }
 
     /** PATCH inclusion payload. */

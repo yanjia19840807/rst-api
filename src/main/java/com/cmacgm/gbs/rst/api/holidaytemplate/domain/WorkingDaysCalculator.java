@@ -1,6 +1,7 @@
 package com.cmacgm.gbs.rst.api.holidaytemplate.domain;
 
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Objects;
@@ -61,5 +62,46 @@ public class WorkingDaysCalculator {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Counts workdays and weekend days in a calendar month for Forecast exogenous features.
+     *
+     * <p>Workdays exclude weekends and non-working holidays. Weekend days follow the weekend
+     * pattern only (holidays on weekend still count as weekend days).
+     *
+     * @param month year-month
+     * @param weekendCode weekend pattern
+     * @param nonWorkingHolidays holiday dates that are not working-day overrides
+     * @return monthly day counts
+     */
+    public MonthDayCounts countMonth(
+            YearMonth month, String weekendCode, Collection<LocalDate> nonWorkingHolidays) {
+        Objects.requireNonNull(month, "month");
+        WeekendCode weekend = WeekendCode.parse(weekendCode);
+        Set<LocalDate> holidays = new HashSet<>();
+        if (nonWorkingHolidays != null) {
+            for (LocalDate holiday : nonWorkingHolidays) {
+                if (holiday != null && YearMonth.from(holiday).equals(month)) {
+                    holidays.add(holiday);
+                }
+            }
+        }
+        int workDays = 0;
+        int weekendDays = 0;
+        LocalDate start = month.atDay(1);
+        LocalDate end = month.atEndOfMonth();
+        for (LocalDate day = start; !day.isAfter(end); day = day.plusDays(1)) {
+            if (weekend.days().contains(day.getDayOfWeek())) {
+                weekendDays++;
+            } else if (!holidays.contains(day)) {
+                workDays++;
+            }
+        }
+        return new MonthDayCounts(workDays, weekendDays);
+    }
+
+    /** Workday / weekend-day counts for one calendar month. */
+    public record MonthDayCounts(int workDays, int weekendDays) {
     }
 }

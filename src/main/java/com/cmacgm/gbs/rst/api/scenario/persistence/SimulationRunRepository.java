@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.scenario.persistence;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -10,6 +11,11 @@ import org.springframework.data.repository.query.Param;
 
 /** Persistence for simulation runs. */
 public interface SimulationRunRepository extends JpaRepository<SimulationRun, UUID> {
+
+    /**
+     * Lists all simulation runs for a scenario.
+     */
+    List<SimulationRun> findByScenarioId(UUID scenarioId);
 
     /**
      * Returns the max run number for a scenario and run type.

@@ -1,17 +1,23 @@
 package com.cmacgm.gbs.rst.api.associateddata.application;
 
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+import com.cmacgm.gbs.rst.api.associateddata.domain.DataImportBatch;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseCalendar;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseHoliday;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseShift;
@@ -23,6 +29,8 @@ import com.cmacgm.gbs.rst.api.associateddata.domain.SupportWorkloadMath;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeDailyInput;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeMonthlyInput;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeSlotInput;
+import com.cmacgm.gbs.rst.api.associateddata.domain.FileArtifact;
+import com.cmacgm.gbs.rst.api.associateddata.persistence.DataImportBatchRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseHolidayRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseShiftRepository;
@@ -32,12 +40,13 @@ import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSuppo
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeDailyInputRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeMonthlyInputRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeSlotInputRepository;
+import com.cmacgm.gbs.rst.api.associateddata.persistence.FileArtifactRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
+import com.cmacgm.gbs.rst.api.exercise.application.ExerciseInitializationService;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
-import com.cmacgm.gbs.rst.api.exercise.application.ExerciseInitializationService;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService.ApplyTemplatesResult;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService.TemplateUpdateHint;
@@ -63,7 +72,13 @@ public class AssociatedDataService {
     private final ExerciseVolumeSlotInputRepository slotVolumes;
     private final HolidayTemplateService holidayTemplates;
     private final CycleTimeBaselineRepository cycleTimeBaselines;
+    private final VolumeInputValidator volumeValidator;
+    private final VolumeExcelService volumeExcel;
+    private final FileArtifactRepository fileArtifacts;
+    private final DataImportBatchRepository importBatches;
     private final Clock clock;
+
+    private static final String DEFAULT_SLOT_TIMEZONE = "Asia/Shanghai";
 
     /**
      * Creates the Associated Data service.
@@ -81,6 +96,10 @@ public class AssociatedDataService {
             ExerciseVolumeSlotInputRepository slotVolumes,
             HolidayTemplateService holidayTemplates,
             CycleTimeBaselineRepository cycleTimeBaselines,
+            VolumeInputValidator volumeValidator,
+            VolumeExcelService volumeExcel,
+            FileArtifactRepository fileArtifacts,
+            DataImportBatchRepository importBatches,
             Clock clock) {
         this.exercises = exercises;
         this.teamSetups = teamSetups;
@@ -94,6 +113,10 @@ public class AssociatedDataService {
         this.slotVolumes = slotVolumes;
         this.holidayTemplates = holidayTemplates;
         this.cycleTimeBaselines = cycleTimeBaselines;
+        this.volumeValidator = volumeValidator;
+        this.volumeExcel = volumeExcel;
+        this.fileArtifacts = fileArtifacts;
+        this.importBatches = importBatches;
         this.clock = clock;
     }
 
@@ -164,13 +187,40 @@ public class AssociatedDataService {
     public List<ShiftView> putShifts(UUID ownerId, UUID exerciseId, List<ShiftRequest> request) {
         RstExercise exercise = editable(ownerId, exerciseId);
         Instant now = clock.instant();
+        // Upsert by shift_no to avoid unique (exercise_id, shift_no) conflicts from
+        // soft-delete + insert in the same flush (partial index WHERE deleted_at IS NULL).
+        Map<Short, ExerciseShift> existingByNo = new LinkedHashMap<>();
         for (ExerciseShift existing : shifts.findByExerciseIdAndDeletedAtIsNullOrderByShiftNoAsc(exerciseId)) {
-            existing.softDelete(ownerId, now);
+            existingByNo.put(existing.getShiftNo(), existing);
         }
+        Set<Short> kept = new HashSet<>();
         for (ShiftRequest item : request) {
-            shifts.save(ExerciseShift.create(
-                    exercise.getId(), item.shiftNo(), item.startTime(), item.durationMinutes(),
-                    item.headcount(), item.worksOnWeekend(), ownerId, now));
+            kept.add(item.shiftNo());
+            ExerciseShift current = existingByNo.get(item.shiftNo());
+            if (current != null) {
+                current.replace(
+                        item.startTime(),
+                        item.durationMinutes(),
+                        item.headcount(),
+                        item.worksOnWeekend(),
+                        ownerId,
+                        now);
+            } else {
+                shifts.save(ExerciseShift.create(
+                        exercise.getId(),
+                        item.shiftNo(),
+                        item.startTime(),
+                        item.durationMinutes(),
+                        item.headcount(),
+                        item.worksOnWeekend(),
+                        ownerId,
+                        now));
+            }
+        }
+        for (Map.Entry<Short, ExerciseShift> entry : existingByNo.entrySet()) {
+            if (!kept.contains(entry.getKey())) {
+                entry.getValue().softDelete(ownerId, now);
+            }
         }
         return getShifts(ownerId, exerciseId);
     }
@@ -394,16 +444,42 @@ public class AssociatedDataService {
     @Transactional
     public List<MonthlyVolumeView> putMonthlyVolumes(
             UUID ownerId, UUID exerciseId, List<MonthlyVolumeRequest> request) {
+        return replaceMonthlyVolumes(ownerId, exerciseId, request, "MANUAL", null);
+    }
+
+    /**
+     * Exports a blank monthly volume Excel template.
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportMonthlyTemplate(UUID ownerId, UUID exerciseId) {
+        exercises.requireOwned(ownerId, exerciseId);
+        return volumeExcel.exportMonthlyBlank();
+    }
+
+    /**
+     * Exports current monthly volumes as Excel.
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportMonthlyExcel(UUID ownerId, UUID exerciseId) {
+        exercises.requireOwned(ownerId, exerciseId);
+        List<MonthlyVolumeRequest> rows = monthlyVolumes.findByExerciseIdOrderByMonthAsc(exerciseId).stream()
+                .map(v -> new MonthlyVolumeRequest(
+                        v.getMonth(), v.getActualVolume(), v.getCommercialRatio(), v.getManualForecastVolume()))
+                .toList();
+        return volumeExcel.exportMonthly(rows);
+    }
+
+    /**
+     * Imports monthly volumes from Excel (replace).
+     */
+    @Transactional
+    public List<MonthlyVolumeView> importMonthlyExcel(
+            UUID ownerId, UUID exerciseId, InputStream input, String fileName) {
         editable(ownerId, exerciseId);
-        Instant now = clock.instant();
-        monthlyVolumes.deleteByExerciseId(exerciseId);
-        monthlyVolumes.flush();
-        for (MonthlyVolumeRequest row : request) {
-            monthlyVolumes.save(ExerciseVolumeMonthlyInput.create(
-                    exerciseId, row.month(), row.actualVolume(), row.commercialRatio(),
-                    row.manualForecastVolume(), ownerId, now));
-        }
-        return getMonthlyVolumes(ownerId, exerciseId);
+        List<MonthlyVolumeRequest> parsed = volumeExcel.parseMonthly(input);
+        volumeValidator.validateMonthly(parsed);
+        UUID batchId = recordImportBatch(ownerId, exerciseId, "MONTHLY_VOLUME", fileName, parsed.size());
+        return replaceMonthlyVolumes(ownerId, exerciseId, parsed, "IMPORT", batchId);
     }
 
     /**
@@ -434,16 +510,45 @@ public class AssociatedDataService {
     @Transactional
     public List<DailyVolumeView> putDailyVolumes(
             UUID ownerId, UUID exerciseId, List<DailyVolumeRequest> request) {
+        return replaceDailyVolumes(ownerId, exerciseId, request, "MANUAL", null);
+    }
+
+    /**
+     * Exports a blank daily volume Excel template.
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportDailyTemplate(UUID ownerId, UUID exerciseId) {
+        exercises.requireOwned(ownerId, exerciseId);
+        return volumeExcel.exportDailyBlank();
+    }
+
+    /**
+     * Exports current daily volumes as Excel.
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportDailyExcel(UUID ownerId, UUID exerciseId) {
+        exercises.requireOwned(ownerId, exerciseId);
+        List<DailyVolumeRequest> rows = dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(exerciseId).stream()
+                .map(v -> new DailyVolumeRequest(
+                        v.getVolumeDate(),
+                        v.getActualVolume(),
+                        v.getDailyAdjustmentRatio(),
+                        v.getManualForecastVolume()))
+                .toList();
+        return volumeExcel.exportDaily(rows);
+    }
+
+    /**
+     * Imports daily volumes from Excel (replace).
+     */
+    @Transactional
+    public List<DailyVolumeView> importDailyExcel(
+            UUID ownerId, UUID exerciseId, InputStream input, String fileName) {
         editable(ownerId, exerciseId);
-        Instant now = clock.instant();
-        dailyVolumes.deleteByExerciseId(exerciseId);
-        dailyVolumes.flush();
-        for (DailyVolumeRequest row : request) {
-            dailyVolumes.save(ExerciseVolumeDailyInput.create(
-                    exerciseId, row.volumeDate(), row.actualVolume(), row.dailyAdjustmentRatio(),
-                    row.manualForecastVolume(), ownerId, now));
-        }
-        return getDailyVolumes(ownerId, exerciseId);
+        List<DailyVolumeRequest> parsed = volumeExcel.parseDaily(input);
+        volumeValidator.validateDaily(parsed);
+        UUID batchId = recordImportBatch(ownerId, exerciseId, "DAILY_VOLUME", fileName, parsed.size());
+        return replaceDailyVolumes(ownerId, exerciseId, parsed, "IMPORT", batchId);
     }
 
     /**
@@ -474,24 +579,160 @@ public class AssociatedDataService {
     @Transactional
     public List<SlotVolumeView> putSlotVolumes(
             UUID ownerId, UUID exerciseId, List<SlotVolumeRequest> request) {
+        return replaceSlotVolumes(ownerId, exerciseId, normalizeSlotTimezone(request), "MANUAL", null);
+    }
+
+    /**
+     * Exports a blank slot volume Excel template.
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportSlotTemplate(UUID ownerId, UUID exerciseId) {
+        exercises.requireOwned(ownerId, exerciseId);
+        return volumeExcel.exportSlotBlank();
+    }
+
+    /**
+     * Exports current slot volumes as Excel.
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportSlotExcel(UUID ownerId, UUID exerciseId) {
+        exercises.requireOwned(ownerId, exerciseId);
+        List<SlotVolumeRequest> rows = slotVolumes.findByExerciseIdOrderBySlotStartAtAsc(exerciseId).stream()
+                .map(v -> new SlotVolumeRequest(
+                        v.getSlotStartAt(), v.getSlotEndAt(), v.getRawVolume(), v.getTimezone()))
+                .toList();
+        return volumeExcel.exportSlot(rows);
+    }
+
+    /**
+     * Imports slot volumes from Excel (replace).
+     */
+    @Transactional
+    public List<SlotVolumeView> importSlotExcel(
+            UUID ownerId, UUID exerciseId, InputStream input, String fileName) {
         editable(ownerId, exerciseId);
+        List<SlotVolumeRequest> parsed = volumeExcel.parseSlot(input, DEFAULT_SLOT_TIMEZONE);
+        volumeValidator.validateSlot(parsed);
+        UUID batchId = recordImportBatch(ownerId, exerciseId, "SLOT_VOLUME", fileName, parsed.size());
+        return replaceSlotVolumes(ownerId, exerciseId, parsed, "IMPORT", batchId);
+    }
+
+    private List<MonthlyVolumeView> replaceMonthlyVolumes(
+            UUID ownerId,
+            UUID exerciseId,
+            List<MonthlyVolumeRequest> request,
+            String sourceType,
+            UUID importBatchId) {
+        editable(ownerId, exerciseId);
+        volumeValidator.validateMonthly(request);
         Instant now = clock.instant();
-        for (SlotVolumeRequest row : request) {
-            if (!row.slotEndAt().isAfter(row.slotStartAt())) {
-                throw new ApiException(
-                        HttpStatus.UNPROCESSABLE_ENTITY,
-                        "invalid-slot-bounds",
-                        "slotEndAt must be after slotStartAt.");
-            }
+        monthlyVolumes.deleteByExerciseId(exerciseId);
+        monthlyVolumes.flush();
+        for (MonthlyVolumeRequest row : request) {
+            monthlyVolumes.save(ExerciseVolumeMonthlyInput.create(
+                    exerciseId,
+                    row.month(),
+                    row.actualVolume(),
+                    row.commercialRatio(),
+                    row.manualForecastVolume(),
+                    sourceType,
+                    importBatchId,
+                    ownerId,
+                    now));
         }
+        return getMonthlyVolumes(ownerId, exerciseId);
+    }
+
+    private List<DailyVolumeView> replaceDailyVolumes(
+            UUID ownerId,
+            UUID exerciseId,
+            List<DailyVolumeRequest> request,
+            String sourceType,
+            UUID importBatchId) {
+        editable(ownerId, exerciseId);
+        volumeValidator.validateDaily(request);
+        Instant now = clock.instant();
+        dailyVolumes.deleteByExerciseId(exerciseId);
+        dailyVolumes.flush();
+        for (DailyVolumeRequest row : request) {
+            dailyVolumes.save(ExerciseVolumeDailyInput.create(
+                    exerciseId,
+                    row.volumeDate(),
+                    row.actualVolume(),
+                    row.dailyAdjustmentRatio(),
+                    row.manualForecastVolume(),
+                    sourceType,
+                    importBatchId,
+                    ownerId,
+                    now));
+        }
+        return getDailyVolumes(ownerId, exerciseId);
+    }
+
+    private List<SlotVolumeView> replaceSlotVolumes(
+            UUID ownerId,
+            UUID exerciseId,
+            List<SlotVolumeRequest> request,
+            String sourceType,
+            UUID importBatchId) {
+        editable(ownerId, exerciseId);
+        volumeValidator.validateSlot(request);
+        Instant now = clock.instant();
         slotVolumes.deleteByExerciseId(exerciseId);
         slotVolumes.flush();
         for (SlotVolumeRequest row : request) {
             slotVolumes.save(ExerciseVolumeSlotInput.create(
-                    exerciseId, row.slotStartAt(), row.slotEndAt(), row.rawVolume(),
-                    row.timezone(), ownerId, now));
+                    exerciseId,
+                    row.slotStartAt(),
+                    row.slotEndAt(),
+                    row.rawVolume(),
+                    row.timezone(),
+                    sourceType,
+                    importBatchId,
+                    ownerId,
+                    now));
         }
         return getSlotVolumes(ownerId, exerciseId);
+    }
+
+    private List<SlotVolumeRequest> normalizeSlotTimezone(List<SlotVolumeRequest> request) {
+        if (request == null) {
+            return List.of();
+        }
+        return request.stream()
+                .map(row -> new SlotVolumeRequest(
+                        row.slotStartAt(),
+                        row.slotEndAt(),
+                        row.rawVolume(),
+                        row.timezone() == null || row.timezone().isBlank()
+                                ? DEFAULT_SLOT_TIMEZONE
+                                : row.timezone()))
+                .toList();
+    }
+
+    private UUID recordImportBatch(
+            UUID ownerId, UUID exerciseId, String importType, String fileName, int rowCount) {
+        Instant now = clock.instant();
+        FileArtifact artifact = fileArtifacts.save(FileArtifact.createStub(
+                "VOLUME_IMPORT",
+                "EXERCISE",
+                exerciseId,
+                fileName == null || fileName.isBlank() ? "volume-import.xlsx" : fileName,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ownerId,
+                now));
+        DataImportBatch batch = importBatches.save(DataImportBatch.create(
+                exerciseId,
+                importType,
+                artifact.getId(),
+                "IMPORTED",
+                rowCount,
+                rowCount,
+                0,
+                "{\"accepted\":" + rowCount + "}",
+                ownerId,
+                now));
+        return batch.getId();
     }
 
     private RstExercise editable(UUID ownerId, UUID exerciseId) {

@@ -289,6 +289,8 @@ public class ExerciseService {
                             + "). Holiday templates were re-applied.");
             notices.addAll(applied.notices());
         }
+        initialization.ensureTrainVolumeGrids(exercise, ownerId);
+        notices.add("Volume Input grids refreshed for the updated training windows.");
         return new UpdateExercisePeriodsResult(toResponse(exercise), notices);
     }
 

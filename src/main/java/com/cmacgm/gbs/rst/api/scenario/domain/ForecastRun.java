@@ -80,38 +80,88 @@ public class ForecastRun {
     }
 
     /**
-     * Creates an ACCEPTED stub forecast run with one monthly point.
+     * Creates an ACCEPTED MONTHLY forecast run shell (points added by caller).
      *
      * @param scenarioId owning scenario
      * @param runNo sequential run number
-     * @param sizingMonth YYYY-MM used as forecast period
+     * @param method forecast method name
+     * @param methodVersion method version
+     * @param trainingFrom training window start
+     * @param trainingTo training window end
+     * @param inputHash SHA-256 hex of request inputs
+     * @param featureMetadata JSON metadata
      * @param actorUserId creating user
      * @param now timestamp
-     * @return accepted stub forecast
+     * @return accepted run without points
      */
-    public static ForecastRun stubAccepted(
-            UUID scenarioId, int runNo, String sizingMonth, UUID actorUserId, Instant now) {
+    public static ForecastRun accepted(
+            UUID scenarioId,
+            int runNo,
+            String method,
+            String methodVersion,
+            LocalDate trainingFrom,
+            LocalDate trainingTo,
+            String inputHash,
+            String featureMetadata,
+            UUID actorUserId,
+            Instant now) {
+        return accepted(
+                scenarioId,
+                runNo,
+                "MONTHLY",
+                method,
+                methodVersion,
+                trainingFrom,
+                trainingTo,
+                inputHash,
+                featureMetadata,
+                actorUserId,
+                now);
+    }
+
+    /**
+     * Creates an ACCEPTED forecast run shell (points added by caller).
+     *
+     * @param forecastLevel MONTHLY or DAILY
+     */
+    public static ForecastRun accepted(
+            UUID scenarioId,
+            int runNo,
+            String forecastLevel,
+            String method,
+            String methodVersion,
+            LocalDate trainingFrom,
+            LocalDate trainingTo,
+            String inputHash,
+            String featureMetadata,
+            UUID actorUserId,
+            Instant now) {
         ForecastRun run = new ForecastRun();
         run.id = UUID.randomUUID();
         run.scenarioId = scenarioId;
         run.runNo = runNo;
-        run.forecastLevel = "MONTHLY";
-        run.method = "STUB";
-        run.methodVersion = "stub-v1";
-        LocalDate monthStart = LocalDate.parse(sizingMonth + "-01");
-        run.trainingFrom = monthStart.minusMonths(12);
-        run.trainingTo = monthStart.minusDays(1);
-        String hashSeed = ("stub-forecast-" + scenarioId + "-" + runNo).replace("-", "");
-        run.inputHash = (hashSeed + "0".repeat(64)).substring(0, 64);
-        run.featureMetadata = "{\"stub\":true}";
+        run.forecastLevel = forecastLevel == null || forecastLevel.isBlank() ? "MONTHLY" : forecastLevel;
+        run.method = method;
+        run.methodVersion = methodVersion;
+        run.trainingFrom = trainingFrom;
+        run.trainingTo = trainingTo;
+        run.inputHash = inputHash;
+        run.featureMetadata = featureMetadata;
         run.status = "ACCEPTED";
         run.startedAt = now;
         run.completedAt = now;
         run.createdBy = actorUserId;
         run.createdAt = now;
-        ForecastPoint point = ForecastPoint.stub(run, monthStart, monthStart.withDayOfMonth(monthStart.lengthOfMonth()), now);
-        run.points.add(point);
         return run;
+    }
+
+    /**
+     * Adds a point to this run (cascade persist).
+     *
+     * @param point forecast point
+     */
+    public void addPoint(ForecastPoint point) {
+        this.points.add(point);
     }
 
     public UUID getId() { return id; }
@@ -120,6 +170,11 @@ public class ForecastRun {
     public String getForecastLevel() { return forecastLevel; }
     public String getMethod() { return method; }
     public String getMethodVersion() { return methodVersion; }
+    public LocalDate getTrainingFrom() { return trainingFrom; }
+    public LocalDate getTrainingTo() { return trainingTo; }
+    public String getFeatureMetadata() { return featureMetadata; }
     public String getStatus() { return status; }
+    public Instant getStartedAt() { return startedAt; }
+    public Instant getCompletedAt() { return completedAt; }
     public List<ForecastPoint> getPoints() { return Collections.unmodifiableList(points); }
 }

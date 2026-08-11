@@ -3,7 +3,9 @@ package com.cmacgm.gbs.rst.api.scenario.domain;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import jakarta.persistence.CascadeType;
@@ -148,15 +150,33 @@ public class Scenario {
     /**
      * Replaces all assumptions for a DRAFT scenario.
      *
+     * <p>Upserts by {@code parameter_code} so Hibernate does not INSERT a duplicate row before
+     * deleting the old one (which violates {@code uk_scenario_assumption}).
+     *
      * @param replacements new assumptions
      * @param actorUserId updating Supervisor
      * @param now update timestamp
      */
     public void replaceAssumptions(List<ScenarioAssumption> replacements, UUID actorUserId, Instant now) {
-        assumptions.clear();
+        Map<String, ScenarioAssumption> incoming = new LinkedHashMap<>();
         for (ScenarioAssumption assumption : replacements) {
-            assumption.attach(this);
-            assumptions.add(assumption);
+            incoming.put(assumption.getParameterCode(), assumption);
+        }
+
+        assumptions.removeIf(existing -> !incoming.containsKey(existing.getParameterCode()));
+
+        Map<String, ScenarioAssumption> existingByCode = new LinkedHashMap<>();
+        for (ScenarioAssumption existing : assumptions) {
+            existingByCode.put(existing.getParameterCode(), existing);
+        }
+        for (ScenarioAssumption next : incoming.values()) {
+            ScenarioAssumption current = existingByCode.get(next.getParameterCode());
+            if (current != null) {
+                current.overwriteValues(next, actorUserId, now);
+            } else {
+                next.attach(this);
+                assumptions.add(next);
+            }
         }
         this.updatedAt = now;
         this.updatedBy = actorUserId;

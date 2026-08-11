@@ -99,6 +99,24 @@ public class ExerciseShift {
     }
 
     /**
+     * Updates shift fields in place (keeps id / shift_no).
+     */
+    public void replace(
+            LocalTime startTime,
+            int durationMinutes,
+            BigDecimal headcount,
+            boolean worksOnWeekend,
+            UUID actorUserId,
+            Instant now) {
+        this.startTime = startTime;
+        this.durationMinutes = durationMinutes;
+        this.headcount = headcount;
+        this.worksOnWeekend = worksOnWeekend;
+        this.updatedAt = now;
+        this.updatedBy = actorUserId;
+    }
+
+    /**
      * Soft-deletes this shift.
      *
      * @param actorUserId deleting Supervisor

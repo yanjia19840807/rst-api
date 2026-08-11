@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.cycletime.api.dto.ExerciseTmsSessionResponse;
 import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService;
+import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService.BaselineFileView;
 import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService.BaselineView;
 import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService.ManualBaselineRequest;
 import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService.PatchTmsSessionRequest;
@@ -15,6 +16,7 @@ import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -24,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Supervisor Cycle Time endpoints (manual baseline, active read, Embedded TMS browse / exclusion).
@@ -59,6 +62,23 @@ public class CycleTimeController {
             @PathVariable UUID exerciseId,
             @Valid @RequestBody ManualBaselineRequest request) {
         return service.createManual(principal.userId(), exerciseId, request);
+    }
+
+    /**
+     * Uploads a MANUAL median support-file stub for this Exercise.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @param file multipart file
+     * @return created file metadata
+     */
+    @PostMapping(value = "/support-files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    public BaselineFileView uploadSupportFile(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @RequestParam("file") MultipartFile file) {
+        return service.uploadSupportFile(principal.userId(), exerciseId, file);
     }
 
     /**

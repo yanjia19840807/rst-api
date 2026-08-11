@@ -329,7 +329,7 @@ public class ApprovalService {
     private String nextRevisionCode(UUID exerciseId, String baseCode) {
         String candidate = baseCode + "-R1";
         int revision = 1;
-        while (scenarios.existsByExerciseIdAndScenarioCode(exerciseId, candidate)) {
+        while (scenarios.existsByExerciseIdAndScenarioCodeAndDeletedAtIsNull(exerciseId, candidate)) {
             revision++;
             candidate = baseCode + "-R" + revision;
         }

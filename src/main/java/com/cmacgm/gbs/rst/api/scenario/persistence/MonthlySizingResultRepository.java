@@ -16,4 +16,9 @@ public interface MonthlySizingResultRepository extends JpaRepository<MonthlySizi
      * @return results
      */
     List<MonthlySizingResult> findBySimulationRunId(UUID simulationRunId);
+
+    /**
+     * Deletes all monthly sizing rows for a simulation run.
+     */
+    void deleteBySimulationRunId(UUID simulationRunId);
 }

@@ -16,4 +16,9 @@ public interface SlotSimulationResultRepository extends JpaRepository<SlotSimula
      * @return results
      */
     List<SlotSimulationResult> findBySimulationRunId(UUID simulationRunId);
+
+    /**
+     * Deletes all slot simulation rows for a simulation run.
+     */
+    void deleteBySimulationRunId(UUID simulationRunId);
 }

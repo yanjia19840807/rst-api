@@ -74,6 +74,34 @@ public class ExerciseVolumeDailyInput {
             BigDecimal manualForecastVolume,
             UUID actorUserId,
             Instant now) {
+        return create(
+                exerciseId,
+                volumeDate,
+                actualVolume,
+                dailyAdjustmentRatio,
+                manualForecastVolume,
+                "MANUAL",
+                null,
+                actorUserId,
+                now);
+    }
+
+    /**
+     * Creates a daily volume row with an explicit source and optional import batch.
+     *
+     * @param sourceType MANUAL / ARCHIVE / IMPORT
+     * @param importBatchId optional import batch
+     */
+    public static ExerciseVolumeDailyInput create(
+            UUID exerciseId,
+            LocalDate volumeDate,
+            BigDecimal actualVolume,
+            BigDecimal dailyAdjustmentRatio,
+            BigDecimal manualForecastVolume,
+            String sourceType,
+            UUID importBatchId,
+            UUID actorUserId,
+            Instant now) {
         ExerciseVolumeDailyInput row = new ExerciseVolumeDailyInput();
         row.id = UUID.randomUUID();
         row.exerciseId = exerciseId;
@@ -81,7 +109,8 @@ public class ExerciseVolumeDailyInput {
         row.actualVolume = actualVolume;
         row.dailyAdjustmentRatio = dailyAdjustmentRatio;
         row.manualForecastVolume = manualForecastVolume;
-        row.sourceType = "MANUAL";
+        row.sourceType = sourceType == null || sourceType.isBlank() ? "MANUAL" : sourceType;
+        row.importBatchId = importBatchId;
         row.createdAt = now;
         row.createdBy = actorUserId;
         row.updatedAt = now;

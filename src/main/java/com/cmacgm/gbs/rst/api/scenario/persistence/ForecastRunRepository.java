@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.scenario.persistence;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -10,6 +11,11 @@ import org.springframework.data.repository.query.Param;
 
 /** Persistence for forecast runs. */
 public interface ForecastRunRepository extends JpaRepository<ForecastRun, UUID> {
+
+    /**
+     * Lists all forecast runs for a scenario.
+     */
+    List<ForecastRun> findByScenarioId(UUID scenarioId);
 
     /**
      * Returns the max run number for a scenario.
@@ -27,4 +33,15 @@ public interface ForecastRunRepository extends JpaRepository<ForecastRun, UUID> 
      * @return optional forecast
      */
     Optional<ForecastRun> findFirstByScenarioIdAndStatusOrderByRunNoDesc(UUID scenarioId, String status);
+
+    /**
+     * Finds the latest ACCEPTED forecast for a scenario at a given level.
+     *
+     * @param scenarioId scenario id
+     * @param forecastLevel MONTHLY or DAILY
+     * @param status run status
+     * @return optional forecast
+     */
+    Optional<ForecastRun> findFirstByScenarioIdAndForecastLevelAndStatusOrderByRunNoDesc(
+            UUID scenarioId, String forecastLevel, String status);
 }

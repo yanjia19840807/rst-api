@@ -9,7 +9,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
-/** Immutable daily simulation result row (may be empty for stub Official). */
+/** Immutable daily simulation result row. */
 @Entity
 @Table(name = "daily_simulation_result")
 public class DailySimulationResult {
@@ -56,6 +56,49 @@ public class DailySimulationResult {
     protected DailySimulationResult() {
     }
 
+    /**
+     * Creates a real daily simulation result row.
+     */
+    public static DailySimulationResult create(
+            UUID simulationRunId,
+            LocalDate resultDate,
+            BigDecimal forecastVolume,
+            BigDecimal manualVolume,
+            boolean holiday,
+            boolean workingDay,
+            BigDecimal simulationHc,
+            BigDecimal standardCapacity,
+            BigDecimal overtimeCapacity,
+            BigDecimal backlogStart,
+            BigDecimal backlogEnd) {
+        DailySimulationResult row = new DailySimulationResult();
+        row.id = UUID.randomUUID();
+        row.simulationRunId = simulationRunId;
+        row.resultDate = resultDate;
+        row.forecastVolume = forecastVolume;
+        row.manualVolume = manualVolume;
+        row.holiday = holiday;
+        row.workingDay = workingDay;
+        row.simulationHc = simulationHc;
+        row.standardCapacity = standardCapacity;
+        row.overtimeCapacity = overtimeCapacity;
+        row.backlogStart = backlogStart;
+        row.backlogEnd = backlogEnd;
+        row.slaOutput = null;
+        return row;
+    }
+
     public UUID getId() { return id; }
     public UUID getSimulationRunId() { return simulationRunId; }
+    public LocalDate getResultDate() { return resultDate; }
+    public BigDecimal getForecastVolume() { return forecastVolume; }
+    public BigDecimal getManualVolume() { return manualVolume; }
+    public Boolean getHoliday() { return holiday; }
+    public Boolean getWorkingDay() { return workingDay; }
+    public BigDecimal getSimulationHc() { return simulationHc; }
+    public BigDecimal getStandardCapacity() { return standardCapacity; }
+    public BigDecimal getOvertimeCapacity() { return overtimeCapacity; }
+    public BigDecimal getBacklogStart() { return backlogStart; }
+    public BigDecimal getBacklogEnd() { return backlogEnd; }
+    public BigDecimal getSlaOutput() { return slaOutput; }
 }
