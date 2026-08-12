@@ -65,12 +65,6 @@ public class ToolkitCommandService {
             request.subtasks().forEach(item ->
                     toolkit.addSubtask(item.name(), item.description(), item.displayOrder(), now));
         }
-        if (toolkit.getSubtasks().isEmpty()) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY,
-                    "active-subtask-required",
-                    "A Toolkit must contain at least one active Subtask.");
-        }
         validateAndAddKpis(toolkit, request.sharedKpiSelections(), now);
         return ToolkitResponse.from(toolkits.saveAndFlush(toolkit));
     }
@@ -117,12 +111,6 @@ public class ToolkitCommandService {
                             item.deletedAt() != null, now);
                 }
             }
-        }
-        if (toolkit.getSubtasks().isEmpty()) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY,
-                    "active-subtask-required",
-                    "A Toolkit must contain at least one active Subtask.");
         }
         toolkit.getSharedKpiSelections().stream()
                 .filter(selection -> selection.getDeletedAt() == null)

@@ -2,6 +2,7 @@ package com.cmacgm.gbs.rst.api.associateddata.domain;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 import jakarta.persistence.Column;
@@ -20,17 +21,12 @@ public class ExerciseVolumeMonthlyInput {
     @Column(name = "exercise_id", nullable = false)
     private UUID exerciseId;
 
-    @Column(nullable = false, length = 7)
-    private String month;
+    /** First day of the month (DATE). */
+    @Column(nullable = false)
+    private LocalDate month;
 
     @Column(name = "actual_volume", precision = 24, scale = 6)
     private BigDecimal actualVolume;
-
-    @Column(name = "commercial_ratio", precision = 12, scale = 8)
-    private BigDecimal commercialRatio;
-
-    @Column(name = "manual_forecast_volume", precision = 24, scale = 6)
-    private BigDecimal manualForecastVolume;
 
     @Column(name = "source_type", nullable = false, length = 30)
     private String sourceType;
@@ -57,57 +53,27 @@ public class ExerciseVolumeMonthlyInput {
      * Creates a monthly volume row.
      *
      * @param exerciseId owning Exercise
-     * @param month YYYY-MM
+     * @param month first day of the month
      * @param actualVolume optional actual volume
-     * @param commercialRatio optional commercial ratio
-     * @param manualForecastVolume optional manual forecast
+     * @param sourceType MANUAL / ARCHIVE / IMPORT
+     * @param importBatchId optional import batch
      * @param actorUserId creating Supervisor
      * @param now creation timestamp
      * @return new monthly volume row
      */
     public static ExerciseVolumeMonthlyInput create(
             UUID exerciseId,
-            String month,
+            LocalDate month,
             BigDecimal actualVolume,
-            BigDecimal commercialRatio,
-            BigDecimal manualForecastVolume,
-            UUID actorUserId,
-            Instant now) {
-        return create(
-                exerciseId,
-                month,
-                actualVolume,
-                commercialRatio,
-                manualForecastVolume,
-                "MANUAL",
-                null,
-                actorUserId,
-                now);
-    }
-
-    /**
-     * Creates a monthly volume row with an explicit source and optional import batch.
-     *
-     * @param sourceType MANUAL / ARCHIVE / IMPORT
-     * @param importBatchId optional import batch
-     */
-    public static ExerciseVolumeMonthlyInput create(
-            UUID exerciseId,
-            String month,
-            BigDecimal actualVolume,
-            BigDecimal commercialRatio,
-            BigDecimal manualForecastVolume,
             String sourceType,
             UUID importBatchId,
             UUID actorUserId,
-            Instant now) {
+            Instant now) {  
         ExerciseVolumeMonthlyInput row = new ExerciseVolumeMonthlyInput();
         row.id = UUID.randomUUID();
         row.exerciseId = exerciseId;
         row.month = month;
         row.actualVolume = actualVolume;
-        row.commercialRatio = commercialRatio;
-        row.manualForecastVolume = manualForecastVolume;
         row.sourceType = sourceType == null || sourceType.isBlank() ? "MANUAL" : sourceType;
         row.importBatchId = importBatchId;
         row.createdAt = now;
@@ -119,9 +85,8 @@ public class ExerciseVolumeMonthlyInput {
 
     public UUID getId() { return id; }
     public UUID getExerciseId() { return exerciseId; }
-    public String getMonth() { return month; }
+    public LocalDate getMonth() { return month; }
     public BigDecimal getActualVolume() { return actualVolume; }
-    public BigDecimal getCommercialRatio() { return commercialRatio; }
-    public BigDecimal getManualForecastVolume() { return manualForecastVolume; }
     public String getSourceType() { return sourceType; }
+    public UUID getImportBatchId() { return importBatchId; }
 }

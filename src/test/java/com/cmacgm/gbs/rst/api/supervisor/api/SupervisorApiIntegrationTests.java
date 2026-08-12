@@ -62,7 +62,6 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update("update rst_exercise set official_scenario_id = null");
         jdbcTemplate.update("delete from scenario");
         jdbcTemplate.update("delete from cycle_time_baseline_file");
-        jdbcTemplate.update("delete from cycle_time_baseline_sample");
         jdbcTemplate.update("delete from cycle_time_baseline");
         jdbcTemplate.update("delete from exercise_tms_session");
         jdbcTemplate.update("delete from exercise_volume_slot_input");
@@ -72,7 +71,6 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update("delete from file_artifact");
         jdbcTemplate.update("delete from exercise_holiday");
         jdbcTemplate.update("delete from exercise_calendar");
-        jdbcTemplate.update("delete from exercise_production_support_item_scope");
         jdbcTemplate.update("delete from exercise_production_support_item");
         jdbcTemplate.update("delete from exercise_shift");
         jdbcTemplate.update("delete from exercise_team_setup");
@@ -103,8 +101,8 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into timesheet_sync_run
-                    (id, sync_date, status, row_count, started_at, completed_at)
-                values (?, date '2026-08-05', 'ACTIVE', 3, ?, ?)
+                    (id, sync_date, attempt_no, status, row_count, started_at, completed_at)
+                values (?, date '2026-08-05', 1, 'ACTIVE', 3, ?, ?)
                 """,
                 ACTIVE_RUN_ID,
                 NOW,
@@ -278,13 +276,33 @@ class SupervisorApiIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(exerciseRequest))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.snapshot.toolkit.name").value("Frozen Toolkit Name"))
-                .andExpect(jsonPath("$.snapshot.subtasks[0].name").value("Manual match"))
-                .andExpect(jsonPath("$.snapshot.sharedKpis[0].deliveryHc").value(2.0))
+                .andExpect(jsonPath("$.exercise.snapshot.toolkit.name").value("Frozen Toolkit Name"))
+                .andExpect(jsonPath("$.exercise.snapshot.subtasks[0].name").value("Manual match"))
+                .andExpect(jsonPath("$.exercise.snapshot.sharedKpis[0].deliveryHc").value(2.0))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
-        String exerciseId = JsonPath.read(createdExercise, "$.id");
+        String exerciseId = JsonPath.read(createdExercise, "$.exercise.id");
+        UUID createdExerciseId = UUID.fromString(exerciseId);
+
+        org.junit.jupiter.api.Assertions.assertEquals(
+                3,
+                jdbcTemplate.queryForObject(
+                        "select count(*) from exercise_volume_monthly_input where exercise_id = ?",
+                        Integer.class,
+                        createdExerciseId));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                30,
+                jdbcTemplate.queryForObject(
+                        "select count(*) from exercise_volume_daily_input where exercise_id = ?",
+                        Integer.class,
+                        createdExerciseId));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                728,
+                jdbcTemplate.queryForObject(
+                        "select count(*) from exercise_volume_slot_input where exercise_id = ?",
+                        Integer.class,
+                        createdExerciseId));
 
         jdbcTemplate.update(
                 "update toolkit set name = ?, version = version + 1 where id = ?",
@@ -309,6 +327,185 @@ class SupervisorApiIntegrationTests {
                 .andExpect(jsonPath("$.snapshot.subtasks[0].name").value("Manual match"))
                 .andExpect(jsonPath("$.snapshot.sharedKpis[0].deliveryHc").value(2.0))
                 .andExpect(jsonPath("$.snapshot.timesheetSyncDate").value("2026-08-05"));
+    }
+
+    @Test
+    void linksCompletedTmsSessionsInConfiguredPeriodOnCreate() throws Exception {
+        String toolkitId = JsonPath.read(createToolkit("TMS Population Toolkit"), "$.id");
+        UUID toolkitUuid = UUID.fromString(toolkitId);
+        UUID agentId = UUID.fromString("00000000-0000-0000-0000-0000000000aa");
+        UUID inRangeId = UUID.fromString("60000000-0000-0000-0000-000000000001");
+        UUID outOfRangeId = UUID.fromString("60000000-0000-0000-0000-000000000002");
+        UUID discardedId = UUID.fromString("60000000-0000-0000-0000-000000000003");
+
+        jdbcTemplate.update(
+                """
+                insert into app_user
+                    (id, ccgid, display_name, email, active, created_at, updated_at)
+                values (?, ?, ?, ?, ?, ?, ?)
+                """,
+                agentId,
+                "AGENT-TMS-001",
+                "TMS Agent",
+                "tms-agent@example.com",
+                true,
+                NOW,
+                NOW);
+        insertCompletedTmsSession(
+                inRangeId,
+                "TMS-IN-RANGE",
+                agentId,
+                toolkitUuid,
+                Instant.parse("2026-08-15T10:00:00Z"));
+        insertCompletedTmsSession(
+                outOfRangeId,
+                "TMS-OUT-RANGE",
+                agentId,
+                toolkitUuid,
+                Instant.parse("2026-07-15T10:00:00Z"));
+        insertTmsSession(
+                discardedId,
+                "TMS-DISCARDED",
+                agentId,
+                toolkitUuid,
+                "DISCARDED",
+                Instant.parse("2026-08-16T10:00:00Z"));
+
+        String exerciseId = JsonPath.read(createExercise(toolkitId), "$.exercise.id");
+
+        org.junit.jupiter.api.Assertions.assertEquals(
+                Integer.valueOf(1),
+                jdbcTemplate.queryForObject(
+                        """
+                        select count(*) from exercise_tms_session
+                        where exercise_id = ? and tms_session_id = ?
+                        """,
+                        Integer.class,
+                        UUID.fromString(exerciseId),
+                        inRangeId));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                Integer.valueOf(0),
+                jdbcTemplate.queryForObject(
+                        """
+                        select count(*) from exercise_tms_session
+                        where exercise_id = ? and tms_session_id in (?, ?)
+                        """,
+                        Integer.class,
+                        UUID.fromString(exerciseId),
+                        outOfRangeId,
+                        discardedId));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                Integer.valueOf(1),
+                jdbcTemplate.queryForObject(
+                        """
+                        select count(*) from cycle_time_baseline
+                        where exercise_id = ? and is_active = true and baseline_type = 'SYSTEM'
+                        """,
+                        Integer.class,
+                        UUID.fromString(exerciseId)));
+    }
+
+    @Test
+    void seedsArchiveAssociatedDataWithoutShiftOrManualCycleTime() throws Exception {
+        String toolkitId = JsonPath.read(createToolkit("Archive Source Toolkit"), "$.id");
+        String sourceId = JsonPath.read(createExercise(toolkitId), "$.exercise.id");
+        UUID sourceExerciseId = UUID.fromString(sourceId);
+        seedArchivedAssociatedData(sourceExerciseId);
+
+        String targetId = JsonPath.read(createExercise(toolkitId), "$.exercise.id");
+        UUID targetExerciseId = UUID.fromString(targetId);
+
+        org.junit.jupiter.api.Assertions.assertEquals(
+                sourceExerciseId,
+                jdbcTemplate.queryForObject(
+                        "select initialized_from_exercise_id from rst_exercise where id = ?",
+                        UUID.class,
+                        targetExerciseId));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                Integer.valueOf(1),
+                jdbcTemplate.queryForObject(
+                        """
+                        select count(*)
+                        from exercise_production_support_item
+                        where exercise_id = ? and deleted_at is null and activity = 'Archive reporting'
+                        """,
+                        Integer.class,
+                        targetExerciseId));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                Integer.valueOf(0),
+                jdbcTemplate.queryForObject(
+                        """
+                        select count(*) from exercise_shift
+                        where exercise_id = ? and deleted_at is null
+                        """,
+                        Integer.class,
+                        targetExerciseId));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                Integer.valueOf(0),
+                jdbcTemplate.queryForObject(
+                        """
+                        select count(*) from cycle_time_baseline
+                        where exercise_id = ? and baseline_type = 'MANUAL'
+                        """,
+                        Integer.class,
+                        targetExerciseId));
+    }
+
+    @Test
+    void rejectsCreateWhenSharedKpiNoLongerMatchesActiveTimesheet() throws Exception {
+        String toolkitId = JsonPath.read(createToolkit("Stale KPI Toolkit"), "$.id");
+        jdbcTemplate.update(
+                """
+                update toolkit_shared_kpi_selection
+                   set deleted_at = ?, deleted_by = ?, updated_at = ?, updated_by = ?
+                 where toolkit_id = ? and deleted_at is null
+                """,
+                NOW,
+                SUPERVISOR_ID,
+                NOW,
+                SUPERVISOR_ID,
+                UUID.fromString(toolkitId));
+        jdbcTemplate.update(
+                """
+                insert into toolkit_shared_kpi_selection
+                    (id, toolkit_id, carrier, site, customer_country,
+                     created_at, created_by, updated_at, updated_by, version)
+                values (?, ?, 'Carrier Z', 'Nowhere', 'Mars', ?, ?, ?, ?, 0)
+                """,
+                UUID.randomUUID(),
+                UUID.fromString(toolkitId),
+                NOW,
+                SUPERVISOR_ID,
+                NOW,
+                SUPERVISOR_ID);
+
+        mockMvc.perform(post("/api/v1/supervisor/exercises")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(exerciseRequest(toolkitId)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type")
+                        .value("https://rst.cmacgm.com/problems/stale-shared-kpi-selection"))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString(
+                        "Update the Toolkit Shared KPI")));
+
+        org.junit.jupiter.api.Assertions.assertEquals(
+                Integer.valueOf(0),
+                jdbcTemplate.queryForObject(
+                        "select count(*) from rst_exercise where toolkit_id = ?",
+                        Integer.class,
+                        UUID.fromString(toolkitId)));
+    }
+
+    @Test
+    void rejectsSlotPeriodLongerThanTwelveWeeks() throws Exception {
+        String toolkitId = JsonPath.read(createToolkit("Slot Limit Toolkit"), "$.id");
+        mockMvc.perform(post("/api/v1/supervisor/exercises")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(exerciseRequest(toolkitId).replace(
+                                "\"slotWeeks\": 4", "\"slotWeeks\": 13")))
+                .andExpect(status().is(422));
     }
 
     @Test
@@ -379,6 +576,67 @@ class SupervisorApiIntegrationTests {
                 .getContentAsString();
     }
 
+    private String createExercise(String toolkitId) throws Exception {
+        return mockMvc.perform(post("/api/v1/supervisor/exercises")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(exerciseRequest(toolkitId)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+    }
+
+    private void seedArchivedAssociatedData(UUID exerciseId) {
+        UUID supportItemId = UUID.randomUUID();
+        jdbcTemplate.update(
+                "update rst_exercise set workflow_status = 'ARCHIVED', validated_at = ? where id = ?",
+                NOW,
+                exerciseId);
+        jdbcTemplate.update(
+                """
+                insert into exercise_production_support_item
+                    (id, exercise_id, lineage_id, category, activity, frequency_code,
+                     volume, unit_of_measure, workload_per_unit_minutes, annual_multiplier,
+                     workload_per_year_hours, support_fte, calculation_version,
+                     created_at, created_by, updated_at, updated_by, version)
+                values (?, ?, ?, 'Operations', 'Archive reporting', 'MONTHLY',
+                        10, 'case', 5, 12, 10, 0.005, 'v1.2',
+                        ?, ?, ?, ?, 0)
+                """,
+                supportItemId,
+                exerciseId,
+                supportItemId,
+                NOW,
+                SUPERVISOR_ID,
+                NOW,
+                SUPERVISOR_ID);
+        jdbcTemplate.update(
+                """
+                insert into exercise_shift
+                    (id, exercise_id, shift_no, start_time, duration_minutes, headcount,
+                     works_on_weekend, created_at, created_by, updated_at, updated_by, version)
+                values (?, ?, 1, time '08:00:00', 480, 2, false, ?, ?, ?, ?, 0)
+                """,
+                UUID.randomUUID(),
+                exerciseId,
+                NOW,
+                SUPERVISOR_ID,
+                NOW,
+                SUPERVISOR_ID);
+        jdbcTemplate.update(
+                """
+                insert into cycle_time_baseline
+                    (id, exercise_id, baseline_type, median_seconds, sample_count,
+                     calculation_method, manual_reason, is_active, calculated_at, calculated_by)
+                values (?, ?, 'MANUAL', 120, null, 'MANUAL_ENTRY', 'Archive manual CT', true, ?, ?)
+                """,
+                UUID.randomUUID(),
+                exerciseId,
+                NOW,
+                SUPERVISOR_ID);
+    }
+
     private String createToolkitRequest(String name, boolean withKpi) {
         String sharedKpis = withKpi
                 ? """
@@ -426,6 +684,45 @@ class SupervisorApiIntegrationTests {
                   "tmsTo": "2026-08-31"
                 }
                 """.formatted(toolkitId);
+    }
+
+    private void insertCompletedTmsSession(
+            UUID id, String sessionNo, UUID agentId, UUID toolkitId, Instant startedAt) {
+        insertTmsSession(id, sessionNo, agentId, toolkitId, "COMPLETED", startedAt);
+    }
+
+    private void insertTmsSession(
+            UUID id,
+            String sessionNo,
+            UUID agentId,
+            UUID toolkitId,
+            String status,
+            Instant startedAt) {
+        jdbcTemplate.update(
+                """
+                insert into tms_session
+                    (id, session_no, agent_user_id, toolkit_id, processed_volume,
+                     reference, remarks, status, started_at, ended_at,
+                     net_duration_seconds, gross_duration_seconds, pause_duration_seconds,
+                     toolkit_name_snapshot, subtask_name_snapshot, domain_snapshot,
+                     pl1_snapshot, pl2_snapshot, pl3_code_snapshot, pl3_name_snapshot,
+                     created_at, updated_at, version)
+                values (?, ?, ?, ?, 10, 'REF', '', ?, ?, ?,
+                        600, 600, 0,
+                        'Bank Rec', 'Manual match', 'Finance',
+                        'Accounting', 'Record to Report', ?, 'Bank Reconciliation',
+                        ?, ?, 0)
+                """,
+                id,
+                sessionNo,
+                agentId,
+                toolkitId,
+                status,
+                startedAt,
+                startedAt.plusSeconds(600),
+                PL3_CODE,
+                NOW,
+                NOW);
     }
 
     private void insertTimesheetRow(

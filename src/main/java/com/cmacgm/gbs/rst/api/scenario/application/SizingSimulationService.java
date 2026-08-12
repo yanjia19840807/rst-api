@@ -13,7 +13,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.HexFormat;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -29,15 +28,12 @@ import com.cmacgm.gbs.rst.api.forecast.ForecastOrchestrationService.ForecastView
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseHoliday;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
-import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeDailyInput;
-import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeMonthlyInput;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseHolidayRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSupportItemRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeDailyInputRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeMonthlyInputRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
 import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
@@ -81,8 +77,6 @@ public class SizingSimulationService {
     private final CycleTimeBaselineRepository baselines;
     private final ExerciseCalendarRepository calendars;
     private final ExerciseHolidayRepository holidays;
-    private final ExerciseVolumeMonthlyInputRepository monthlyVolumes;
-    private final ExerciseVolumeDailyInputRepository dailyVolumes;
     private final ExerciseProductionSupportItemRepository supportItems;
     private final WorkingDaysCalculator workingDaysCalculator;
     private final Clock clock;
@@ -99,8 +93,6 @@ public class SizingSimulationService {
             CycleTimeBaselineRepository baselines,
             ExerciseCalendarRepository calendars,
             ExerciseHolidayRepository holidays,
-            ExerciseVolumeMonthlyInputRepository monthlyVolumes,
-            ExerciseVolumeDailyInputRepository dailyVolumes,
             ExerciseProductionSupportItemRepository supportItems,
             WorkingDaysCalculator workingDaysCalculator,
             Clock clock) {
@@ -115,8 +107,6 @@ public class SizingSimulationService {
         this.baselines = baselines;
         this.calendars = calendars;
         this.holidays = holidays;
-        this.monthlyVolumes = monthlyVolumes;
-        this.dailyVolumes = dailyVolumes;
         this.supportItems = supportItems;
         this.workingDaysCalculator = workingDaysCalculator;
         this.clock = clock;
@@ -197,7 +187,7 @@ public class SizingSimulationService {
         for (MonthlySizingRowView row : monthly.rows()) {
             monthlyRows.add(MonthlySizingResult.create(
                     monthlyRun.getId(),
-                    row.month(),
+                    MonthKeys.parseMonthStart(row.month()),
                     row.forecastVolume(),
                     row.manualVolume(),
                     row.workdays(),
@@ -268,7 +258,6 @@ public class SizingSimulationService {
         for (ForecastPointView point : points) {
             YearMonth month = YearMonth.from(point.periodStart());
             BigDecimal forecastVolume = acceptedVolume(point);
-            BigDecimal commercial = commercialForMonth(month, ctx.volumeByMonth());
             MonthDayCounts counts = workingDaysCalculator.countMonth(
                     month, ctx.weekendCode(), ctx.holidayDates());
             if (counts.workDays() <= 0) {
@@ -279,8 +268,7 @@ public class SizingSimulationService {
             }
             BigDecimal workDays = BigDecimal.valueOf(counts.workDays());
             BigDecimal weekendDays = BigDecimal.valueOf(counts.weekendDays());
-            BigDecimal manual = SizingMath.monthlyManualVolume(
-                    forecastVolume, ctx.automationRatio(), commercial);
+            BigDecimal manual = SizingMath.monthlyManualVolume(forecastVolume, ctx.automationRatio());
             BigDecimal nominalWo = SizingMath.nominalHcWithoutOt(
                     manual,
                     ctx.cycleTimeSeconds(),
@@ -302,7 +290,7 @@ public class SizingSimulationService {
                     ctx.deliveryHc(), ctx.rightSizingHc(), ctx.supportFte());
             rows.add(MonthlySizingResult.create(
                     run.getId(),
-                    month.toString(),
+                    MonthKeys.monthStart(month),
                     scale(forecastVolume),
                     manual,
                     workDays,
@@ -349,10 +337,7 @@ public class SizingSimulationService {
             boolean workingDay = workingDaysCalculator.isWorkingDay(
                     day, ctx.weekendCode(), ctx.holidayDates());
             BigDecimal forecastVolume = acceptedVolume(point);
-            BigDecimal commercial = commercialForMonth(YearMonth.from(day), ctx.volumeByMonth());
-            BigDecimal dailyAdj = dailyAdjustment(day, ctx.volumeByDate());
-            BigDecimal manual = SizingMath.dailyManualVolume(
-                    forecastVolume, ctx.automationRatio(), commercial, dailyAdj);
+            BigDecimal manual = SizingMath.dailyManualVolume(forecastVolume, ctx.automationRatio());
             BigDecimal simHc = SizingMath.simulationHc(
                     holiday,
                     workingDay,
@@ -503,7 +488,7 @@ public class SizingSimulationService {
                 .sorted(Comparator.comparing(MonthlySizingResult::getMonth))
                 .map(row -> new MonthlySizingRowView(
                         row.getId(),
-                        row.getMonth(),
+                        MonthKeys.formatYearMonth(row.getMonth()),
                         row.getForecastVolume(),
                         row.getManualVolume(),
                         row.getWorkdays(),
@@ -608,15 +593,6 @@ public class SizingSimulationService {
             holidayDates.add(holiday.getHolidayDate());
         }
 
-        Map<String, ExerciseVolumeMonthlyInput> volumeByMonth = new LinkedHashMap<>();
-        for (ExerciseVolumeMonthlyInput row : monthlyVolumes.findByExerciseIdOrderByMonthAsc(exerciseId)) {
-            volumeByMonth.put(row.getMonth(), row);
-        }
-        Map<LocalDate, ExerciseVolumeDailyInput> volumeByDate = new LinkedHashMap<>();
-        for (ExerciseVolumeDailyInput row : dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(exerciseId)) {
-            volumeByDate.put(row.getVolumeDate(), row);
-        }
-
         BigDecimal supportFte = BigDecimal.ZERO;
         for (ExerciseProductionSupportItem item : supportItems
                 .findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(exerciseId)) {
@@ -640,9 +616,7 @@ public class SizingSimulationService {
                 maxOt,
                 cycleTime.setScale(6, RoundingMode.HALF_UP),
                 rightSizingHc.setScale(6, RoundingMode.HALF_UP),
-                supportFte,
-                volumeByMonth,
-                volumeByDate);
+                supportFte);
     }
 
     private Scenario requireScenario(UUID exerciseId, UUID scenarioId) {
@@ -679,24 +653,6 @@ public class SizingSimulationService {
             return point.acceptedValue();
         }
         return point.forecastMean() != null ? point.forecastMean() : BigDecimal.ZERO;
-    }
-
-    private static BigDecimal commercialForMonth(
-            YearMonth month, Map<String, ExerciseVolumeMonthlyInput> volumeByMonth) {
-        ExerciseVolumeMonthlyInput row = volumeByMonth.get(month.toString());
-        if (row == null || row.getCommercialRatio() == null) {
-            return BigDecimal.ZERO;
-        }
-        return row.getCommercialRatio();
-    }
-
-    private static BigDecimal dailyAdjustment(
-            LocalDate day, Map<LocalDate, ExerciseVolumeDailyInput> volumeByDate) {
-        ExerciseVolumeDailyInput row = volumeByDate.get(day);
-        if (row == null || row.getDailyAdjustmentRatio() == null) {
-            return BigDecimal.ZERO;
-        }
-        return row.getDailyAdjustmentRatio();
     }
 
     private static BigDecimal requireRightSizingHc(Scenario scenario) {
@@ -751,9 +707,7 @@ public class SizingSimulationService {
             int maxOvertimeMinutes,
             BigDecimal cycleTimeSeconds,
             BigDecimal rightSizingHc,
-            BigDecimal supportFte,
-            Map<String, ExerciseVolumeMonthlyInput> volumeByMonth,
-            Map<LocalDate, ExerciseVolumeDailyInput> volumeByDate) {
+            BigDecimal supportFte) {
     }
 
     /** Preview request with HC from the form (not yet saved). */

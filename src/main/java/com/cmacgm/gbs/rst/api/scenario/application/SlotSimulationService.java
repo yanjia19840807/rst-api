@@ -10,7 +10,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
@@ -316,15 +316,8 @@ public class SlotSimulationService {
             series.put("shift" + shift.getShiftNo(), new ArrayList<>(rows.size()));
         }
         WeekendCode weekend = WeekendCode.parse(weekendCode);
-        List<ExerciseVolumeSlotInput> volumes = slotVolumes.findByExerciseIdOrderBySlotStartAtAsc(
-                shiftRows.getFirst().getExerciseId());
-        Map<Instant, ExerciseVolumeSlotInput> byStart = new LinkedHashMap<>();
-        for (ExerciseVolumeSlotInput volume : volumes) {
-            byStart.put(volume.getSlotStartAt(), volume);
-        }
         for (SlotSimulationResult row : rows) {
-            ExerciseVolumeSlotInput volume = byStart.get(row.getSlotStartAt());
-            ZoneId zone = zoneOf(volume == null ? "UTC" : volume.getTimezone());
+            ZoneOffset zone = ZoneOffset.UTC;
             LocalDate day = row.getSlotStartAt().atZone(zone).toLocalDate();
             LocalTime slotStartLocal = row.getSlotStartAt().atZone(zone).toLocalTime();
             LocalTime slotEndLocal = row.getSlotEndAt().atZone(zone).toLocalTime();
@@ -372,7 +365,7 @@ public class SlotSimulationService {
         WeekendCode weekend = WeekendCode.parse(ctx.weekendCode());
         int index = 0;
         for (ExerciseVolumeSlotInput volume : volumes) {
-            ZoneId zone = zoneOf(volume.getTimezone());
+            ZoneOffset zone = ZoneOffset.UTC;
             LocalDate day = volume.getSlotStartAt().atZone(zone).toLocalDate();
             LocalTime slotStartLocal = volume.getSlotStartAt().atZone(zone).toLocalTime();
             LocalTime slotEndLocal = volume.getSlotEndAt().atZone(zone).toLocalTime();
@@ -387,7 +380,7 @@ public class SlotSimulationService {
                         "Slot duration must be positive for " + volume.getSlotStartAt());
             }
 
-            BigDecimal raw = nz(volume.getRawVolume());
+            BigDecimal raw = nz(volume.getActualVolume());
             BigDecimal manual = SlotMath.manualVolume(raw, ctx.automationRatio());
             BigDecimal cases = SlotMath.casesPerFte(
                     slotMinutes, ctx.cycleTimeSeconds(), ctx.availabilityRatio());
@@ -555,14 +548,6 @@ public class SlotSimulationService {
                 row.getVolumeOutsideSla(),
                 row.getTatResult(),
                 row.getSlaResult());
-    }
-
-    private static ZoneId zoneOf(String timezone) {
-        try {
-            return ZoneId.of(timezone == null || timezone.isBlank() ? "UTC" : timezone);
-        } catch (Exception ex) {
-            return ZoneId.of("UTC");
-        }
     }
 
     private static BigDecimal requirePositive(BigDecimal value, String label) {

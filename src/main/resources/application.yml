@@ -17,11 +17,19 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+          batch_size: 100
+        order_inserts: true
+        order_updates: true
   flyway:
     enabled: true
   web:
     error:
       include-message: never
+
+# Keep p6spy JDBC logging off outside local/dev (enable in application-dev.yml).
+decorator:
+  datasource:
+    enabled: false
 
 management:
   endpoints:

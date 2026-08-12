@@ -9,6 +9,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
+
 /**
  * Derives Volume Input training windows from Exercise periods (forecast windows excluded).
  *
@@ -17,7 +19,6 @@ import java.util.Set;
  */
 public final class VolumeTrainWindows {
 
-    public static final String DEFAULT_SLOT_TIMEZONE = "Asia/Shanghai";
     private static final int SLOT_MINUTES = 30;
     /** Inclusive start of the first slot each day (09:00). */
     private static final int SLOT_DAY_START_MINUTES = 9 * 60;
@@ -27,19 +28,19 @@ public final class VolumeTrainWindows {
     private VolumeTrainWindows() {
     }
 
-    /** Monthly train months: sizingMonth-2 … sizingMonth. */
-    public static List<String> monthlyTrainMonths(String sizingMonth) {
-        YearMonth ym = YearMonth.parse(sizingMonth);
-        List<String> months = new ArrayList<>(3);
+    /** Monthly train months: sizingMonth-2 … sizingMonth (month-start DATE). */
+    public static List<LocalDate> monthlyTrainMonths(LocalDate sizingMonth) {
+        YearMonth ym = YearMonth.from(sizingMonth);
+        List<LocalDate> months = new ArrayList<>(3);
         for (int delta = -2; delta <= 0; delta++) {
-            months.add(ym.plusMonths(delta).toString());
+            months.add(MonthKeys.monthStart(ym.plusMonths(delta)));
         }
         return months;
     }
 
     /** Daily train dates: every day in the sizing month. */
-    public static List<LocalDate> dailyTrainDates(String sizingMonth) {
-        YearMonth ym = YearMonth.parse(sizingMonth);
+    public static List<LocalDate> dailyTrainDates(LocalDate sizingMonth) {
+        YearMonth ym = YearMonth.from(sizingMonth);
         List<LocalDate> dates = new ArrayList<>();
         LocalDate cursor = ym.atDay(1);
         LocalDate end = ym.atEndOfMonth();
@@ -76,7 +77,7 @@ public final class VolumeTrainWindows {
         return bounds;
     }
 
-    public static Set<String> monthlyTrainMonthSet(String sizingMonth) {
+    public static Set<LocalDate> monthlyTrainMonthSet(LocalDate sizingMonth) {
         return new LinkedHashSet<>(monthlyTrainMonths(sizingMonth));
     }
 

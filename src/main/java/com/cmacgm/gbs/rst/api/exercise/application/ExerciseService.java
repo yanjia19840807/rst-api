@@ -4,12 +4,12 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.UUID;
-import java.util.ArrayList;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -22,6 +22,7 @@ import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
@@ -86,44 +87,9 @@ public class ExerciseService {
      */
     @Transactional(isolation = Isolation.REPEATABLE_READ)
     public CreateExerciseResult create(UUID ownerId, String ccgid, CreateExercise request) {
-        // Recompute under a repeatable-read transaction so an ACTIVE switch cannot mix snapshots.
-        preview(ccgid, request);
-        var toolkit = toolkits.findActiveById(request.toolkitId())
-                .orElseThrow(() -> notFound("toolkit-not-found", "The Toolkit was not found."));
-        if (!timesheet.supervisorOwnsScope(
-                ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code())) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN, "toolkit-out-of-scope",
-                    "The current Supervisor does not own the Toolkit scope.");
-        }
-        var active = timesheet.activeSnapshot();
-        var selections = toolkit.getSharedKpiSelections().stream()
-                .filter(selection -> selection.getDeletedAt() == null)
-                .toList();
-        if (selections.isEmpty()) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY,
-                    "shared-kpi-selection-required",
-                    "Exercise requires at least one active Shared KPI selection.");
-        }
-        var countries = selections.stream()
-                .map(selection -> selection.getCustomerCountry())
-                .distinct()
-                .toList();
-        var candidates = timesheet.kpis(
-                toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), countries);
-        for (var selection : selections) {
-            boolean exists = candidates.stream().anyMatch(candidate ->
-                    Objects.equals(candidate.carrier(), selection.getCarrier())
-                            && candidate.site().equals(selection.getSite())
-                            && candidate.customerCountry().equals(selection.getCustomerCountry()));
-            if (!exists) {
-                throw new ApiException(
-                        HttpStatus.CONFLICT,
-                        "stale-shared-kpi-selection",
-                        "A selected Shared KPI no longer exists in the ACTIVE Timesheet snapshot.");
-            }
-        }
+        // Resolve under repeatable-read so an ACTIVE switch cannot mix snapshots.
+        validatePeriods(request.sizingMonth(), request.tmsFrom(), request.tmsTo());
+        ExerciseFreeze freeze = ExerciseFreeze.resolve(ccgid, request.toolkitId(), toolkits, timesheet);
 
         Instant now = clock.instant();
         UUID exerciseId = UUID.randomUUID();
@@ -133,58 +99,16 @@ public class ExerciseService {
         RstExercise exercise = RstExercise.create(
                 exerciseId,
                 code,
-                toolkit.getId(),
+                freeze.toolkit().getId(),
                 ownerId,
-                request.sizingMonth(),
+                MonthKeys.parseMonthStart(request.sizingMonth()),
                 request.slotStartDate(),
                 request.slotWeeks(),
                 request.tmsFrom(),
                 request.tmsTo(),
                 now);
-        exercise.freezeToolkitSnapshot(
-                toolkit.getId(),
-                toolkit.getVersion(),
-                active.id(),
-                toolkit.getName(),
-                toolkit.getSupervisorPositionId(),
-                toolkit.getCenter(),
-                toolkit.getDomain(),
-                toolkit.getPl1(),
-                toolkit.getPl2(),
-                toolkit.getPrimaryPl3Code(),
-                toolkit.getPl3Name(),
-                toolkit.isCombineSubtasksTime(),
-                ownerId,
-                now);
-        for (var subtask : toolkit.getSubtasks()) {
-            exercise.addSubtask(
-                    subtask.getId(),
-                    subtask.getName(),
-                    subtask.getDescription(),
-                    subtask.getDisplayOrder(),
-                    now);
-        }
-        for (var selection : selections) {
-            BigDecimal hc = timesheet.headcount(
-                    toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(),
-                    selection.getCarrier(), selection.getSite(), selection.getCustomerCountry());
-            exercise.addSharedKpiLine(
-                    selection.getId(),
-                    active.id(),
-                    toolkit.getCenter(),
-                    selection.getSite(),
-                    toolkit.getDomain(),
-                    toolkit.getPl1(),
-                    toolkit.getPl2(),
-                    toolkit.getPrimaryPl3Code(),
-                    toolkit.getPl3Name(),
-                    selection.getCarrier(),
-                    selection.getCustomerCountry(),
-                    hc,
-                    ownerId,
-                    now);
-        }
-        exercises.saveAndFlush(exercise);
+        freeze.applyTo(exercise, now);
+        exercise = exercises.saveAndFlush(exercise);
         teamSetups.save(ExerciseTeamSetup.emptyShell(exerciseId, ownerId, now));
         calendars.save(ExerciseCalendar.emptyShell(exerciseId, ownerId, now));
         List<String> notices = new ArrayList<>(initialization.initialize(exercise, ownerId));
@@ -256,10 +180,10 @@ public class ExerciseService {
                     "exercise-not-editable",
                     "Exercise periods can only be changed while In Progress or Returned.");
         }
-        short previousYear = Short.parseShort(exercise.getSizingMonth().substring(0, 4));
-        short nextYear = Short.parseShort(request.sizingMonth().substring(0, 4));
+        short previousYear = (short) YearMonth.from(exercise.getSizingMonth()).getYear();
+        short nextYear = (short) YearMonth.parse(request.sizingMonth()).getYear();
         exercise.updatePeriods(
-                request.sizingMonth(),
+                MonthKeys.parseMonthStart(request.sizingMonth()),
                 request.slotStartDate(),
                 request.slotWeeks(),
                 request.tmsFrom(),
@@ -291,11 +215,12 @@ public class ExerciseService {
         }
         initialization.ensureTrainVolumeGrids(exercise, ownerId);
         notices.add("Volume Input grids refreshed for the updated training windows.");
+        notices.add(initialization.syncTmsPopulation(exercise, ownerId));
         return new UpdateExercisePeriodsResult(toResponse(exercise), notices);
     }
 
     private static void validatePeriods(String sizingMonth, LocalDate tmsFrom, LocalDate tmsTo) {
-        if (tmsTo.isBefore(tmsFrom)) {
+        if (tmsFrom == null || tmsTo == null || tmsTo.isBefore(tmsFrom)) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "invalid-tms-period",
@@ -318,68 +243,8 @@ public class ExerciseService {
      */
     @Transactional(readOnly = true)
     public ExerciseSnapshot preview(String ccgid, CreateExercise request) {
-        if (request.tmsTo().isBefore(request.tmsFrom())) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY,
-                    "invalid-tms-period",
-                    "tmsTo cannot be before tmsFrom.");
-        }
-        var toolkit = toolkits.findActiveById(request.toolkitId())
-                .orElseThrow(() -> notFound("toolkit-not-found", "The Toolkit was not found."));
-        if (!timesheet.supervisorOwnsScope(
-                ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code())) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN, "toolkit-out-of-scope",
-                    "The current Supervisor does not own the Toolkit scope.");
-        }
-        var active = timesheet.activeSnapshot();
-        var selections = toolkit.getSharedKpiSelections().stream()
-                .filter(selection -> selection.getDeletedAt() == null)
-                .toList();
-        if (selections.isEmpty()) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY,
-                    "shared-kpi-selection-required",
-                    "Exercise requires at least one active Shared KPI selection.");
-        }
-        var countries = selections.stream()
-                .map(selection -> selection.getCustomerCountry())
-                .distinct()
-                .toList();
-        var candidates = timesheet.kpis(
-                toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), countries);
-        var kpis = selections.stream().map(selection -> {
-            var candidate = candidates.stream().filter(item ->
-                            Objects.equals(item.carrier(), selection.getCarrier())
-                                    && item.site().equals(selection.getSite())
-                                    && item.customerCountry().equals(selection.getCustomerCountry()))
-                    .findFirst()
-                    .orElseThrow(() -> new ApiException(
-                            HttpStatus.CONFLICT,
-                            "stale-shared-kpi-selection",
-                            "A selected Shared KPI no longer exists in the ACTIVE Timesheet snapshot."));
-            return new ExerciseKpiView(
-                    selection.getId(), selection.getId(), selection.getCarrier(),
-                    selection.getSite(), selection.getCustomerCountry(),
-                    candidate.deliveryHc(), true);
-        }).toList();
-        var subtasks = toolkit.getSubtasks().stream()
-                .map(item -> new ExerciseSubtaskView(
-                        item.getId(), item.getId(), item.getName(), item.getDescription(),
-                        item.getDisplayOrder(), null))
-                .toList();
-        if (subtasks.isEmpty()) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY,
-                    "invalid-toolkit-snapshot",
-                    "Exercise requires at least one active Subtask.");
-        }
-        return new ExerciseSnapshot(
-                new ExerciseToolkitView(
-                        toolkit.getId(), toolkit.getName(), toolkit.getCenter(), toolkit.getDomain(),
-                        toolkit.getPl1(), toolkit.getPl2(), toolkit.getPrimaryPl3Code(),
-                        toolkit.getPl3Name(), toolkit.isCombineSubtasksTime(), toolkit.getVersion()),
-                subtasks, kpis, active.syncDate());
+        validatePeriods(request.sizingMonth(), request.tmsFrom(), request.tmsTo());
+        return ExerciseFreeze.resolve(ccgid, request.toolkitId(), toolkits, timesheet).toSnapshot();
     }
 
     /**
@@ -451,7 +316,7 @@ public class ExerciseService {
                 exercise.getId(),
                 exercise.getExerciseCode(),
                 snapshot.getSourceToolkitId(),
-                exercise.getSizingMonth(),
+                MonthKeys.formatYearMonth(exercise.getSizingMonth()),
                 exercise.getSlotStartDate(),
                 exercise.getSlotWeeks(),
                 exercise.getTmsFrom(),
@@ -478,7 +343,7 @@ public class ExerciseService {
             @NotNull UUID toolkitId,
             @NotBlank @Pattern(regexp = "^[0-9]{4}-(0[1-9]|1[0-2])$") String sizingMonth,
             @NotNull LocalDate slotStartDate,
-            @Min(1) @Max(53) short slotWeeks,
+            @Min(1) @Max(12) short slotWeeks,
             @NotNull LocalDate tmsFrom,
             @NotNull LocalDate tmsTo) {
     }

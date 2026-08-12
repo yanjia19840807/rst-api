@@ -9,15 +9,31 @@ app:
     # Simulate one login: set ccgid + role (AGENT|SUPERVISOR|MANAGER|CDH|LTH|HO).
     # Restart API after changing. Optional per-request: X-Dev-Ccgid / X-Dev-Role.
     dev-identity:
-      ccgid: S00628182
-      role: SUPERVISOR
+      ccgid: LTH001
+      role: LTH
 
 rst:
   forecast:
     base-url: http://localhost:8000
     enabled: true
 
+# Log SQL with parameters substituted into '?' (dev only). p6spy does this natively.
+decorator:
+  datasource:
+    enabled: true
+    p6spy:
+      enable-logging: true
+      logging: slf4j
+      multiline: true
+      # %(sql) already has bound values inlined (not separate Params:).
+      # Use real \n — p6spy does not treat %n as a newline.
+      log-format: "%(executionTime)ms | %(category) | connection %(connectionId)\n%(sql)"
+      exclude-categories: info,debug,result,resultset,batch
+
 logging:
   level:
-    org.hibernate.SQL: debug
+    # Prefer p6spy output; keep Hibernate SQL quiet to avoid duplicates.
+    org.hibernate.SQL: warn
+    org.hibernate.orm.jdbc.bind: warn
+    p6spy: info
     com.cmacgm.gbs.rst.api.forecast: info

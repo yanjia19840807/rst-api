@@ -6,9 +6,12 @@ import java.io.InputStream;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalTime;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoField;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -16,7 +19,10 @@ import java.util.Locale;
 import java.util.Map;
 
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -37,8 +43,22 @@ public class VolumeExcelService {
 
     private static final List<String> MONTHLY_HEADERS = List.of("month", "actual_volume");
     private static final List<String> DAILY_HEADERS = List.of("date", "actual_volume");
-    private static final List<String> SLOT_HEADERS =
-            List.of("date", "slot_start", "slot_end", "actual_volume");
+    private static final List<String> SLOT_HEADERS = List.of("slot_start", "actual_volume");
+    private static final long SLOT_MINUTES = 30;
+    private static final String SLOT_EXCEL_DATE_FORMAT = "yyyy-mm-dd hh:mm";
+    private static final List<DateTimeFormatter> SLOT_START_TEXT_FORMATS = List.of(
+            DateTimeFormatter.ISO_LOCAL_DATE_TIME,
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm[:ss]"),
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm[:ss]"),
+            DateTimeFormatter.ofPattern("yyyy/M/d H:mm[:ss]"),
+            DateTimeFormatter.ofPattern("M/d/yyyy H:mm[:ss]"),
+            DateTimeFormatter.ofPattern("M/d/yy H:mm[:ss]"),
+            new DateTimeFormatterBuilder()
+                    .appendPattern("dd-MMM-yyyy[ HH:mm[:ss]]")
+                    .parseDefaulting(ChronoField.HOUR_OF_DAY, 0)
+                    .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
+                    .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
+                    .toFormatter(Locale.ENGLISH));
 
     private final DataFormatter formatter = new DataFormatter(Locale.ROOT);
 
@@ -75,18 +95,29 @@ public class VolumeExcelService {
     }
 
     public byte[] exportSlot(List<SlotVolumeRequest> rows) {
-        List<List<String>> body = new ArrayList<>();
-        for (SlotVolumeRequest row : rows) {
-            LocalDate date = LocalDate.ofInstant(row.slotStartAt(), ZoneOffset.UTC);
-            LocalTime start = LocalTime.ofInstant(row.slotStartAt(), ZoneOffset.UTC);
-            LocalTime end = LocalTime.ofInstant(row.slotEndAt(), ZoneOffset.UTC);
-            body.add(List.of(
-                    date.toString(),
-                    start.toString(),
-                    end.toString(),
-                    row.rawVolume() == null ? "0" : row.rawVolume().toPlainString()));
+        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("Per-slot");
+            Row header = sheet.createRow(0);
+            header.createCell(0).setCellValue("slot_start");
+            header.createCell(1).setCellValue("actual_volume");
+            CellStyle dateStyle = workbook.createCellStyle();
+            dateStyle.setDataFormat(workbook.createDataFormat().getFormat(SLOT_EXCEL_DATE_FORMAT));
+            int rowIdx = 1;
+            for (SlotVolumeRequest row : rows) {
+                Row excelRow = sheet.createRow(rowIdx++);
+                Cell startCell = excelRow.createCell(0);
+                startCell.setCellValue(LocalDateTime.ofInstant(row.slotStartAt(), ZoneOffset.UTC));
+                startCell.setCellStyle(dateStyle);
+                excelRow.createCell(1).setCellValue(
+                        row.actualVolume() == null ? 0d : row.actualVolume().doubleValue());
+            }
+            sheet.autoSizeColumn(0);
+            sheet.autoSizeColumn(1);
+            workbook.write(out);
+            return out.toByteArray();
+        } catch (IOException ex) {
+            throw conflict("excel-export-failed", "Unable to export volume Excel: " + ex.getMessage());
         }
-        return writeSheet("Per-slot", SLOT_HEADERS, body);
     }
 
     public List<MonthlyVolumeRequest> parseMonthly(InputStream inputStream) {
@@ -98,7 +129,7 @@ public class VolumeExcelService {
             if (month == null || month.isBlank()) {
                 throw conflict("invalid-excel", "Row " + (i + 2) + ": month is required.");
             }
-            out.add(new MonthlyVolumeRequest(month.trim(), parseDecimal(row.get("actual_volume"), i), null, null));
+            out.add(new MonthlyVolumeRequest(month.trim(), parseDecimal(row.get("actual_volume"), i)));
         }
         return out;
     }
@@ -109,32 +140,39 @@ public class VolumeExcelService {
         for (int i = 0; i < rows.size(); i++) {
             Map<String, String> row = rows.get(i);
             LocalDate date = parseDate(row.get("date"), i);
-            out.add(new DailyVolumeRequest(date, parseDecimal(row.get("actual_volume"), i), null, null));
+            out.add(new DailyVolumeRequest(date, parseDecimal(row.get("actual_volume"), i)));
         }
         return out;
     }
 
-    public List<SlotVolumeRequest> parseSlot(InputStream inputStream, String defaultTimezone) {
-        List<Map<String, String>> rows = parseRows(inputStream, SLOT_HEADERS);
-        List<SlotVolumeRequest> out = new ArrayList<>();
-        for (int i = 0; i < rows.size(); i++) {
-            Map<String, String> row = rows.get(i);
-            LocalDate date = parseDate(row.get("date"), i);
-            LocalTime start = parseTime(row.get("slot_start"), i, "slot_start");
-            LocalTime end = parseTime(row.get("slot_end"), i, "slot_end");
-            Instant startAt = date.atTime(start).toInstant(ZoneOffset.UTC);
-            Instant endAt = date.atTime(end).toInstant(ZoneOffset.UTC);
-            if (end.equals(LocalTime.MIDNIGHT) && start.isAfter(end)) {
-                endAt = date.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+    public List<SlotVolumeRequest> parseSlot(InputStream inputStream) {
+        try (Workbook workbook = new XSSFWorkbook(inputStream)) {
+            if (workbook.getNumberOfSheets() == 0) {
+                throw conflict("invalid-excel", "Workbook has no sheets.");
             }
-            BigDecimal volume = parseDecimal(row.get("actual_volume"), i);
-            out.add(new SlotVolumeRequest(
-                    startAt,
-                    endAt,
-                    volume == null ? BigDecimal.ZERO : volume,
-                    defaultTimezone == null || defaultTimezone.isBlank() ? "Asia/Shanghai" : defaultTimezone));
+            Sheet sheet = workbook.getSheetAt(0);
+            Map<String, Integer> headers = readHeaders(sheet.getRow(0), SLOT_HEADERS);
+            List<SlotVolumeRequest> out = new ArrayList<>();
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row excelRow = sheet.getRow(i);
+                if (excelRow == null || isBlank(excelRow, headers)) {
+                    continue;
+                }
+                Instant startAt = readSlotStart(excelRow.getCell(headers.get("slot_start")), i);
+                Instant endAt = startAt.plusSeconds(SLOT_MINUTES * 60L);
+                BigDecimal volume = parseDecimal(
+                        cell(excelRow, headers.get("actual_volume")), i - 1);
+                out.add(new SlotVolumeRequest(
+                        startAt,
+                        endAt,
+                        volume == null ? BigDecimal.ZERO : volume));
+            }
+            return out;
+        } catch (ApiException ex) {
+            throw ex;
+        } catch (IOException ex) {
+            throw conflict("invalid-excel", "Unable to read volume Excel: " + ex.getMessage());
         }
-        return out;
     }
 
     private List<Map<String, String>> parseRows(InputStream inputStream, List<String> requiredHeaders) {
@@ -234,15 +272,55 @@ public class VolumeExcelService {
         }
     }
 
-    private LocalTime parseTime(String raw, int index, String field) {
-        if (raw == null || raw.isBlank()) {
-            throw conflict("invalid-excel", "Row " + (index + 2) + ": " + field + " is required (HH:mm).");
+    private Instant readSlotStart(Cell cell, int sheetRowIndex) {
+        int displayRow = sheetRowIndex + 1;
+        if (cell == null || cell.getCellType() == CellType.BLANK) {
+            throw conflict("invalid-excel", "Row " + displayRow + ": slot_start is required.");
         }
+        if (cell.getCellType() == CellType.NUMERIC
+                && (DateUtil.isCellDateFormatted(cell)
+                        || DateUtil.isValidExcelDate(cell.getNumericCellValue()))) {
+            return cell.getLocalDateTimeCellValue().toInstant(ZoneOffset.UTC);
+        }
+        if (cell.getCellType() == CellType.FORMULA
+                && cell.getCachedFormulaResultType() == CellType.NUMERIC
+                && DateUtil.isCellDateFormatted(cell)) {
+            return cell.getLocalDateTimeCellValue().toInstant(ZoneOffset.UTC);
+        }
+        String raw = formatter.formatCellValue(cell).trim();
+        if (raw.isBlank()) {
+            throw conflict("invalid-excel", "Row " + displayRow + ": slot_start is required.");
+        }
+        Instant parsed = parseSlotStartText(raw);
+        if (parsed != null) {
+            return parsed;
+        }
+        throw conflict(
+                "invalid-excel",
+                "Row " + displayRow + ": slot_start must be a valid Excel date/time.");
+    }
+
+    private static Instant parseSlotStartText(String raw) {
+        String value = raw.trim();
         try {
-            return LocalTime.parse(raw.trim());
-        } catch (DateTimeParseException ex) {
-            throw conflict("invalid-excel", "Row " + (index + 2) + ": " + field + " must be HH:mm or HH:mm:ss.");
+            return Instant.parse(value);
+        } catch (DateTimeParseException ignored) {
+            // fall through
         }
+        String normalized = value.contains("T") ? value : value.replace(' ', 'T');
+        try {
+            return LocalDateTime.parse(normalized).toInstant(ZoneOffset.UTC);
+        } catch (DateTimeParseException ignored) {
+            // fall through
+        }
+        for (DateTimeFormatter format : SLOT_START_TEXT_FORMATS) {
+            try {
+                return LocalDateTime.parse(value, format).toInstant(ZoneOffset.UTC);
+            } catch (DateTimeParseException ignored) {
+                // try next
+            }
+        }
+        return null;
     }
 
     private BigDecimal parseDecimal(String raw, int index) {

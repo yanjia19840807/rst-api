@@ -27,12 +27,6 @@ public class ExerciseVolumeDailyInput {
     @Column(name = "actual_volume", precision = 24, scale = 6)
     private BigDecimal actualVolume;
 
-    @Column(name = "daily_adjustment_ratio", precision = 12, scale = 8)
-    private BigDecimal dailyAdjustmentRatio;
-
-    @Column(name = "manual_forecast_volume", precision = 24, scale = 6)
-    private BigDecimal manualForecastVolume;
-
     @Column(name = "source_type", nullable = false, length = 30)
     private String sourceType;
 
@@ -60,8 +54,8 @@ public class ExerciseVolumeDailyInput {
      * @param exerciseId owning Exercise
      * @param volumeDate calendar date
      * @param actualVolume optional actual volume
-     * @param dailyAdjustmentRatio optional adjustment ratio
-     * @param manualForecastVolume optional manual forecast
+     * @param sourceType MANUAL / ARCHIVE / IMPORT
+     * @param importBatchId optional import batch
      * @param actorUserId creating Supervisor
      * @param now creation timestamp
      * @return new daily volume row
@@ -70,34 +64,6 @@ public class ExerciseVolumeDailyInput {
             UUID exerciseId,
             LocalDate volumeDate,
             BigDecimal actualVolume,
-            BigDecimal dailyAdjustmentRatio,
-            BigDecimal manualForecastVolume,
-            UUID actorUserId,
-            Instant now) {
-        return create(
-                exerciseId,
-                volumeDate,
-                actualVolume,
-                dailyAdjustmentRatio,
-                manualForecastVolume,
-                "MANUAL",
-                null,
-                actorUserId,
-                now);
-    }
-
-    /**
-     * Creates a daily volume row with an explicit source and optional import batch.
-     *
-     * @param sourceType MANUAL / ARCHIVE / IMPORT
-     * @param importBatchId optional import batch
-     */
-    public static ExerciseVolumeDailyInput create(
-            UUID exerciseId,
-            LocalDate volumeDate,
-            BigDecimal actualVolume,
-            BigDecimal dailyAdjustmentRatio,
-            BigDecimal manualForecastVolume,
             String sourceType,
             UUID importBatchId,
             UUID actorUserId,
@@ -107,8 +73,6 @@ public class ExerciseVolumeDailyInput {
         row.exerciseId = exerciseId;
         row.volumeDate = volumeDate;
         row.actualVolume = actualVolume;
-        row.dailyAdjustmentRatio = dailyAdjustmentRatio;
-        row.manualForecastVolume = manualForecastVolume;
         row.sourceType = sourceType == null || sourceType.isBlank() ? "MANUAL" : sourceType;
         row.importBatchId = importBatchId;
         row.createdAt = now;
@@ -122,7 +86,6 @@ public class ExerciseVolumeDailyInput {
     public UUID getExerciseId() { return exerciseId; }
     public LocalDate getVolumeDate() { return volumeDate; }
     public BigDecimal getActualVolume() { return actualVolume; }
-    public BigDecimal getDailyAdjustmentRatio() { return dailyAdjustmentRatio; }
-    public BigDecimal getManualForecastVolume() { return manualForecastVolume; }
     public String getSourceType() { return sourceType; }
+    public UUID getImportBatchId() { return importBatchId; }
 }

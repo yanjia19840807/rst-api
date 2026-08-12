@@ -57,7 +57,6 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update("update rst_exercise set official_scenario_id = null");
         jdbcTemplate.update("delete from scenario");
         jdbcTemplate.update("delete from cycle_time_baseline_file");
-        jdbcTemplate.update("delete from cycle_time_baseline_sample");
         jdbcTemplate.update("delete from cycle_time_baseline");
         jdbcTemplate.update("delete from exercise_tms_session");
         jdbcTemplate.update("delete from exercise_volume_slot_input");
@@ -67,7 +66,6 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update("delete from file_artifact");
         jdbcTemplate.update("delete from exercise_holiday");
         jdbcTemplate.update("delete from exercise_calendar");
-        jdbcTemplate.update("delete from exercise_production_support_item_scope");
         jdbcTemplate.update("delete from exercise_production_support_item");
         jdbcTemplate.update("delete from exercise_shift");
         jdbcTemplate.update("delete from exercise_team_setup");
@@ -161,8 +159,8 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into timesheet_sync_run
-                    (id, sync_date, status, row_count, started_at, completed_at)
-                values (?, current_date, 'ACTIVE', 1, ?, ?)
+                    (id, sync_date, attempt_no, status, row_count, started_at, completed_at)
+                values (?, current_date, 1, 'ACTIVE', 1, ?, ?)
                 """,
                 UUID.fromString("40000000-0000-0000-0000-000000000001"),
                 now,

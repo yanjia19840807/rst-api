@@ -120,11 +120,8 @@ public class VolumeInputValidator {
                         "volume-slot-duration",
                         "Each slot must be exactly " + SLOT_MINUTES + " minutes.");
             }
-            if (row.rawVolume() == null || row.rawVolume().compareTo(BigDecimal.ZERO) < 0) {
-                fail("volume-negative", "Row " + (i + 1) + ": rawVolume must be non-negative.");
-            }
-            if (row.timezone() == null || row.timezone().isBlank()) {
-                fail("volume-timezone-required", "Row " + (i + 1) + ": timezone is required.");
+            if (row.actualVolume() == null || row.actualVolume().compareTo(BigDecimal.ZERO) < 0) {
+                fail("volume-negative", "Row " + (i + 1) + ": actualVolume must be non-negative.");
             }
             String key = row.slotStartAt() + "|" + row.slotEndAt();
             if (!seen.add(key)) {

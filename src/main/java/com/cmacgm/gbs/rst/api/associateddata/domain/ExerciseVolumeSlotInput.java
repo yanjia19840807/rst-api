@@ -26,11 +26,8 @@ public class ExerciseVolumeSlotInput {
     @Column(name = "slot_end_at", nullable = false)
     private Instant slotEndAt;
 
-    @Column(name = "raw_volume", nullable = false, precision = 24, scale = 6)
-    private BigDecimal rawVolume;
-
-    @Column(nullable = false, length = 64)
-    private String timezone;
+    @Column(name = "actual_volume", nullable = false, precision = 24, scale = 6)
+    private BigDecimal actualVolume;
 
     @Column(name = "source_type", nullable = false, length = 30)
     private String sourceType;
@@ -57,10 +54,11 @@ public class ExerciseVolumeSlotInput {
      * Creates a slot volume row.
      *
      * @param exerciseId owning Exercise
-     * @param slotStartAt inclusive slot start
+     * @param slotStartAt inclusive slot start (UTC)
      * @param slotEndAt exclusive/end bound (must be after start)
-     * @param rawVolume non-negative raw volume
-     * @param timezone IANA timezone
+     * @param actualVolume non-negative actual volume
+     * @param sourceType MANUAL / ARCHIVE / IMPORT
+     * @param importBatchId optional import batch
      * @param actorUserId creating Supervisor
      * @param now creation timestamp
      * @return new slot volume row
@@ -69,34 +67,7 @@ public class ExerciseVolumeSlotInput {
             UUID exerciseId,
             Instant slotStartAt,
             Instant slotEndAt,
-            BigDecimal rawVolume,
-            String timezone,
-            UUID actorUserId,
-            Instant now) {
-        return create(
-                exerciseId,
-                slotStartAt,
-                slotEndAt,
-                rawVolume,
-                timezone,
-                "MANUAL",
-                null,
-                actorUserId,
-                now);
-    }
-
-    /**
-     * Creates a slot volume row with an explicit source and optional import batch.
-     *
-     * @param sourceType MANUAL / ARCHIVE / IMPORT
-     * @param importBatchId optional import batch
-     */
-    public static ExerciseVolumeSlotInput create(
-            UUID exerciseId,
-            Instant slotStartAt,
-            Instant slotEndAt,
-            BigDecimal rawVolume,
-            String timezone,
+            BigDecimal actualVolume,
             String sourceType,
             UUID importBatchId,
             UUID actorUserId,
@@ -106,8 +77,7 @@ public class ExerciseVolumeSlotInput {
         row.exerciseId = exerciseId;
         row.slotStartAt = slotStartAt;
         row.slotEndAt = slotEndAt;
-        row.rawVolume = rawVolume;
-        row.timezone = timezone;
+        row.actualVolume = actualVolume;
         row.sourceType = sourceType == null || sourceType.isBlank() ? "MANUAL" : sourceType;
         row.importBatchId = importBatchId;
         row.createdAt = now;
@@ -121,7 +91,7 @@ public class ExerciseVolumeSlotInput {
     public UUID getExerciseId() { return exerciseId; }
     public Instant getSlotStartAt() { return slotStartAt; }
     public Instant getSlotEndAt() { return slotEndAt; }
-    public BigDecimal getRawVolume() { return rawVolume; }
-    public String getTimezone() { return timezone; }
+    public BigDecimal getActualVolume() { return actualVolume; }
     public String getSourceType() { return sourceType; }
+    public UUID getImportBatchId() { return importBatchId; }
 }

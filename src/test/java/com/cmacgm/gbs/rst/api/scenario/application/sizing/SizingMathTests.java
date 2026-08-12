@@ -9,12 +9,11 @@ import org.junit.jupiter.api.Test;
 class SizingMathTests {
 
     @Test
-    void monthlyManualVolumeAppliesAutomationAndCommercial() {
+    void monthlyManualVolumeAppliesAutomation() {
         BigDecimal manual = SizingMath.monthlyManualVolume(
                 new BigDecimal("1000"),
-                new BigDecimal("0.10"),
-                new BigDecimal("0.05"));
-        assertThat(manual).isEqualByComparingTo("945.000000");
+                new BigDecimal("0.10"));
+        assertThat(manual).isEqualByComparingTo("900.000000");
     }
 
     @Test

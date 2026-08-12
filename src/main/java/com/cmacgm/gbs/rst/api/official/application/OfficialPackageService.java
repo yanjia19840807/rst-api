@@ -10,6 +10,7 @@ import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
 import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
@@ -225,7 +226,7 @@ public class OfficialPackageService {
     private static String compactExercise(RstExercise exercise) {
         return "{\"id\":\"" + exercise.getId()
                 + "\",\"exerciseCode\":\"" + exercise.getExerciseCode()
-                + "\",\"sizingMonth\":\"" + exercise.getSizingMonth() + "\"}";
+                + "\",\"sizingMonth\":\"" + MonthKeys.formatYearMonth(exercise.getSizingMonth()) + "\"}";
     }
 
     private static String compactToolkit(RstExercise exercise) {

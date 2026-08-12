@@ -1,6 +1,7 @@
 package com.cmacgm.gbs.rst.api.scenario.domain;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.UUID;
 
 import jakarta.persistence.Column;
@@ -19,8 +20,9 @@ public class MonthlySizingResult {
     @Column(name = "simulation_run_id", nullable = false)
     private UUID simulationRunId;
 
-    @Column(nullable = false, length = 7)
-    private String month;
+    /** First day of the month (DATE). */
+    @Column(nullable = false)
+    private LocalDate month;
 
     @Column(name = "forecast_volume", precision = 24, scale = 6)
     private BigDecimal forecastVolume;
@@ -60,7 +62,7 @@ public class MonthlySizingResult {
      */
     public static MonthlySizingResult create(
             UUID simulationRunId,
-            String month,
+            LocalDate month,
             BigDecimal forecastVolume,
             BigDecimal manualVolume,
             BigDecimal workdays,
@@ -90,7 +92,7 @@ public class MonthlySizingResult {
 
     public UUID getId() { return id; }
     public UUID getSimulationRunId() { return simulationRunId; }
-    public String getMonth() { return month; }
+    public LocalDate getMonth() { return month; }
     public BigDecimal getForecastVolume() { return forecastVolume; }
     public BigDecimal getManualVolume() { return manualVolume; }
     public BigDecimal getWorkdays() { return workdays; }

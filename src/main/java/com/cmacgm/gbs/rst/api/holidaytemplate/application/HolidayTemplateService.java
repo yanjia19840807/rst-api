@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -207,10 +208,10 @@ public class HolidayTemplateService {
     public boolean applyPublishedTemplateToExercise(
             UUID exerciseId,
             String center,
-            String sizingMonth,
+            LocalDate sizingMonth,
             UUID actorUserId,
             boolean preserveCustom) {
-        short year = yearOfSizingMonth(sizingMonth);
+        short year = (short) YearMonth.from(sizingMonth).getYear();
         return applyPublishedTemplates(
                 exerciseId, center, year, Set.of(year), actorUserId, preserveCustom)
                 .primaryApplied();
@@ -576,13 +577,6 @@ public class HolidayTemplateService {
             }
         }
         return dates;
-    }
-
-    private static short yearOfSizingMonth(String sizingMonth) {
-        if (sizingMonth == null || !sizingMonth.matches("^\\d{4}-(0[1-9]|1[0-2])$")) {
-            throw unprocessable("invalid-sizing-month", "sizingMonth must be YYYY-MM.");
-        }
-        return Short.parseShort(sizingMonth.substring(0, 4));
     }
 
     private static String requireText(String value, String field) {

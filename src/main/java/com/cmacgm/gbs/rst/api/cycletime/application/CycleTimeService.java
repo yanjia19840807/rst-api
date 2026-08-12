@@ -1,11 +1,9 @@
 package com.cmacgm.gbs.rst.api.cycletime.application;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,11 +20,9 @@ import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.cycletime.api.dto.ExerciseTmsSessionResponse;
 import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
 import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaselineFile;
-import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaselineSample;
 import com.cmacgm.gbs.rst.api.cycletime.domain.ExerciseTmsSession;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineFileRepository;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
-import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineSampleRepository;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.ExerciseTmsSessionRepository;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.ExerciseTmsSessionRepository.ExerciseTmsSessionRow;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
@@ -50,11 +46,11 @@ public class CycleTimeService {
 
     private final ExerciseService exercises;
     private final CycleTimeBaselineRepository baselines;
-    private final CycleTimeBaselineSampleRepository baselineSamples;
     private final CycleTimeBaselineFileRepository baselineFiles;
     private final FileArtifactRepository fileArtifacts;
     private final ExerciseTmsSessionRepository exerciseTmsSessions;
     private final ExerciseTeamSetupRepository teamSetups;
+    private final SystemCycleTimeBaselineWriter systemCycleTime;
     private final Clock clock;
 
     /**
@@ -62,29 +58,29 @@ public class CycleTimeService {
      *
      * @param exercises Exercise service
      * @param baselines baseline repository
-     * @param baselineSamples SYSTEM baseline sample freeze repository
      * @param baselineFiles MANUAL baseline evidence links
      * @param fileArtifacts file artifact repository
      * @param exerciseTmsSessions Exercise ↔ TMS session selections
      * @param teamSetups Team Setup repository (refresh daily capacity)
+     * @param systemCycleTime shared SYSTEM baseline writer
      * @param clock clock
      */
     public CycleTimeService(
             ExerciseService exercises,
             CycleTimeBaselineRepository baselines,
-            CycleTimeBaselineSampleRepository baselineSamples,
             CycleTimeBaselineFileRepository baselineFiles,
             FileArtifactRepository fileArtifacts,
             ExerciseTmsSessionRepository exerciseTmsSessions,
             ExerciseTeamSetupRepository teamSetups,
+            SystemCycleTimeBaselineWriter systemCycleTime,
             Clock clock) {
         this.exercises = exercises;
         this.baselines = baselines;
-        this.baselineSamples = baselineSamples;
         this.baselineFiles = baselineFiles;
         this.fileArtifacts = fileArtifacts;
         this.exerciseTmsSessions = exerciseTmsSessions;
         this.teamSetups = teamSetups;
+        this.systemCycleTime = systemCycleTime;
         this.clock = clock;
     }
 
@@ -254,7 +250,8 @@ public class CycleTimeService {
 
             List<ExerciseTmsSessionRow> allRows =
                     exerciseTmsSessions.findAllSessionRowsByExerciseId(exerciseId);
-            List<Double> includedValues = includedSecondsPerUnit(allRows);
+            List<Double> includedValues =
+                    SystemCycleTimeBaselineWriter.includedSecondsPerUnit(allRows);
             if (includedValues.isEmpty()) {
                 throw new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
@@ -265,7 +262,7 @@ public class CycleTimeService {
             Optional<CycleTimeBaseline> active = baselines.findByExerciseIdAndActiveTrue(exerciseId);
             boolean recalculateSystem = active.isEmpty() || "SYSTEM".equals(active.get().getBaselineType());
             if (recalculateSystem) {
-                recalculateSystemBaseline(exerciseId, ownerId, allRows, includedValues);
+                systemCycleTime.replaceSystem(exerciseId, ownerId, includedValues);
             }
         }
 
@@ -289,74 +286,11 @@ public class CycleTimeService {
         baselines.deactivateActiveByExerciseId(exerciseId);
     }
 
-    private void recalculateSystemBaseline(
-            UUID exerciseId,
-            UUID actorUserId,
-            List<ExerciseTmsSessionRow> allRows,
-            List<Double> includedValues) {
-        Instant now = clock.instant();
-        deactivateActiveBaseline(exerciseId);
-
-        BigDecimal median = medianOf(includedValues);
-        CycleTimeBaseline baseline = CycleTimeBaseline.createSystem(
-                exerciseId, median, includedValues.size(), actorUserId, now);
-        baselines.save(baseline);
-
-        List<CycleTimeBaselineSample> samples = new ArrayList<>(allRows.size());
-        for (ExerciseTmsSessionRow row : allRows) {
-            Double seconds = secondsPerUnit(row.getProcessedVolume(), row.getNetDurationSeconds());
-            samples.add(CycleTimeBaselineSample.freeze(
-                    baseline.getId(),
-                    row.getTmsSessionId(),
-                    row.getIncluded(),
-                    seconds == null ? null : BigDecimal.valueOf(seconds).setScale(6, RoundingMode.HALF_UP)));
-        }
-        baselineSamples.saveAll(samples);
-
-        teamSetups.findById(exerciseId).ifPresent(setup -> {
-            setup.recalculateDerived(median);
-            teamSetups.save(setup);
-        });
-    }
-
-    private static List<Double> includedSecondsPerUnit(List<ExerciseTmsSessionRow> rows) {
-        List<Double> values = new ArrayList<>();
-        for (ExerciseTmsSessionRow row : rows) {
-            if (!row.getIncluded()) {
-                continue;
-            }
-            Double seconds = secondsPerUnit(row.getProcessedVolume(), row.getNetDurationSeconds());
-            if (seconds != null) {
-                values.add(seconds);
-            }
-        }
-        return values;
-    }
-
-    private static Double secondsPerUnit(Integer volume, long netDurationSeconds) {
-        if (volume == null || volume <= 0) {
-            return null;
-        }
-        return (double) netDurationSeconds / volume;
-    }
-
-    private static BigDecimal medianOf(List<Double> values) {
-        List<Double> sorted = new ArrayList<>(values);
-        Collections.sort(sorted);
-        int n = sorted.size();
-        double median;
-        if (n % 2 == 1) {
-            median = sorted.get(n / 2);
-        } else {
-            median = (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2.0;
-        }
-        return BigDecimal.valueOf(median).setScale(6, RoundingMode.HALF_UP);
-    }
-
     private static ZScoreStats computeZScoreStats(List<ExerciseTmsSessionRow> rows) {
         List<Double> values = new ArrayList<>();
         for (ExerciseTmsSessionRow row : rows) {
-            Double seconds = secondsPerUnit(row.getProcessedVolume(), row.getNetDurationSeconds());
+            Double seconds = SystemCycleTimeBaselineWriter.secondsPerUnit(
+                    row.getProcessedVolume(), row.getNetDurationSeconds());
             if (seconds != null) {
                 values.add(seconds);
             }
@@ -383,7 +317,8 @@ public class CycleTimeService {
 
     private static ExerciseTmsSessionResponse toSessionResponse(
             ExerciseTmsSessionRow row, ZScoreStats stats) {
-        Double seconds = secondsPerUnit(row.getProcessedVolume(), row.getNetDurationSeconds());
+        Double seconds = SystemCycleTimeBaselineWriter.secondsPerUnit(
+                row.getProcessedVolume(), row.getNetDurationSeconds());
         Integer cycleTime = seconds == null ? null : (int) Math.round(seconds);
         Double zScore = null;
         if (seconds != null && stats.available()) {

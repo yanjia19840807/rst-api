@@ -16,24 +16,16 @@ public final class SizingMath {
     private SizingMath() {
     }
 
-    /** Monthly / shared: Forecast × (1 − Auto) × (1 + Commercial). */
-    public static BigDecimal monthlyManualVolume(
-            BigDecimal forecastVolume, BigDecimal automationRatio, BigDecimal commercialRatio) {
+    /** Monthly / shared: Forecast × (1 − Auto). */
+    public static BigDecimal monthlyManualVolume(BigDecimal forecastVolume, BigDecimal automationRatio) {
         return forecastVolume
                 .multiply(BigDecimal.ONE.subtract(nz(automationRatio)), MC)
-                .multiply(BigDecimal.ONE.add(nz(commercialRatio)), MC)
                 .setScale(6, RoundingMode.HALF_UP);
     }
 
-    /** Daily: monthly manual × (1 + DailyAdj). */
-    public static BigDecimal dailyManualVolume(
-            BigDecimal forecastVolume,
-            BigDecimal automationRatio,
-            BigDecimal commercialRatio,
-            BigDecimal dailyAdjustmentRatio) {
-        return monthlyManualVolume(forecastVolume, automationRatio, commercialRatio)
-                .multiply(BigDecimal.ONE.add(nz(dailyAdjustmentRatio)), MC)
-                .setScale(6, RoundingMode.HALF_UP);
+    /** Daily: same manual volume base as monthly. */
+    public static BigDecimal dailyManualVolume(BigDecimal forecastVolume, BigDecimal automationRatio) {
+        return monthlyManualVolume(forecastVolume, automationRatio);
     }
 
     /**

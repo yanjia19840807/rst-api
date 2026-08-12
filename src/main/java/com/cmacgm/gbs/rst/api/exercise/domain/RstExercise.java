@@ -38,8 +38,9 @@ public class RstExercise {
     @Column(name = "owner_user_id", nullable = false)
     private UUID ownerUserId;
 
-    @Column(name = "sizing_month", nullable = false, length = 7)
-    private String sizingMonth;
+    /** First day of the sizing month (DATE). */
+    @Column(name = "sizing_month", nullable = false)
+    private LocalDate sizingMonth;
 
     @Column(name = "slot_start_date", nullable = false)
     private LocalDate slotStartDate;
@@ -110,7 +111,7 @@ public class RstExercise {
      * @param exerciseCode unique business code
      * @param toolkitId source Toolkit id
      * @param ownerUserId owning Supervisor
-     * @param sizingMonth YYYY-MM sizing month
+     * @param sizingMonth first day of sizing month
      * @param slotStartDate slot window start
      * @param slotWeeks slot window length in weeks
      * @param tmsFrom TMS history from date
@@ -123,7 +124,7 @@ public class RstExercise {
             String exerciseCode,
             UUID toolkitId,
             UUID ownerUserId,
-            String sizingMonth,
+            LocalDate sizingMonth,
             LocalDate slotStartDate,
             short slotWeeks,
             LocalDate tmsFrom,
@@ -150,7 +151,7 @@ public class RstExercise {
     /**
      * Updates sizing / slot / TMS period fields while the Exercise remains editable.
      *
-     * @param sizingMonth YYYY-MM sizing month
+     * @param sizingMonth first day of sizing month
      * @param slotStartDate slot window start
      * @param slotWeeks slot window length in weeks
      * @param tmsFrom TMS history from date
@@ -159,7 +160,7 @@ public class RstExercise {
      * @param now update timestamp
      */
     public void updatePeriods(
-            String sizingMonth,
+            LocalDate sizingMonth,
             LocalDate slotStartDate,
             short slotWeeks,
             LocalDate tmsFrom,
@@ -408,7 +409,7 @@ public class RstExercise {
         return ownerUserId;
     }
 
-    public String getSizingMonth() {
+    public LocalDate getSizingMonth() {
         return sizingMonth;
     }
 
