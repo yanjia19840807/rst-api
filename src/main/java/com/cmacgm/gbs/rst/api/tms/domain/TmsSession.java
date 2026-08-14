@@ -23,7 +23,6 @@ import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
-import com.cmacgm.gbs.rst.api.identity.domain.AppUser;
 import com.cmacgm.gbs.rst.api.toolkit.domain.Toolkit;
 import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitSubtask;
 
@@ -38,9 +37,11 @@ public class TmsSession {
     @Column(name = "session_no", nullable = false, unique = true, length = 80)
     private String sessionNo;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "agent_user_id", nullable = false)
-    private AppUser user;
+    @Column(name = "agent_ccgid", nullable = false, length = 64)
+    private String agentCcgid;
+
+    @Column(name = "agent_name_snapshot", nullable = false, length = 160)
+    private String agentNameSnapshot;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "toolkit_id", nullable = false)
@@ -127,7 +128,8 @@ public class TmsSession {
 
     public static TmsSession start(
             String sessionNo,
-            AppUser user,
+            String agentCcgid,
+            String agentNameSnapshot,
             Toolkit toolkit,
             ToolkitSubtask subtask,
             BigDecimal processedVolume,
@@ -136,7 +138,8 @@ public class TmsSession {
             Instant now) {
         TmsSession session = new TmsSession();
         session.sessionNo = sessionNo;
-        session.user = user;
+        session.agentCcgid = agentCcgid;
+        session.agentNameSnapshot = agentNameSnapshot == null ? "" : agentNameSnapshot;
         session.toolkit = toolkit;
         session.toolkitSubtask = subtask;
         session.processedVolume = processedVolume;
@@ -246,8 +249,12 @@ public class TmsSession {
         return sessionNo;
     }
 
-    public AppUser getUser() {
-        return user;
+    public String getAgentCcgid() {
+        return agentCcgid;
+    }
+
+    public String getAgentNameSnapshot() {
+        return agentNameSnapshot;
     }
 
     public Toolkit getToolkit() {

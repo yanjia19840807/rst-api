@@ -9,20 +9,27 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
-import jakarta.validation.constraints.NotBlank;
-
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
-import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
+import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
+import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
-import com.cmacgm.gbs.rst.api.official.application.OfficialPackageService;
+import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.scenario.domain.ScenarioAssumption;
 import com.cmacgm.gbs.rst.api.scenario.domain.ScenarioShift;
+import com.cmacgm.gbs.rst.api.scenario.persistence.ForecastRunRepository;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
-import org.springframework.context.annotation.Lazy;
+import com.cmacgm.gbs.rst.api.scenario.persistence.SimulationRunRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.ShiftRequest;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.AssumptionRequest;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.AssumptionView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.CreateScenarioRequest;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.ScenarioView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.ShiftView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.UpdateScenarioRequest;
 
 /**
  * Scenario CRUD and Official promotion for Supervisor Exercises.
@@ -30,40 +37,44 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ScenarioService {
 
-    private final ExerciseService exercises;
+    private final ExerciseAccess exercises;
+    private final RstExerciseRepository exerciseRepository;
     private final ScenarioRepository scenarios;
-    private final OfficialPackageService officialPackages;
+    private final ForecastRunRepository forecastRuns;
+    private final SimulationRunRepository simulationRuns;
+    private final CycleTimeBaselineRepository baselines;
     private final Clock clock;
 
     /**
      * Creates the Scenario service.
-     *
-     * @param exercises Exercise service
-     * @param scenarios scenario repository
-     * @param officialPackages Official package service (lazy to avoid cycle)
-     * @param clock clock
      */
     public ScenarioService(
-            ExerciseService exercises,
+            ExerciseAccess exercises,
+            RstExerciseRepository exerciseRepository,
             ScenarioRepository scenarios,
-            @Lazy OfficialPackageService officialPackages,
+            ForecastRunRepository forecastRuns,
+            SimulationRunRepository simulationRuns,
+            CycleTimeBaselineRepository baselines,
             Clock clock) {
         this.exercises = exercises;
+        this.exerciseRepository = exerciseRepository;
         this.scenarios = scenarios;
-        this.officialPackages = officialPackages;
+        this.forecastRuns = forecastRuns;
+        this.simulationRuns = simulationRuns;
+        this.baselines = baselines;
         this.clock = clock;
     }
 
     /**
      * Lists non-deleted scenarios for an Exercise.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @return scenarios
      */
     @Transactional(readOnly = true)
-    public List<ScenarioView> list(UUID ownerId, UUID exerciseId) {
-        exercises.requireReadable(ownerId, exerciseId);
+    public List<ScenarioView> list(String ownerCcgid, UUID exerciseId) {
+        exercises.requireReadable(ownerCcgid, exerciseId);
         return scenarios.findByExerciseIdAndDeletedAtIsNullOrderByCreatedAtAsc(exerciseId).stream()
                 .map(this::toView)
                 .toList();
@@ -72,14 +83,14 @@ public class ScenarioService {
     /**
      * Creates a DRAFT scenario.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param request create payload
      * @return created scenario
      */
     @Transactional
-    public ScenarioView create(UUID ownerId, UUID exerciseId, CreateScenarioRequest request) {
-        RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
+    public ScenarioView create(String ownerCcgid, UUID exerciseId, CreateScenarioRequest request) {
+        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
         Instant now = clock.instant();
         String scenarioCode = resolveScenarioCode(exerciseId, request.scenarioCode());
@@ -89,9 +100,9 @@ public class ScenarioService {
             name = name.replace(request.scenarioCode(), scenarioCode);
         }
         Scenario scenario = Scenario.createDraft(
-                exerciseId, scenarioCode, name, request.description(), ownerId, now);
+                exerciseId, scenarioCode, name, request.description(), ownerCcgid, now);
         if (request.assumptions() != null && !request.assumptions().isEmpty()) {
-            scenario.replaceAssumptions(toAssumptions(request.assumptions(), ownerId, now), ownerId, now);
+            scenario.replaceAssumptions(toAssumptions(request.assumptions(), ownerCcgid, now), ownerCcgid, now);
         }
         return toView(scenarios.save(scenario));
     }
@@ -127,21 +138,21 @@ public class ScenarioService {
     /**
      * Returns a scenario detail.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param scenarioId Scenario id
      * @return scenario
      */
     @Transactional(readOnly = true)
-    public ScenarioView detail(UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        exercises.requireReadable(ownerId, exerciseId);
+    public ScenarioView detail(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
+        exercises.requireReadable(ownerCcgid, exerciseId);
         return toView(requireScenario(exerciseId, scenarioId));
     }
 
     /**
      * Updates a DRAFT scenario header and assumptions.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param scenarioId Scenario id
      * @param request update payload
@@ -149,15 +160,15 @@ public class ScenarioService {
      */
     @Transactional
     public ScenarioView update(
-            UUID ownerId, UUID exerciseId, UUID scenarioId, UpdateScenarioRequest request) {
-        RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
+            String ownerCcgid, UUID exerciseId, UUID scenarioId, UpdateScenarioRequest request) {
+        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
         Scenario scenario = requireScenario(exerciseId, scenarioId);
         requireDraft(scenario);
         Instant now = clock.instant();
-        scenario.updateDraft(request.name(), request.description(), ownerId, now);
+        scenario.updateDraft(request.name(), request.description(), ownerCcgid, now);
         if (request.assumptions() != null) {
-            scenario.replaceAssumptions(toAssumptions(request.assumptions(), ownerId, now), ownerId, now);
+            scenario.replaceAssumptions(toAssumptions(request.assumptions(), ownerCcgid, now), ownerCcgid, now);
         }
         return toView(scenarios.save(scenario));
     }
@@ -167,47 +178,107 @@ public class ScenarioService {
      */
     @Transactional
     public ScenarioView replaceShifts(
-            UUID ownerId,
+            String ownerCcgid,
             UUID exerciseId,
             UUID scenarioId,
-            List<com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.ShiftRequest> requests) {
-        RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
+            List<ShiftRequest> requests) {
+        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
         Scenario scenario = requireScenario(exerciseId, scenarioId);
         requireDraft(scenario);
         Instant now = clock.instant();
-        scenario.replaceShifts(toShifts(requests, ownerId, now), ownerId, now);
+        scenario.replaceShifts(toShifts(requests, ownerCcgid, now), ownerCcgid, now);
         return toView(scenarios.save(scenario));
     }
 
     /**
      * Soft-deletes a DRAFT scenario.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param scenarioId Scenario id
      */
     @Transactional
-    public void delete(UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
+    public void delete(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
+        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
         Scenario scenario = requireScenario(exerciseId, scenarioId);
         requireDraft(scenario);
-        scenario.softDelete(ownerId, clock.instant());
+        scenario.softDelete(ownerCcgid, clock.instant());
         scenarios.save(scenario);
     }
 
     /**
-     * Marks a DRAFT scenario Official and creates an Official Package.
+     * Marks a DRAFT scenario Official and points the Exercise at it (no package snapshot).
      *
-     * @param ownerId Supervisor id
-     * @param exerciseId Exercise id
-     * @param scenarioId Scenario id
-     * @return official scenario after package creation
+     * <p>Requires editable Exercise, DRAFT scenario, active CT baseline, and ACCEPTED
+     * forecast / monthly sizing / slot runs. Supersedes any previous Official scenario.
      */
     @Transactional
-    public ScenarioView markOfficial(UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        return officialPackages.saveOfficial(ownerId, exerciseId, scenarioId);
+    public ScenarioView markOfficial(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
+        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
+        exercises.requireEditable(exercise);
+        Scenario scenario = requireScenario(exerciseId, scenarioId);
+        requireDraft(scenario);
+
+        baselines.findByExerciseIdAndActiveTrue(exerciseId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "cycle-time-required",
+                        "An active Cycle Time baseline is required before Official."));
+        forecastRuns
+                .findFirstByScenarioIdAndStatusOrderByRunNoDesc(scenarioId, "ACCEPTED")
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "forecast-required",
+                        "An ACCEPTED forecast run is required before Official."));
+        simulationRuns
+                .findFirstByScenarioIdAndRunTypeAndStatusOrderByRunNoDesc(
+                        scenarioId, "MONTHLY_SIZING", "ACCEPTED")
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "monthly-sizing-required",
+                        "An ACCEPTED monthly sizing run is required before Official."));
+        simulationRuns
+                .findFirstByScenarioIdAndRunTypeAndStatusOrderByRunNoDesc(
+                        scenarioId, "SLOT", "ACCEPTED")
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "slot-simulation-required",
+                        "An ACCEPTED slot simulation run is required before Official."));
+
+        Instant now = clock.instant();
+        scenarios.findByExerciseIdAndStatusAndDeletedAtIsNull(exerciseId, "OFFICIAL")
+                .ifPresent(previous -> {
+                    if (!previous.getId().equals(scenarioId)) {
+                        previous.markSuperseded(ownerCcgid, now);
+                        scenarios.save(previous);
+                    }
+                });
+
+        scenario.markOfficial(ownerCcgid, now);
+        scenarios.save(scenario);
+        exercise.setOfficialScenario(scenario.getId(), ownerCcgid, now);
+        exerciseRepository.save(exercise);
+
+        return toView(scenario);
+    }
+
+    /**
+     * Ensures the Exercise has an Official Scenario selected (Submit gate).
+     *
+     * @param exercise Exercise aggregate
+     * @return official scenario id
+     */
+    public UUID requireOfficialScenarioId(RstExercise exercise) {
+        UUID scenarioId = exercise.getOfficialScenarioId();
+        if (scenarioId == null) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "official-scenario-required",
+                    "An Official Scenario is required before Submit.");
+        }
+        return scenarioId;
     }
 
     private Scenario requireScenario(UUID exerciseId, UUID scenarioId) {
@@ -226,7 +297,7 @@ public class ScenarioService {
     }
 
     private List<ScenarioAssumption> toAssumptions(
-            List<AssumptionRequest> requests, UUID actorUserId, Instant now) {
+            List<AssumptionRequest> requests, String actorCcgid, Instant now) {
         List<ScenarioAssumption> assumptions = new ArrayList<>();
         for (AssumptionRequest request : requests) {
             int filled = 0;
@@ -247,13 +318,13 @@ public class ScenarioService {
             }
             if (request.numericValue() != null) {
                 assumptions.add(ScenarioAssumption.numeric(
-                        request.parameterCode(), request.numericValue(), request.unit(), actorUserId, now));
+                        request.parameterCode(), request.numericValue(), request.unit(), actorCcgid, now));
             } else if (request.textValue() != null) {
                 assumptions.add(ScenarioAssumption.text(
-                        request.parameterCode(), request.textValue(), actorUserId, now));
+                        request.parameterCode(), request.textValue(), actorCcgid, now));
             } else {
                 assumptions.add(ScenarioAssumption.bool(
-                        request.parameterCode(), request.booleanValue(), actorUserId, now));
+                        request.parameterCode(), request.booleanValue(), actorCcgid, now));
             }
         }
         return assumptions;
@@ -284,8 +355,8 @@ public class ScenarioService {
     }
 
     List<ScenarioShift> toShifts(
-            List<com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.ShiftRequest> requests,
-            UUID actorUserId,
+            List<ShiftRequest> requests,
+            String actorCcgid,
             Instant now) {
         List<ScenarioShift> shifts = new ArrayList<>();
         if (requests == null) {
@@ -298,66 +369,9 @@ public class ScenarioService {
                     request.durationMinutes(),
                     request.headcount(),
                     request.worksOnWeekend(),
-                    actorUserId,
+                    actorCcgid,
                     now));
         }
         return shifts;
-    }
-
-    /** Scenario response. */
-    public record ScenarioView(
-            UUID id,
-            String scenarioCode,
-            String name,
-            String description,
-            String status,
-            Instant officialAt,
-            long version,
-            List<AssumptionView> assumptions,
-            List<ShiftView> shifts) {
-    }
-
-    /** Slot Simulation shift input on a Scenario. */
-    public record ShiftView(
-            UUID id,
-            short shiftNo,
-            LocalTime startTime,
-            BigDecimal durationMinutes,
-            BigDecimal headcount,
-            boolean worksOnWeekend) {
-    }
-
-    /** Assumption response. */
-    public record AssumptionView(
-            UUID id,
-            String parameterCode,
-            BigDecimal numericValue,
-            String textValue,
-            Boolean booleanValue,
-            String unit) {
-    }
-
-    /** Create scenario payload. */
-    public record CreateScenarioRequest(
-            @NotBlank String scenarioCode,
-            @NotBlank String name,
-            String description,
-            List<AssumptionRequest> assumptions) {
-    }
-
-    /** Update scenario payload. */
-    public record UpdateScenarioRequest(
-            @NotBlank String name,
-            String description,
-            List<AssumptionRequest> assumptions) {
-    }
-
-    /** Assumption write payload. */
-    public record AssumptionRequest(
-            @NotBlank String parameterCode,
-            BigDecimal numericValue,
-            String textValue,
-            Boolean booleanValue,
-            String unit) {
     }
 }

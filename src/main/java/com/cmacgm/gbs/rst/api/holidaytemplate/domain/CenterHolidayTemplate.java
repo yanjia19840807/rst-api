@@ -42,25 +42,25 @@ public class CenterHolidayTemplate {
     private Instant publishedAt;
 
     @Column(name = "published_by")
-    private UUID publishedBy;
+    private String publishedBy;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     @Column(name = "updated_by")
-    private UUID updatedBy;
+    private String updatedBy;
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
     @Column(name = "deleted_by")
-    private UUID deletedBy;
+    private String deletedBy;
 
     @Version
     @Column(name = "row_version")
@@ -77,7 +77,7 @@ public class CenterHolidayTemplate {
             short year,
             String defaultWeekendCode,
             String sourceNote,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         CenterHolidayTemplate template = new CenterHolidayTemplate();
         template.id = UUID.randomUUID();
@@ -90,42 +90,42 @@ public class CenterHolidayTemplate {
         template.version = 0;
         template.sourceNote = sourceNote;
         template.createdAt = now;
-        template.createdBy = actorUserId;
+        template.createdBy = actorCcgid;
         template.updatedAt = now;
-        template.updatedBy = actorUserId;
+        template.updatedBy = actorCcgid;
         return template;
     }
 
     public void updateHeader(
             String defaultWeekendCode,
             String sourceNote,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         ensureEditable();
         if (defaultWeekendCode != null && !defaultWeekendCode.isBlank()) {
             this.defaultWeekendCode = defaultWeekendCode;
         }
         this.sourceNote = sourceNote;
-        touch(actorUserId, now);
+        touch(actorCcgid, now);
     }
 
-    public void markPublished(UUID actorUserId, Instant now) {
+    public void markPublished(String actorCcgid, Instant now) {
         this.status = STATUS_PUBLISHED;
         this.version = this.version + 1;
         this.publishedAt = now;
-        this.publishedBy = actorUserId;
-        touch(actorUserId, now);
+        this.publishedBy = actorCcgid;
+        touch(actorCcgid, now);
     }
 
-    public void reopenDraft(UUID actorUserId, Instant now) {
+    public void reopenDraft(String actorCcgid, Instant now) {
         this.status = STATUS_DRAFT;
-        touch(actorUserId, now);
+        touch(actorCcgid, now);
     }
 
-    public void softDelete(UUID actorUserId, Instant now) {
+    public void softDelete(String actorCcgid, Instant now) {
         this.deletedAt = now;
-        this.deletedBy = actorUserId;
-        touch(actorUserId, now);
+        this.deletedBy = actorCcgid;
+        touch(actorCcgid, now);
     }
 
     public void ensureEditable() {
@@ -134,9 +134,9 @@ public class CenterHolidayTemplate {
         }
     }
 
-    private void touch(UUID actorUserId, Instant now) {
+    private void touch(String actorCcgid, Instant now) {
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     public UUID getId() { return id; }
@@ -147,7 +147,7 @@ public class CenterHolidayTemplate {
     public int getVersion() { return version; }
     public String getSourceNote() { return sourceNote; }
     public Instant getPublishedAt() { return publishedAt; }
-    public UUID getPublishedBy() { return publishedBy; }
+    public String getPublishedBy() { return publishedBy; }
     public Instant getDeletedAt() { return deletedAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 }

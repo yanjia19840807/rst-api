@@ -113,6 +113,44 @@ public class TimesheetReadService {
                 .toList();
     }
 
+    /**
+     * Resolves a display name for a CCGID from the ACTIVE Timesheet snapshot.
+     * Tries supervisor, employee, senior manager, then domain head; falls back to the ccgid.
+     *
+     * @param ccgid actor / occupant CCGID
+     * @return display name or the ccgid itself when unknown
+     */
+    @Transactional(readOnly = true)
+    public String displayNameByCcgid(String ccgid) {
+        if (ccgid == null || ccgid.isBlank()) {
+            return null;
+        }
+        String trimmed = ccgid.trim();
+        String name = firstName(snapshotRows.findSupervisorNamesByCcgid(trimmed));
+        if (name == null) {
+            name = firstName(snapshotRows.findEmployeeNamesByCcgid(trimmed));
+        }
+        if (name == null) {
+            name = firstName(snapshotRows.findSrManagerNamesByCcgid(trimmed));
+        }
+        if (name == null) {
+            name = firstName(snapshotRows.findDomainHeadNamesByCcgid(trimmed));
+        }
+        return name == null ? trimmed : name;
+    }
+
+    private static String firstName(List<String> names) {
+        if (names == null || names.isEmpty()) {
+            return null;
+        }
+        for (String name : names) {
+            if (name != null && !name.isBlank()) {
+                return name.trim();
+            }
+        }
+        return null;
+    }
+
     public record ActiveSnapshot(UUID id, LocalDate syncDate, int rowCount) {
     }
 

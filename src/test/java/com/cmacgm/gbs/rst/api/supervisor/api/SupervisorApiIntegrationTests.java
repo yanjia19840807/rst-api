@@ -27,8 +27,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @ActiveProfiles("test")
 class SupervisorApiIntegrationTests {
 
-    private static final UUID SUPERVISOR_ID =
-            UUID.fromString("00000000-0000-0000-0000-000000000002");
+    private static final String SUPERVISOR_CCGID = "SUPERVISOR001";
     private static final UUID ACTIVE_RUN_ID =
             UUID.fromString("40000000-0000-0000-0000-000000000010");
     private static final String SUPERVISOR_POSITION_ID = "POS-SUP-001";
@@ -50,8 +49,6 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update("delete from workflow_instance");
         jdbcTemplate.update("delete from submission_scope");
         jdbcTemplate.update("delete from submission");
-        jdbcTemplate.update("delete from official_package_section");
-        jdbcTemplate.update("delete from official_package");
         jdbcTemplate.update("delete from validation_result");
         jdbcTemplate.update("delete from slot_simulation_result");
         jdbcTemplate.update("delete from daily_simulation_result");
@@ -84,21 +81,7 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update("delete from toolkit");
         jdbcTemplate.update("delete from timesheet_snapshot_row");
         jdbcTemplate.update("delete from timesheet_sync_run");
-        jdbcTemplate.update("delete from app_user");
 
-        jdbcTemplate.update(
-                """
-                insert into app_user
-                    (id, ccgid, display_name, email, active, created_at, updated_at)
-                values (?, ?, ?, ?, ?, ?, ?)
-                """,
-                SUPERVISOR_ID,
-                "SUPERVISOR001",
-                "Test Supervisor",
-                "supervisor@example.com",
-                true,
-                NOW,
-                NOW);
         jdbcTemplate.update(
                 """
                 insert into timesheet_sync_run
@@ -393,40 +376,27 @@ class SupervisorApiIntegrationTests {
     void linksCompletedTmsSessionsInConfiguredPeriodOnCreate() throws Exception {
         String toolkitId = JsonPath.read(createToolkit("TMS Population Toolkit"), "$.id");
         UUID toolkitUuid = UUID.fromString(toolkitId);
-        UUID agentId = UUID.fromString("00000000-0000-0000-0000-0000000000aa");
+        String agentCcgid = "AGENT-TMS-001";
         UUID inRangeId = UUID.fromString("60000000-0000-0000-0000-000000000001");
         UUID outOfRangeId = UUID.fromString("60000000-0000-0000-0000-000000000002");
         UUID discardedId = UUID.fromString("60000000-0000-0000-0000-000000000003");
 
-        jdbcTemplate.update(
-                """
-                insert into app_user
-                    (id, ccgid, display_name, email, active, created_at, updated_at)
-                values (?, ?, ?, ?, ?, ?, ?)
-                """,
-                agentId,
-                "AGENT-TMS-001",
-                "TMS Agent",
-                "tms-agent@example.com",
-                true,
-                NOW,
-                NOW);
         insertCompletedTmsSession(
                 inRangeId,
                 "TMS-IN-RANGE",
-                agentId,
+                agentCcgid,
                 toolkitUuid,
                 Instant.parse("2026-08-15T10:00:00Z"));
         insertCompletedTmsSession(
                 outOfRangeId,
                 "TMS-OUT-RANGE",
-                agentId,
+                agentCcgid,
                 toolkitUuid,
                 Instant.parse("2026-07-15T10:00:00Z"));
         insertTmsSession(
                 discardedId,
                 "TMS-DISCARDED",
-                agentId,
+                agentCcgid,
                 toolkitUuid,
                 "DISCARDED",
                 Instant.parse("2026-08-16T10:00:00Z"));
@@ -521,9 +491,9 @@ class SupervisorApiIntegrationTests {
                  where toolkit_id = ? and deleted_at is null
                 """,
                 NOW,
-                SUPERVISOR_ID,
+                SUPERVISOR_CCGID,
                 NOW,
-                SUPERVISOR_ID,
+                SUPERVISOR_CCGID,
                 UUID.fromString(toolkitId));
         jdbcTemplate.update(
                 """
@@ -535,9 +505,9 @@ class SupervisorApiIntegrationTests {
                 UUID.randomUUID(),
                 UUID.fromString(toolkitId),
                 NOW,
-                SUPERVISOR_ID,
+                SUPERVISOR_CCGID,
                 NOW,
-                SUPERVISOR_ID);
+                SUPERVISOR_CCGID);
 
         mockMvc.perform(post("/api/v1/supervisor/exercises")
                         .header("X-Dev-Role", "SUPERVISOR")
@@ -585,7 +555,7 @@ class SupervisorApiIntegrationTests {
                 insert into toolkit
                     (id, name, supervisor_position_id, center, domain, pl1, pl2,
                      pl3_name, primary_pl3_code, combine_subtasks_time,
-                     owner_user_id, created_at, updated_at, version)
+                     owner_ccgid, created_at, updated_at, version)
                 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 toolkitWithoutKpi,
@@ -598,7 +568,7 @@ class SupervisorApiIntegrationTests {
                 "Bank Reconciliation",
                 PL3_CODE,
                 false,
-                SUPERVISOR_ID,
+                SUPERVISOR_CCGID,
                 NOW,
                 NOW,
                 0);
@@ -650,7 +620,7 @@ class SupervisorApiIntegrationTests {
     private void seedArchivedAssociatedData(UUID exerciseId) {
         UUID supportItemId = UUID.randomUUID();
         jdbcTemplate.update(
-                "update rst_exercise set workflow_status = 'ARCHIVED', validated_at = ? where id = ?",
+                "update rst_exercise set workflow_status = 'APPROVED', validated_at = ? where id = ?",
                 NOW,
                 exerciseId);
         jdbcTemplate.update(
@@ -667,9 +637,9 @@ class SupervisorApiIntegrationTests {
                 exerciseId,
                 supportItemId,
                 NOW,
-                SUPERVISOR_ID,
+                SUPERVISOR_CCGID,
                 NOW,
-                SUPERVISOR_ID);
+                SUPERVISOR_CCGID);
         jdbcTemplate.update(
                 """
                 insert into exercise_shift
@@ -680,9 +650,9 @@ class SupervisorApiIntegrationTests {
                 UUID.randomUUID(),
                 exerciseId,
                 NOW,
-                SUPERVISOR_ID,
+                SUPERVISOR_CCGID,
                 NOW,
-                SUPERVISOR_ID);
+                SUPERVISOR_CCGID);
         jdbcTemplate.update(
                 """
                 insert into cycle_time_baseline
@@ -693,7 +663,7 @@ class SupervisorApiIntegrationTests {
                 UUID.randomUUID(),
                 exerciseId,
                 NOW,
-                SUPERVISOR_ID);
+                SUPERVISOR_CCGID);
     }
 
     private String createToolkitRequest(String name, boolean withKpi) {
@@ -746,27 +716,27 @@ class SupervisorApiIntegrationTests {
     }
 
     private void insertCompletedTmsSession(
-            UUID id, String sessionNo, UUID agentId, UUID toolkitId, Instant startedAt) {
-        insertTmsSession(id, sessionNo, agentId, toolkitId, "COMPLETED", startedAt);
+            UUID id, String sessionNo, String agentCcgid, UUID toolkitId, Instant startedAt) {
+        insertTmsSession(id, sessionNo, agentCcgid, toolkitId, "COMPLETED", startedAt);
     }
 
     private void insertTmsSession(
             UUID id,
             String sessionNo,
-            UUID agentId,
+            String agentCcgid,
             UUID toolkitId,
             String status,
             Instant startedAt) {
         jdbcTemplate.update(
                 """
                 insert into tms_session
-                    (id, session_no, agent_user_id, toolkit_id, processed_volume,
+                    (id, session_no, agent_ccgid, agent_name_snapshot, toolkit_id, processed_volume,
                      reference, remarks, status, started_at, ended_at,
                      net_duration_seconds, gross_duration_seconds, pause_duration_seconds,
                      toolkit_name_snapshot, subtask_name_snapshot, domain_snapshot,
                      pl1_snapshot, pl2_snapshot, pl3_code_snapshot, pl3_name_snapshot,
                      created_at, updated_at, version)
-                values (?, ?, ?, ?, 10, 'REF', '', ?, ?, ?,
+                values (?, ?, ?, ?, ?, 10, 'REF', '', ?, ?, ?,
                         600, 600, 0,
                         'Bank Rec', 'Manual match', 'Finance',
                         'Accounting', 'Record to Report', ?, 'Bank Reconciliation',
@@ -774,7 +744,8 @@ class SupervisorApiIntegrationTests {
                 """,
                 id,
                 sessionNo,
-                agentId,
+                agentCcgid,
+                "TMS Agent",
                 toolkitId,
                 status,
                 startedAt,

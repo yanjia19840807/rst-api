@@ -12,7 +12,6 @@ import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
-import com.cmacgm.gbs.rst.api.identity.persistence.AppUserRepository;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.TeamAgent;
 import com.cmacgm.gbs.rst.api.tms.api.dto.TmsSessionResponse;
@@ -36,35 +35,32 @@ public class TmsSessionQueryService {
     private final TmsSessionRepository sessionRepository;
     private final ToolkitService toolkits;
     private final TimesheetReadService timesheet;
-    private final AppUserRepository users;
     private final Clock clock;
 
     public TmsSessionQueryService(
             TmsSessionRepository sessionRepository,
             ToolkitService toolkits,
             TimesheetReadService timesheet,
-            AppUserRepository users,
             Clock clock) {
         this.sessionRepository = sessionRepository;
         this.toolkits = toolkits;
         this.timesheet = timesheet;
-        this.users = users;
         this.clock = clock;
     }
 
     @Transactional(readOnly = true)
-    public TmsSessionResponse current(UUID userId) {
+    public TmsSessionResponse current(String agentCcgid) {
         var now = clock.instant();
-        return sessionRepository.findFirstByUserIdAndStatusIn(
-                        userId, Set.of(TmsSessionStatus.RUNNING, TmsSessionStatus.PAUSED))
+        return sessionRepository.findFirstByAgentCcgidAndStatusIn(
+                        agentCcgid, Set.of(TmsSessionStatus.RUNNING, TmsSessionStatus.PAUSED))
                 .map(session -> TmsSessionResponse.from(session, now))
                 .orElse(null);
     }
 
     @Transactional(readOnly = true)
-    public TmsSessionResponse get(UUID userId, String sessionNo) {
+    public TmsSessionResponse get(String agentCcgid, String sessionNo) {
         var now = clock.instant();
-        return sessionRepository.findBySessionNoAndUserId(sessionNo, userId)
+        return sessionRepository.findBySessionNoAndAgentCcgid(sessionNo, agentCcgid)
                 .map(session -> TmsSessionResponse.from(session, now))
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
@@ -98,7 +94,7 @@ public class TmsSessionQueryService {
 
     @Transactional(readOnly = true)
     public PageResponse<TmsSessionResponse> sessions(
-            UUID userId,
+            String agentCcgid,
             String status,
             String sessionNo,
             String reference,
@@ -109,7 +105,7 @@ public class TmsSessionQueryService {
             int pageSize) {
         return pageSessions(
                 new Filter(
-                        userId,
+                        agentCcgid,
                         null,
                         null,
                         null,
@@ -125,20 +121,6 @@ public class TmsSessionQueryService {
 
     /**
      * Lists completed/filtered TMS sessions for toolkits owned by the Supervisor.
-     *
-     * @param supervisorCcgid supervisor CCGID
-     * @param agentCcgid optional team agent filter
-     * @param toolkitId optional toolkit filter (must be in scope)
-     * @param pl3Code optional PL3 code filter
-     * @param status optional status
-     * @param sessionNo optional session number contains
-     * @param reference optional reference contains
-     * @param query optional sessionNo∪reference contains
-     * @param dateFrom optional start date from
-     * @param dateTo optional start date to
-     * @param page 1-based page
-     * @param pageSize page size
-     * @return paged sessions
      */
     @Transactional(readOnly = true)
     public PageResponse<TmsSessionResponse> sessionsForSupervisor(
@@ -162,7 +144,7 @@ public class TmsSessionQueryService {
                     "The Toolkit is outside the current Timesheet scope.");
         }
 
-        UUID agentUserId = null;
+        String filterAgentCcgid = null;
         if (agentCcgid != null && !agentCcgid.isBlank()) {
             String trimmed = agentCcgid.trim();
             boolean onTeam = timesheet.teamAgents(supervisorCcgid).stream()
@@ -173,17 +155,12 @@ public class TmsSessionQueryService {
                         "agent-out-of-scope",
                         "The Agent is outside the current Timesheet team.");
             }
-            agentUserId = users.findByCcgidAndActiveTrue(trimmed)
-                    .map(user -> user.getId())
-                    .orElse(null);
-            if (agentUserId == null) {
-                return emptyPage(page, pageSize);
-            }
+            filterAgentCcgid = trimmed;
         }
 
         return pageSessions(
                 new Filter(
-                        agentUserId,
+                        filterAgentCcgid,
                         scopedToolkitIds,
                         toolkitId,
                         pl3Code,
@@ -199,9 +176,6 @@ public class TmsSessionQueryService {
 
     /**
      * Lists team agents under the Supervisor for TMS filters.
-     *
-     * @param supervisorCcgid supervisor CCGID
-     * @return team agents
      */
     @Transactional(readOnly = true)
     public List<TeamAgent> teamAgents(String supervisorCcgid) {
@@ -209,22 +183,22 @@ public class TmsSessionQueryService {
     }
 
     @Transactional(readOnly = true)
-    public TmsSummaryResponse summary(UUID userId) {
+    public TmsSummaryResponse summary(String agentCcgid) {
         LocalDate today = LocalDate.now(clock.withZone(ZoneOffset.UTC));
         var from = today.atStartOfDay(ZoneOffset.UTC).toInstant();
         var to = today.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
         return new TmsSummaryResponse(
-                sessionRepository.countByUserIdAndStatusAndEndedAtGreaterThanEqualAndEndedAtLessThan(
-                        userId,
+                sessionRepository.countByAgentCcgidAndStatusAndEndedAtGreaterThanEqualAndEndedAtLessThan(
+                        agentCcgid,
                         TmsSessionStatus.COMPLETED,
                         from,
                         to),
                 Optional.ofNullable(sessionRepository.sumVolume(
-                        userId,
+                        agentCcgid,
                         TmsSessionStatus.COMPLETED,
                         from,
                         to)).orElse(BigDecimal.ZERO),
-                sessionRepository.countByUserIdAndStatus(userId, TmsSessionStatus.PAUSED));
+                sessionRepository.countByAgentCcgidAndStatus(agentCcgid, TmsSessionStatus.PAUSED));
     }
 
     private PageResponse<TmsSessionResponse> pageSessions(Filter filter, int page, int pageSize) {

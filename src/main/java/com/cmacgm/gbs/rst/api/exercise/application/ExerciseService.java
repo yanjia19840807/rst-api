@@ -20,12 +20,6 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
-
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseCalendar;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
@@ -35,16 +29,23 @@ import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSuppo
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.CreateExerciseRequest;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.CreateExerciseResult;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseKpiView;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseListQuery;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseListView;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseResponse;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseSnapshot;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseSubtaskView;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseToolkitView;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateExercisePeriodsRequest;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateExercisePeriodsResult;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService.ApplyTemplatesResult;
-import com.cmacgm.gbs.rst.api.identity.domain.AppUser;
-import com.cmacgm.gbs.rst.api.identity.persistence.AppUserRepository;
-import com.cmacgm.gbs.rst.api.official.domain.OfficialPackage;
-import com.cmacgm.gbs.rst.api.official.persistence.OfficialPackageRepository;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.scenario.domain.ScenarioAssumption;
@@ -53,7 +54,6 @@ import com.cmacgm.gbs.rst.api.submission.domain.Submission;
 import com.cmacgm.gbs.rst.api.submission.persistence.SubmissionRepository;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
-import com.cmacgm.gbs.rst.api.toolkit.persistence.ToolkitRepository;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
 import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowAction;
 import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowInstance;
@@ -71,19 +71,18 @@ import org.springframework.transaction.annotation.Transactional;
 public class ExerciseService {
 
     private final RstExerciseRepository exercises;
-    private final ToolkitRepository toolkits;
+    private final ExerciseAccess access;
+    private final ExerciseFreezeResolver freezeResolver;
     private final TimesheetReadService timesheet;
     private final TimesheetSyncRunRepository syncRuns;
     private final ExerciseTeamSetupRepository teamSetups;
     private final ExerciseCalendarRepository calendars;
     private final ExerciseInitializationService initialization;
     private final HolidayTemplateService holidayTemplates;
-    private final OfficialPackageRepository officialPackages;
     private final ScenarioRepository scenarios;
     private final ExerciseProductionSupportItemRepository supportItems;
     private final SubmissionRepository submissions;
     private final WorkflowInstanceRepository workflows;
-    private final AppUserRepository users;
     private final WorkflowRouter workflowRouter;
     private final Clock clock;
 
@@ -92,35 +91,33 @@ public class ExerciseService {
      */
     public ExerciseService(
             RstExerciseRepository exercises,
-            ToolkitRepository toolkits,
+            ExerciseAccess access,
+            ExerciseFreezeResolver freezeResolver,
             TimesheetReadService timesheet,
             TimesheetSyncRunRepository syncRuns,
             ExerciseTeamSetupRepository teamSetups,
             ExerciseCalendarRepository calendars,
             ExerciseInitializationService initialization,
             HolidayTemplateService holidayTemplates,
-            OfficialPackageRepository officialPackages,
             ScenarioRepository scenarios,
             ExerciseProductionSupportItemRepository supportItems,
             SubmissionRepository submissions,
             WorkflowInstanceRepository workflows,
-            AppUserRepository users,
             WorkflowRouter workflowRouter,
             Clock clock) {
         this.exercises = exercises;
-        this.toolkits = toolkits;
+        this.access = access;
+        this.freezeResolver = freezeResolver;
         this.timesheet = timesheet;
         this.syncRuns = syncRuns;
         this.teamSetups = teamSetups;
         this.calendars = calendars;
         this.initialization = initialization;
         this.holidayTemplates = holidayTemplates;
-        this.officialPackages = officialPackages;
         this.scenarios = scenarios;
         this.supportItems = supportItems;
         this.submissions = submissions;
         this.workflows = workflows;
-        this.users = users;
         this.workflowRouter = workflowRouter;
         this.clock = clock;
     }
@@ -129,16 +126,15 @@ public class ExerciseService {
      * Creates an Exercise, freezes Toolkit/KPI snapshots, and seeds Associated Data
      * (archive-first copy + multi-year holiday templates).
      *
-     * @param ownerId Supervisor user id
-     * @param ccgid Supervisor CCGID
+     * @param ownerCcgid Supervisor CCGID
      * @param request create payload
      * @return created Exercise response with initialization notices
      */
     @Transactional(isolation = Isolation.REPEATABLE_READ)
-    public CreateExerciseResult create(UUID ownerId, String ccgid, CreateExercise request) {
+    public CreateExerciseResult create(String ownerCcgid, CreateExerciseRequest request) {
         // Resolve under repeatable-read so an ACTIVE switch cannot mix snapshots.
         validatePeriods(request.sizingMonth(), request.tmsFrom(), request.tmsTo());
-        ExerciseFreeze freeze = ExerciseFreeze.resolve(ccgid, request.toolkitId(), toolkits, timesheet);
+        ExerciseFreeze freeze = freezeResolver.resolve(ownerCcgid, request.toolkitId());
 
         Instant now = clock.instant();
         UUID exerciseId = UUID.randomUUID();
@@ -149,7 +145,7 @@ public class ExerciseService {
                 exerciseId,
                 code,
                 freeze.toolkit().getId(),
-                ownerId,
+                ownerCcgid,
                 MonthKeys.parseMonthStart(request.sizingMonth()),
                 request.slotStartDate(),
                 request.slotWeeks(),
@@ -158,70 +154,70 @@ public class ExerciseService {
                 now);
         freeze.applyTo(exercise, now);
         exercise = exercises.saveAndFlush(exercise);
-        teamSetups.save(ExerciseTeamSetup.emptyShell(exerciseId, ownerId, now));
-        calendars.save(ExerciseCalendar.emptyShell(exerciseId, ownerId, now));
-        List<String> notices = new ArrayList<>(initialization.initialize(exercise, ownerId));
+        teamSetups.save(ExerciseTeamSetup.emptyShell(exerciseId, ownerCcgid, now));
+        calendars.save(ExerciseCalendar.emptyShell(exerciseId, ownerCcgid, now));
+        List<String> notices = new ArrayList<>(initialization.initialize(exercise, ownerCcgid));
         return new CreateExerciseResult(toResponse(exercise, null), notices);
     }
 
     /**
      * Lists non-deleted Exercises owned by the Supervisor, applying list filters on the server.
      *
-     * @param ownerId Supervisor user id
+     * @param ownerCcgid Supervisor CCGID
      * @param query tab and field filters
      * @return filtered rows and filter options for the current tab
      */
     @Transactional(readOnly = true)
-    public ExerciseListView list(UUID ownerId, ListQuery query) {
+    public ExerciseListView list(String ownerCcgid, ExerciseListQuery query) {
         List<RstExercise> owned =
-                exercises.findByOwnerUserIdAndDeletedAtIsNullOrderByUpdatedAtDescIdAsc(ownerId);
+                exercises.findByOwnerCcgidAndDeletedAtIsNullOrderByUpdatedAtDescIdAsc(ownerCcgid);
         Set<String> tabStatuses = tabStatuses(query.tab());
         List<RstExercise> inTab = owned.stream()
                 .filter(item -> tabStatuses.contains(item.getWorkflowStatus()))
                 .toList();
         Map<UUID, ReviewProgress> progress = reviewProgressFor(inTab);
-        List<Exercise> source = inTab.stream()
+        List<ExerciseResponse> source = inTab.stream()
                 .map(item -> toResponse(item, progress.get(item.getId())))
                 .toList();
-        List<Exercise> items = source.stream()
+        List<ExerciseResponse> items = source.stream()
                 .filter(item -> matches(item, query))
                 .toList();
         return new ExerciseListView(
                 items,
                 distinctNames(source, item -> item.snapshot().toolkit().name()),
                 distinctNames(source, item -> item.snapshot().toolkit().pl3Name()),
-                distinctNames(source, Exercise::currentReviewer));
+                distinctNames(source, ExerciseResponse::currentReviewer));
     }
 
     /**
      * Returns Exercise detail including Official/submit flags.
      *
-     * @param ownerId Supervisor user id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @return Exercise response
      */
     @Transactional(readOnly = true)
-    public Exercise detail(UUID ownerId, UUID exerciseId) {
-        RstExercise exercise = requireReadable(ownerId, exerciseId);
+    public ExerciseResponse detail(String ownerCcgid, UUID exerciseId) {
+        RstExercise exercise = access.requireReadable(ownerCcgid, exerciseId);
         return toResponse(exercise, reviewProgressFor(List.of(exercise)).get(exercise.getId()));
     }
 
     /**
      * Soft-deletes an unsubmitted Exercise.
      *
-     * @param ownerId Supervisor user id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      */
     @Transactional
-    public void softDelete(UUID ownerId, UUID exerciseId) {
-        RstExercise exercise = requireOwned(ownerId, exerciseId);
+    public void softDelete(String ownerCcgid, UUID exerciseId) {
+        RstExercise exercise = access.requireOwned(ownerCcgid, exerciseId);
         if (!exercise.canDelete()) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
                     "exercise-not-deletable",
                     "Only unsubmitted Exercises can be deleted.");
         }
-        exercise.softDelete(ownerId, clock.instant());
+        exercise.softDelete(ownerCcgid, clock.instant());
         exercises.save(exercise);
     }
 
@@ -229,16 +225,16 @@ public class ExerciseService {
      * Updates sizing / slot / TMS periods on an editable Exercise.
      * When the sizing year changes, re-applies Center holiday templates (CUSTOM rows kept).
      *
-     * @param ownerId Supervisor user id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param request period payload
      * @return updated Exercise and notices
      */
     @Transactional
     public UpdateExercisePeriodsResult updatePeriods(
-            UUID ownerId, UUID exerciseId, UpdateExercisePeriods request) {
+            String ownerCcgid, UUID exerciseId, UpdateExercisePeriodsRequest request) {
         validatePeriods(request.sizingMonth(), request.tmsFrom(), request.tmsTo());
-        RstExercise exercise = requireOwned(ownerId, exerciseId);
+        RstExercise exercise = access.requireOwned(ownerCcgid, exerciseId);
         if (!exercise.canEdit()) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
@@ -253,7 +249,7 @@ public class ExerciseService {
                 request.slotWeeks(),
                 request.tmsFrom(),
                 request.tmsTo(),
-                ownerId,
+                ownerCcgid,
                 clock.instant());
         exercises.saveAndFlush(exercise);
 
@@ -267,7 +263,7 @@ public class ExerciseService {
                     center,
                     nextYear,
                     ExerciseInitializationService.resolveHolidayYears(exercise),
-                    ownerId,
+                    ownerCcgid,
                     true);
             notices.add(
                     "Sizing year changed ("
@@ -277,9 +273,9 @@ public class ExerciseService {
                             + "). Holiday templates were re-applied.");
             notices.addAll(applied.notices());
         }
-        initialization.ensureTrainVolumeGrids(exercise, ownerId);
+        initialization.ensureTrainVolumeGrids(exercise, ownerCcgid);
         notices.add("Volume Input grids refreshed for the updated training windows.");
-        notices.add(initialization.syncTmsPopulation(exercise, ownerId));
+        notices.add(initialization.syncTmsPopulation(exercise, ownerCcgid));
         return new UpdateExercisePeriodsResult(toResponse(exercise, null), notices);
     }
 
@@ -298,80 +294,14 @@ public class ExerciseService {
         }
     }
 
-    /**
-     * Previews the Toolkit/Timesheet freeze without persisting an Exercise.
-     *
-     * @param ccgid Supervisor CCGID
-     * @param request create payload
-     * @return preview snapshot
-     */
-    @Transactional(readOnly = true)
-    public ExerciseSnapshot preview(String ccgid, CreateExercise request) {
-        validatePeriods(request.sizingMonth(), request.tmsFrom(), request.tmsTo());
-        return ExerciseFreeze.resolve(ccgid, request.toolkitId(), toolkits, timesheet).toSnapshot();
-    }
-
-    /**
-     * Loads a non-deleted Exercise owned by the given Supervisor.
-     *
-     * @param ownerId Supervisor user id
-     * @param exerciseId Exercise id
-     * @return Exercise aggregate
-     */
-    @Transactional(readOnly = true)
-    public RstExercise requireOwned(UUID ownerId, UUID exerciseId) {
-        return exercises.findByIdAndOwnerUserIdAndDeletedAtIsNull(exerciseId, ownerId)
-                .orElseThrow(() -> notFound("exercise-not-found", "The Exercise was not found."));
-    }
-
-    /**
-     * Loads a non-deleted Exercise the principal may read: the owner, or any user when the
-     * Exercise has (or had) a submission — so Approvers can open Submitted Exercise data.
-     *
-     * @param userId acting principal
-     * @param exerciseId Exercise id
-     * @return Exercise aggregate
-     */
-    @Transactional(readOnly = true)
-    public RstExercise requireReadable(UUID userId, UUID exerciseId) {
-        RstExercise exercise = exercises.findByIdAndDeletedAtIsNull(exerciseId)
-                .orElseThrow(() -> notFound("exercise-not-found", "The Exercise was not found."));
-        if (userId.equals(exercise.getOwnerUserId())) {
-            return exercise;
-        }
-        List<OfficialPackage> packages = officialPackages.findByExerciseId(exerciseId);
-        if (packages.isEmpty()) {
-            throw notFound("exercise-not-found", "The Exercise was not found.");
-        }
-        List<UUID> packageIds = packages.stream().map(OfficialPackage::getId).toList();
-        if (submissions.findByOfficialPackageIdIn(packageIds).isEmpty()) {
-            throw notFound("exercise-not-found", "The Exercise was not found.");
-        }
-        return exercise;
-    }
-
-    /**
-     * Ensures the Exercise is editable (IN_PROGRESS / RETURNED).
-     *
-     * @param exercise Exercise aggregate
-     */
-    public void requireEditable(RstExercise exercise) {
-        if (!exercise.canEdit()) {
-            throw new ApiException(
-                    HttpStatus.CONFLICT,
-                    "exercise-not-editable",
-                    "The Exercise is not editable in its current workflow status.");
-        }
-    }
-
     private static Set<String> tabStatuses(String tab) {
         if ("ARCHIVED".equalsIgnoreCase(tab)) {
-            return Set.of("VALIDATED", "ARCHIVED");
+            return Set.of("APPROVED", "REJECTED");
         }
         return Set.of("IN_PROGRESS", "RETURNED", "UNDER_REVIEW");
     }
 
-    private static boolean matches(Exercise item, ListQuery query) {
+    private static boolean matches(ExerciseResponse item, ExerciseListQuery query) {
         if (hasText(query.exerciseCode())) {
             String code = item.exerciseCode() == null ? "" : item.exerciseCode();
             if (!code.toLowerCase(Locale.ROOT)
@@ -430,7 +360,8 @@ public class ExerciseService {
         return true;
     }
 
-    private static List<String> distinctNames(List<Exercise> items, Function<Exercise, String> getter) {
+    private static List<String> distinctNames(
+            List<ExerciseResponse> items, Function<ExerciseResponse, String> getter) {
         return items.stream()
                 .map(getter)
                 .filter(name -> name != null && !name.isBlank())
@@ -450,7 +381,7 @@ public class ExerciseService {
         return instant.atZone(ZoneOffset.UTC).toLocalDate();
     }
 
-    private Exercise toResponse(RstExercise exercise, ReviewProgress progress) {
+    private ExerciseResponse toResponse(RstExercise exercise, ReviewProgress progress) {
         ExerciseToolkitSnapshot snapshot = exercise.getToolkitSnapshot();
         if (snapshot == null) {
             throw notFound("exercise-not-found", "The Exercise was not found.");
@@ -503,7 +434,7 @@ public class ExerciseService {
             agingDays = agingFrom == null ? null : daysBetween(agingFrom, clock.instant());
         }
         Instant archivedAt = archivedAt(exercise);
-        return new Exercise(
+        return new ExerciseResponse(
                 exercise.getId(),
                 exercise.getExerciseCode(),
                 snapshot.getSourceToolkitId(),
@@ -542,41 +473,31 @@ public class ExerciseService {
             return Map.of();
         }
         List<UUID> trackedIds = tracked.stream().map(RstExercise::getId).toList();
-        Map<UUID, OfficialPackage> packageByExercise = currentOrLatestPackage(
-                officialPackages.findByExerciseIdIn(trackedIds));
-        if (packageByExercise.isEmpty()) {
+        List<Submission> submissionRows = submissions.findByExerciseIdIn(trackedIds);
+        if (submissionRows.isEmpty()) {
             return Map.of();
         }
-        List<Submission> submissionRows = submissions.findByOfficialPackageIdIn(
-                packageByExercise.values().stream().map(OfficialPackage::getId).toList());
-        Map<UUID, Submission> submissionByPackage = submissionRows.stream()
-                .collect(Collectors.toMap(Submission::getOfficialPackageId, Function.identity()));
+        Map<UUID, Submission> submissionByExercise = submissionRows.stream()
+                .collect(Collectors.toMap(Submission::getExerciseId, Function.identity()));
         Map<UUID, WorkflowInstance> workflowBySubmission = workflows
                 .findBySubmissionIdIn(submissionRows.stream().map(Submission::getId).toList())
                 .stream()
                 .collect(Collectors.toMap(WorkflowInstance::getSubmissionId, Function.identity()));
-        Set<UUID> userIds = new HashSet<>();
+        Set<String> ccgids = new HashSet<>();
         workflowBySubmission.values().forEach(workflow -> {
             workflow.findCurrentReadyStep()
-                    .map(WorkflowStepAssignment::getAssigneeUserId)
-                    .ifPresent(userIds::add);
+                    .map(WorkflowStepAssignment::getAssigneeCcgid)
+                    .ifPresent(ccgids::add);
             workflow.getActions().forEach(action -> {
-                if (action.getActorUserId() != null) {
-                    userIds.add(action.getActorUserId());
+                if (action.getActorCcgid() != null) {
+                    ccgids.add(action.getActorCcgid());
                 }
             });
         });
-        Map<UUID, String> names = userIds.isEmpty()
-                ? Map.of()
-                : users.findAllById(userIds).stream()
-                        .collect(Collectors.toMap(AppUser::getId, AppUser::getDisplayName));
+        Map<String, String> names = resolveDisplayNames(ccgids);
         Map<UUID, ReviewProgress> result = new HashMap<>();
         for (RstExercise exercise : tracked) {
-            OfficialPackage pkg = packageByExercise.get(exercise.getId());
-            if (pkg == null) {
-                continue;
-            }
-            Submission submission = submissionByPackage.get(pkg.getId());
+            Submission submission = submissionByExercise.get(exercise.getId());
             if (submission == null) {
                 continue;
             }
@@ -589,7 +510,7 @@ public class ExerciseService {
                 result.put(exercise.getId(), new ReviewProgress(
                         returned.getStepNo(),
                         returned.getActorRoleCode(),
-                        displayName(names, returned.getActorUserId()),
+                        displayName(names, returned.getActorCcgid()),
                         returned.getComments(),
                         returned.getActionAt()));
                 continue;
@@ -612,27 +533,13 @@ public class ExerciseService {
                     ? null
                     : firstNonBlank(
                             workflowRouter.occupantName(ready.getRequiredRoleCode(), positionId),
-                            displayName(names, ready.getAssigneeUserId()));
+                            displayName(names, ready.getAssigneeCcgid()));
             result.put(exercise.getId(), new ReviewProgress(
                     submission.getCurrentStep(),
                     role,
                     reviewer,
                     null,
                     exercise.getSubmittedAt()));
-        }
-        return result;
-    }
-
-    private static Map<UUID, OfficialPackage> currentOrLatestPackage(List<OfficialPackage> packages) {
-        Map<UUID, OfficialPackage> result = new HashMap<>();
-        for (OfficialPackage pkg : packages) {
-            OfficialPackage existing = result.get(pkg.getExerciseId());
-            if (existing == null
-                    || (pkg.isCurrent() && !existing.isCurrent())
-                    || (pkg.isCurrent() == existing.isCurrent()
-                            && pkg.getPackageVersion() > existing.getPackageVersion())) {
-                result.put(pkg.getExerciseId(), pkg);
-            }
         }
         return result;
     }
@@ -649,11 +556,25 @@ public class ExerciseService {
                 .orElse(null);
     }
 
-    private static String displayName(Map<UUID, String> names, UUID userId) {
-        if (userId == null) {
+    private Map<String, String> resolveDisplayNames(Set<String> ccgids) {
+        if (ccgids == null || ccgids.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> names = new HashMap<>();
+        for (String ccgid : ccgids) {
+            if (ccgid == null || ccgid.isBlank()) {
+                continue;
+            }
+            names.put(ccgid, timesheet.displayNameByCcgid(ccgid));
+        }
+        return names;
+    }
+
+    private static String displayName(Map<String, String> names, String ccgid) {
+        if (ccgid == null) {
             return null;
         }
-        return names.get(userId);
+        return names.get(ccgid);
     }
 
     private static String firstNonBlank(String first, String second) {
@@ -731,10 +652,10 @@ public class ExerciseService {
     }
 
     private static Instant archivedAt(RstExercise exercise) {
-        if ("VALIDATED".equals(exercise.getWorkflowStatus())) {
+        if ("APPROVED".equals(exercise.getWorkflowStatus())) {
             return exercise.getValidatedAt();
         }
-        if ("ARCHIVED".equals(exercise.getWorkflowStatus())) {
+        if ("REJECTED".equals(exercise.getWorkflowStatus())) {
             return exercise.getUpdatedAt();
         }
         return null;
@@ -752,117 +673,5 @@ public class ExerciseService {
 
     private static ApiException notFound(String code, String message) {
         return new ApiException(HttpStatus.NOT_FOUND, code, message);
-    }
-
-    /**
-     * Create Exercise request payload.
-     */
-    public record CreateExercise(
-            @NotNull UUID toolkitId,
-            @NotBlank @Pattern(regexp = "^[0-9]{4}-(0[1-9]|1[0-2])$") String sizingMonth,
-            @NotNull LocalDate slotStartDate,
-            @Min(1) @Max(12) short slotWeeks,
-            @NotNull LocalDate tmsFrom,
-            @NotNull LocalDate tmsTo) {
-    }
-
-    /**
-     * Create Exercise response with initialization notices for the Supervisor.
-     */
-    public record CreateExerciseResult(Exercise exercise, List<String> notices) {
-    }
-
-    /**
-     * Update Exercise period payload (Toolkit is immutable after create).
-     */
-    public record UpdateExercisePeriods(
-            @NotBlank @Pattern(regexp = "^[0-9]{4}-(0[1-9]|1[0-2])$") String sizingMonth,
-            @NotNull LocalDate slotStartDate,
-            @Min(1) @Max(12) short slotWeeks,
-            @NotNull LocalDate tmsFrom,
-            @NotNull LocalDate tmsTo) {
-    }
-
-    /**
-     * Update periods response with optional holiday re-apply notices.
-     */
-    public record UpdateExercisePeriodsResult(Exercise exercise, List<String> notices) {
-    }
-
-    /**
-     * Frozen Subtask view.
-     */
-    public record ExerciseSubtaskView(
-            UUID id, UUID sourceToolkitSubtaskId, String name, String description,
-            int displayOrder, Instant deletedAt) {
-    }
-
-    /**
-     * Frozen Shared KPI view.
-     */
-    public record ExerciseKpiView(
-            UUID id, UUID sourceSelectionId, String carrier, String site,
-            String customerCountry, BigDecimal deliveryHc, boolean valid) {
-    }
-
-    /**
-     * Frozen Toolkit view.
-     */
-    public record ExerciseToolkitView(
-            UUID id, String name, String center, String domain, String pl1, String pl2,
-            String pl3Code, String pl3Name, boolean combineSubtasksTime, long version) {
-    }
-
-    /**
-     * Exercise snapshot envelope.
-     */
-    public record ExerciseSnapshot(
-            ExerciseToolkitView toolkit, List<ExerciseSubtaskView> subtasks,
-            List<ExerciseKpiView> sharedKpis, LocalDate timesheetSyncDate) {
-    }
-
-    /**
-     * Exercise API response including action flags.
-     */
-    public record Exercise(
-            UUID id, String exerciseCode, UUID toolkitId, String sizingMonth,
-            LocalDate slotStartDate, short slotWeeks, LocalDate tmsFrom, LocalDate tmsTo,
-            String workflowStatus, UUID officialScenarioId, Instant submittedAt,
-            boolean canDelete, boolean canSubmit, boolean canEdit,
-            long version, Instant createdAt,
-            Short currentStep, String requiredRole, String currentReviewer, String lastDecisionComment,
-            BigDecimal deliveryHc, BigDecimal rightSizingHc, BigDecimal productionSupport,
-            BigDecimal capacityCreation, Integer agingDays, Instant archivedAt,
-            ExerciseSnapshot snapshot) {
-    }
-
-    /**
-     * Supervisor Exercise list query (tab + field filters).
-     */
-    public record ListQuery(
-            String tab,
-            String exerciseCode,
-            String toolkitName,
-            String pl3Name,
-            String workflowStatus,
-            String reviewStage,
-            String handler,
-            String officialScenario,
-            LocalDate createdFrom,
-            LocalDate createdTo,
-            LocalDate submittedFrom,
-            LocalDate submittedTo,
-            LocalDate archivedFrom,
-            LocalDate archivedTo) {
-    }
-
-    /**
-     * Supervisor Exercise list response: filtered rows and filter options for the tab.
-     */
-    public record ExerciseListView(
-            List<Exercise> items,
-            List<String> toolkitNames,
-            List<String> pl3Names,
-            List<String> reviewerNames) {
     }
 }

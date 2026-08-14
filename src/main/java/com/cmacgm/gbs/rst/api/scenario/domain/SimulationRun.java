@@ -56,7 +56,7 @@ public class SimulationRun {
     private String errorDetail;
 
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -75,7 +75,7 @@ public class SimulationRun {
             String calculationVersion,
             String inputHash,
             String summaryJson,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         SimulationRun run = new SimulationRun();
         run.id = UUID.randomUUID();
@@ -89,7 +89,7 @@ public class SimulationRun {
         run.summaryJson = summaryJson;
         run.startedAt = now;
         run.completedAt = now;
-        run.createdBy = actorUserId;
+        run.createdBy = actorCcgid;
         run.createdAt = now;
         return run;
     }

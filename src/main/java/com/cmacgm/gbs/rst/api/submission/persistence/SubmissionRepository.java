@@ -12,20 +12,20 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface SubmissionRepository extends JpaRepository<Submission, UUID> {
 
     /**
-     * Finds a submission by Official Package id.
+     * Finds the submission for an Exercise (at most one per Exercise).
      *
-     * @param officialPackageId package id
+     * @param exerciseId Exercise id
      * @return optional submission
      */
-    Optional<Submission> findByOfficialPackageId(UUID officialPackageId);
+    Optional<Submission> findByExerciseId(UUID exerciseId);
 
     /**
-     * Finds submissions for the given Official Packages.
+     * Finds submissions for the given Exercises.
      *
-     * @param officialPackageIds package ids
+     * @param exerciseIds Exercise ids
      * @return submissions
      */
-    List<Submission> findByOfficialPackageIdIn(Collection<UUID> officialPackageIds);
+    List<Submission> findByExerciseIdIn(Collection<UUID> exerciseIds);
 
     /**
      * Lists submissions in the given statuses, newest first.

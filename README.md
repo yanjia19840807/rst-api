@@ -44,9 +44,10 @@ app:
       role: SUPERVISOR   # AGENT | SUPERVISOR | MANAGER | CDH | LTH | HO
 ```
 
-On first API call the backend ensures an `app_user` row exists (from Timesheet name when
-available, otherwise a synthetic display name). Optional request overrides:
-`X-Dev-Ccgid`, `X-Dev-Role`. Restart the API after changing config.
+On first API call Dev identity resolves display name from the ACTIVE Timesheet
+(or a synthetic name). Identity is the CCGID only — no local `app_user` row.
+Optional request overrides: `X-Dev-Ccgid`, `X-Dev-Role`. Restart the API after
+changing config.
 
 - API: `http://localhost:8080/api/v1`
 - Health: `http://localhost:8080/actuator/health`

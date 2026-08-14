@@ -42,13 +42,13 @@ public class ExerciseCalendar {
     private Instant createdAt;
 
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     @Column(name = "updated_by")
-    private UUID updatedBy;
+    private String updatedBy;
 
     @Version
     private long version;
@@ -59,13 +59,13 @@ public class ExerciseCalendar {
     /**
      * Creates an empty calendar shell for a newly created Exercise.
      */
-    public static ExerciseCalendar emptyShell(UUID exerciseId, UUID actorUserId, Instant now) {
+    public static ExerciseCalendar emptyShell(UUID exerciseId, String actorCcgid, Instant now) {
         ExerciseCalendar calendar = new ExerciseCalendar();
         calendar.exerciseId = exerciseId;
         calendar.createdAt = now;
-        calendar.createdBy = actorUserId;
+        calendar.createdBy = actorCcgid;
         calendar.updatedAt = now;
-        calendar.updatedBy = actorUserId;
+        calendar.updatedBy = actorCcgid;
         return calendar;
     }
 
@@ -76,7 +76,7 @@ public class ExerciseCalendar {
             String weekendCode,
             String baselineSource,
             String baselineVersion,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         this.weekendCode = weekendCode;
         if (baselineSource != null) {
@@ -85,7 +85,7 @@ public class ExerciseCalendar {
         if (baselineVersion != null) {
             this.baselineVersion = baselineVersion;
         }
-        touch(actorUserId, now);
+        touch(actorCcgid, now);
     }
 
     /**
@@ -98,7 +98,7 @@ public class ExerciseCalendar {
             Short baselineYear,
             String baselineSource,
             String baselineVersion,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         this.weekendCode = weekendCode;
         this.sourceTemplateId = sourceTemplateId;
@@ -106,12 +106,12 @@ public class ExerciseCalendar {
         this.baselineYear = baselineYear;
         this.baselineSource = baselineSource;
         this.baselineVersion = baselineVersion;
-        touch(actorUserId, now);
+        touch(actorCcgid, now);
     }
 
-    public void touch(UUID actorUserId, Instant now) {
+    public void touch(String actorCcgid, Instant now) {
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     public UUID getExerciseId() { return exerciseId; }

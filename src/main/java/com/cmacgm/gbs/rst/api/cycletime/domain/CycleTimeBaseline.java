@@ -42,7 +42,7 @@ public class CycleTimeBaseline {
     private Instant calculatedAt;
 
     @Column(name = "calculated_by")
-    private UUID calculatedBy;
+    private String calculatedBy;
 
     protected CycleTimeBaseline() {
     }
@@ -53,7 +53,7 @@ public class CycleTimeBaseline {
      * @param exerciseId owning Exercise
      * @param medianSeconds positive median seconds per unit
      * @param manualReason required justification
-     * @param actorUserId creating Supervisor
+     * @param actorCcgid creating Supervisor
      * @param now calculation timestamp
      * @return active manual baseline
      */
@@ -61,7 +61,7 @@ public class CycleTimeBaseline {
             UUID exerciseId,
             BigDecimal medianSeconds,
             String manualReason,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         CycleTimeBaseline baseline = new CycleTimeBaseline();
         baseline.id = UUID.randomUUID();
@@ -72,7 +72,7 @@ public class CycleTimeBaseline {
         baseline.calculationMethod = "MANUAL_ENTRY";
         baseline.active = true;
         baseline.calculatedAt = now;
-        baseline.calculatedBy = actorUserId;
+        baseline.calculatedBy = actorCcgid;
         return baseline;
     }
 
@@ -82,7 +82,7 @@ public class CycleTimeBaseline {
      * @param exerciseId owning Exercise
      * @param medianSeconds median seconds per unit from included samples
      * @param sampleCount number of included samples used for the median
-     * @param actorUserId calculating Supervisor
+     * @param actorCcgid calculating Supervisor
      * @param now calculation timestamp
      * @return active system baseline
      */
@@ -90,7 +90,7 @@ public class CycleTimeBaseline {
             UUID exerciseId,
             BigDecimal medianSeconds,
             int sampleCount,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         CycleTimeBaseline baseline = new CycleTimeBaseline();
         baseline.id = UUID.randomUUID();
@@ -101,7 +101,7 @@ public class CycleTimeBaseline {
         baseline.calculationMethod = "MEDIAN";
         baseline.active = true;
         baseline.calculatedAt = now;
-        baseline.calculatedBy = actorUserId;
+        baseline.calculatedBy = actorCcgid;
         return baseline;
     }
 
@@ -121,5 +121,5 @@ public class CycleTimeBaseline {
     public String getManualReason() { return manualReason; }
     public boolean isActive() { return active; }
     public Instant getCalculatedAt() { return calculatedAt; }
-    public UUID getCalculatedBy() { return calculatedBy; }
+    public String getCalculatedBy() { return calculatedBy; }
 }

@@ -13,7 +13,7 @@ import org.springframework.security.web.authentication.AnonymousAuthenticationFi
 /**
  * Temporary open security for local {@code dev} walkthrough only.
  * {@code @PreAuthorize} is disabled; HTTP auth is {@code permitAll}.
- * {@link DevAuthenticationFilter} still injects a principal for {@code userId}/{@code ccgid}.
+ * {@link DevAuthenticationFilter} still injects a principal for {@code ccgid}.
  * Restore role checks after the Supervisor → Submit path is stable.
  */
 @Configuration

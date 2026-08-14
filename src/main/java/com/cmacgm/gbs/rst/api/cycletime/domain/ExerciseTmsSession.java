@@ -9,13 +9,18 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
+
+import org.springframework.data.domain.Persistable;
 
 /** Selection of a TMS session into an Exercise Cycle Time population. */
 @Entity
 @Table(name = "exercise_tms_session")
 @IdClass(ExerciseTmsSession.Pk.class)
-public class ExerciseTmsSession {
+public class ExerciseTmsSession implements Persistable<ExerciseTmsSession.Pk> {
 
     @Id
     @Column(name = "exercise_id", nullable = false)
@@ -32,10 +37,14 @@ public class ExerciseTmsSession {
     private String exclusionReason;
 
     @Column(name = "selected_by")
-    private UUID selectedBy;
+    private String selectedBy;
 
     @Column(name = "selected_at", nullable = false)
     private Instant selectedAt;
+
+    /** Assigned-id rows: true until first persist/load so saveAll does not merge+select. */
+    @Transient
+    private boolean isNew = true;
 
     protected ExerciseTmsSession() {
     }
@@ -47,7 +56,7 @@ public class ExerciseTmsSession {
      * @param tmsSessionId TMS session id
      * @param included whether included in active calculation
      * @param exclusionReason required when excluded
-     * @param actorUserId selecting Supervisor
+     * @param actorCcgid selecting Supervisor
      * @param now selection timestamp
      * @return selection row
      */
@@ -56,15 +65,16 @@ public class ExerciseTmsSession {
             UUID tmsSessionId,
             boolean included,
             String exclusionReason,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         ExerciseTmsSession row = new ExerciseTmsSession();
         row.exerciseId = exerciseId;
         row.tmsSessionId = tmsSessionId;
         row.included = included;
         row.exclusionReason = exclusionReason;
-        row.selectedBy = actorUserId;
+        row.selectedBy = actorCcgid;
         row.selectedAt = now;
+        row.isNew = true;
         return row;
     }
 
@@ -78,6 +88,22 @@ public class ExerciseTmsSession {
         this.exclusionReason = null;
     }
 
+    @Override
+    public Pk getId() {
+        return new Pk(exerciseId, tmsSessionId);
+    }
+
+    @Override
+    public boolean isNew() {
+        return isNew;
+    }
+
+    @PrePersist
+    @PostLoad
+    void markNotNew() {
+        this.isNew = false;
+    }
+
     public UUID getExerciseId() { return exerciseId; }
     public UUID getTmsSessionId() { return tmsSessionId; }
     public boolean isIncluded() { return included; }
@@ -89,6 +115,11 @@ public class ExerciseTmsSession {
         private UUID tmsSessionId;
 
         public Pk() {
+        }
+
+        public Pk(UUID exerciseId, UUID tmsSessionId) {
+            this.exerciseId = exerciseId;
+            this.tmsSessionId = tmsSessionId;
         }
 
         @Override

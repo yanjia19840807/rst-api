@@ -6,21 +6,21 @@ import java.util.UUID;
 import jakarta.validation.Valid;
 
 import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService;
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.CalendarRequest;
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.CalendarView;
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.ReapplyCalendarResult;
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.DailyVolumeRequest;
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.DailyVolumeView;
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.MonthlyVolumeRequest;
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.MonthlyVolumeView;
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.ShiftRequest;
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.ShiftView;
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.SlotVolumeRequest;
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.SlotVolumeView;
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.SupportItemRequest;
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.SupportItemView;
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.TeamSetupRequest;
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.TeamSetupView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.CalendarRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.CalendarView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.ReapplyCalendarResult;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.DailyVolumeRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.DailyVolumeView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.MonthlyVolumeRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.MonthlyVolumeView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.ShiftRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.ShiftView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.SlotVolumeRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.SlotVolumeView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.SupportItemRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.SupportItemView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.TeamSetupRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.TeamSetupView;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -69,7 +69,7 @@ public class ExerciseAssociatedDataController {
     @GetMapping("/team-setup")
     public TeamSetupView getTeamSetup(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
-        return service.getTeamSetup(principal.userId(), exerciseId);
+        return service.getTeamSetup(principal.ccgid(), exerciseId);
     }
 
     /**
@@ -85,7 +85,7 @@ public class ExerciseAssociatedDataController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @RequestBody TeamSetupRequest request) {
-        return service.putTeamSetup(principal.userId(), exerciseId, request);
+        return service.putTeamSetup(principal.ccgid(), exerciseId, request);
     }
 
     /**
@@ -98,7 +98,7 @@ public class ExerciseAssociatedDataController {
     @GetMapping("/shifts")
     public List<ShiftView> getShifts(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
-        return service.getShifts(principal.userId(), exerciseId);
+        return service.getShifts(principal.ccgid(), exerciseId);
     }
 
     /**
@@ -114,7 +114,7 @@ public class ExerciseAssociatedDataController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @RequestBody List<@Valid ShiftRequest> request) {
-        return service.putShifts(principal.userId(), exerciseId, request);
+        return service.putShifts(principal.ccgid(), exerciseId, request);
     }
 
     /**
@@ -127,7 +127,7 @@ public class ExerciseAssociatedDataController {
     @GetMapping("/production-support")
     public List<SupportItemView> listSupport(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
-        return service.listSupport(principal.userId(), exerciseId);
+        return service.listSupport(principal.ccgid(), exerciseId);
     }
 
     /**
@@ -144,7 +144,7 @@ public class ExerciseAssociatedDataController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @Valid @RequestBody SupportItemRequest request) {
-        return service.createSupport(principal.userId(), exerciseId, request);
+        return service.createSupport(principal.ccgid(), exerciseId, request);
     }
 
     /**
@@ -162,7 +162,7 @@ public class ExerciseAssociatedDataController {
             @PathVariable UUID exerciseId,
             @PathVariable UUID itemId,
             @Valid @RequestBody SupportItemRequest request) {
-        return service.updateSupport(principal.userId(), exerciseId, itemId, request);
+        return service.updateSupport(principal.ccgid(), exerciseId, itemId, request);
     }
 
     /**
@@ -178,7 +178,7 @@ public class ExerciseAssociatedDataController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @PathVariable UUID itemId) {
-        service.deleteSupport(principal.userId(), exerciseId, itemId);
+        service.deleteSupport(principal.ccgid(), exerciseId, itemId);
     }
 
     /**
@@ -191,7 +191,7 @@ public class ExerciseAssociatedDataController {
     @GetMapping("/calendar")
     public CalendarView getCalendar(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
-        return service.getCalendar(principal.userId(), exerciseId);
+        return service.getCalendar(principal.ccgid(), exerciseId);
     }
 
     /**
@@ -207,7 +207,7 @@ public class ExerciseAssociatedDataController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @RequestBody CalendarRequest request) {
-        return service.putCalendar(principal.userId(), exerciseId, request);
+        return service.putCalendar(principal.ccgid(), exerciseId, request);
     }
 
     /**
@@ -216,7 +216,7 @@ public class ExerciseAssociatedDataController {
     @PostMapping("/calendar/reapply-template")
     public ReapplyCalendarResult reapplyHolidayTemplate(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
-        return service.reapplyHolidayTemplate(principal.userId(), exerciseId);
+        return service.reapplyHolidayTemplate(principal.ccgid(), exerciseId);
     }
 
     /**
@@ -229,7 +229,7 @@ public class ExerciseAssociatedDataController {
     @GetMapping("/volumes/monthly")
     public List<MonthlyVolumeView> getMonthly(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
-        return service.getMonthlyVolumes(principal.userId(), exerciseId);
+        return service.getMonthlyVolumes(principal.ccgid(), exerciseId);
     }
 
     /**
@@ -245,7 +245,7 @@ public class ExerciseAssociatedDataController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @RequestBody List<MonthlyVolumeRequest> request) {
-        return service.putMonthlyVolumes(principal.userId(), exerciseId, request);
+        return service.putMonthlyVolumes(principal.ccgid(), exerciseId, request);
     }
 
     /**
@@ -258,7 +258,7 @@ public class ExerciseAssociatedDataController {
     @GetMapping("/volumes/daily")
     public List<DailyVolumeView> getDaily(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
-        return service.getDailyVolumes(principal.userId(), exerciseId);
+        return service.getDailyVolumes(principal.ccgid(), exerciseId);
     }
 
     /**
@@ -274,7 +274,7 @@ public class ExerciseAssociatedDataController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @RequestBody List<DailyVolumeRequest> request) {
-        return service.putDailyVolumes(principal.userId(), exerciseId, request);
+        return service.putDailyVolumes(principal.ccgid(), exerciseId, request);
     }
 
     /**
@@ -287,7 +287,7 @@ public class ExerciseAssociatedDataController {
     @GetMapping("/volumes/slot")
     public List<SlotVolumeView> getSlot(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
-        return service.getSlotVolumes(principal.userId(), exerciseId);
+        return service.getSlotVolumes(principal.ccgid(), exerciseId);
     }
 
     /**
@@ -303,14 +303,14 @@ public class ExerciseAssociatedDataController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @RequestBody List<SlotVolumeRequest> request) {
-        return service.putSlotVolumes(principal.userId(), exerciseId, request);
+        return service.putSlotVolumes(principal.ccgid(), exerciseId, request);
     }
 
     @GetMapping("/volumes/monthly/export-template")
     public ResponseEntity<byte[]> exportMonthlyTemplate(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
         return excelResponse(
-                service.exportMonthlyTemplate(principal.userId(), exerciseId),
+                service.exportMonthlyTemplate(principal.ccgid(), exerciseId),
                 "volume-monthly-template.xlsx");
     }
 
@@ -318,7 +318,7 @@ public class ExerciseAssociatedDataController {
     public ResponseEntity<byte[]> exportMonthly(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
         return excelResponse(
-                service.exportMonthlyExcel(principal.userId(), exerciseId),
+                service.exportMonthlyExcel(principal.ccgid(), exerciseId),
                 "volume-monthly.xlsx");
     }
 
@@ -328,14 +328,14 @@ public class ExerciseAssociatedDataController {
             @PathVariable UUID exerciseId,
             @RequestParam("file") MultipartFile file) throws Exception {
         return service.importMonthlyExcel(
-                principal.userId(), exerciseId, file.getInputStream(), file.getOriginalFilename());
+                principal.ccgid(), exerciseId, file.getInputStream(), file.getOriginalFilename());
     }
 
     @GetMapping("/volumes/daily/export-template")
     public ResponseEntity<byte[]> exportDailyTemplate(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
         return excelResponse(
-                service.exportDailyTemplate(principal.userId(), exerciseId),
+                service.exportDailyTemplate(principal.ccgid(), exerciseId),
                 "volume-daily-template.xlsx");
     }
 
@@ -343,7 +343,7 @@ public class ExerciseAssociatedDataController {
     public ResponseEntity<byte[]> exportDaily(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
         return excelResponse(
-                service.exportDailyExcel(principal.userId(), exerciseId),
+                service.exportDailyExcel(principal.ccgid(), exerciseId),
                 "volume-daily.xlsx");
     }
 
@@ -353,14 +353,14 @@ public class ExerciseAssociatedDataController {
             @PathVariable UUID exerciseId,
             @RequestParam("file") MultipartFile file) throws Exception {
         return service.importDailyExcel(
-                principal.userId(), exerciseId, file.getInputStream(), file.getOriginalFilename());
+                principal.ccgid(), exerciseId, file.getInputStream(), file.getOriginalFilename());
     }
 
     @GetMapping("/volumes/slot/export-template")
     public ResponseEntity<byte[]> exportSlotTemplate(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
         return excelResponse(
-                service.exportSlotTemplate(principal.userId(), exerciseId),
+                service.exportSlotTemplate(principal.ccgid(), exerciseId),
                 "volume-slot-template.xlsx");
     }
 
@@ -368,7 +368,7 @@ public class ExerciseAssociatedDataController {
     public ResponseEntity<byte[]> exportSlot(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
         return excelResponse(
-                service.exportSlotExcel(principal.userId(), exerciseId),
+                service.exportSlotExcel(principal.ccgid(), exerciseId),
                 "volume-slot.xlsx");
     }
 
@@ -378,7 +378,7 @@ public class ExerciseAssociatedDataController {
             @PathVariable UUID exerciseId,
             @RequestParam("file") MultipartFile file) throws Exception {
         return service.importSlotExcel(
-                principal.userId(), exerciseId, file.getInputStream(), file.getOriginalFilename());
+                principal.ccgid(), exerciseId, file.getInputStream(), file.getOriginalFilename());
     }
 
     private static ResponseEntity<byte[]> excelResponse(byte[] body, String filename) {

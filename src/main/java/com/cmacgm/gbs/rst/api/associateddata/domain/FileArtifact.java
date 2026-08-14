@@ -50,7 +50,7 @@ public class FileArtifact {
     private Instant createdAt;
 
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     protected FileArtifact() {
     }
@@ -63,7 +63,7 @@ public class FileArtifact {
      * @param businessObjectId owning business id
      * @param fileName display file name
      * @param mimeType MIME type
-     * @param actorUserId creating user
+     * @param actorCcgid creating user
      * @param now creation timestamp
      * @return new file artifact
      */
@@ -73,7 +73,7 @@ public class FileArtifact {
             UUID businessObjectId,
             String fileName,
             String mimeType,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         return createStub(
                 artifactType,
@@ -82,7 +82,7 @@ public class FileArtifact {
                 fileName,
                 mimeType,
                 null,
-                actorUserId,
+                actorCcgid,
                 now);
     }
 
@@ -95,7 +95,7 @@ public class FileArtifact {
      * @param fileName display file name
      * @param mimeType MIME type
      * @param sizeBytes optional byte size
-     * @param actorUserId creating user
+     * @param actorCcgid creating user
      * @param now creation timestamp
      * @return new file artifact
      */
@@ -106,7 +106,7 @@ public class FileArtifact {
             String fileName,
             String mimeType,
             Long sizeBytes,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         FileArtifact artifact = new FileArtifact();
         artifact.id = UUID.randomUUID();
@@ -120,7 +120,7 @@ public class FileArtifact {
         artifact.sizeBytes = sizeBytes;
         artifact.status = "AVAILABLE";
         artifact.createdAt = now;
-        artifact.createdBy = actorUserId;
+        artifact.createdBy = actorCcgid;
         return artifact;
     }
 

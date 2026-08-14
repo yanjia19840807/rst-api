@@ -42,18 +42,18 @@ public class TmsSessionController {
 
     @GetMapping("/summary")
     public TmsSummaryResponse summary(@AuthenticationPrincipal RstPrincipal principal) {
-        return queryService.summary(principal.userId());
+        return queryService.summary(principal.ccgid());
     }
 
     @GetMapping("/sessions/current")
     public TmsSessionResponse current(@AuthenticationPrincipal RstPrincipal principal) {
-        return queryService.current(principal.userId());
+        return queryService.current(principal.ccgid());
     }
 
     @GetMapping("/sessions/{id}")
     public TmsSessionResponse get(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable String id) {
-        return queryService.get(principal.userId(), id);
+        return queryService.get(principal.ccgid(), id);
     }
 
     @GetMapping("/sessions")
@@ -72,7 +72,7 @@ public class TmsSessionController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         return queryService.sessions(
-                principal.userId(),
+                principal.ccgid(),
                 status,
                 sessionNo,
                 reference,
@@ -88,28 +88,28 @@ public class TmsSessionController {
     public TmsSessionResponse start(
             @AuthenticationPrincipal RstPrincipal principal,
             @Valid @RequestBody StartTmsSessionRequest request) {
-        return commandService.start(principal.userId(), principal.ccgid(), request);
+        return commandService.start(principal.ccgid(), principal.displayName(), request);
     }
 
     @PostMapping("/sessions/{id}/pause")
     public TmsSessionResponse pause(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable String id) {
-        return commandService.pause(principal.userId(), id);
+        return commandService.pause(principal.ccgid(), id);
     }
 
     @PostMapping("/sessions/{id}/resume")
     public TmsSessionResponse resume(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable String id) {
-        return commandService.resume(principal.userId(), id);
+        return commandService.resume(principal.ccgid(), id);
     }
 
     @PostMapping("/sessions/{id}/end")
     public TmsSessionResponse end(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable String id) {
-        return commandService.end(principal.userId(), id);
+        return commandService.end(principal.ccgid(), id);
     }
 
     @PostMapping("/sessions/{id}/discard")
@@ -118,6 +118,6 @@ public class TmsSessionController {
             @PathVariable String id,
             @RequestBody(required = false) DiscardTmsSessionRequest request) {
         String reason = request == null ? null : request.reason();
-        return commandService.discard(principal.userId(), id, reason);
+        return commandService.discard(principal.ccgid(), id, reason);
     }
 }

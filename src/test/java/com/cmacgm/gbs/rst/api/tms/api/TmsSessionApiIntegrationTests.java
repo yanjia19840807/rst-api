@@ -25,7 +25,6 @@ import org.springframework.test.web.servlet.MockMvc;
 @ActiveProfiles("test")
 class TmsSessionApiIntegrationTests {
 
-    private static final UUID USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID TOOLKIT_ID = UUID.fromString("10000000-0000-0000-0000-000000000001");
     private static final UUID SUBTASK_ID = UUID.fromString("20000000-0000-0000-0000-000000000001");
 
@@ -44,8 +43,6 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update("delete from workflow_instance");
         jdbcTemplate.update("delete from submission_scope");
         jdbcTemplate.update("delete from submission");
-        jdbcTemplate.update("delete from official_package_section");
-        jdbcTemplate.update("delete from official_package");
         jdbcTemplate.update("delete from validation_result");
         jdbcTemplate.update("delete from slot_simulation_result");
         jdbcTemplate.update("delete from daily_simulation_result");
@@ -78,42 +75,15 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update("delete from toolkit_shared_kpi_selection");
         jdbcTemplate.update("delete from toolkit_subtask");
         jdbcTemplate.update("delete from toolkit");
-        jdbcTemplate.update("delete from app_user");
 
         Instant now = Instant.parse("2026-08-05T01:00:00Z");
-        jdbcTemplate.update(
-                """
-                insert into app_user
-                    (id, ccgid, display_name, email, active, created_at, updated_at)
-                values (?, ?, ?, ?, ?, ?, ?)
-                """,
-                USER_ID,
-                "AGENT001",
-                "Test Agent",
-                "agent@example.com",
-                true,
-                now,
-                now);
-        jdbcTemplate.update(
-                """
-                insert into app_user
-                    (id, ccgid, display_name, email, active, created_at, updated_at)
-                values (?, ?, ?, ?, ?, ?, ?)
-                """,
-                UUID.fromString("00000000-0000-0000-0000-000000000002"),
-                "SUPERVISOR001",
-                "Test Supervisor",
-                "supervisor@example.com",
-                true,
-                now,
-                now);
         jdbcTemplate.update(
                 """
                 insert into toolkit
                     (id, name, supervisor_position_id, center, domain, pl1, pl2,
                      pl3_name, primary_pl3_code, combine_subtasks_time,
-                     created_at, updated_at, version)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     owner_ccgid, created_at, updated_at, version)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 TOOLKIT_ID,
                 "Bank Rec Manual Check",
@@ -125,6 +95,7 @@ class TmsSessionApiIntegrationTests {
                 "Bank Reconciliation",
                 "BANK_REC",
                 false,
+                "SUPERVISOR001",
                 now,
                 now,
                 0);
@@ -297,10 +268,10 @@ class TmsSessionApiIntegrationTests {
                                 }
                                 """.formatted(TOOLKIT_ID)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.snapshot.toolkit.name").value("Bank Rec Manual Check"))
-                .andExpect(jsonPath("$.snapshot.subtasks[0].name").value("Manual match"))
+                .andExpect(jsonPath("$.exercise.snapshot.toolkit.name").value("Bank Rec Manual Check"))
+                .andExpect(jsonPath("$.exercise.snapshot.subtasks[0].name").value("Manual match"))
                 .andReturn().getResponse().getContentAsString();
-        String exerciseId = JsonPath.read(response, "$.id");
+        String exerciseId = JsonPath.read(response, "$.exercise.id");
 
         mockMvc.perform(get("/api/v1/supervisor/exercises/{id}", exerciseId)
                         .header("X-Dev-Ccgid", "SUPERVISOR001")

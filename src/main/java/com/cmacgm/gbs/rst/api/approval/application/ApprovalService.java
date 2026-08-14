@@ -28,15 +28,12 @@ import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
-import com.cmacgm.gbs.rst.api.identity.domain.AppUser;
-import com.cmacgm.gbs.rst.api.identity.persistence.AppUserRepository;
-import com.cmacgm.gbs.rst.api.official.domain.OfficialPackage;
-import com.cmacgm.gbs.rst.api.official.persistence.OfficialPackageRepository;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.scenario.domain.ScenarioAssumption;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.submission.domain.Submission;
 import com.cmacgm.gbs.rst.api.submission.persistence.SubmissionRepository;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
@@ -47,6 +44,17 @@ import com.cmacgm.gbs.rst.api.workflow.persistence.WorkflowInstanceRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.cmacgm.gbs.rst.api.approval.api.dto.ActionView;
+import com.cmacgm.gbs.rst.api.approval.api.dto.ApprovalDetailView;
+import com.cmacgm.gbs.rst.api.approval.api.dto.ApprovalQueueItem;
+import com.cmacgm.gbs.rst.api.approval.api.dto.ApprovalQueueView;
+import com.cmacgm.gbs.rst.api.approval.api.dto.ApprovalWorkspaceView;
+import com.cmacgm.gbs.rst.api.approval.api.dto.ApproveRequest;
+import com.cmacgm.gbs.rst.api.approval.api.dto.QueueMetrics;
+import com.cmacgm.gbs.rst.api.approval.api.dto.QueueQuery;
+import com.cmacgm.gbs.rst.api.approval.api.dto.ReturnRequest;
+import com.cmacgm.gbs.rst.api.approval.api.dto.ScopeView;
+import com.cmacgm.gbs.rst.api.approval.api.dto.StepView;
 
 /**
  * Approver queue, review detail, Approve/Return, and Supervisor Withdraw.
@@ -54,23 +62,20 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ApprovalService {
 
-    private static final Set<String> OPEN_STATUSES = Set.of(
-            "AWAITING_MANAGER", "AWAITING_CDH", "AWAITING_LTH");
+    private static final Set<String> OPEN_STATUSES = Set.of("OPEN");
     private static final Set<String> ARCHIVED_STATUSES = Set.of(
-            "VALIDATED", "RETURNED", "ARCHIVED");
+            "APPROVED", "RETURNED", "WITHDRAWN");
     private static final Set<String> QUEUE_STATUSES = Set.of(
-            "AWAITING_MANAGER", "AWAITING_CDH", "AWAITING_LTH",
-            "VALIDATED", "RETURNED", "ARCHIVED");
+            "OPEN", "APPROVED", "RETURNED", "WITHDRAWN");
 
     private final SubmissionRepository submissions;
     private final WorkflowInstanceRepository workflows;
-    private final OfficialPackageRepository packages;
     private final RstExerciseRepository exercises;
     private final ScenarioRepository scenarios;
     private final ExerciseTeamSetupRepository teamSetups;
     private final ExerciseProductionSupportItemRepository supportItems;
     private final HolidayTemplateService holidayTemplates;
-    private final AppUserRepository users;
+    private final TimesheetReadService timesheet;
     private final WorkflowRouter workflowRouter;
     private final ApprovalWorkspaceAssembler workspaceAssembler;
     private final Clock clock;
@@ -81,25 +86,23 @@ public class ApprovalService {
     public ApprovalService(
             SubmissionRepository submissions,
             WorkflowInstanceRepository workflows,
-            OfficialPackageRepository packages,
             RstExerciseRepository exercises,
             ScenarioRepository scenarios,
             ExerciseTeamSetupRepository teamSetups,
             ExerciseProductionSupportItemRepository supportItems,
             HolidayTemplateService holidayTemplates,
-            AppUserRepository users,
+            TimesheetReadService timesheet,
             WorkflowRouter workflowRouter,
             ApprovalWorkspaceAssembler workspaceAssembler,
             Clock clock) {
         this.submissions = submissions;
         this.workflows = workflows;
-        this.packages = packages;
         this.exercises = exercises;
         this.scenarios = scenarios;
         this.teamSetups = teamSetups;
         this.supportItems = supportItems;
         this.holidayTemplates = holidayTemplates;
-        this.users = users;
+        this.timesheet = timesheet;
         this.workflowRouter = workflowRouter;
         this.workspaceAssembler = workspaceAssembler;
         this.clock = clock;
@@ -148,14 +151,10 @@ public class ApprovalService {
 
     private List<ApprovalQueueItem> listItems(
             Set<String> statuses, Set<String> myPositions, boolean awaitingOnly, boolean byAging) {
-        Map<UUID, String> names = new HashMap<>();
+        Map<String, String> names = new HashMap<>();
         List<ApprovalQueueItem> items = new ArrayList<>();
         for (Submission submission : submissions.findByStatusInOrderBySubmittedAtDesc(statuses)) {
-            OfficialPackage pkg = packages.findById(submission.getOfficialPackageId()).orElse(null);
-            if (pkg == null) {
-                continue;
-            }
-            RstExercise exercise = exercises.findById(pkg.getExerciseId()).orElse(null);
+            RstExercise exercise = exercises.findById(submission.getExerciseId()).orElse(null);
             if (exercise == null || exercise.getDeletedAt() != null) {
                 continue;
             }
@@ -168,7 +167,7 @@ public class ApprovalService {
             if (!awaitingOnly && (mine == null || awaitingMe)) {
                 continue;
             }
-            items.add(toQueueItem(submission, pkg, exercise, workflow, names, mine));
+            items.add(toQueueItem(submission, exercise, workflow, names, mine));
         }
         if (byAging) {
             items.sort(Comparator.comparing(
@@ -268,8 +267,8 @@ public class ApprovalService {
     /**
      * Approves the current READY workflow step.
      *
-     * <p>Step 1 adds CDH READY and moves submission to AWAITING_CDH; step 2 adds LTH READY and
-     * AWAITING_LTH; step 3 completes workflow and validates submission/package/exercise.
+     * <p>Steps 1–2 advance Workflow READY; submission stays OPEN. Step 3 completes
+     * workflow and marks submission/exercise APPROVED.
      *
      * @param principal acting approver
      * @param submissionId submission id
@@ -279,7 +278,7 @@ public class ApprovalService {
     @Transactional
     public ApprovalDetailView approve(RstPrincipal principal, UUID submissionId, ApproveRequest request) {
         Loaded loaded = load(submissionId);
-        if (!"ACTIVE".equals(loaded.workflow().getStatus()) || !loaded.submission().isAwaitingReview()) {
+        if (!"ACTIVE".equals(loaded.workflow().getStatus()) || !loaded.submission().isOpen()) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
                     "submission-not-awaiting",
@@ -299,10 +298,10 @@ public class ApprovalService {
         requireCurrentReviewer(principal, current, loaded.exercise());
         Instant now = clock.instant();
         short stepNo = current.getStepNo();
-        UUID actorUserId = principal.userId();
+        String actorCcgid = principal.ccgid();
         loaded.workflow().addAction(WorkflowAction.approve(
                 stepNo,
-                actorUserId,
+                actorCcgid,
                 current.getRequiredRoleCode(),
                 request.comments(),
                 requestId,
@@ -313,19 +312,18 @@ public class ApprovalService {
             String scopeHash = current.getScopeSnapshotHash();
             WorkflowRouter.RoutedStep cdh = workflowRouter.resolveCdh(supervisorPosition(loaded.exercise()));
             loaded.workflow().advanceAfterApprove(WorkflowStepAssignment.readyCdh(
-                    cdh.occupantUserId(), cdh.positionId(), scopeHash, now));
+                    cdh.assigneeCcgid(), cdh.positionId(), scopeHash, now));
             loaded.submission().advanceAfterApprove(stepNo, now);
         } else if (stepNo == 2) {
             String scopeHash = current.getScopeSnapshotHash();
             WorkflowRouter.RoutedStep lth = workflowRouter.resolveLth();
             loaded.workflow().advanceAfterApprove(WorkflowStepAssignment.readyLth(
-                    lth.occupantUserId(), lth.positionId(), scopeHash, now));
+                    lth.assigneeCcgid(), lth.positionId(), scopeHash, now));
             loaded.submission().advanceAfterApprove(stepNo, now);
         } else if (stepNo == 3) {
             loaded.workflow().complete(now);
             loaded.submission().advanceAfterApprove(stepNo, now);
-            loaded.pkg().markValidated();
-            loaded.exercise().markValidated(actorUserId, now);
+            loaded.exercise().markApproved(actorCcgid, now);
         } else {
             throw new ApiException(
                     HttpStatus.CONFLICT, "unsupported-step", "Unsupported workflow step: " + stepNo);
@@ -353,7 +351,7 @@ public class ApprovalService {
                     "Return comments are required.");
         }
         Loaded loaded = load(submissionId);
-        if (!"ACTIVE".equals(loaded.workflow().getStatus()) || !loaded.submission().isAwaitingReview()) {
+        if (!"ACTIVE".equals(loaded.workflow().getStatus()) || !loaded.submission().isOpen()) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
                     "submission-not-awaiting",
@@ -371,10 +369,10 @@ public class ApprovalService {
                         "Current workflow step is not READY."));
         requireCurrentReviewer(principal, current, loaded.exercise());
         Instant now = clock.instant();
-        UUID actorUserId = principal.userId();
+        String actorCcgid = principal.ccgid();
         loaded.workflow().addAction(WorkflowAction.returnAction(
                 current.getStepNo(),
-                actorUserId,
+                actorCcgid,
                 current.getRequiredRoleCode(),
                 request.comments(),
                 requestId,
@@ -382,7 +380,7 @@ public class ApprovalService {
         current.markActed();
         loaded.workflow().markReturned(now);
         loaded.submission().markReturned(now);
-        reopenExercise(loaded, actorUserId, now, true);
+        reopenExercise(loaded, actorCcgid, now, true);
         persist(loaded);
         return toDetail(loaded, principal);
     }
@@ -391,13 +389,13 @@ public class ApprovalService {
      * Withdraws an UNDER_REVIEW submission as Supervisor: cancels workflow, reverts the
      * Official scenario back to DRAFT, and reopens the Exercise for editing.
      *
-     * @param ownerId Supervisor owner id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @return review detail after withdraw
      */
     @Transactional
-    public ApprovalDetailView withdraw(UUID ownerId, UUID exerciseId) {
-        RstExercise exercise = exercises.findByIdAndOwnerUserIdAndDeletedAtIsNull(exerciseId, ownerId)
+    public ApprovalDetailView withdraw(String ownerCcgid, UUID exerciseId) {
+        RstExercise exercise = exercises.findByIdAndOwnerCcgidAndDeletedAtIsNull(exerciseId, ownerCcgid)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "exercise-not-found", "The Exercise was not found."));
         if (!exercise.canWithdraw()) {
@@ -406,12 +404,7 @@ public class ApprovalService {
                     "exercise-not-withdrawable",
                     "Only UNDER_REVIEW Exercises can be withdrawn.");
         }
-        OfficialPackage pkg = packages.findByExerciseIdAndCurrentTrue(exerciseId)
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND,
-                        "official-package-not-found",
-                        "No current Official Package found for this Exercise."));
-        Submission submission = submissions.findByOfficialPackageId(pkg.getId())
+        Submission submission = submissions.findByExerciseId(exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
                         "submission-not-found",
@@ -434,31 +427,31 @@ public class ApprovalService {
                 .orElseGet(() -> workflow.getCurrentStep() == null
                         ? 0
                         : workflow.getCurrentStep());
-        workflow.addAction(WorkflowAction.withdraw(stepNo, ownerId, UUID.randomUUID(), now));
+        workflow.addAction(WorkflowAction.withdraw(stepNo, ownerCcgid, UUID.randomUUID(), now));
         workflow.markCancelled(now);
-        submission.markArchived(now);
-        Loaded loaded = new Loaded(submission, workflow, pkg, exercise);
-        reopenExercise(loaded, ownerId, now, false);
+        submission.markWithdrawn(now);
+        Loaded loaded = new Loaded(submission, workflow, exercise);
+        reopenExercise(loaded, ownerCcgid, now, false);
         persist(loaded);
         return toDetail(loaded, null);
     }
 
     /**
-     * Reopens the Exercise after Return or Withdraw: Official Scenario is reverted to DRAFT
-     * so simulations can run, but the Official pointer and current package stay so the same
-     * approval submission can continue.
+     * Reopens the Exercise after Return or Withdraw.
+     * Keeps {@code officialScenarioId}; demotes the Official Scenario to DRAFT so edits /
+     * simulations can run again. Associated Data and scenario content are not rewritten.
      */
-    private void reopenExercise(Loaded loaded, UUID actorUserId, Instant now, boolean returned) {
-        loaded.pkg().markReturned();
-        Scenario official = scenarios.findById(loaded.pkg().getScenarioId()).orElse(null);
+    private void reopenExercise(Loaded loaded, String actorCcgid, Instant now, boolean returned) {
+        UUID scenarioId = loaded.exercise().getOfficialScenarioId();
+        Scenario official = scenarioId == null ? null : scenarios.findById(scenarioId).orElse(null);
         if (official != null && "OFFICIAL".equals(official.getStatus())) {
-            official.revertToDraft(actorUserId, now);
+            official.revertToDraft(actorCcgid, now);
             scenarios.save(official);
         }
         if (returned) {
-            loaded.exercise().markReturned(actorUserId, now);
+            loaded.exercise().markReturned(actorCcgid, now);
         } else {
-            loaded.exercise().markWithdrawn(actorUserId, now);
+            loaded.exercise().markWithdrawn(actorCcgid, now);
         }
     }
 
@@ -469,27 +462,24 @@ public class ApprovalService {
         WorkflowInstance workflow = workflows.findBySubmissionId(submissionId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "workflow-not-found", "No workflow exists for this submission."));
-        OfficialPackage pkg = packages.findById(submission.getOfficialPackageId())
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND, "official-package-not-found", "Official Package not found."));
-        RstExercise exercise = exercises.findById(pkg.getExerciseId())
+        RstExercise exercise = exercises.findById(submission.getExerciseId())
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "exercise-not-found", "The Exercise was not found."));
-        return new Loaded(submission, workflow, pkg, exercise);
+        return new Loaded(submission, workflow, exercise);
     }
 
     private void persist(Loaded loaded) {
         submissions.save(loaded.submission());
         workflows.save(loaded.workflow());
-        packages.save(loaded.pkg());
         exercises.save(loaded.exercise());
     }
 
     private ApprovalDetailView toDetail(Loaded loaded, RstPrincipal principal) {
-        String scenarioName = scenarios.findById(loaded.pkg().getScenarioId())
-                .map(Scenario::getName)
-                .orElse(null);
-        Map<UUID, String> displayNames = displayNames(loaded.workflow());
+        UUID scenarioId = loaded.exercise().getOfficialScenarioId();
+        String scenarioName = scenarioId == null
+                ? null
+                : scenarios.findById(scenarioId).map(Scenario::getName).orElse(null);
+        Map<String, String> displayNames = displayNames(loaded.workflow());
         String supervisorPositionId = supervisorPosition(loaded.exercise());
         List<ScopeView> scopes = loaded.submission().getScopes().stream()
                 .map(s -> new ScopeView(
@@ -503,9 +493,9 @@ public class ApprovalService {
                 .map(a -> new ActionView(
                         a.getStepNo(),
                         a.getActionType(),
-                        a.getActorUserId(),
+                        a.getActorCcgid(),
                         a.getActorRoleCode(),
-                        displayNames.get(a.getActorUserId()),
+                        displayNames.get(a.getActorCcgid()),
                         a.getComments(),
                         a.getActionAt(),
                         a.getRequestId()))
@@ -513,7 +503,7 @@ public class ApprovalService {
         String requiredRole = loaded.workflow().findCurrentReadyStep()
                 .map(WorkflowStepAssignment::getRequiredRoleCode)
                 .orElseGet(() -> roleForStep(loaded.workflow().getCurrentStep()));
-        boolean canDecide = loaded.submission().isAwaitingReview()
+        boolean canDecide = loaded.submission().isOpen()
                 && loaded.workflow().findCurrentReadyStep()
                         .filter(step -> ownsStep(principal, step, loaded.exercise()))
                         .isPresent();
@@ -534,10 +524,7 @@ public class ApprovalService {
                 loaded.exercise().getExerciseCode(),
                 loaded.exercise().getWorkflowStatus(),
                 loaded.exercise().getSubmittedAt(),
-                loaded.pkg().getId(),
-                loaded.pkg().getPackageVersion(),
-                loaded.pkg().getStatus(),
-                loaded.pkg().getScenarioId(),
+                scenarioId,
                 scenarioName,
                 loaded.submission().getId(),
                 loaded.submission().getSubmissionCode(),
@@ -556,17 +543,17 @@ public class ApprovalService {
 
     private StepView toStepView(
             WorkflowStepAssignment step,
-            Map<UUID, String> displayNames,
+            Map<String, String> displayNames,
             String supervisorPositionId) {
         String positionId = resolveStepPosition(step, supervisorPositionId);
         String liveName = workflowRouter.occupantName(step.getRequiredRoleCode(), positionId);
         String name = liveName != null
                 ? liveName
-                : (step.getAssigneeUserId() == null ? null : displayNames.get(step.getAssigneeUserId()));
+                : (step.getAssigneeCcgid() == null ? null : displayNames.get(step.getAssigneeCcgid()));
         return new StepView(
                 step.getStepNo(),
                 step.getRequiredRoleCode(),
-                step.getAssigneeUserId(),
+                step.getAssigneeCcgid(),
                 positionId,
                 name,
                 step.getRoutingStatus());
@@ -574,20 +561,20 @@ public class ApprovalService {
 
     private ApprovalQueueItem toQueueItem(
             Submission submission,
-            OfficialPackage pkg,
             RstExercise exercise,
             WorkflowInstance workflow,
-            Map<UUID, String> names,
+            Map<String, String> names,
             WorkflowAction mine) {
         var snapshot = exercise.getToolkitSnapshot();
         String toolkitName = snapshot != null ? snapshot.getToolkitName() : "";
         String pl3Name = snapshot != null ? snapshot.getPl3Name() : "";
         String center = snapshot != null ? snapshot.getCenter() : "";
         String domain = snapshot != null ? snapshot.getDomain() : "";
-        String supervisor = displayName(exercise.getOwnerUserId(), names);
+        String supervisor = displayName(exercise.getOwnerCcgid(), names);
 
         BigDecimal deliveryHc = deliveryHc(exercise);
-        BigDecimal rightSizingHc = rightSizingHc(pkg.getScenarioId());
+        UUID scenarioId = exercise.getOfficialScenarioId();
+        BigDecimal rightSizingHc = rightSizingHc(scenarioId);
         BigDecimal productionSupport = productionSupport(exercise.getId());
         BigDecimal capacityCreation = rightSizingHc == null
                 ? null
@@ -597,7 +584,7 @@ public class ApprovalService {
         WorkflowAction last = lastCompletedAction(workflow);
         String previousStep = previous == null ? null : reviewStageLabel(previous.getActorRoleCode());
         String previousActor = last != null
-                ? displayName(last.getActorUserId(), names)
+                ? displayName(last.getActorCcgid(), names)
                 : supervisor;
         Instant previousStepAt = last != null ? last.getActionAt() : submission.getSubmittedAt();
         Instant agingFrom = previous != null ? previous.getActionAt() : submission.getSubmittedAt();
@@ -724,10 +711,10 @@ public class ApprovalService {
     }
 
     private static String finalStatus(String submissionStatus) {
-        if ("VALIDATED".equals(submissionStatus)) {
+        if ("APPROVED".equals(submissionStatus)) {
             return "Approved";
         }
-        if ("RETURNED".equals(submissionStatus) || "ARCHIVED".equals(submissionStatus)) {
+        if ("RETURNED".equals(submissionStatus) || "WITHDRAWN".equals(submissionStatus)) {
             return "Rejected";
         }
         return null;
@@ -743,35 +730,35 @@ public class ApprovalService {
         return (int) Math.max(0, days);
     }
 
-    private String displayName(UUID userId, Map<UUID, String> names) {
-        if (userId == null) {
+    private String displayName(String ccgid, Map<String, String> names) {
+        if (ccgid == null) {
             return null;
         }
-        return names.computeIfAbsent(userId, id ->
-                users.findById(id).map(AppUser::getDisplayName).orElse(null));
+        return names.computeIfAbsent(ccgid, timesheet::displayNameByCcgid);
     }
 
-    private Map<UUID, String> displayNames(WorkflowInstance workflow) {
-        Set<UUID> ids = new HashSet<>();
+    private Map<String, String> displayNames(WorkflowInstance workflow) {
+        Set<String> ids = new HashSet<>();
         workflow.getSteps().forEach(s -> {
-            if (s.getAssigneeUserId() != null) {
-                ids.add(s.getAssigneeUserId());
+            if (s.getAssigneeCcgid() != null) {
+                ids.add(s.getAssigneeCcgid());
             }
         });
         workflow.getActions().forEach(a -> {
-            if (a.getActorUserId() != null) {
-                ids.add(a.getActorUserId());
+            if (a.getActorCcgid() != null) {
+                ids.add(a.getActorCcgid());
             }
         });
-        if (ids.isEmpty()) {
-            return Map.of();
+        Map<String, String> names = new HashMap<>();
+        for (String ccgid : ids) {
+            names.put(ccgid, timesheet.displayNameByCcgid(ccgid));
         }
-        return users.findAllById(ids).stream()
-                .collect(Collectors.toMap(AppUser::getId, AppUser::getDisplayName));
+        return names;
     }
 
     private static Set<String> resolveOpenFilter(String status) {
-        if (status == null || status.isBlank() || "AWAITING".equalsIgnoreCase(status)) {
+        if (status == null || status.isBlank() || "AWAITING".equalsIgnoreCase(status)
+                || "OPEN".equalsIgnoreCase(status)) {
             return OPEN_STATUSES;
         }
         String normalized = status.trim().toUpperCase();
@@ -784,7 +771,7 @@ public class ApprovalService {
         throw new ApiException(
                 HttpStatus.BAD_REQUEST,
                 "invalid-status-filter",
-                "status must be AWAITING or a specific AWAITING_* value.");
+                "status must be AWAITING, OPEN, or omitted.");
     }
 
     private void requireCurrentReviewer(
@@ -905,124 +892,6 @@ public class ApprovalService {
     private record Loaded(
             Submission submission,
             WorkflowInstance workflow,
-            OfficialPackage pkg,
             RstExercise exercise) {
-    }
-
-    /** Approver queue query (tab + field filters). */
-    public record QueueQuery(
-            String status,
-            boolean completed,
-            String exerciseCode,
-            String toolkitName,
-            String pl3Name,
-            LocalDate submittedFrom,
-            LocalDate submittedTo,
-            LocalDate completedFrom,
-            LocalDate completedTo,
-            String decision) {
-    }
-
-    /** Approver queue response: filtered rows, filter options, and awaiting metrics. */
-    public record ApprovalQueueView(
-            List<ApprovalQueueItem> items,
-            QueueMetrics metrics,
-            List<String> toolkitNames,
-            List<String> pl3Names) {
-    }
-
-    /** Unfiltered awaiting-tab metrics. */
-    public record QueueMetrics(int awaitingMe, int overdue, int dueWithin2Days, int highRisk) {
-    }
-
-    /** Approver queue row. */
-    public record ApprovalQueueItem(
-            UUID submissionId,
-            UUID exerciseId,
-            String exerciseCode,
-            String center,
-            String domain,
-            String pl3Name,
-            String toolkitName,
-            String supervisor,
-            BigDecimal deliveryHc,
-            BigDecimal rightSizingHc,
-            BigDecimal productionSupport,
-            BigDecimal capacityCreation,
-            String previousStep,
-            String previousActor,
-            Instant previousStepAt,
-            Integer agingDays,
-            Instant createdAt,
-            Instant submittedAt,
-            Instant archivedAt,
-            String finalStatus,
-            Integer reviewDurationDays,
-            String status,
-            String myDecision,
-            Instant myCompletedAt,
-            String completedStep) {
-    }
-
-    /** Approver review detail (extends Submitted Details fields). */
-    public record ApprovalDetailView(
-            UUID exerciseId,
-            String exerciseCode,
-            String workflowStatus,
-            Instant submittedAt,
-            UUID officialPackageId,
-            int packageVersion,
-            String packageStatus,
-            UUID scenarioId,
-            String scenarioName,
-            UUID submissionId,
-            String submissionCode,
-            String submissionStatus,
-            Short currentStep,
-            String requiredRole,
-            String remarks,
-            List<ScopeView> scopes,
-            UUID workflowInstanceId,
-            String workflowStatusLabel,
-            List<StepView> steps,
-            List<ActionView> actions,
-            boolean canDecide,
-            ApprovalWorkspaceView workspace) {
-    }
-
-    /** Submission scope view. */
-    public record ScopeView(
-            String scopeLevel, String center, String site, String domain, String pl3Code,
-            String carrier, String customerCountry) {
-    }
-
-    /** Workflow step view. */
-    public record StepView(
-            short stepNo,
-            String requiredRoleCode,
-            UUID assigneeUserId,
-            String assigneePositionId,
-            String assigneeDisplayName,
-            String routingStatus) {
-    }
-
-    /** Workflow action view. */
-    public record ActionView(
-            short stepNo,
-            String actionType,
-            UUID actorUserId,
-            String actorRoleCode,
-            String actorDisplayName,
-            String comments,
-            Instant actionAt,
-            UUID requestId) {
-    }
-
-    /** Approve request payload. */
-    public record ApproveRequest(String comments, UUID requestId) {
-    }
-
-    /** Return request payload. */
-    public record ReturnRequest(String comments, UUID requestId) {
     }
 }

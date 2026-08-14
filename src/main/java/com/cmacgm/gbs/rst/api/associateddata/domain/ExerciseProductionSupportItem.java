@@ -51,19 +51,19 @@ public class ExerciseProductionSupportItem {
     private Instant createdAt;
 
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     @Column(name = "updated_by")
-    private UUID updatedBy;
+    private String updatedBy;
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
     @Column(name = "deleted_by")
-    private UUID deletedBy;
+    private String deletedBy;
 
     @Version
     private long version;
@@ -83,7 +83,7 @@ public class ExerciseProductionSupportItem {
             String unitOfMeasure,
             BigDecimal workloadPerUnitMinutes,
             String comments,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         ExerciseProductionSupportItem item = new ExerciseProductionSupportItem();
         item.id = UUID.randomUUID();
@@ -97,9 +97,9 @@ public class ExerciseProductionSupportItem {
         item.workloadPerUnitMinutes = workloadPerUnitMinutes;
         item.comments = comments;
         item.createdAt = now;
-        item.createdBy = actorUserId;
+        item.createdBy = actorCcgid;
         item.updatedAt = now;
-        item.updatedBy = actorUserId;
+        item.updatedBy = actorCcgid;
         return item;
     }
 
@@ -109,7 +109,7 @@ public class ExerciseProductionSupportItem {
     public static ExerciseProductionSupportItem createFromArchive(
             UUID exerciseId,
             ExerciseProductionSupportItem source,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         ExerciseProductionSupportItem item = create(
                 exerciseId,
@@ -120,7 +120,7 @@ public class ExerciseProductionSupportItem {
                 source.getUnitOfMeasure(),
                 source.getWorkloadPerUnitMinutes(),
                 source.getComments(),
-                actorUserId,
+                actorCcgid,
                 now);
         item.lineageId = source.getLineageId() != null ? source.getLineageId() : source.getId();
         return item;
@@ -137,7 +137,7 @@ public class ExerciseProductionSupportItem {
             String unitOfMeasure,
             BigDecimal workloadPerUnitMinutes,
             String comments,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         this.category = category;
         this.activity = activity;
@@ -147,17 +147,17 @@ public class ExerciseProductionSupportItem {
         this.workloadPerUnitMinutes = workloadPerUnitMinutes;
         this.comments = comments;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /**
      * Soft-deletes this support item.
      */
-    public void softDelete(UUID actorUserId, Instant now) {
+    public void softDelete(String actorCcgid, Instant now) {
         this.deletedAt = now;
-        this.deletedBy = actorUserId;
+        this.deletedBy = actorCcgid;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     public UUID getId() { return id; }

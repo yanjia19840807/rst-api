@@ -18,10 +18,10 @@ public final class TmsSessionSpecification {
     }
 
     /**
-     * Agent-owned session list filter (single user).
+     * Agent-owned session list filter (single agent ccgid).
      */
     public static Specification<TmsSession> filtered(
-            UUID userId,
+            String agentCcgid,
             TmsSessionStatus status,
             String sessionNo,
             String reference,
@@ -29,7 +29,7 @@ public final class TmsSessionSpecification {
             LocalDate dateFrom,
             LocalDate dateTo) {
         return filtered(new Filter(
-                userId,
+                agentCcgid,
                 null,
                 null,
                 null,
@@ -50,8 +50,8 @@ public final class TmsSessionSpecification {
     public static Specification<TmsSession> filtered(Filter filter) {
         return (root, query, builder) -> {
             var predicates = new ArrayList<Predicate>();
-            if (filter.userId() != null) {
-                predicates.add(builder.equal(root.get("user").get("id"), filter.userId()));
+            if (filter.agentCcgid() != null) {
+                predicates.add(builder.equal(root.get("agentCcgid"), filter.agentCcgid()));
             }
             if (filter.toolkitIds() != null) {
                 if (filter.toolkitIds().isEmpty()) {
@@ -101,7 +101,7 @@ public final class TmsSessionSpecification {
     /**
      * Session list filter criteria.
      *
-     * @param userId when set, restrict to this agent (Agent list or Supervisor agent filter)
+     * @param agentCcgid when set, restrict to this agent (Agent list or Supervisor agent filter)
      * @param toolkitIds when set, restrict to these toolkits (Supervisor org scope)
      * @param toolkitId optional single toolkit filter within scope
      * @param pl3Code optional PL3 code filter (snapshot)
@@ -113,7 +113,7 @@ public final class TmsSessionSpecification {
      * @param dateTo optional started-at upper bound (inclusive day)
      */
     public record Filter(
-            UUID userId,
+            String agentCcgid,
             Collection<UUID> toolkitIds,
             UUID toolkitId,
             String pl3Code,

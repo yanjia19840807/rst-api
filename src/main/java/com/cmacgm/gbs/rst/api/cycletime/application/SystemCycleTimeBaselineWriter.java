@@ -41,7 +41,7 @@ public final class SystemCycleTimeBaselineWriter {
      * is absent or SYSTEM. MANUAL baselines are left unchanged. When no valid included
      * samples remain, deactivates an active SYSTEM baseline.
      */
-    public void refreshIfSystemOrAbsent(UUID exerciseId, UUID actorUserId) {
+    public void refreshIfSystemOrAbsent(UUID exerciseId, String actorCcgid) {
         Optional<CycleTimeBaseline> active = baselines.findByExerciseIdAndActiveTrue(exerciseId);
         if (active.isPresent() && "MANUAL".equalsIgnoreCase(active.get().getBaselineType())) {
             return;
@@ -54,18 +54,18 @@ public final class SystemCycleTimeBaselineWriter {
             }
             return;
         }
-        replaceSystem(exerciseId, actorUserId, includedValues);
+        replaceSystem(exerciseId, actorCcgid, includedValues);
     }
 
     /**
      * Replaces the active baseline with a new SYSTEM median (caller validates sample list).
      */
-    public void replaceSystem(UUID exerciseId, UUID actorUserId, List<Double> includedValues) {
+    public void replaceSystem(UUID exerciseId, String actorCcgid, List<Double> includedValues) {
         Instant now = clock.instant();
         baselines.deactivateActiveByExerciseId(exerciseId);
         BigDecimal median = medianOf(includedValues);
         baselines.save(CycleTimeBaseline.createSystem(
-                exerciseId, median, includedValues.size(), actorUserId, now));
+                exerciseId, median, includedValues.size(), actorCcgid, now));
     }
 
     public static List<Double> includedSecondsPerUnit(List<ExerciseTmsSessionRow> rows) {

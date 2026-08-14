@@ -34,8 +34,8 @@ public class WorkflowAction {
     @Column(name = "action_type", nullable = false, length = 20)
     private String actionType;
 
-    @Column(name = "actor_user_id", nullable = false)
-    private UUID actorUserId;
+    @Column(name = "actor_ccgid", nullable = false)
+    private String actorCcgid;
 
     @Column(name = "actor_role_code", nullable = false, length = 40)
     private String actorRoleCode;
@@ -58,7 +58,7 @@ public class WorkflowAction {
     /**
      * Creates a SUBMIT action (step 0).
      *
-     * @param actorUserId submitting Supervisor
+     * @param actorCcgid submitting Supervisor
      * @param comments optional remarks
      * @param scopeSnapshot JSON scope snapshot
      * @param requestId idempotency / audit request id
@@ -66,12 +66,12 @@ public class WorkflowAction {
      * @return action entity
      */
     public static WorkflowAction submit(
-            UUID actorUserId, String comments, String scopeSnapshot, UUID requestId, Instant now) {
+            String actorCcgid, String comments, String scopeSnapshot, UUID requestId, Instant now) {
         WorkflowAction action = new WorkflowAction();
         action.id = UUID.randomUUID();
         action.stepNo = 0;
         action.actionType = "SUBMIT";
-        action.actorUserId = actorUserId;
+        action.actorCcgid = actorCcgid;
         action.actorRoleCode = "SUPERVISOR";
         action.comments = comments;
         action.scopeSnapshot = scopeSnapshot;
@@ -84,7 +84,7 @@ public class WorkflowAction {
      * Creates an APPROVE action for the current workflow step.
      *
      * @param stepNo acted step number (1–3)
-     * @param actorUserId approving user
+     * @param actorCcgid approving user
      * @param actorRoleCode role used for the step (MANAGER / CDH / LTH)
      * @param comments optional comments
      * @param requestId idempotency / audit request id
@@ -93,7 +93,7 @@ public class WorkflowAction {
      */
     public static WorkflowAction approve(
             short stepNo,
-            UUID actorUserId,
+            String actorCcgid,
             String actorRoleCode,
             String comments,
             UUID requestId,
@@ -102,7 +102,7 @@ public class WorkflowAction {
         action.id = UUID.randomUUID();
         action.stepNo = stepNo;
         action.actionType = "APPROVE";
-        action.actorUserId = actorUserId;
+        action.actorCcgid = actorCcgid;
         action.actorRoleCode = actorRoleCode;
         action.comments = comments;
         action.actionAt = now;
@@ -114,7 +114,7 @@ public class WorkflowAction {
      * Creates a RETURN action that sends the submission back to the Supervisor.
      *
      * @param stepNo acted step number (1–3)
-     * @param actorUserId returning user
+     * @param actorCcgid returning user
      * @param actorRoleCode role used for the step (MANAGER / CDH / LTH)
      * @param comments required return comments
      * @param requestId idempotency / audit request id
@@ -123,7 +123,7 @@ public class WorkflowAction {
      */
     public static WorkflowAction returnAction(
             short stepNo,
-            UUID actorUserId,
+            String actorCcgid,
             String actorRoleCode,
             String comments,
             UUID requestId,
@@ -132,7 +132,7 @@ public class WorkflowAction {
         action.id = UUID.randomUUID();
         action.stepNo = stepNo;
         action.actionType = "RETURN";
-        action.actorUserId = actorUserId;
+        action.actorCcgid = actorCcgid;
         action.actorRoleCode = actorRoleCode;
         action.comments = comments;
         action.actionAt = now;
@@ -144,18 +144,18 @@ public class WorkflowAction {
      * Creates a WITHDRAW action recorded against the step that was waiting.
      *
      * @param stepNo current READY step when withdrawn
-     * @param actorUserId withdrawing Supervisor
+     * @param actorCcgid withdrawing Supervisor
      * @param requestId audit request id
      * @param now action timestamp
      * @return action entity
      */
     public static WorkflowAction withdraw(
-            short stepNo, UUID actorUserId, UUID requestId, Instant now) {
+            short stepNo, String actorCcgid, UUID requestId, Instant now) {
         WorkflowAction action = new WorkflowAction();
         action.id = UUID.randomUUID();
         action.stepNo = stepNo;
         action.actionType = "WITHDRAW";
-        action.actorUserId = actorUserId;
+        action.actorCcgid = actorCcgid;
         action.actorRoleCode = "SUPERVISOR";
         action.actionAt = now;
         action.requestId = requestId;
@@ -170,7 +170,7 @@ public class WorkflowAction {
     public UUID getId() { return id; }
     public short getStepNo() { return stepNo; }
     public String getActionType() { return actionType; }
-    public UUID getActorUserId() { return actorUserId; }
+    public String getActorCcgid() { return actorCcgid; }
     public String getActorRoleCode() { return actorRoleCode; }
     public String getComments() { return comments; }
     public Instant getActionAt() { return actionAt; }

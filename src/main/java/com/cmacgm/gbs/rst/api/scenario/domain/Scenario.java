@@ -46,25 +46,25 @@ public class Scenario {
     private Instant officialAt;
 
     @Column(name = "official_by")
-    private UUID officialBy;
+    private String officialBy;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     @Column(name = "updated_by")
-    private UUID updatedBy;
+    private String updatedBy;
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
     @Column(name = "deleted_by")
-    private UUID deletedBy;
+    private String deletedBy;
 
     @Version
     private long version;
@@ -86,7 +86,7 @@ public class Scenario {
      * @param scenarioCode business code unique within Exercise
      * @param name display name
      * @param description optional description
-     * @param actorUserId creating Supervisor
+     * @param actorCcgid creating Supervisor
      * @param now creation timestamp
      * @return draft scenario
      */
@@ -95,7 +95,7 @@ public class Scenario {
             String scenarioCode,
             String name,
             String description,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         Scenario scenario = new Scenario();
         scenario.id = UUID.randomUUID();
@@ -105,9 +105,9 @@ public class Scenario {
         scenario.description = description;
         scenario.status = "DRAFT";
         scenario.createdAt = now;
-        scenario.createdBy = actorUserId;
+        scenario.createdBy = actorCcgid;
         scenario.updatedAt = now;
-        scenario.updatedBy = actorUserId;
+        scenario.updatedBy = actorCcgid;
         return scenario;
     }
 
@@ -116,14 +116,14 @@ public class Scenario {
      *
      * @param name display name
      * @param description optional description
-     * @param actorUserId updating Supervisor
+     * @param actorCcgid updating Supervisor
      * @param now update timestamp
      */
-    public void updateDraft(String name, String description, UUID actorUserId, Instant now) {
+    public void updateDraft(String name, String description, String actorCcgid, Instant now) {
         this.name = name;
         this.description = description;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /**
@@ -133,10 +133,10 @@ public class Scenario {
      * deleting the old one (which violates {@code uk_scenario_assumption}).
      *
      * @param replacements new assumptions
-     * @param actorUserId updating Supervisor
+     * @param actorCcgid updating Supervisor
      * @param now update timestamp
      */
-    public void replaceAssumptions(List<ScenarioAssumption> replacements, UUID actorUserId, Instant now) {
+    public void replaceAssumptions(List<ScenarioAssumption> replacements, String actorCcgid, Instant now) {
         Map<String, ScenarioAssumption> incoming = new LinkedHashMap<>();
         for (ScenarioAssumption assumption : replacements) {
             incoming.put(assumption.getParameterCode(), assumption);
@@ -151,14 +151,14 @@ public class Scenario {
         for (ScenarioAssumption next : incoming.values()) {
             ScenarioAssumption current = existingByCode.get(next.getParameterCode());
             if (current != null) {
-                current.overwriteValues(next, actorUserId, now);
+                current.overwriteValues(next, actorCcgid, now);
             } else {
                 next.attach(this);
                 assumptions.add(next);
             }
         }
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /**
@@ -167,7 +167,7 @@ public class Scenario {
      * <p>Upserts by {@code shift_no} so Hibernate does not INSERT a duplicate before
      * deleting the old row (which violates {@code uk_scenario_shift}).
      */
-    public void replaceShifts(List<ScenarioShift> replacements, UUID actorUserId, Instant now) {
+    public void replaceShifts(List<ScenarioShift> replacements, String actorCcgid, Instant now) {
         Map<Short, ScenarioShift> incoming = new LinkedHashMap<>();
         for (ScenarioShift shift : replacements) {
             incoming.put(shift.getShiftNo(), shift);
@@ -182,68 +182,68 @@ public class Scenario {
         for (ScenarioShift next : incoming.values()) {
             ScenarioShift current = existingByNo.get(next.getShiftNo());
             if (current != null) {
-                current.overwriteValues(next, actorUserId, now);
+                current.overwriteValues(next, actorCcgid, now);
             } else {
                 next.attach(this);
                 shifts.add(next);
             }
         }
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /**
      * Marks this scenario OFFICIAL.
      *
-     * @param actorUserId Supervisor making it official
+     * @param actorCcgid Supervisor making it official
      * @param now official timestamp
      */
-    public void markOfficial(UUID actorUserId, Instant now) {
+    public void markOfficial(String actorCcgid, Instant now) {
         this.status = "OFFICIAL";
         this.officialAt = now;
-        this.officialBy = actorUserId;
+        this.officialBy = actorCcgid;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /**
      * Reverts an Official scenario back to DRAFT after Return or Withdraw.
      *
-     * @param actorUserId actor
+     * @param actorCcgid actor
      * @param now timestamp
      */
-    public void revertToDraft(UUID actorUserId, Instant now) {
+    public void revertToDraft(String actorCcgid, Instant now) {
         this.status = "DRAFT";
         this.officialAt = null;
         this.officialBy = null;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /**
      * Supersedes a previous official scenario.
      *
-     * @param actorUserId actor
+     * @param actorCcgid actor
      * @param now timestamp
      */
-    public void markSuperseded(UUID actorUserId, Instant now) {
+    public void markSuperseded(String actorCcgid, Instant now) {
         this.status = "SUPERSEDED";
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /**
      * Soft-deletes a draft scenario.
      *
-     * @param actorUserId deleting Supervisor
+     * @param actorCcgid deleting Supervisor
      * @param now deletion timestamp
      */
-    public void softDelete(UUID actorUserId, Instant now) {
+    public void softDelete(String actorCcgid, Instant now) {
         this.status = "DELETED";
         this.deletedAt = now;
-        this.deletedBy = actorUserId;
+        this.deletedBy = actorCcgid;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     public UUID getId() { return id; }
@@ -253,7 +253,7 @@ public class Scenario {
     public String getDescription() { return description; }
     public String getStatus() { return status; }
     public Instant getOfficialAt() { return officialAt; }
-    public UUID getOfficialBy() { return officialBy; }
+    public String getOfficialBy() { return officialBy; }
     public Instant getDeletedAt() { return deletedAt; }
     public long getVersion() { return version; }
     public List<ScenarioAssumption> getAssumptions() { return Collections.unmodifiableList(assumptions); }

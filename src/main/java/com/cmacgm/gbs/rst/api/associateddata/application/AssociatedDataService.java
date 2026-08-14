@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,7 +45,7 @@ import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
 import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseInitializationService;
-import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
+import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
@@ -53,6 +54,23 @@ import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.CalendarRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.CalendarView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.DailyVolumeRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.DailyVolumeView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.HolidayRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.HolidayView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.MonthlyVolumeRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.MonthlyVolumeView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.ReapplyCalendarResult;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.ShiftRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.ShiftView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.SlotVolumeRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.SlotVolumeView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.SupportItemRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.SupportItemView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.TeamSetupRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.TeamSetupView;
 
 /**
  * Associated Data CRUD for Supervisor Exercise Team Setup, Shift, Support, Calendar and Volume.
@@ -60,7 +78,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AssociatedDataService {
 
-    private final ExerciseService exercises;
+    private final ExerciseAccess exercises;
     private final ExerciseTeamSetupRepository teamSetups;
     private final ExerciseShiftRepository shifts;
     private final ExerciseProductionSupportItemRepository supportItems;
@@ -81,7 +99,7 @@ public class AssociatedDataService {
      * Creates the Associated Data service.
      */
     public AssociatedDataService(
-            ExerciseService exercises,
+            ExerciseAccess exercises,
             ExerciseTeamSetupRepository teamSetups,
             ExerciseShiftRepository shifts,
             ExerciseProductionSupportItemRepository supportItems,
@@ -118,43 +136,43 @@ public class AssociatedDataService {
     /**
      * Returns Team Setup for an Exercise.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @return Team Setup view
      */
     @Transactional(readOnly = true)
-    public TeamSetupView getTeamSetup(UUID ownerId, UUID exerciseId) {
-        RstExercise exercise = exercises.requireReadable(ownerId, exerciseId);
+    public TeamSetupView getTeamSetup(String ownerCcgid, UUID exerciseId) {
+        RstExercise exercise = exercises.requireReadable(ownerCcgid, exerciseId);
         return toTeamSetup(exercise, requireTeamSetup(exerciseId));
     }
 
     /**
      * Replaces Team Setup inputs. Derived metrics are computed on the response.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param request Team Setup payload
      * @return updated Team Setup view
      */
     @Transactional
-    public TeamSetupView putTeamSetup(UUID ownerId, UUID exerciseId, TeamSetupRequest request) {
-        RstExercise exercise = editable(ownerId, exerciseId);
+    public TeamSetupView putTeamSetup(String ownerCcgid, UUID exerciseId, TeamSetupRequest request) {
+        RstExercise exercise = editable(ownerCcgid, exerciseId);
         ExerciseTeamSetup setup = requireTeamSetup(exercise.getId());
         Instant now = clock.instant();
-        setup.replaceInputs(request.toInput(), ownerId, now);
+        setup.replaceInputs(request.toInput(), ownerCcgid, now);
         return toTeamSetup(exercise, teamSetups.save(setup));
     }
 
     /**
      * Lists active shifts.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @return shifts
      */
     @Transactional(readOnly = true)
-    public List<ShiftView> getShifts(UUID ownerId, UUID exerciseId) {
-        exercises.requireReadable(ownerId, exerciseId);
+    public List<ShiftView> getShifts(String ownerCcgid, UUID exerciseId) {
+        exercises.requireReadable(ownerCcgid, exerciseId);
         return shifts.findByExerciseIdAndDeletedAtIsNullOrderByShiftNoAsc(exerciseId).stream()
                 .map(this::toShift)
                 .toList();
@@ -163,14 +181,14 @@ public class AssociatedDataService {
     /**
      * Replaces the full active shift list for an Exercise.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param request shift list
      * @return new active shifts
      */
     @Transactional
-    public List<ShiftView> putShifts(UUID ownerId, UUID exerciseId, List<ShiftRequest> request) {
-        RstExercise exercise = editable(ownerId, exerciseId);
+    public List<ShiftView> putShifts(String ownerCcgid, UUID exerciseId, List<ShiftRequest> request) {
+        RstExercise exercise = editable(ownerCcgid, exerciseId);
         Instant now = clock.instant();
         // Upsert by shift_no to avoid unique (exercise_id, shift_no) conflicts from
         // soft-delete + insert in the same flush (partial index WHERE deleted_at IS NULL).
@@ -188,7 +206,7 @@ public class AssociatedDataService {
                         item.durationMinutes(),
                         item.headcount(),
                         item.worksOnWeekend(),
-                        ownerId,
+                        ownerCcgid,
                         now);
             } else {
                 shifts.save(ExerciseShift.create(
@@ -198,28 +216,28 @@ public class AssociatedDataService {
                         item.durationMinutes(),
                         item.headcount(),
                         item.worksOnWeekend(),
-                        ownerId,
+                        ownerCcgid,
                         now));
             }
         }
         for (Map.Entry<Short, ExerciseShift> entry : existingByNo.entrySet()) {
             if (!kept.contains(entry.getKey())) {
-                entry.getValue().softDelete(ownerId, now);
+                entry.getValue().softDelete(ownerCcgid, now);
             }
         }
-        return getShifts(ownerId, exerciseId);
+        return getShifts(ownerCcgid, exerciseId);
     }
 
     /**
      * Lists active production support items for an Exercise.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @return support items
      */
     @Transactional(readOnly = true)
-    public List<SupportItemView> listSupport(UUID ownerId, UUID exerciseId) {
-        RstExercise exercise = exercises.requireReadable(ownerId, exerciseId);
+    public List<SupportItemView> listSupport(String ownerCcgid, UUID exerciseId) {
+        RstExercise exercise = exercises.requireReadable(ownerCcgid, exerciseId);
         return supportItems.findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(exercise.getId())
                 .stream()
                 .map(item -> toSupport(item, exerciseId))
@@ -229,20 +247,20 @@ public class AssociatedDataService {
     /**
      * Creates a support item for the Exercise.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param request support payload
      * @return created item
      */
     @Transactional
-    public SupportItemView createSupport(UUID ownerId, UUID exerciseId, SupportItemRequest request) {
-        editable(ownerId, exerciseId);
+    public SupportItemView createSupport(String ownerCcgid, UUID exerciseId, SupportItemRequest request) {
+        editable(ownerCcgid, exerciseId);
         Instant now = clock.instant();
         requireValidFrequency(request.frequencyCode(), exerciseId);
         ExerciseProductionSupportItem item = ExerciseProductionSupportItem.create(
                 exerciseId, request.category(), request.activity(), request.frequencyCode(),
                 request.volume(), request.unitOfMeasure(), request.workloadPerUnitMinutes(),
-                request.comments(), ownerId, now);
+                request.comments(), ownerCcgid, now);
         supportItems.save(item);
         return toSupport(item, exerciseId);
     }
@@ -250,7 +268,7 @@ public class AssociatedDataService {
     /**
      * Updates a support item.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param itemId support item id
      * @param request support payload
@@ -258,8 +276,8 @@ public class AssociatedDataService {
      */
     @Transactional
     public SupportItemView updateSupport(
-            UUID ownerId, UUID exerciseId, UUID itemId, SupportItemRequest request) {
-        editable(ownerId, exerciseId);
+            String ownerCcgid, UUID exerciseId, UUID itemId, SupportItemRequest request) {
+        editable(ownerCcgid, exerciseId);
         ExerciseProductionSupportItem item = supportItems.findByIdAndExerciseIdAndDeletedAtIsNull(itemId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "support-item-not-found", "The support item was not found."));
@@ -268,7 +286,7 @@ public class AssociatedDataService {
         item.update(
                 request.category(), request.activity(), request.frequencyCode(), request.volume(),
                 request.unitOfMeasure(), request.workloadPerUnitMinutes(),
-                request.comments(), ownerId, now);
+                request.comments(), ownerCcgid, now);
         supportItems.save(item);
         return toSupport(item, exerciseId);
     }
@@ -276,30 +294,30 @@ public class AssociatedDataService {
     /**
      * Soft-deletes a support item.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param itemId support item id
      */
     @Transactional
-    public void deleteSupport(UUID ownerId, UUID exerciseId, UUID itemId) {
-        editable(ownerId, exerciseId);
+    public void deleteSupport(String ownerCcgid, UUID exerciseId, UUID itemId) {
+        editable(ownerCcgid, exerciseId);
         ExerciseProductionSupportItem item = supportItems.findByIdAndExerciseIdAndDeletedAtIsNull(itemId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "support-item-not-found", "The support item was not found."));
-        item.softDelete(ownerId, clock.instant());
+        item.softDelete(ownerCcgid, clock.instant());
         supportItems.save(item);
     }
 
     /**
      * Returns calendar header and active holidays.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @return calendar view
      */
     @Transactional(readOnly = true)
-    public CalendarView getCalendar(UUID ownerId, UUID exerciseId) {
-        RstExercise exercise = exercises.requireReadable(ownerId, exerciseId);
+    public CalendarView getCalendar(String ownerCcgid, UUID exerciseId) {
+        RstExercise exercise = exercises.requireReadable(ownerCcgid, exerciseId);
         ExerciseCalendar calendar = requireCalendar(exerciseId);
         List<HolidayView> holidayViews = holidays
                 .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)
@@ -327,23 +345,23 @@ public class AssociatedDataService {
     /**
      * Replaces calendar header and full holiday list.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param request calendar payload
      * @return updated calendar
      */
     @Transactional
-    public CalendarView putCalendar(UUID ownerId, UUID exerciseId, CalendarRequest request) {
-        editable(ownerId, exerciseId);
+    public CalendarView putCalendar(String ownerCcgid, UUID exerciseId, CalendarRequest request) {
+        editable(ownerCcgid, exerciseId);
         Instant now = clock.instant();
         ExerciseCalendar calendar = requireCalendar(exerciseId);
         calendar.replace(
                 request.weekendCode(),
-                request.baselineSource(), request.baselineVersion(), ownerId, now);
+                request.baselineSource(), request.baselineVersion(), ownerCcgid, now);
         calendars.save(calendar);
         for (ExerciseHoliday existing : holidays
                 .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)) {
-            existing.softDelete(ownerId, now);
+            existing.softDelete(ownerCcgid, now);
             holidays.save(existing);
         }
         holidays.flush();
@@ -351,10 +369,10 @@ public class AssociatedDataService {
             for (HolidayRequest holiday : request.holidays()) {
                 holidays.save(ExerciseHoliday.create(
                         exerciseId, holiday.holidayDate(), holiday.holidayName(),
-                        holiday.holidayType(), null, ownerId, now));
+                        holiday.holidayType(), null, ownerCcgid, now));
             }
         }
-        return getCalendar(ownerId, exerciseId);
+        return getCalendar(ownerCcgid, exerciseId);
     }
 
     /**
@@ -362,8 +380,8 @@ public class AssociatedDataService {
      * Preserves CUSTOM holidays.
      */
     @Transactional
-    public ReapplyCalendarResult reapplyHolidayTemplate(UUID ownerId, UUID exerciseId) {
-        RstExercise exercise = editable(ownerId, exerciseId);
+    public ReapplyCalendarResult reapplyHolidayTemplate(String ownerCcgid, UUID exerciseId) {
+        RstExercise exercise = editable(ownerCcgid, exerciseId);
         String center = exercise.getToolkitSnapshot() != null
                 ? exercise.getToolkitSnapshot().getCenter()
                 : null;
@@ -373,21 +391,21 @@ public class AssociatedDataService {
                 center,
                 primaryYear,
                 ExerciseInitializationService.resolveHolidayYears(exercise),
-                ownerId,
+                ownerCcgid,
                 true);
-        return new ReapplyCalendarResult(getCalendar(ownerId, exerciseId), applied.notices());
+        return new ReapplyCalendarResult(getCalendar(ownerCcgid, exerciseId), applied.notices());
     }
 
     /**
      * Lists monthly volumes.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @return monthly volumes
      */
     @Transactional(readOnly = true)
-    public List<MonthlyVolumeView> getMonthlyVolumes(UUID ownerId, UUID exerciseId) {
-        exercises.requireReadable(ownerId, exerciseId);
+    public List<MonthlyVolumeView> getMonthlyVolumes(String ownerCcgid, UUID exerciseId) {
+        exercises.requireReadable(ownerCcgid, exerciseId);
         return monthlyVolumes.findByExerciseIdOrderByMonthAsc(exerciseId).stream()
                 .map(v -> new MonthlyVolumeView(
                         v.getId(),
@@ -401,23 +419,23 @@ public class AssociatedDataService {
     /**
      * Replaces the full monthly volume list.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param request monthly rows
      * @return replaced list
      */
     @Transactional
     public List<MonthlyVolumeView> putMonthlyVolumes(
-            UUID ownerId, UUID exerciseId, List<MonthlyVolumeRequest> request) {
-        return replaceMonthlyVolumes(ownerId, exerciseId, request, "MANUAL", null);
+            String ownerCcgid, UUID exerciseId, List<MonthlyVolumeRequest> request) {
+        return replaceMonthlyVolumes(ownerCcgid, exerciseId, request, "MANUAL", null);
     }
 
     /**
      * Exports a blank monthly volume Excel template.
      */
     @Transactional(readOnly = true)
-    public byte[] exportMonthlyTemplate(UUID ownerId, UUID exerciseId) {
-        exercises.requireOwned(ownerId, exerciseId);
+    public byte[] exportMonthlyTemplate(String ownerCcgid, UUID exerciseId) {
+        exercises.requireOwned(ownerCcgid, exerciseId);
         return volumeExcel.exportMonthlyBlank();
     }
 
@@ -425,8 +443,8 @@ public class AssociatedDataService {
      * Exports current monthly volumes as Excel.
      */
     @Transactional(readOnly = true)
-    public byte[] exportMonthlyExcel(UUID ownerId, UUID exerciseId) {
-        exercises.requireOwned(ownerId, exerciseId);
+    public byte[] exportMonthlyExcel(String ownerCcgid, UUID exerciseId) {
+        exercises.requireOwned(ownerCcgid, exerciseId);
         List<MonthlyVolumeRequest> rows = monthlyVolumes.findByExerciseIdOrderByMonthAsc(exerciseId).stream()
                 .map(v -> new MonthlyVolumeRequest(MonthKeys.formatYearMonth(v.getMonth()), v.getActualVolume()))
                 .toList();
@@ -438,24 +456,24 @@ public class AssociatedDataService {
      */
     @Transactional
     public List<MonthlyVolumeView> importMonthlyExcel(
-            UUID ownerId, UUID exerciseId, InputStream input, String fileName) {
-        editable(ownerId, exerciseId);
+            String ownerCcgid, UUID exerciseId, InputStream input, String fileName) {
+        editable(ownerCcgid, exerciseId);
         List<MonthlyVolumeRequest> parsed = volumeExcel.parseMonthly(input);
         volumeValidator.validateMonthly(parsed);
-        UUID batchId = recordImportBatch(ownerId, exerciseId, "MONTHLY_VOLUME", fileName, parsed.size());
-        return replaceMonthlyVolumes(ownerId, exerciseId, parsed, "IMPORT", batchId);
+        UUID batchId = recordImportBatch(ownerCcgid, exerciseId, "MONTHLY_VOLUME", fileName, parsed.size());
+        return replaceMonthlyVolumes(ownerCcgid, exerciseId, parsed, "IMPORT", batchId);
     }
 
     /**
      * Lists daily volumes.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @return daily volumes
      */
     @Transactional(readOnly = true)
-    public List<DailyVolumeView> getDailyVolumes(UUID ownerId, UUID exerciseId) {
-        exercises.requireReadable(ownerId, exerciseId);
+    public List<DailyVolumeView> getDailyVolumes(String ownerCcgid, UUID exerciseId) {
+        exercises.requireReadable(ownerCcgid, exerciseId);
         return dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(exerciseId).stream()
                 .map(v -> new DailyVolumeView(
                         v.getId(),
@@ -469,23 +487,23 @@ public class AssociatedDataService {
     /**
      * Replaces the full daily volume list.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param request daily rows
      * @return replaced list
      */
     @Transactional
     public List<DailyVolumeView> putDailyVolumes(
-            UUID ownerId, UUID exerciseId, List<DailyVolumeRequest> request) {
-        return replaceDailyVolumes(ownerId, exerciseId, request, "MANUAL", null);
+            String ownerCcgid, UUID exerciseId, List<DailyVolumeRequest> request) {
+        return replaceDailyVolumes(ownerCcgid, exerciseId, request, "MANUAL", null);
     }
 
     /**
      * Exports a blank daily volume Excel template.
      */
     @Transactional(readOnly = true)
-    public byte[] exportDailyTemplate(UUID ownerId, UUID exerciseId) {
-        exercises.requireOwned(ownerId, exerciseId);
+    public byte[] exportDailyTemplate(String ownerCcgid, UUID exerciseId) {
+        exercises.requireOwned(ownerCcgid, exerciseId);
         return volumeExcel.exportDailyBlank();
     }
 
@@ -493,8 +511,8 @@ public class AssociatedDataService {
      * Exports current daily volumes as Excel.
      */
     @Transactional(readOnly = true)
-    public byte[] exportDailyExcel(UUID ownerId, UUID exerciseId) {
-        exercises.requireOwned(ownerId, exerciseId);
+    public byte[] exportDailyExcel(String ownerCcgid, UUID exerciseId) {
+        exercises.requireOwned(ownerCcgid, exerciseId);
         List<DailyVolumeRequest> rows = dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(exerciseId).stream()
                 .map(v -> new DailyVolumeRequest(v.getVolumeDate(), v.getActualVolume()))
                 .toList();
@@ -506,24 +524,24 @@ public class AssociatedDataService {
      */
     @Transactional
     public List<DailyVolumeView> importDailyExcel(
-            UUID ownerId, UUID exerciseId, InputStream input, String fileName) {
-        editable(ownerId, exerciseId);
+            String ownerCcgid, UUID exerciseId, InputStream input, String fileName) {
+        editable(ownerCcgid, exerciseId);
         List<DailyVolumeRequest> parsed = volumeExcel.parseDaily(input);
         volumeValidator.validateDaily(parsed);
-        UUID batchId = recordImportBatch(ownerId, exerciseId, "DAILY_VOLUME", fileName, parsed.size());
-        return replaceDailyVolumes(ownerId, exerciseId, parsed, "IMPORT", batchId);
+        UUID batchId = recordImportBatch(ownerCcgid, exerciseId, "DAILY_VOLUME", fileName, parsed.size());
+        return replaceDailyVolumes(ownerCcgid, exerciseId, parsed, "IMPORT", batchId);
     }
 
     /**
      * Lists slot volumes.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @return slot volumes
      */
     @Transactional(readOnly = true)
-    public List<SlotVolumeView> getSlotVolumes(UUID ownerId, UUID exerciseId) {
-        exercises.requireReadable(ownerId, exerciseId);
+    public List<SlotVolumeView> getSlotVolumes(String ownerCcgid, UUID exerciseId) {
+        exercises.requireReadable(ownerCcgid, exerciseId);
         return slotVolumes.findByExerciseIdOrderBySlotStartAtAsc(exerciseId).stream()
                 .map(v -> new SlotVolumeView(
                         v.getId(),
@@ -538,23 +556,23 @@ public class AssociatedDataService {
     /**
      * Replaces the full slot volume list.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param request slot rows
      * @return replaced list
      */
     @Transactional
     public List<SlotVolumeView> putSlotVolumes(
-            UUID ownerId, UUID exerciseId, List<SlotVolumeRequest> request) {
-        return replaceSlotVolumes(ownerId, exerciseId, request, "MANUAL", null);
+            String ownerCcgid, UUID exerciseId, List<SlotVolumeRequest> request) {
+        return replaceSlotVolumes(ownerCcgid, exerciseId, request, "MANUAL", null);
     }
 
     /**
      * Exports a blank slot volume Excel template.
      */
     @Transactional(readOnly = true)
-    public byte[] exportSlotTemplate(UUID ownerId, UUID exerciseId) {
-        exercises.requireOwned(ownerId, exerciseId);
+    public byte[] exportSlotTemplate(String ownerCcgid, UUID exerciseId) {
+        exercises.requireOwned(ownerCcgid, exerciseId);
         return volumeExcel.exportSlotBlank();
     }
 
@@ -562,8 +580,8 @@ public class AssociatedDataService {
      * Exports current slot volumes as Excel.
      */
     @Transactional(readOnly = true)
-    public byte[] exportSlotExcel(UUID ownerId, UUID exerciseId) {
-        exercises.requireOwned(ownerId, exerciseId);
+    public byte[] exportSlotExcel(String ownerCcgid, UUID exerciseId) {
+        exercises.requireOwned(ownerCcgid, exerciseId);
         List<SlotVolumeRequest> rows = slotVolumes.findByExerciseIdOrderBySlotStartAtAsc(exerciseId).stream()
                 .map(v -> new SlotVolumeRequest(
                         v.getSlotStartAt(), v.getSlotEndAt(), v.getActualVolume()))
@@ -576,89 +594,95 @@ public class AssociatedDataService {
      */
     @Transactional
     public List<SlotVolumeView> importSlotExcel(
-            UUID ownerId, UUID exerciseId, InputStream input, String fileName) {
-        editable(ownerId, exerciseId);
+            String ownerCcgid, UUID exerciseId, InputStream input, String fileName) {
+        editable(ownerCcgid, exerciseId);
         List<SlotVolumeRequest> parsed = volumeExcel.parseSlot(input);
         volumeValidator.validateSlot(parsed);
-        UUID batchId = recordImportBatch(ownerId, exerciseId, "SLOT_VOLUME", fileName, parsed.size());
-        return replaceSlotVolumes(ownerId, exerciseId, parsed, "IMPORT", batchId);
+        UUID batchId = recordImportBatch(ownerCcgid, exerciseId, "SLOT_VOLUME", fileName, parsed.size());
+        return replaceSlotVolumes(ownerCcgid, exerciseId, parsed, "IMPORT", batchId);
     }
 
     private List<MonthlyVolumeView> replaceMonthlyVolumes(
-            UUID ownerId,
+            String ownerCcgid,
             UUID exerciseId,
             List<MonthlyVolumeRequest> request,
             String sourceType,
             UUID importBatchId) {
-        editable(ownerId, exerciseId);
+        editable(ownerCcgid, exerciseId);
         volumeValidator.validateMonthly(request);
         Instant now = clock.instant();
         monthlyVolumes.deleteByExerciseId(exerciseId);
         monthlyVolumes.flush();
+        List<ExerciseVolumeMonthlyInput> rows = new ArrayList<>(request.size());
         for (MonthlyVolumeRequest row : request) {
-            monthlyVolumes.save(ExerciseVolumeMonthlyInput.create(
+            rows.add(ExerciseVolumeMonthlyInput.create(
                     exerciseId,
                     MonthKeys.parseMonthStart(row.month()),
                     row.actualVolume(),
                     sourceType,
                     importBatchId,
-                    ownerId,
+                    ownerCcgid,
                     now));
         }
-        return getMonthlyVolumes(ownerId, exerciseId);
+        monthlyVolumes.saveAll(rows);
+        return getMonthlyVolumes(ownerCcgid, exerciseId);
     }
 
     private List<DailyVolumeView> replaceDailyVolumes(
-            UUID ownerId,
+            String ownerCcgid,
             UUID exerciseId,
             List<DailyVolumeRequest> request,
             String sourceType,
             UUID importBatchId) {
-        editable(ownerId, exerciseId);
+        editable(ownerCcgid, exerciseId);
         volumeValidator.validateDaily(request);
         Instant now = clock.instant();
         dailyVolumes.deleteByExerciseId(exerciseId);
         dailyVolumes.flush();
+        List<ExerciseVolumeDailyInput> rows = new ArrayList<>(request.size());
         for (DailyVolumeRequest row : request) {
-            dailyVolumes.save(ExerciseVolumeDailyInput.create(
+            rows.add(ExerciseVolumeDailyInput.create(
                     exerciseId,
                     row.volumeDate(),
                     row.actualVolume(),
                     sourceType,
                     importBatchId,
-                    ownerId,
+                    ownerCcgid,
                     now));
         }
-        return getDailyVolumes(ownerId, exerciseId);
+        dailyVolumes.saveAll(rows);
+        return getDailyVolumes(ownerCcgid, exerciseId);
     }
 
     private List<SlotVolumeView> replaceSlotVolumes(
-            UUID ownerId,
+            String ownerCcgid,
             UUID exerciseId,
             List<SlotVolumeRequest> request,
             String sourceType,
             UUID importBatchId) {
-        editable(ownerId, exerciseId);
+        editable(ownerCcgid, exerciseId);
         volumeValidator.validateSlot(request);
         Instant now = clock.instant();
         slotVolumes.deleteByExerciseId(exerciseId);
         slotVolumes.flush();
+        List<ExerciseVolumeSlotInput> rows = new ArrayList<>(request.size());
         for (SlotVolumeRequest row : request) {
-            slotVolumes.save(ExerciseVolumeSlotInput.create(
+            rows.add(ExerciseVolumeSlotInput.create(
                     exerciseId,
                     row.slotStartAt(),
                     row.slotEndAt(),
                     row.actualVolume(),
                     sourceType,
                     importBatchId,
-                    ownerId,
+                    ownerCcgid,
                     now));
         }
-        return getSlotVolumes(ownerId, exerciseId);
+        slotVolumes.saveAll(rows);
+        return getSlotVolumes(ownerCcgid, exerciseId);
     }
 
     private UUID recordImportBatch(
-            UUID ownerId, UUID exerciseId, String importType, String fileName, int rowCount) {
+            String ownerCcgid, UUID exerciseId, String importType, String fileName, int rowCount) {
         Instant now = clock.instant();
         FileArtifact artifact = fileArtifacts.save(FileArtifact.createStub(
                 "VOLUME_IMPORT",
@@ -666,7 +690,7 @@ public class AssociatedDataService {
                 exerciseId,
                 fileName == null || fileName.isBlank() ? "volume-import.xlsx" : fileName,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                ownerId,
+                ownerCcgid,
                 now));
         DataImportBatch batch = importBatches.save(DataImportBatch.create(
                 exerciseId,
@@ -677,13 +701,13 @@ public class AssociatedDataService {
                 rowCount,
                 0,
                 "{\"accepted\":" + rowCount + "}",
-                ownerId,
+                ownerCcgid,
                 now));
         return batch.getId();
     }
 
-    private RstExercise editable(UUID ownerId, UUID exerciseId) {
-        RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
+    private RstExercise editable(String ownerCcgid, UUID exerciseId) {
+        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
         return exercise;
     }
@@ -767,146 +791,5 @@ public class AssociatedDataService {
         return new HolidayView(
                 holiday.getId(), holiday.getHolidayDate(), holiday.getHolidayName(),
                 holiday.getHolidayType(), holiday.getWorkingDayOverride());
-    }
-
-    /** Team Setup response. */
-    public record TeamSetupView(
-            BigDecimal agentsLt6m, BigDecimal agents6To24m, BigDecimal agents24To48m,
-            BigDecimal agentsGt48m, BigDecimal deliveryHc, BigDecimal workingHoursPerDay,
-            BigDecimal paidLeaveDays, BigDecimal otherLeaveDays, String weekendCode,
-            BigDecimal availabilityRatio, BigDecimal automationRatio, BigDecimal capacityRatio,
-            BigDecimal maxOvertimeMinutes, String slaType, BigDecimal slaTargetRatio,
-            BigDecimal slaTurnaroundMinutes, LocalTime slaStartTime, LocalTime slaEndTime,
-            Boolean slaWeekendEnabled, BigDecimal weekendShiftHc, BigDecimal skeletonRatio,
-            BigDecimal totalAgents, BigDecimal averageTenureYears, BigDecimal workingDaysPerYear,
-            BigDecimal maxCapacityDays, BigDecimal dailyCapacityPerAgent,
-            String calculationVersion, long version) {
-    }
-
-    /** Team Setup PUT payload. */
-    public record TeamSetupRequest(
-            BigDecimal agentsLt6m, BigDecimal agents6To24m, BigDecimal agents24To48m,
-            BigDecimal agentsGt48m, BigDecimal paidLeaveDays, BigDecimal otherLeaveDays,
-            BigDecimal availabilityRatio, BigDecimal automationRatio,
-            BigDecimal maxOvertimeMinutes, String slaType, BigDecimal slaTargetRatio,
-            BigDecimal slaTurnaroundMinutes, LocalTime slaStartTime, LocalTime slaEndTime,
-            Boolean slaWeekendEnabled, BigDecimal weekendShiftHc, BigDecimal skeletonRatio) {
-        /**
-         * Converts to domain input.
-         *
-         * @return domain input
-         */
-        public TeamSetupInput toInput() {
-            return new TeamSetupInput(
-                    agentsLt6m, agents6To24m, agents24To48m, agentsGt48m,
-                    paidLeaveDays, otherLeaveDays,
-                    availabilityRatio, automationRatio, maxOvertimeMinutes,
-                    slaType, slaTargetRatio, slaTurnaroundMinutes, slaStartTime, slaEndTime,
-                    slaWeekendEnabled, weekendShiftHc, skeletonRatio);
-        }
-    }
-
-    /** Shift response. */
-    public record ShiftView(
-            UUID id, short shiftNo, LocalTime startTime, BigDecimal durationMinutes,
-            BigDecimal headcount, boolean worksOnWeekend) {
-    }
-
-    /** Shift request row. */
-    public record ShiftRequest(
-            short shiftNo, @NotNull LocalTime startTime, BigDecimal durationMinutes,
-            @NotNull BigDecimal headcount, boolean worksOnWeekend) {
-    }
-
-    /** Support item response. */
-    public record SupportItemView(
-            UUID id, UUID lineageId, String category, String activity, String frequencyCode,
-            BigDecimal volume, String unitOfMeasure, BigDecimal workloadPerUnitMinutes,
-            BigDecimal annualMultiplier, BigDecimal workloadPerYearHours, BigDecimal supportFte,
-            String comments, String calculationVersion) {
-    }
-
-    /** Support item write payload. {@code annualMultiplier} is ignored; server derives it. */
-    public record SupportItemRequest(
-            @NotBlank String category,
-            @NotBlank String activity,
-            @NotBlank String frequencyCode,
-            @NotNull BigDecimal volume,
-            @NotBlank String unitOfMeasure,
-            @NotNull BigDecimal workloadPerUnitMinutes,
-            BigDecimal annualMultiplier,
-            String comments) {
-    }
-
-    /** Calendar response. */
-    public record CalendarView(
-            String weekendCode, String baselineSource,
-            String baselineVersion, UUID sourceTemplateId, Integer sourceTemplateVersion,
-            Short baselineYear, BigDecimal workingDaysPerYear, long version,
-            List<HolidayView> holidays,
-            boolean templateUpdateAvailable,
-            Integer publishedTemplateVersion,
-            String templateUpdateMessage) {
-    }
-
-    /** Re-apply template response with initialization notices. */
-    public record ReapplyCalendarResult(CalendarView calendar, List<String> notices) {
-    }
-
-    /** Calendar PUT payload. */
-    public record CalendarRequest(
-            String weekendCode, String baselineSource,
-            String baselineVersion, List<HolidayRequest> holidays) {
-    }
-
-    /** Holiday response. */
-    public record HolidayView(
-            UUID id, LocalDate holidayDate, String holidayName, String holidayType,
-            Boolean workingDayOverride) {
-    }
-
-    /** Holiday request row. */
-    public record HolidayRequest(
-            @NotNull LocalDate holidayDate, @NotBlank String holidayName,
-            @NotBlank String holidayType, Boolean workingDayOverride) {
-    }
-
-    /** Monthly volume response. */
-    public record MonthlyVolumeView(
-            UUID id, String month, BigDecimal actualVolume, String sourceType, UUID importBatchId) {
-    }
-
-    /** Monthly volume request row. */
-    public record MonthlyVolumeRequest(@NotBlank String month, BigDecimal actualVolume) {
-    }
-
-    /** Daily volume response. */
-    public record DailyVolumeView(
-            UUID id,
-            LocalDate volumeDate,
-            BigDecimal actualVolume,
-            String sourceType,
-            UUID importBatchId) {
-    }
-
-    /** Daily volume request row. */
-    public record DailyVolumeRequest(@NotNull LocalDate volumeDate, BigDecimal actualVolume) {
-    }
-
-    /** Slot volume response. */
-    public record SlotVolumeView(
-            UUID id,
-            Instant slotStartAt,
-            Instant slotEndAt,
-            BigDecimal actualVolume,
-            String sourceType,
-            UUID importBatchId) {
-    }
-
-    /** Slot volume request row. */
-    public record SlotVolumeRequest(
-            @NotNull Instant slotStartAt,
-            @NotNull Instant slotEndAt,
-            @NotNull BigDecimal actualVolume) {
     }
 }

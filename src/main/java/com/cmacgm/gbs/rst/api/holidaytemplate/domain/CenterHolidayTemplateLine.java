@@ -34,19 +34,19 @@ public class CenterHolidayTemplateLine {
     private Instant createdAt;
 
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     @Column(name = "updated_by")
-    private UUID updatedBy;
+    private String updatedBy;
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
     @Column(name = "deleted_by")
-    private UUID deletedBy;
+    private String deletedBy;
 
     @Version
     @Column(name = "row_version")
@@ -60,7 +60,7 @@ public class CenterHolidayTemplateLine {
             LocalDate holidayDate,
             String holidayName,
             Boolean workingDayOverride,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         CenterHolidayTemplateLine line = new CenterHolidayTemplateLine();
         line.id = UUID.randomUUID();
@@ -69,17 +69,17 @@ public class CenterHolidayTemplateLine {
         line.holidayName = holidayName;
         line.workingDayOverride = workingDayOverride;
         line.createdAt = now;
-        line.createdBy = actorUserId;
+        line.createdBy = actorCcgid;
         line.updatedAt = now;
-        line.updatedBy = actorUserId;
+        line.updatedBy = actorCcgid;
         return line;
     }
 
-    public void softDelete(UUID actorUserId, Instant now) {
+    public void softDelete(String actorCcgid, Instant now) {
         this.deletedAt = now;
-        this.deletedBy = actorUserId;
+        this.deletedBy = actorCcgid;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     public UUID getId() { return id; }

@@ -80,13 +80,13 @@ public class ExerciseTeamSetup {
     private Instant createdAt;
 
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     @Column(name = "updated_by")
-    private UUID updatedBy;
+    private String updatedBy;
 
     @Version
     private long version;
@@ -97,20 +97,20 @@ public class ExerciseTeamSetup {
     /**
      * Creates an empty Team Setup shell for a newly created Exercise.
      */
-    public static ExerciseTeamSetup emptyShell(UUID exerciseId, UUID actorUserId, Instant now) {
+    public static ExerciseTeamSetup emptyShell(UUID exerciseId, String actorCcgid, Instant now) {
         ExerciseTeamSetup setup = new ExerciseTeamSetup();
         setup.exerciseId = exerciseId;
         setup.createdAt = now;
-        setup.createdBy = actorUserId;
+        setup.createdBy = actorCcgid;
         setup.updatedAt = now;
-        setup.updatedBy = actorUserId;
+        setup.updatedBy = actorCcgid;
         return setup;
     }
 
     /**
      * Replaces editable Supervisor inputs. Derived values are not stored.
      */
-    public void replaceInputs(TeamSetupInput input, UUID actorUserId, Instant now) {
+    public void replaceInputs(TeamSetupInput input, String actorCcgid, Instant now) {
         this.agentsLt6m = input.agentsLt6m();
         this.agents6To24m = input.agents6To24m();
         this.agents24To48m = input.agents24To48m();
@@ -129,7 +129,7 @@ public class ExerciseTeamSetup {
         this.weekendShiftHc = input.weekendShiftHc();
         this.skeletonRatio = input.skeletonRatio();
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /** Sum of tenure buckets; null when all empty or zero. */

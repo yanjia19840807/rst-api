@@ -12,7 +12,6 @@ import java.util.stream.Collectors;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
-import com.cmacgm.gbs.rst.api.identity.persistence.AppUserRepository;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.tms.persistence.TmsSessionRepository;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.CreateToolkitRequest;
@@ -31,7 +30,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class ToolkitService {
 
     private final ToolkitRepository toolkits;
-    private final AppUserRepository users;
     private final TimesheetReadService timesheet;
     private final TmsSessionRepository tmsSessions;
     private final RstExerciseRepository exercises;
@@ -39,13 +37,11 @@ public class ToolkitService {
 
     public ToolkitService(
             ToolkitRepository toolkits,
-            AppUserRepository users,
             TimesheetReadService timesheet,
             TmsSessionRepository tmsSessions,
             RstExerciseRepository exercises,
             Clock clock) {
         this.toolkits = toolkits;
-        this.users = users;
         this.timesheet = timesheet;
         this.tmsSessions = tmsSessions;
         this.exercises = exercises;
@@ -102,18 +98,16 @@ public class ToolkitService {
     }
 
     @Transactional
-    public ToolkitResponse create(UUID userId, String ccgid, CreateToolkitRequest request) {
+    public ToolkitResponse create(String ccgid, CreateToolkitRequest request) {
         ensureScope(ccgid, request);
         String name = request.name().trim();
         ensureNameAvailable(request.supervisorPositionId(), name, null);
         ensureHierarchyAvailable(request);
         Instant now = clock.instant();
-        var owner = users.findByIdAndActiveTrue(userId)
-                .orElseThrow(() -> forbidden("inactive-user", "The current user is inactive."));
         Toolkit toolkit = Toolkit.create(
                 name, request.description(), request.supervisorPositionId(),
                 request.center(), request.domain(), request.pl1(), request.pl2(),
-                request.pl3Code(), request.pl3Name(), request.combineSubtasksTime(), owner, now);
+                request.pl3Code(), request.pl3Name(), request.combineSubtasksTime(), ccgid, now);
         if (request.subtasks() != null) {
             request.subtasks().forEach(item ->
                     toolkit.addSubtask(item.name(), item.description(), item.displayOrder(), now));
@@ -123,8 +117,7 @@ public class ToolkitService {
     }
 
     @Transactional
-    public ToolkitResponse update(
-            UUID userId, String ccgid, UUID toolkitId, UpdateToolkitRequest request) {
+    public ToolkitResponse update(String ccgid, UUID toolkitId, UpdateToolkitRequest request) {
         Toolkit toolkit = ownedToolkit(ccgid, toolkitId);
         if (toolkit.getVersion() != request.version()) {
             throw conflict("optimistic-lock-conflict",
@@ -132,12 +125,10 @@ public class ToolkitService {
         }
         String name = request.name().trim();
         ensureNameAvailable(toolkit.getSupervisorPositionId(), name, toolkitId);
-        var owner = users.findByIdAndActiveTrue(userId)
-                .orElseThrow(() -> forbidden("inactive-user", "The current user is inactive."));
         Instant now = clock.instant();
         toolkit.update(
                 name, request.description(), request.combineSubtasksTime(),
-                owner, now);
+                ccgid, now);
         syncSubtasks(toolkit, request.subtasks(), now);
         toolkit.getSharedKpiSelections().stream()
                 .filter(selection -> selection.getDeletedAt() == null)

@@ -18,13 +18,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import jakarta.validation.constraints.NotNull;
-
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseCalendar;
 import com.cmacgm.gbs.rst.api.forecast.ForecastOrchestrationService;
-import com.cmacgm.gbs.rst.api.forecast.ForecastOrchestrationService.ForecastBundleView;
-import com.cmacgm.gbs.rst.api.forecast.ForecastOrchestrationService.ForecastPointView;
-import com.cmacgm.gbs.rst.api.forecast.ForecastOrchestrationService.ForecastView;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseHoliday;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
@@ -37,7 +32,7 @@ import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
 import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
-import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
+import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator;
@@ -58,6 +53,15 @@ import com.cmacgm.gbs.rst.api.scenario.persistence.SimulationRunRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.DailySizingRowView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.DailySizingView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.ForecastBundleView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.ForecastPointView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.ForecastView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.MonthlySizingRowView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.MonthlySizingView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.PreviewSizingRequest;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.SizingPreviewBundle;
 
 /**
  * Real monthly sizing + daily simulation using forecast points and §11.2 formulas.
@@ -68,7 +72,7 @@ public class SizingSimulationService {
 
     private static final String VERSION = "sizing-v1";
 
-    private final ExerciseService exercises;
+    private final ExerciseAccess exercises;
     private final ScenarioRepository scenarios;
     private final ForecastOrchestrationService forecasts;
     private final ForecastRunRepository forecastRuns;
@@ -84,7 +88,7 @@ public class SizingSimulationService {
     private final Clock clock;
 
     public SizingSimulationService(
-            ExerciseService exercises,
+            ExerciseAccess exercises,
             ScenarioRepository scenarios,
             ForecastOrchestrationService forecasts,
             ForecastRunRepository forecastRuns,
@@ -119,18 +123,18 @@ public class SizingSimulationService {
      */
     @Transactional(readOnly = true)
     public SizingPreviewBundle previewSizing(
-            UUID ownerId, UUID exerciseId, UUID scenarioId, PreviewSizingRequest request) {
+            String ownerCcgid, UUID exerciseId, UUID scenarioId, PreviewSizingRequest request) {
         if (request == null || request.rightSizingHc() == null || request.rightSizingHc().signum() <= 0) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "right-sizing-hc-required",
                     "rightSizingHc must be a positive number.");
         }
-        Context ctx = loadContext(ownerId, exerciseId, scenarioId, request.rightSizingHc());
+        Context ctx = loadContext(ownerCcgid, exerciseId, scenarioId, request.rightSizingHc());
         ForecastBundleView forecast =
-                forecasts.previewMonthlyAndDailyForecast(ownerId, exerciseId, scenarioId);
-        MonthlySizingView monthly = computeMonthlyView(ownerId, scenarioId, ctx, forecast.monthly());
-        DailySizingView daily = computeDailyView(ownerId, scenarioId, ctx, forecast.daily());
+                forecasts.previewMonthlyAndDailyForecast(ownerCcgid, exerciseId, scenarioId);
+        MonthlySizingView monthly = computeMonthlyView(ownerCcgid, scenarioId, ctx, forecast.monthly());
+        DailySizingView daily = computeDailyView(ownerCcgid, scenarioId, ctx, forecast.daily());
         return new SizingPreviewBundle(forecast, monthly, daily);
     }
 
@@ -138,20 +142,20 @@ public class SizingSimulationService {
      * @deprecated Prefer {@link #previewSizing}; no longer persists.
      */
     @Transactional(readOnly = true)
-    public MonthlySizingView runMonthly(UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        Context ctx = loadContext(ownerId, exerciseId, scenarioId, null);
+    public MonthlySizingView runMonthly(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
+        Context ctx = loadContext(ownerCcgid, exerciseId, scenarioId, null);
         ForecastRun forecast = requireForecast(scenarioId, "MONTHLY");
-        return computeMonthlyFromEntity(ownerId, scenarioId, ctx, forecast);
+        return computeMonthlyFromEntity(ownerCcgid, scenarioId, ctx, forecast);
     }
 
     /**
      * @deprecated Prefer {@link #previewSizing}; no longer persists.
      */
     @Transactional(readOnly = true)
-    public DailySizingView runDaily(UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        Context ctx = loadContext(ownerId, exerciseId, scenarioId, null);
+    public DailySizingView runDaily(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
+        Context ctx = loadContext(ownerCcgid, exerciseId, scenarioId, null);
         ForecastRun forecast = requireForecast(scenarioId, "DAILY");
-        return computeDailyFromEntity(ownerId, scenarioId, ctx, forecast);
+        return computeDailyFromEntity(ownerCcgid, scenarioId, ctx, forecast);
     }
 
     /**
@@ -160,7 +164,7 @@ public class SizingSimulationService {
     @Transactional
     public void persistSizingSnapshot(
             UUID scenarioId,
-            UUID ownerId,
+            String ownerCcgid,
             UUID monthlyForecastRunId,
             UUID dailyForecastRunId,
             MonthlySizingView monthly,
@@ -182,7 +186,7 @@ public class SizingSimulationService {
                 VERSION,
                 sha256Hex("monthly|" + monthlyForecastRunId + "|" + rightSizingHc),
                 "{\"version\":\"" + VERSION + "\",\"rows\":" + monthly.rows().size() + "}",
-                ownerId,
+                ownerCcgid,
                 monthly.startedAt() != null ? monthly.startedAt() : now);
         simulationRuns.save(monthlyRun);
         List<MonthlySizingResult> monthlyRows = new ArrayList<>(monthly.rows().size());
@@ -211,7 +215,7 @@ public class SizingSimulationService {
                 VERSION,
                 sha256Hex("daily|" + dailyForecastRunId + "|" + rightSizingHc),
                 "{\"version\":\"" + VERSION + "\",\"rows\":" + daily.rows().size() + "}",
-                ownerId,
+                ownerCcgid,
                 daily.startedAt() != null ? daily.startedAt() : now);
         simulationRuns.save(dailyRun);
         List<DailySimulationResult> dailyRows = new ArrayList<>(daily.rows().size());
@@ -233,7 +237,7 @@ public class SizingSimulationService {
     }
 
     private MonthlySizingView computeMonthlyView(
-            UUID ownerId, UUID scenarioId, Context ctx, ForecastView forecast) {
+            String ownerCcgid, UUID scenarioId, Context ctx, ForecastView forecast) {
         List<ForecastPointView> points = forecast.points() == null
                 ? List.of()
                 : forecast.points().stream()
@@ -254,7 +258,7 @@ public class SizingSimulationService {
                 VERSION,
                 sha256Hex("monthly|" + forecast.id() + "|" + ctx.rightSizingHc()),
                 "{\"version\":\"" + VERSION + "\",\"rows\":" + points.size() + "}",
-                ownerId,
+                ownerCcgid,
                 now);
         List<MonthlySizingResult> rows = new ArrayList<>(points.size());
         for (ForecastPointView point : points) {
@@ -308,7 +312,7 @@ public class SizingSimulationService {
     }
 
     private DailySizingView computeDailyView(
-            UUID ownerId, UUID scenarioId, Context ctx, ForecastView forecast) {
+            String ownerCcgid, UUID scenarioId, Context ctx, ForecastView forecast) {
         List<ForecastPointView> points = forecast.points() == null
                 ? List.of()
                 : forecast.points().stream()
@@ -329,7 +333,7 @@ public class SizingSimulationService {
                 VERSION,
                 sha256Hex("daily|" + forecast.id() + "|" + ctx.rightSizingHc()),
                 "{\"version\":\"" + VERSION + "\",\"rows\":" + points.size() + "}",
-                ownerId,
+                ownerCcgid,
                 now);
         BigDecimal backlog = BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
         List<DailySimulationResult> rows = new ArrayList<>(points.size());
@@ -378,7 +382,7 @@ public class SizingSimulationService {
     }
 
     private MonthlySizingView computeMonthlyFromEntity(
-            UUID ownerId, UUID scenarioId, Context ctx, ForecastRun forecast) {
+            String ownerCcgid, UUID scenarioId, Context ctx, ForecastRun forecast) {
         List<ForecastPointView> points = sortedPoints(forecast).stream()
                 .map(point -> new ForecastPointView(
                         point.getId(),
@@ -402,11 +406,11 @@ public class SizingSimulationService {
                 forecast.getStartedAt(),
                 forecast.getCompletedAt(),
                 points);
-        return computeMonthlyView(ownerId, scenarioId, ctx, view);
+        return computeMonthlyView(ownerCcgid, scenarioId, ctx, view);
     }
 
     private DailySizingView computeDailyFromEntity(
-            UUID ownerId, UUID scenarioId, Context ctx, ForecastRun forecast) {
+            String ownerCcgid, UUID scenarioId, Context ctx, ForecastRun forecast) {
         List<ForecastPointView> points = sortedPoints(forecast).stream()
                 .map(point -> new ForecastPointView(
                         point.getId(),
@@ -430,7 +434,7 @@ public class SizingSimulationService {
                 forecast.getStartedAt(),
                 forecast.getCompletedAt(),
                 points);
-        return computeDailyView(ownerId, scenarioId, ctx, view);
+        return computeDailyView(ownerCcgid, scenarioId, ctx, view);
     }
 
     private static void validateMonthlyHc(MonthlySizingView monthly, BigDecimal rightSizingHc) {
@@ -453,8 +457,8 @@ public class SizingSimulationService {
     }
 
     @Transactional(readOnly = true)
-    public MonthlySizingView getLatestMonthly(UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        exercises.requireReadable(ownerId, exerciseId);
+    public MonthlySizingView getLatestMonthly(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
+        exercises.requireReadable(ownerCcgid, exerciseId);
         requireScenario(exerciseId, scenarioId);
         SimulationRun run = simulationRuns
                 .findFirstByScenarioIdAndRunTypeAndStatusOrderByRunNoDesc(
@@ -470,8 +474,8 @@ public class SizingSimulationService {
     }
 
     @Transactional(readOnly = true)
-    public DailySizingView getLatestDaily(UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        exercises.requireReadable(ownerId, exerciseId);
+    public DailySizingView getLatestDaily(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
+        exercises.requireReadable(ownerCcgid, exerciseId);
         requireScenario(exerciseId, scenarioId);
         SimulationRun run = simulationRuns
                 .findFirstByScenarioIdAndRunTypeAndStatusOrderByRunNoDesc(
@@ -541,8 +545,8 @@ public class SizingSimulationService {
     }
 
     private Context loadContext(
-            UUID ownerId, UUID exerciseId, UUID scenarioId, BigDecimal rightSizingHcOverride) {
-        RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
+            String ownerCcgid, UUID exerciseId, UUID scenarioId, BigDecimal rightSizingHcOverride) {
+        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
         Scenario scenario = requireScenario(exerciseId, scenarioId);
         if (!"DRAFT".equals(scenario.getStatus())) {
@@ -724,69 +728,5 @@ public class SizingSimulationService {
             BigDecimal cycleTimeSeconds,
             BigDecimal rightSizingHc,
             BigDecimal supportFte) {
-    }
-
-    /** Preview request with HC from the form (not yet saved). */
-    public record PreviewSizingRequest(@NotNull BigDecimal rightSizingHc) {
-    }
-
-    /** Forecast + sizing preview payload (not persisted). */
-    public record SizingPreviewBundle(
-            ForecastBundleView forecast, MonthlySizingView monthly, DailySizingView daily) {
-    }
-
-    /** Latest monthly sizing response. */
-    public record MonthlySizingView(
-            UUID id,
-            int runNo,
-            String status,
-            String calculationVersion,
-            UUID forecastRunId,
-            Instant startedAt,
-            Instant completedAt,
-            List<MonthlySizingRowView> rows) {
-    }
-
-    /** Monthly sizing row. */
-    public record MonthlySizingRowView(
-            UUID id,
-            String month,
-            BigDecimal forecastVolume,
-            BigDecimal manualVolume,
-            BigDecimal workdays,
-            BigDecimal weekendDays,
-            BigDecimal cycleTimeSeconds,
-            BigDecimal nominalHcWithoutOt,
-            BigDecimal nominalHcWithOt,
-            BigDecimal productionSupportFte,
-            BigDecimal rightSizingHc,
-            BigDecimal capacityCreation) {
-    }
-
-    /** Latest daily simulation response. */
-    public record DailySizingView(
-            UUID id,
-            int runNo,
-            String status,
-            String calculationVersion,
-            UUID forecastRunId,
-            Instant startedAt,
-            Instant completedAt,
-            List<DailySizingRowView> rows) {
-    }
-
-    /** Daily simulation row. */
-    public record DailySizingRowView(
-            UUID id,
-            LocalDate resultDate,
-            BigDecimal forecastVolume,
-            BigDecimal manualVolume,
-            boolean holiday,
-            boolean workingDay,
-            BigDecimal simulationHc,
-            BigDecimal standardCapacity,
-            BigDecimal overtimeCapacity,
-            BigDecimal backlogStart,
-            BigDecimal backlogEnd) {
     }
 }

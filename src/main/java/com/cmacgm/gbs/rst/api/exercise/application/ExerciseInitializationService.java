@@ -59,7 +59,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ExerciseInitializationService {
 
-    private static final List<String> ARCHIVE_STATUSES = List.of("VALIDATED", "ARCHIVED");
+    private static final List<String> ARCHIVE_STATUSES = List.of("APPROVED");
 
     private final RstExerciseRepository exercises;
     private final ExerciseTeamSetupRepository teamSetups;
@@ -108,7 +108,7 @@ public class ExerciseInitializationService {
      * Initializes Associated Data for a newly created Exercise.
      */
     @Transactional
-    public List<String> initialize(RstExercise exercise, UUID actorUserId) {
+    public List<String> initialize(RstExercise exercise, String actorCcgid) {
         Instant now = clock.instant();
         List<String> notices = new ArrayList<>();
         String center = exercise.getToolkitSnapshot() != null
@@ -120,7 +120,7 @@ public class ExerciseInitializationService {
         Optional<RstExercise> archive = findLatestArchive(exercise.getToolkitId());
         if (archive.isPresent()) {
             RstExercise source = archive.get();
-            seedFromArchive(source, exercise, actorUserId, now);
+            seedFromArchive(source, exercise, actorCcgid, now);
             notices.add("Associated Data seeded from archived exercise "
                     + source.getExerciseCode()
                     + " (Team Setup, Production Support, Calendar & Holidays).");
@@ -132,7 +132,7 @@ public class ExerciseInitializationService {
             }
         } else {
             notices.add(
-                    "No validated/archived exercise found for this Toolkit. "
+                    "No approved exercise found for this Toolkit. "
                             + "Associated Data starts empty; Calendar uses Center templates.");
         }
 
@@ -141,21 +141,21 @@ public class ExerciseInitializationService {
                 center,
                 primaryYear,
                 holidayYears,
-                actorUserId,
+                actorCcgid,
                 false);
         notices.addAll(applied.notices());
 
         if (archive.isPresent()) {
-            copyCalendarHeader(archive.get().getId(), exercise.getId(), actorUserId, now);
+            copyCalendarHeader(archive.get().getId(), exercise.getId(), actorCcgid, now);
             copyCustomHolidays(
-                    archive.get().getId(), exercise.getId(), holidayYears, actorUserId, now);
+                    archive.get().getId(), exercise.getId(), holidayYears, actorCcgid, now);
         }
 
-        syncVolumeGrids(exercise, archive.map(RstExercise::getId).orElse(null), actorUserId);
+        syncVolumeGrids(exercise, archive.map(RstExercise::getId).orElse(null), actorCcgid);
         notices.add("Volume Input grids prepared for Sizing and Slot training windows"
                 + (archive.isPresent() ? " (overlapping archive values copied)." : "."));
 
-        notices.add(syncTmsPopulation(exercise, actorUserId));
+        notices.add(syncTmsPopulation(exercise, actorCcgid));
         return notices;
     }
 
@@ -163,15 +163,15 @@ public class ExerciseInitializationService {
      * Reconciles Volume Input grids after Exercise period changes (no archive re-seed).
      */
     @Transactional
-    public void ensureTrainVolumeGrids(RstExercise exercise, UUID actorUserId) {
-        syncVolumeGrids(exercise, null, actorUserId);
+    public void ensureTrainVolumeGrids(RstExercise exercise, String actorCcgid) {
+        syncVolumeGrids(exercise, null, actorCcgid);
     }
 
     /**
      * Reconciles Embedded TMS population for the Exercise TMS period and refreshes SYSTEM CT.
      */
     @Transactional
-    public String syncTmsPopulation(RstExercise exercise, UUID actorUserId) {
+    public String syncTmsPopulation(RstExercise exercise, String actorCcgid) {
         Instant now = clock.instant();
         UUID exerciseId = exercise.getId();
         List<TmsSession> qualifying = tmsSessions.findAll(TmsSessionSpecification.filtered(new Filter(
@@ -208,7 +208,7 @@ public class ExerciseInitializationService {
         for (UUID sessionId : desiredIds) {
             if (!existingBySessionId.containsKey(sessionId)) {
                 missing.add(ExerciseTmsSession.select(
-                        exerciseId, sessionId, true, null, actorUserId, now));
+                        exerciseId, sessionId, true, null, actorCcgid, now));
             }
         }
         if (!missing.isEmpty()) {
@@ -216,7 +216,7 @@ public class ExerciseInitializationService {
         }
         exerciseTmsSessions.flush();
 
-        systemCycleTime.refreshIfSystemOrAbsent(exerciseId, actorUserId);
+        systemCycleTime.refreshIfSystemOrAbsent(exerciseId, actorCcgid);
         return "Linked " + desiredIds.size()
                 + " COMPLETED TMS session(s) for the Exercise TMS period.";
     }
@@ -239,14 +239,14 @@ public class ExerciseInitializationService {
     private void seedFromArchive(
             RstExercise source,
             RstExercise target,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
-        copyTeamSetup(source.getId(), target.getId(), actorUserId, now);
-        copySupport(source, target, actorUserId, now);
-        target.markInitializedFrom(source.getId(), actorUserId, now);
+        copyTeamSetup(source.getId(), target.getId(), actorCcgid, now);
+        copySupport(source, target, actorCcgid, now);
+        target.markInitializedFrom(source.getId(), actorCcgid, now);
     }
 
-    private void copyTeamSetup(UUID sourceId, UUID targetId, UUID actorUserId, Instant now) {
+    private void copyTeamSetup(UUID sourceId, UUID targetId, String actorCcgid, Instant now) {
         ExerciseTeamSetup target = teamSetups.findById(targetId)
                 .orElseThrow(() -> initializationConflict(
                         "exercise-team-setup-shell-missing",
@@ -255,25 +255,25 @@ public class ExerciseInitializationService {
                 .orElseThrow(() -> initializationConflict(
                         "archive-team-setup-missing",
                         "The archived Exercise has no Team Setup to copy."));
-        target.replaceInputs(toInput(source), actorUserId, now);
+        target.replaceInputs(toInput(source), actorCcgid, now);
         teamSetups.save(target);
     }
 
-    private void copySupport(RstExercise source, RstExercise target, UUID actorUserId, Instant now) {
+    private void copySupport(RstExercise source, RstExercise target, String actorCcgid, Instant now) {
         List<ExerciseProductionSupportItem> copies = supportItems
                 .findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(source.getId())
                 .stream()
                 .map(sourceItem -> ExerciseProductionSupportItem.createFromArchive(
                         target.getId(),
                         sourceItem,
-                        actorUserId,
+                        actorCcgid,
                         now))
                 .toList();
         supportItems.saveAll(copies);
     }
 
     private void copyCalendarHeader(
-            UUID sourceId, UUID targetId, UUID actorUserId, Instant now) {
+            UUID sourceId, UUID targetId, String actorCcgid, Instant now) {
         ExerciseCalendar target = calendars.findById(targetId)
                 .orElseThrow(() -> initializationConflict(
                         "exercise-calendar-shell-missing",
@@ -286,7 +286,7 @@ public class ExerciseInitializationService {
                     source.getBaselineYear(),
                     source.getBaselineSource(),
                     source.getBaselineVersion(),
-                    actorUserId,
+                    actorCcgid,
                     now);
             calendars.save(target);
         });
@@ -296,7 +296,7 @@ public class ExerciseInitializationService {
             UUID sourceId,
             UUID targetId,
             Set<Short> holidayYears,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         Set<String> existingKeys = holidays
                 .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(targetId)
@@ -320,22 +320,22 @@ public class ExerciseInitializationService {
                         holiday.getHolidayName(),
                         "CUSTOM",
                         holiday.getWorkingDayOverride(),
-                        actorUserId,
+                        actorCcgid,
                         now));
             }
         }
         holidays.saveAll(copies);
     }
 
-    private void syncVolumeGrids(RstExercise exercise, UUID archiveExerciseId, UUID actorUserId) {
+    private void syncVolumeGrids(RstExercise exercise, UUID archiveExerciseId, String actorCcgid) {
         Instant now = clock.instant();
-        syncMonthly(exercise, archiveExerciseId, actorUserId, now);
-        syncDaily(exercise, archiveExerciseId, actorUserId, now);
-        syncSlot(exercise, archiveExerciseId, actorUserId, now);
+        syncMonthly(exercise, archiveExerciseId, actorCcgid, now);
+        syncDaily(exercise, archiveExerciseId, actorCcgid, now);
+        syncSlot(exercise, archiveExerciseId, actorCcgid, now);
     }
 
     private void syncMonthly(
-            RstExercise exercise, UUID archiveExerciseId, UUID actorUserId, Instant now) {
+            RstExercise exercise, UUID archiveExerciseId, String actorCcgid, Instant now) {
         UUID targetId = exercise.getId();
         List<LocalDate> expected = VolumeTrainWindows.monthlyTrainMonths(exercise.getSizingMonth());
         Set<LocalDate> expectedKeys = new HashSet<>(expected);
@@ -361,7 +361,7 @@ public class ExerciseInitializationService {
                     seed != null ? seed.getActualVolume() : null,
                     seed != null ? "ARCHIVE" : "MANUAL",
                     seed != null ? seed.getImportBatchId() : null,
-                    actorUserId,
+                    actorCcgid,
                     now));
         }
         monthlyVolumes.deleteAllInBatch(targetRows.stream()
@@ -371,7 +371,7 @@ public class ExerciseInitializationService {
     }
 
     private void syncDaily(
-            RstExercise exercise, UUID archiveExerciseId, UUID actorUserId, Instant now) {
+            RstExercise exercise, UUID archiveExerciseId, String actorCcgid, Instant now) {
         UUID targetId = exercise.getId();
         List<LocalDate> expected = VolumeTrainWindows.dailyTrainDates(exercise.getSizingMonth());
         Set<LocalDate> expectedKeys = new HashSet<>(expected);
@@ -397,7 +397,7 @@ public class ExerciseInitializationService {
                     seed != null ? seed.getActualVolume() : null,
                     seed != null ? "ARCHIVE" : "MANUAL",
                     seed != null ? seed.getImportBatchId() : null,
-                    actorUserId,
+                    actorCcgid,
                     now));
         }
         dailyVolumes.deleteAllInBatch(targetRows.stream()
@@ -407,7 +407,7 @@ public class ExerciseInitializationService {
     }
 
     private void syncSlot(
-            RstExercise exercise, UUID archiveExerciseId, UUID actorUserId, Instant now) {
+            RstExercise exercise, UUID archiveExerciseId, String actorCcgid, Instant now) {
         UUID targetId = exercise.getId();
         List<SlotBound> expected = VolumeTrainWindows.slotTrainBounds(
                 exercise.getSlotStartDate(), exercise.getSlotWeeks());
@@ -440,7 +440,7 @@ public class ExerciseInitializationService {
                     seed != null ? seed.getActualVolume() : BigDecimal.ZERO,
                     seed != null ? "ARCHIVE" : "MANUAL",
                     seed != null ? seed.getImportBatchId() : null,
-                    actorUserId,
+                    actorCcgid,
                     now));
         }
         slotVolumes.deleteAllInBatch(targetRows.stream()

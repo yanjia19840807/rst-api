@@ -7,11 +7,11 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 
 import com.cmacgm.gbs.rst.api.approval.application.ApprovalService;
-import com.cmacgm.gbs.rst.api.approval.application.ApprovalService.ApprovalDetailView;
-import com.cmacgm.gbs.rst.api.approval.application.ApprovalService.ApprovalQueueView;
-import com.cmacgm.gbs.rst.api.approval.application.ApprovalService.ApproveRequest;
-import com.cmacgm.gbs.rst.api.approval.application.ApprovalService.QueueQuery;
-import com.cmacgm.gbs.rst.api.approval.application.ApprovalService.ReturnRequest;
+import com.cmacgm.gbs.rst.api.approval.api.dto.ApprovalDetailView;
+import com.cmacgm.gbs.rst.api.approval.api.dto.ApprovalQueueView;
+import com.cmacgm.gbs.rst.api.approval.api.dto.ApproveRequest;
+import com.cmacgm.gbs.rst.api.approval.api.dto.QueueQuery;
+import com.cmacgm.gbs.rst.api.approval.api.dto.ReturnRequest;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;

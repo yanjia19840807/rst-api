@@ -45,7 +45,7 @@ public class CenterHolidayTemplateSnapshot {
     private Instant publishedAt;
 
     @Column(name = "published_by")
-    private UUID publishedBy;
+    private String publishedBy;
 
     protected CenterHolidayTemplateSnapshot() {
     }
@@ -53,7 +53,7 @@ public class CenterHolidayTemplateSnapshot {
     public static CenterHolidayTemplateSnapshot create(
             CenterHolidayTemplate template,
             String linesJson,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         CenterHolidayTemplateSnapshot snapshot = new CenterHolidayTemplateSnapshot();
         snapshot.id = UUID.randomUUID();
@@ -65,7 +65,7 @@ public class CenterHolidayTemplateSnapshot {
         snapshot.sourceNote = template.getSourceNote();
         snapshot.linesJson = linesJson;
         snapshot.publishedAt = now;
-        snapshot.publishedBy = actorUserId;
+        snapshot.publishedBy = actorCcgid;
         return snapshot;
     }
 

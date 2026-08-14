@@ -32,7 +32,7 @@ public class CycleTimeBaselineFile {
     private Instant createdAt;
 
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     protected CycleTimeBaselineFile() {
     }
@@ -43,7 +43,7 @@ public class CycleTimeBaselineFile {
      * @param cycleTimeBaselineId baseline id
      * @param fileArtifactId file artifact id
      * @param displayOrder display order
-     * @param actorUserId creating user
+     * @param actorCcgid creating user
      * @param now creation timestamp
      * @return link row
      */
@@ -51,14 +51,14 @@ public class CycleTimeBaselineFile {
             UUID cycleTimeBaselineId,
             UUID fileArtifactId,
             int displayOrder,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         CycleTimeBaselineFile row = new CycleTimeBaselineFile();
         row.cycleTimeBaselineId = cycleTimeBaselineId;
         row.fileArtifactId = fileArtifactId;
         row.displayOrder = displayOrder;
         row.createdAt = now;
-        row.createdBy = actorUserId;
+        row.createdBy = actorCcgid;
         return row;
     }
 

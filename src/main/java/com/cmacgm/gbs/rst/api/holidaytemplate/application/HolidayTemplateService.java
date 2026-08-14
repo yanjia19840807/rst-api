@@ -88,7 +88,7 @@ public class HolidayTemplateService {
     }
 
     @Transactional
-    public TemplateDetail create(UUID actorUserId, CreateTemplateRequest request) {
+    public TemplateDetail create(String actorCcgid, CreateTemplateRequest request) {
         Instant now = clock.instant();
         String center = requireText(request.center(), "center");
         short year = request.year();
@@ -101,54 +101,54 @@ public class HolidayTemplateService {
         var defaults = CenterCountryDefaults.resolve(center);
         String weekend = optionalText(request.defaultWeekendCode(), defaults.weekendCode());
         CenterHolidayTemplate template = CenterHolidayTemplate.createDraft(
-                center, year, weekend, request.sourceNote(), actorUserId, now);
+                center, year, weekend, request.sourceNote(), actorCcgid, now);
         templates.save(template);
-        replaceLines(template.getId(), request.holidays(), year, actorUserId, now);
+        replaceLines(template.getId(), request.holidays(), year, actorCcgid, now);
         return get(template.getId());
     }
 
     @Transactional
-    public TemplateDetail update(UUID actorUserId, UUID id, UpdateTemplateRequest request) {
+    public TemplateDetail update(String actorCcgid, UUID id, UpdateTemplateRequest request) {
         Instant now = clock.instant();
         CenterHolidayTemplate template = requireTemplate(id);
         template.ensureEditable();
         if (CenterHolidayTemplate.STATUS_PUBLISHED.equals(template.getStatus())) {
-            template.reopenDraft(actorUserId, now);
+            template.reopenDraft(actorCcgid, now);
         }
         template.updateHeader(
                 optionalText(request.defaultWeekendCode(), template.getDefaultWeekendCode()),
                 request.sourceNote() != null ? request.sourceNote() : template.getSourceNote(),
-                actorUserId,
+                actorCcgid,
                 now);
         templates.save(template);
         if (request.holidays() != null) {
-            replaceLines(template.getId(), request.holidays(), template.getYear(), actorUserId, now);
+            replaceLines(template.getId(), request.holidays(), template.getYear(), actorCcgid, now);
         }
         return get(template.getId());
     }
 
     @Transactional
-    public TemplateDetail publish(UUID actorUserId, UUID id) {
+    public TemplateDetail publish(String actorCcgid, UUID id) {
         Instant now = clock.instant();
         CenterHolidayTemplate template = requireTemplate(id);
         List<CenterHolidayTemplateLine> active = activeLines(template.getId());
         if (active.isEmpty()) {
             throw unprocessable("empty-template", "Publish requires at least one holiday line.");
         }
-        template.markPublished(actorUserId, now);
+        template.markPublished(actorCcgid, now);
         templates.save(template);
-        snapshots.save(CenterHolidayTemplateSnapshot.create(template, toLinesJson(active), actorUserId, now));
+        snapshots.save(CenterHolidayTemplateSnapshot.create(template, toLinesJson(active), actorCcgid, now));
         return get(template.getId());
     }
 
     @Transactional
-    public void softDelete(UUID actorUserId, UUID id) {
+    public void softDelete(String actorCcgid, UUID id) {
         Instant now = clock.instant();
         CenterHolidayTemplate template = requireTemplate(id);
-        template.softDelete(actorUserId, now);
+        template.softDelete(actorCcgid, now);
         templates.save(template);
         for (CenterHolidayTemplateLine line : activeLines(id)) {
-            line.softDelete(actorUserId, now);
+            line.softDelete(actorCcgid, now);
             lines.save(line);
         }
     }
@@ -177,13 +177,13 @@ public class HolidayTemplateService {
     }
 
     @Transactional
-    public TemplateDetail importExcel(UUID actorUserId, UUID id, java.io.InputStream inputStream) {
+    public TemplateDetail importExcel(String actorCcgid, UUID id, java.io.InputStream inputStream) {
         CenterHolidayTemplate template = requireTemplate(id);
         List<LineDraft> drafts = excel.parse(inputStream, template.getYear());
         List<HolidayLineRequest> holidays = drafts.stream()
                 .map(d -> new HolidayLineRequest(d.holidayDate(), d.holidayName(), d.workingDayOverride()))
                 .toList();
-        return update(actorUserId, id, new UpdateTemplateRequest(
+        return update(actorCcgid, id, new UpdateTemplateRequest(
                 template.getDefaultWeekendCode(),
                 template.getSourceNote(),
                 holidays));
@@ -200,11 +200,11 @@ public class HolidayTemplateService {
             UUID exerciseId,
             String center,
             LocalDate sizingMonth,
-            UUID actorUserId,
+            String actorCcgid,
             boolean preserveCustom) {
         short year = (short) YearMonth.from(sizingMonth).getYear();
         return applyPublishedTemplates(
-                exerciseId, center, year, Set.of(year), actorUserId, preserveCustom)
+                exerciseId, center, year, Set.of(year), actorCcgid, preserveCustom)
                 .primaryApplied();
     }
 
@@ -218,7 +218,7 @@ public class HolidayTemplateService {
             String center,
             short primaryYear,
             Collection<Short> holidayYears,
-            UUID actorUserId,
+            String actorCcgid,
             boolean preserveCustom) {
         Instant now = clock.instant();
         List<String> notices = new ArrayList<>();
@@ -230,7 +230,7 @@ public class HolidayTemplateService {
 
         ExerciseCalendar calendar = calendars.findById(exerciseId).orElse(null);
         if (calendar == null) {
-            calendar = ExerciseCalendar.emptyShell(exerciseId, actorUserId, now);
+            calendar = ExerciseCalendar.emptyShell(exerciseId, actorCcgid, now);
             calendars.save(calendar);
         }
 
@@ -239,7 +239,7 @@ public class HolidayTemplateService {
         for (ExerciseHoliday holiday : existing) {
             boolean baselineRow = "BASELINE".equalsIgnoreCase(holiday.getHolidayType());
             if (baselineRow || !preserveCustom) {
-                holiday.softDelete(actorUserId, now);
+                holiday.softDelete(actorCcgid, now);
                 holidays.save(holiday);
             }
         }
@@ -267,7 +267,7 @@ public class HolidayTemplateService {
                         line.holidayName(),
                         null,
                         line.sourceLineId(),
-                        actorUserId,
+                        actorCcgid,
                         now));
             }
         }
@@ -285,7 +285,7 @@ public class HolidayTemplateService {
                     primaryYear,
                     "CENTER_TEMPLATE",
                     String.valueOf(primary.version()),
-                    actorUserId,
+                    actorCcgid,
                     now);
         } else {
             calendar.applyTemplateMeta(
@@ -295,7 +295,7 @@ public class HolidayTemplateService {
                     primaryYear,
                     "NO_TEMPLATE",
                     null,
-                    actorUserId,
+                    actorCcgid,
                     now);
             notices.add("No published holiday template for Center "
                     + center + " / " + primaryYear
@@ -442,10 +442,10 @@ public class HolidayTemplateService {
             UUID templateId,
             List<HolidayLineRequest> holidays,
             short year,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         for (CenterHolidayTemplateLine existing : activeLines(templateId)) {
-            existing.softDelete(actorUserId, now);
+            existing.softDelete(actorCcgid, now);
             lines.save(existing);
         }
         // Flush soft-deletes before inserts so the partial unique index
@@ -471,7 +471,7 @@ public class HolidayTemplateService {
                     holiday.holidayDate(),
                     holiday.holidayName().trim(),
                     holiday.workingDayOverride(),
-                    actorUserId,
+                    actorCcgid,
                     now));
         }
     }

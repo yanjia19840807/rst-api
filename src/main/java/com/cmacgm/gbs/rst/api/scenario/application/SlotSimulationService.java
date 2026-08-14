@@ -19,11 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.NotNull;
-
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.ShiftRequest;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseCalendar;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeSlotInput;
@@ -33,7 +28,7 @@ import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeSlotInput
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
-import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
+import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WeekendCode;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SlotMath;
@@ -48,6 +43,11 @@ import com.cmacgm.gbs.rst.api.scenario.persistence.SlotSimulationResultRepositor
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.ShiftRequest;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.PreviewSlotRequest;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.SlotChartView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.SlotRowView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.SlotSimulationView;
 
 /**
  * Real slot simulation using AD slot volumes, shifts, Team Setup, and Cycle Time (§11.2).
@@ -58,7 +58,7 @@ public class SlotSimulationService {
 
     private static final String VERSION = "slot-v1";
 
-    private final ExerciseService exercises;
+    private final ExerciseAccess exercises;
     private final ScenarioRepository scenarios;
     private final SimulationRunRepository simulationRuns;
     private final SlotSimulationResultRepository slotResults;
@@ -72,7 +72,7 @@ public class SlotSimulationService {
      * Creates the slot simulation service.
      */
     public SlotSimulationService(
-            ExerciseService exercises,
+            ExerciseAccess exercises,
             ScenarioRepository scenarios,
             SimulationRunRepository simulationRuns,
             SlotSimulationResultRepository slotResults,
@@ -97,7 +97,7 @@ public class SlotSimulationService {
      */
     @Transactional(readOnly = true)
     public SlotSimulationView previewSlot(
-            UUID ownerId, UUID exerciseId, UUID scenarioId, PreviewSlotRequest request) {
+            String ownerCcgid, UUID exerciseId, UUID scenarioId, PreviewSlotRequest request) {
         if (request == null || request.shifts() == null || request.shifts().isEmpty()) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
@@ -105,7 +105,7 @@ public class SlotSimulationService {
                     "At least one shift is required before slot simulation.");
         }
         List<SlotShift> draftShifts = toSlotShifts(request.shifts());
-        Context ctx = loadContext(ownerId, exerciseId, scenarioId, draftShifts);
+        Context ctx = loadContext(ownerCcgid, exerciseId, scenarioId, draftShifts);
         Instant now = clock.instant();
         SimulationRun run = SimulationRun.accepted(
                 scenarioId,
@@ -115,7 +115,7 @@ public class SlotSimulationService {
                 VERSION,
                 sha256Hex("slot|" + scenarioId + "|" + ctx.volumes().size() + "|" + ctx.shifts().size()),
                 "{\"version\":\"" + VERSION + "\",\"slots\":" + ctx.volumes().size() + "}",
-                ownerId,
+                ownerCcgid,
                 now);
         Computed computed = compute(run.getId(), ctx);
         return toView(run, computed, ctx.shifts().size(), ctx.slaTargetRatio());
@@ -125,8 +125,8 @@ public class SlotSimulationService {
      * @deprecated Prefer {@link #previewSlot}; no longer persists and reads scenario shifts.
      */
     @Transactional(readOnly = true)
-    public SlotSimulationView runSlot(UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        Context ctx = loadContext(ownerId, exerciseId, scenarioId, null);
+    public SlotSimulationView runSlot(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
+        Context ctx = loadContext(ownerCcgid, exerciseId, scenarioId, null);
         Instant now = clock.instant();
         SimulationRun run = SimulationRun.accepted(
                 scenarioId,
@@ -136,7 +136,7 @@ public class SlotSimulationService {
                 VERSION,
                 sha256Hex("slot|" + scenarioId + "|" + ctx.volumes().size() + "|" + ctx.shifts().size()),
                 "{\"version\":\"" + VERSION + "\",\"slots\":" + ctx.volumes().size() + "}",
-                ownerId,
+                ownerCcgid,
                 now);
         Computed computed = compute(run.getId(), ctx);
         return toView(run, computed, ctx.shifts().size(), ctx.slaTargetRatio());
@@ -147,7 +147,7 @@ public class SlotSimulationService {
      */
     @Transactional
     public void persistSlotSnapshot(
-            UUID scenarioId, UUID ownerId, UUID monthlyForecastRunId, SlotSimulationView view) {
+            UUID scenarioId, String ownerCcgid, UUID monthlyForecastRunId, SlotSimulationView view) {
         if (view == null || view.rows() == null || view.rows().isEmpty()) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
@@ -163,7 +163,7 @@ public class SlotSimulationService {
                 VERSION,
                 sha256Hex("slot|" + scenarioId + "|" + view.rows().size()),
                 "{\"version\":\"" + VERSION + "\",\"slots\":" + view.rows().size() + "}",
-                ownerId,
+                ownerCcgid,
                 view.startedAt() != null ? view.startedAt() : now);
         simulationRuns.save(run);
         List<SlotSimulationResult> rows = new ArrayList<>(view.rows().size());
@@ -235,8 +235,8 @@ public class SlotSimulationService {
      * Returns the latest ACCEPTED slot simulation for a scenario.
      */
     @Transactional(readOnly = true)
-    public SlotSimulationView getLatest(UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        exercises.requireReadable(ownerId, exerciseId);
+    public SlotSimulationView getLatest(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
+        exercises.requireReadable(ownerCcgid, exerciseId);
         Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
@@ -449,8 +449,8 @@ public class SlotSimulationService {
     }
 
     private Context loadContext(
-            UUID ownerId, UUID exerciseId, UUID scenarioId, List<SlotShift> overrideShifts) {
-        RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
+            String ownerCcgid, UUID exerciseId, UUID scenarioId, List<SlotShift> overrideShifts) {
+        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
         Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
                 .orElseThrow(() -> new ApiException(
@@ -603,53 +603,5 @@ public class SlotSimulationService {
             BigDecimal actualVsTheoretical,
             boolean applicability,
             SlotChartView chart) {
-    }
-
-    /** Slot preview request using in-memory shifts. */
-    public record PreviewSlotRequest(@NotEmpty List<@Valid @NotNull ShiftRequest> shifts) {
-    }
-
-    /** Slot simulation response. */
-    public record SlotSimulationView(
-            UUID id,
-            int runNo,
-            String status,
-            String calculationVersion,
-            UUID forecastRunId,
-            Instant startedAt,
-            Instant completedAt,
-            BigDecimal tatOnPeriod,
-            BigDecimal actualVsTheoretical,
-            int shiftCount,
-            boolean applicability,
-            BigDecimal slaTargetRatio,
-            List<SlotRowView> rows,
-            SlotChartView chart) {
-    }
-
-    /** One slot result row. */
-    public record SlotRowView(
-            UUID id,
-            Instant slotStartAt,
-            Instant slotEndAt,
-            BigDecimal rawVolume,
-            BigDecimal manualVolume,
-            BigDecimal theoreticalFte,
-            BigDecimal shiftFte,
-            BigDecimal casesPerFte,
-            BigDecimal teamCapacity,
-            BigDecimal backlogStart,
-            BigDecimal backlogEnd,
-            BigDecimal volumeOutsideSla,
-            BigDecimal tatResult,
-            BigDecimal slaResult) {
-    }
-
-    /** Chart series for slot result visualization. */
-    public record SlotChartView(
-            List<String> labels,
-            List<BigDecimal> theoreticalFte,
-            Map<String, List<BigDecimal>> shiftFteByKey,
-            List<BigDecimal> cumulativeTat) {
     }
 }

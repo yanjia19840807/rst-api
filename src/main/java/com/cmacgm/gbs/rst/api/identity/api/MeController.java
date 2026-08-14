@@ -31,7 +31,6 @@ public class MeController {
                     "Authentication is required.");
         }
         return new CurrentUserResponse(
-                principal.userId(),
                 principal.ccgid(),
                 principal.displayName(),
                 principal.email(),

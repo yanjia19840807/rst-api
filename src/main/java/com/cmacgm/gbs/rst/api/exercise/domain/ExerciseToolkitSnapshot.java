@@ -65,7 +65,7 @@ public class ExerciseToolkitSnapshot {
     private Instant createdAt;
 
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     protected ExerciseToolkitSnapshot() {
     }
@@ -84,7 +84,7 @@ public class ExerciseToolkitSnapshot {
             String pl3Code,
             String pl3Name,
             boolean combineSubtasksTime,
-            UUID createdBy,
+            String createdBy,
             Instant now) {
         ExerciseToolkitSnapshot snapshot = new ExerciseToolkitSnapshot();
         snapshot.exercise = exercise;

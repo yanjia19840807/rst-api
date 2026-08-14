@@ -6,22 +6,22 @@ import java.util.UUID;
 import jakarta.validation.Valid;
 
 import com.cmacgm.gbs.rst.api.forecast.ForecastOrchestrationService;
-import com.cmacgm.gbs.rst.api.forecast.ForecastOrchestrationService.ForecastBundleView;
-import com.cmacgm.gbs.rst.api.forecast.ForecastOrchestrationService.ForecastView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.ForecastBundleView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.ForecastView;
 import com.cmacgm.gbs.rst.api.scenario.application.ScenarioCommitService;
-import com.cmacgm.gbs.rst.api.scenario.application.ScenarioCommitService.CommitScenarioRequest;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.CommitScenarioRequest;
 import com.cmacgm.gbs.rst.api.scenario.application.ScenarioService;
-import com.cmacgm.gbs.rst.api.scenario.application.ScenarioService.CreateScenarioRequest;
-import com.cmacgm.gbs.rst.api.scenario.application.ScenarioService.ScenarioView;
-import com.cmacgm.gbs.rst.api.scenario.application.ScenarioService.UpdateScenarioRequest;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.CreateScenarioRequest;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.ScenarioView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.UpdateScenarioRequest;
 import com.cmacgm.gbs.rst.api.scenario.application.SizingSimulationService;
-import com.cmacgm.gbs.rst.api.scenario.application.SizingSimulationService.DailySizingView;
-import com.cmacgm.gbs.rst.api.scenario.application.SizingSimulationService.MonthlySizingView;
-import com.cmacgm.gbs.rst.api.scenario.application.SizingSimulationService.PreviewSizingRequest;
-import com.cmacgm.gbs.rst.api.scenario.application.SizingSimulationService.SizingPreviewBundle;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.DailySizingView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.MonthlySizingView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.PreviewSizingRequest;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.SizingPreviewBundle;
 import com.cmacgm.gbs.rst.api.scenario.application.SlotSimulationService;
-import com.cmacgm.gbs.rst.api.scenario.application.SlotSimulationService.PreviewSlotRequest;
-import com.cmacgm.gbs.rst.api.scenario.application.SlotSimulationService.SlotSimulationView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.PreviewSlotRequest;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.SlotSimulationView;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -77,7 +77,7 @@ public class ScenarioController {
     @GetMapping
     public List<ScenarioView> list(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
-        return scenarios.list(principal.userId(), exerciseId);
+        return scenarios.list(principal.ccgid(), exerciseId);
     }
 
     /**
@@ -94,7 +94,7 @@ public class ScenarioController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @Valid @RequestBody CreateScenarioRequest request) {
-        return scenarios.create(principal.userId(), exerciseId, request);
+        return scenarios.create(principal.ccgid(), exerciseId, request);
     }
 
     /**
@@ -110,7 +110,7 @@ public class ScenarioController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @PathVariable UUID scenarioId) {
-        return scenarios.detail(principal.userId(), exerciseId, scenarioId);
+        return scenarios.detail(principal.ccgid(), exerciseId, scenarioId);
     }
 
     /**
@@ -128,7 +128,7 @@ public class ScenarioController {
             @PathVariable UUID exerciseId,
             @PathVariable UUID scenarioId,
             @Valid @RequestBody UpdateScenarioRequest request) {
-        return scenarios.update(principal.userId(), exerciseId, scenarioId, request);
+        return scenarios.update(principal.ccgid(), exerciseId, scenarioId, request);
     }
 
     /**
@@ -141,7 +141,7 @@ public class ScenarioController {
             @PathVariable UUID exerciseId,
             @PathVariable UUID scenarioId,
             @Valid @RequestBody CommitScenarioRequest request) {
-        return commits.commit(principal.userId(), exerciseId, scenarioId, request);
+        return commits.commit(principal.ccgid(), exerciseId, scenarioId, request);
     }
 
     /**
@@ -157,11 +157,11 @@ public class ScenarioController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @PathVariable UUID scenarioId) {
-        scenarios.delete(principal.userId(), exerciseId, scenarioId);
+        scenarios.delete(principal.ccgid(), exerciseId, scenarioId);
     }
 
     /**
-     * Marks a DRAFT scenario Official and creates an Official Package.
+     * Marks a DRAFT scenario Official and points the Exercise at it.
      *
      * @param principal authenticated Supervisor
      * @param exerciseId Exercise id
@@ -173,7 +173,7 @@ public class ScenarioController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @PathVariable UUID scenarioId) {
-        return scenarios.markOfficial(principal.userId(), exerciseId, scenarioId);
+        return scenarios.markOfficial(principal.ccgid(), exerciseId, scenarioId);
     }
 
     /**
@@ -184,7 +184,7 @@ public class ScenarioController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @PathVariable UUID scenarioId) {
-        return forecasts.previewMonthlyAndDailyForecast(principal.userId(), exerciseId, scenarioId);
+        return forecasts.previewMonthlyAndDailyForecast(principal.ccgid(), exerciseId, scenarioId);
     }
 
     /**
@@ -196,7 +196,7 @@ public class ScenarioController {
             @PathVariable UUID exerciseId,
             @PathVariable UUID scenarioId,
             @Valid @RequestBody PreviewSizingRequest request) {
-        return sizing.previewSizing(principal.userId(), exerciseId, scenarioId, request);
+        return sizing.previewSizing(principal.ccgid(), exerciseId, scenarioId, request);
     }
 
     /**
@@ -210,7 +210,7 @@ public class ScenarioController {
             @PathVariable UUID exerciseId,
             @PathVariable UUID scenarioId,
             @RequestParam(defaultValue = "MONTHLY") String level) {
-        return forecasts.getLatestAccepted(principal.userId(), exerciseId, scenarioId, level);
+        return forecasts.getLatestAccepted(principal.ccgid(), exerciseId, scenarioId, level);
     }
 
     /**
@@ -221,7 +221,7 @@ public class ScenarioController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @PathVariable UUID scenarioId) {
-        return sizing.runMonthly(principal.userId(), exerciseId, scenarioId);
+        return sizing.runMonthly(principal.ccgid(), exerciseId, scenarioId);
     }
 
     /**
@@ -232,7 +232,7 @@ public class ScenarioController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @PathVariable UUID scenarioId) {
-        return sizing.getLatestMonthly(principal.userId(), exerciseId, scenarioId);
+        return sizing.getLatestMonthly(principal.ccgid(), exerciseId, scenarioId);
     }
 
     /**
@@ -243,7 +243,7 @@ public class ScenarioController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @PathVariable UUID scenarioId) {
-        return sizing.runDaily(principal.userId(), exerciseId, scenarioId);
+        return sizing.runDaily(principal.ccgid(), exerciseId, scenarioId);
     }
 
     /**
@@ -254,7 +254,7 @@ public class ScenarioController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @PathVariable UUID scenarioId) {
-        return sizing.getLatestDaily(principal.userId(), exerciseId, scenarioId);
+        return sizing.getLatestDaily(principal.ccgid(), exerciseId, scenarioId);
     }
 
     /**
@@ -266,7 +266,7 @@ public class ScenarioController {
             @PathVariable UUID exerciseId,
             @PathVariable UUID scenarioId,
             @Valid @RequestBody PreviewSlotRequest request) {
-        return slots.previewSlot(principal.userId(), exerciseId, scenarioId, request);
+        return slots.previewSlot(principal.ccgid(), exerciseId, scenarioId, request);
     }
 
     /**
@@ -277,6 +277,6 @@ public class ScenarioController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @PathVariable UUID scenarioId) {
-        return slots.getLatest(principal.userId(), exerciseId, scenarioId);
+        return slots.getLatest(principal.ccgid(), exerciseId, scenarioId);
     }
 }

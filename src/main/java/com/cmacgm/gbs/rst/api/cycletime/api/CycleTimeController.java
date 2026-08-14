@@ -7,11 +7,11 @@ import jakarta.validation.Valid;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.cycletime.api.dto.ExerciseTmsSessionResponse;
 import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService;
-import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService.BaselineFileView;
-import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService.BaselineView;
-import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService.ManualBaselineRequest;
-import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService.PatchTmsSessionRequest;
-import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService.PatchTmsSessionResult;
+import com.cmacgm.gbs.rst.api.cycletime.api.dto.BaselineFileView;
+import com.cmacgm.gbs.rst.api.cycletime.api.dto.BaselineView;
+import com.cmacgm.gbs.rst.api.cycletime.api.dto.ManualBaselineRequest;
+import com.cmacgm.gbs.rst.api.cycletime.api.dto.PatchTmsSessionRequest;
+import com.cmacgm.gbs.rst.api.cycletime.api.dto.PatchTmsSessionResult;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -61,7 +61,7 @@ public class CycleTimeController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @Valid @RequestBody ManualBaselineRequest request) {
-        return service.createManual(principal.userId(), exerciseId, request);
+        return service.createManual(principal.ccgid(), exerciseId, request);
     }
 
     /**
@@ -78,7 +78,7 @@ public class CycleTimeController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @RequestParam("file") MultipartFile file) {
-        return service.uploadSupportFile(principal.userId(), exerciseId, file);
+        return service.uploadSupportFile(principal.ccgid(), exerciseId, file);
     }
 
     /**
@@ -91,7 +91,7 @@ public class CycleTimeController {
     @GetMapping("/active")
     public BaselineView getActive(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
-        return service.getActive(principal.userId(), exerciseId);
+        return service.getActive(principal.ccgid(), exerciseId);
     }
 
     /**
@@ -109,7 +109,7 @@ public class CycleTimeController {
             @PathVariable UUID exerciseId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        return service.listTmsSessions(principal.userId(), exerciseId, page, pageSize);
+        return service.listTmsSessions(principal.ccgid(), exerciseId, page, pageSize);
     }
 
     /**
@@ -128,6 +128,6 @@ public class CycleTimeController {
             @PathVariable String sessionNo,
             @Valid @RequestBody PatchTmsSessionRequest request) {
         return service.patchTmsSessionIncluded(
-                principal.userId(), exerciseId, sessionNo, request);
+                principal.ccgid(), exerciseId, sessionNo, request);
     }
 }

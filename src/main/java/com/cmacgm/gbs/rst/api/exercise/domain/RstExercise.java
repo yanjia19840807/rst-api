@@ -35,8 +35,8 @@ public class RstExercise {
     @Column(name = "toolkit_id", nullable = false)
     private UUID toolkitId;
 
-    @Column(name = "owner_user_id", nullable = false)
-    private UUID ownerUserId;
+    @Column(name = "owner_ccgid", nullable = false)
+    private String ownerCcgid;
 
     /** First day of the sizing month (DATE). */
     @Column(name = "sizing_month", nullable = false)
@@ -73,19 +73,19 @@ public class RstExercise {
     private Instant createdAt;
 
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     @Column(name = "updated_by")
-    private UUID updatedBy;
+    private String updatedBy;
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
     @Column(name = "deleted_by")
-    private UUID deletedBy;
+    private String deletedBy;
 
     @Version
     private long version;
@@ -110,7 +110,7 @@ public class RstExercise {
      * @param id Exercise id
      * @param exerciseCode unique business code
      * @param toolkitId source Toolkit id
-     * @param ownerUserId owning Supervisor
+     * @param ownerCcgid owning Supervisor
      * @param sizingMonth first day of sizing month
      * @param slotStartDate slot window start
      * @param slotWeeks slot window length in weeks
@@ -123,7 +123,7 @@ public class RstExercise {
             UUID id,
             String exerciseCode,
             UUID toolkitId,
-            UUID ownerUserId,
+            String ownerCcgid,
             LocalDate sizingMonth,
             LocalDate slotStartDate,
             short slotWeeks,
@@ -134,7 +134,7 @@ public class RstExercise {
         exercise.id = id;
         exercise.exerciseCode = exerciseCode;
         exercise.toolkitId = toolkitId;
-        exercise.ownerUserId = ownerUserId;
+        exercise.ownerCcgid = ownerCcgid;
         exercise.sizingMonth = sizingMonth;
         exercise.slotStartDate = slotStartDate;
         exercise.slotWeeks = slotWeeks;
@@ -142,9 +142,9 @@ public class RstExercise {
         exercise.tmsTo = tmsTo;
         exercise.workflowStatus = "IN_PROGRESS";
         exercise.createdAt = now;
-        exercise.createdBy = ownerUserId;
+        exercise.createdBy = ownerCcgid;
         exercise.updatedAt = now;
-        exercise.updatedBy = ownerUserId;
+        exercise.updatedBy = ownerCcgid;
         return exercise;
     }
 
@@ -156,7 +156,7 @@ public class RstExercise {
      * @param slotWeeks slot window length in weeks
      * @param tmsFrom TMS history from date
      * @param tmsTo TMS history to date
-     * @param actorUserId updating Supervisor
+     * @param actorCcgid updating Supervisor
      * @param now update timestamp
      */
     public void updatePeriods(
@@ -165,7 +165,7 @@ public class RstExercise {
             short slotWeeks,
             LocalDate tmsFrom,
             LocalDate tmsTo,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         this.sizingMonth = sizingMonth;
         this.slotStartDate = slotStartDate;
@@ -173,121 +173,121 @@ public class RstExercise {
         this.tmsFrom = tmsFrom;
         this.tmsTo = tmsTo;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /**
      * Soft-deletes an unsubmitted Exercise.
      *
-     * @param actorUserId deleting Supervisor
+     * @param actorCcgid deleting Supervisor
      * @param now deletion timestamp
      */
-    public void softDelete(UUID actorUserId, Instant now) {
+    public void softDelete(String actorCcgid, Instant now) {
         this.deletedAt = now;
-        this.deletedBy = actorUserId;
+        this.deletedBy = actorCcgid;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /**
      * Points the Exercise at its current Official Scenario.
      *
      * @param scenarioId official scenario belonging to this Exercise
-     * @param actorUserId actor
+     * @param actorCcgid actor
      * @param now update timestamp
      */
-    public void setOfficialScenario(UUID scenarioId, UUID actorUserId, Instant now) {
+    public void setOfficialScenario(UUID scenarioId, String actorCcgid, Instant now) {
         this.officialScenarioId = scenarioId;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /**
      * Clears the current Official Scenario pointer (e.g. after Return).
      *
-     * @param actorUserId actor
+     * @param actorCcgid actor
      * @param now update timestamp
      */
-    public void clearOfficialScenario(UUID actorUserId, Instant now) {
+    public void clearOfficialScenario(String actorCcgid, Instant now) {
         this.officialScenarioId = null;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /**
      * Marks the Exercise UNDER_REVIEW after a successful Submit.
      *
-     * @param actorUserId submitting Supervisor
+     * @param actorCcgid submitting Supervisor
      * @param now submit timestamp
      */
-    public void markSubmitted(UUID actorUserId, Instant now) {
+    public void markSubmitted(String actorCcgid, Instant now) {
         this.workflowStatus = "UNDER_REVIEW";
         this.submittedAt = now;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /**
      * Reopens the Exercise after Return: sets {@code RETURNED} for Supervisor editing
      * while keeping the Official Scenario pointer.
      *
-     * @param actorUserId actor
+     * @param actorCcgid actor
      * @param now update timestamp
      */
-    public void markReturned(UUID actorUserId, Instant now) {
-        reopenForEditing(actorUserId, now, "RETURNED");
+    public void markReturned(String actorCcgid, Instant now) {
+        reopenForEditing(actorCcgid, now, "RETURNED");
     }
 
     /**
      * Reopens the Exercise after Withdraw: returns to {@code IN_PROGRESS}
      * while keeping the Official Scenario pointer.
      *
-     * @param actorUserId actor
+     * @param actorCcgid actor
      * @param now update timestamp
      */
-    public void markWithdrawn(UUID actorUserId, Instant now) {
-        reopenForEditing(actorUserId, now, "IN_PROGRESS");
+    public void markWithdrawn(String actorCcgid, Instant now) {
+        reopenForEditing(actorCcgid, now, "IN_PROGRESS");
     }
 
-    private void reopenForEditing(UUID actorUserId, Instant now, String status) {
+    private void reopenForEditing(String actorCcgid, Instant now, String status) {
         this.validatedAt = null;
         this.workflowStatus = status;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /**
-     * Marks the Exercise VALIDATED after final LTH Approve.
+     * Marks the Exercise APPROVED after final LTH Approve.
      *
-     * @param actorUserId validating actor
-     * @param now validation timestamp
+     * @param actorCcgid approving actor
+     * @param now approval timestamp
      */
-    public void markValidated(UUID actorUserId, Instant now) {
-        this.workflowStatus = "VALIDATED";
+    public void markApproved(String actorCcgid, Instant now) {
+        this.workflowStatus = "APPROVED";
         this.validatedAt = now;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /**
-     * Marks the Exercise ARCHIVED.
+     * Marks the Exercise REJECTED.
      *
-     * @param actorUserId actor
-     * @param now archive timestamp
+     * @param actorCcgid actor
+     * @param now reject timestamp
      */
-    public void markArchived(UUID actorUserId, Instant now) {
-        this.workflowStatus = "ARCHIVED";
+    public void markRejected(String actorCcgid, Instant now) {
+        this.workflowStatus = "REJECTED";
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /**
      * Records that Associated Data was initialized from another Exercise.
      */
-    public void markInitializedFrom(UUID sourceExerciseId, UUID actorUserId, Instant now) {
+    public void markInitializedFrom(UUID sourceExerciseId, String actorCcgid, Instant now) {
         this.initializedFromExerciseId = sourceExerciseId;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /**
@@ -344,7 +344,7 @@ public class RstExercise {
             String pl3Code,
             String pl3Name,
             boolean combineSubtasksTime,
-            UUID createdBy,
+            String createdBy,
             Instant now) {
         ExerciseToolkitSnapshot.capture(
                 this,
@@ -387,7 +387,7 @@ public class RstExercise {
             String carrier,
             String customerCountry,
             BigDecimal deliveryHc,
-            UUID createdBy,
+            String createdBy,
             Instant now) {
         sharedKpiLines.add(ExerciseSharedKpiLine.freeze(
                 this,
@@ -419,8 +419,8 @@ public class RstExercise {
         return toolkitId;
     }
 
-    public UUID getOwnerUserId() {
-        return ownerUserId;
+    public String getOwnerCcgid() {
+        return ownerCcgid;
     }
 
     public LocalDate getSizingMonth() {

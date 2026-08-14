@@ -68,7 +68,7 @@ public class ForecastRun {
     private String errorDetail;
 
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -90,7 +90,7 @@ public class ForecastRun {
      * @param trainingTo training window end
      * @param inputHash SHA-256 hex of request inputs
      * @param featureMetadata JSON metadata
-     * @param actorUserId creating user
+     * @param actorCcgid creating user
      * @param now timestamp
      * @return accepted run without points
      */
@@ -103,7 +103,7 @@ public class ForecastRun {
             LocalDate trainingTo,
             String inputHash,
             String featureMetadata,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         return accepted(
                 scenarioId,
@@ -115,7 +115,7 @@ public class ForecastRun {
                 trainingTo,
                 inputHash,
                 featureMetadata,
-                actorUserId,
+                actorCcgid,
                 now);
     }
 
@@ -134,7 +134,7 @@ public class ForecastRun {
             LocalDate trainingTo,
             String inputHash,
             String featureMetadata,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         ForecastRun run = new ForecastRun();
         run.id = UUID.randomUUID();
@@ -150,7 +150,7 @@ public class ForecastRun {
         run.status = "ACCEPTED";
         run.startedAt = now;
         run.completedAt = now;
-        run.createdBy = actorUserId;
+        run.createdBy = actorCcgid;
         run.createdAt = now;
         return run;
     }

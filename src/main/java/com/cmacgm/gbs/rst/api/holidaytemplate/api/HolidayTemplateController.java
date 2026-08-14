@@ -82,7 +82,7 @@ public class HolidayTemplateController {
     public TemplateDetail create(
             @AuthenticationPrincipal RstPrincipal principal,
             @Valid @RequestBody CreateBody request) {
-        return service.create(principal.userId(), request.toService());
+        return service.create(principal.ccgid(), request.toService());
     }
 
     @PutMapping("/{id}")
@@ -90,20 +90,20 @@ public class HolidayTemplateController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id,
             @Valid @RequestBody UpdateBody request) {
-        return service.update(principal.userId(), id, request.toService());
+        return service.update(principal.ccgid(), id, request.toService());
     }
 
     @PostMapping("/{id}/publish")
     public TemplateDetail publish(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID id) {
-        return service.publish(principal.userId(), id);
+        return service.publish(principal.ccgid(), id);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID id) {
-        service.softDelete(principal.userId(), id);
+        service.softDelete(principal.ccgid(), id);
     }
 
     @GetMapping("/{id}/export")
@@ -120,7 +120,7 @@ public class HolidayTemplateController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id,
             @RequestParam("file") MultipartFile file) throws Exception {
-        return service.importExcel(principal.userId(), id, file.getInputStream());
+        return service.importExcel(principal.ccgid(), id, file.getInputStream());
     }
 
     private static ResponseEntity<byte[]> excelResponse(byte[] body, String filename) {

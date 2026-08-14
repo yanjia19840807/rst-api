@@ -14,8 +14,6 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
-import com.cmacgm.gbs.rst.api.identity.domain.AppUser;
-
 @Entity
 @Table(name = "toolkit_shared_kpi_selection")
 public class ToolkitSharedKpiSelection {
@@ -40,23 +38,20 @@ public class ToolkitSharedKpiSelection {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by")
-    private AppUser createdBy;
+    @Column(name = "created_by", length = 64)
+    private String createdBy;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "updated_by")
-    private AppUser updatedBy;
+    @Column(name = "updated_by", length = 64)
+    private String updatedBy;
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "deleted_by")
-    private AppUser deletedBy;
+    @Column(name = "deleted_by", length = 64)
+    private String deletedBy;
 
     @Version
     private long version;
@@ -69,7 +64,7 @@ public class ToolkitSharedKpiSelection {
             String carrier,
             String site,
             String customerCountry,
-            AppUser actor,
+            String actorCcgid,
             Instant now) {
         ToolkitSharedKpiSelection selection = new ToolkitSharedKpiSelection();
         selection.toolkit = toolkit;
@@ -77,9 +72,9 @@ public class ToolkitSharedKpiSelection {
         selection.site = site;
         selection.customerCountry = customerCountry;
         selection.createdAt = now;
-        selection.createdBy = actor;
+        selection.createdBy = actorCcgid;
         selection.updatedAt = now;
-        selection.updatedBy = actor;
+        selection.updatedBy = actorCcgid;
         return selection;
     }
 

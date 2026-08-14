@@ -9,12 +9,9 @@ import java.util.UUID;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
@@ -22,8 +19,6 @@ import jakarta.persistence.Version;
 
 import org.hibernate.annotations.Fetch;
 import org.hibernate.annotations.FetchMode;
-
-import com.cmacgm.gbs.rst.api.identity.domain.AppUser;
 
 @Entity
 @Table(name = "toolkit")
@@ -59,9 +54,8 @@ public class Toolkit {
     @Column(name = "primary_pl3_code", nullable = false, length = 80)
     private String primaryPl3Code;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_user_id")
-    private AppUser owner;
+    @Column(name = "owner_ccgid", length = 64)
+    private String ownerCcgid;
 
     @Column(name = "combine_subtasks_time", nullable = false)
     private boolean combineSubtasksTime;
@@ -69,23 +63,20 @@ public class Toolkit {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by")
-    private AppUser createdBy;
+    @Column(name = "created_by", length = 64)
+    private String createdBy;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "updated_by")
-    private AppUser updatedBy;
+    @Column(name = "updated_by", length = 64)
+    private String updatedBy;
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "deleted_by")
-    private AppUser deletedBy;
+    @Column(name = "deleted_by", length = 64)
+    private String deletedBy;
 
     @Version
     @Column(nullable = false)
@@ -113,7 +104,7 @@ public class Toolkit {
             String pl3Code,
             String pl3Name,
             boolean combineSubtasksTime,
-            AppUser owner,
+            String ownerCcgid,
             Instant now) {
         Toolkit toolkit = new Toolkit();
         toolkit.name = name.trim();
@@ -126,11 +117,11 @@ public class Toolkit {
         toolkit.primaryPl3Code = pl3Code;
         toolkit.pl3Name = pl3Name;
         toolkit.combineSubtasksTime = combineSubtasksTime;
-        toolkit.owner = owner;
+        toolkit.ownerCcgid = ownerCcgid;
         toolkit.createdAt = now;
-        toolkit.createdBy = owner;
+        toolkit.createdBy = ownerCcgid;
         toolkit.updatedAt = now;
-        toolkit.updatedBy = owner;
+        toolkit.updatedBy = ownerCcgid;
         return toolkit;
     }
 
@@ -138,19 +129,19 @@ public class Toolkit {
             String name,
             String description,
             boolean combineSubtasksTime,
-            AppUser owner,
+            String ownerCcgid,
             Instant now) {
         this.name = name.trim();
         this.description = normalize(description);
         this.combineSubtasksTime = combineSubtasksTime;
-        this.owner = owner;
+        this.ownerCcgid = ownerCcgid;
         this.updatedAt = now;
-        this.updatedBy = owner;
+        this.updatedBy = ownerCcgid;
     }
 
     public ToolkitSubtask addSubtask(String name, String description, int displayOrder, Instant now) {
         ToolkitSubtask subtask =
-                ToolkitSubtask.create(this, name, description, displayOrder, owner, now);
+                ToolkitSubtask.create(this, name, description, displayOrder, ownerCcgid, now);
         subtasks.add(subtask);
         return subtask;
     }
@@ -158,16 +149,16 @@ public class Toolkit {
     public ToolkitSharedKpiSelection selectKpi(
             String carrier, String site, String country, Instant now) {
         ToolkitSharedKpiSelection selection =
-                ToolkitSharedKpiSelection.create(this, carrier, site, country, owner, now);
+                ToolkitSharedKpiSelection.create(this, carrier, site, country, ownerCcgid, now);
         sharedKpiSelections.add(selection);
         return selection;
     }
 
     public void softDelete(Instant now) {
         deletedAt = now;
-        deletedBy = owner;
+        deletedBy = ownerCcgid;
         updatedAt = now;
-        updatedBy = owner;
+        updatedBy = ownerCcgid;
     }
 
     public UUID getId() {
@@ -222,8 +213,12 @@ public class Toolkit {
         return deletedAt;
     }
 
-    AppUser ownerForAudit() {
-        return owner;
+    public String getOwnerCcgid() {
+        return ownerCcgid;
+    }
+
+    String ownerForAudit() {
+        return ownerCcgid;
     }
 
     public List<ToolkitSubtask> getSubtasks() {

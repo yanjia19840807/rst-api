@@ -37,7 +37,7 @@ class ExerciseInitializationRulesTests {
                 id,
                 "EX-TEST",
                 UUID.randomUUID(),
-                UUID.randomUUID(),
+                "SUPERVISOR001",
                 LocalDate.of(2026, 1, 1),
                 LocalDate.of(2026, 12, 28),
                 (short) 2,

@@ -40,19 +40,19 @@ public class ExerciseHoliday {
     private Instant createdAt;
 
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     @Column(name = "updated_by")
-    private UUID updatedBy;
+    private String updatedBy;
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
     @Column(name = "deleted_by")
-    private UUID deletedBy;
+    private String deletedBy;
 
     @Version
     private long version;
@@ -68,7 +68,7 @@ public class ExerciseHoliday {
      * @param holidayName display name
      * @param holidayType BASELINE or CUSTOM
      * @param workingDayOverride optional working-day override
-     * @param actorUserId creating Supervisor
+     * @param actorCcgid creating Supervisor
      * @param now creation timestamp
      * @return new holiday entity
      */
@@ -78,7 +78,7 @@ public class ExerciseHoliday {
             String holidayName,
             String holidayType,
             Boolean workingDayOverride,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         ExerciseHoliday holiday = new ExerciseHoliday();
         holiday.id = UUID.randomUUID();
@@ -88,9 +88,9 @@ public class ExerciseHoliday {
         holiday.holidayType = holidayType;
         holiday.workingDayOverride = workingDayOverride;
         holiday.createdAt = now;
-        holiday.createdBy = actorUserId;
+        holiday.createdBy = actorCcgid;
         holiday.updatedAt = now;
-        holiday.updatedBy = actorUserId;
+        holiday.updatedBy = actorCcgid;
         return holiday;
     }
 
@@ -103,10 +103,10 @@ public class ExerciseHoliday {
             String holidayName,
             Boolean workingDayOverride,
             UUID sourceTemplateLineId,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         ExerciseHoliday holiday = create(
-                exerciseId, holidayDate, holidayName, "BASELINE", workingDayOverride, actorUserId, now);
+                exerciseId, holidayDate, holidayName, "BASELINE", workingDayOverride, actorCcgid, now);
         holiday.sourceTemplateLineId = sourceTemplateLineId;
         return holiday;
     }
@@ -114,14 +114,14 @@ public class ExerciseHoliday {
     /**
      * Soft-deletes this holiday.
      *
-     * @param actorUserId deleting Supervisor
+     * @param actorCcgid deleting Supervisor
      * @param now deletion timestamp
      */
-    public void softDelete(UUID actorUserId, Instant now) {
+    public void softDelete(String actorCcgid, Instant now) {
         this.deletedAt = now;
-        this.deletedBy = actorUserId;
+        this.deletedBy = actorCcgid;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     public UUID getId() { return id; }

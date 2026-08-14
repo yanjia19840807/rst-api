@@ -102,7 +102,7 @@ public class WorkflowInstance {
         for (WorkflowStepAssignment step : steps) {
             if (step.getStepNo() == nextStep.getStepNo()) {
                 step.reopenReady(
-                        nextStep.getAssigneeUserId(),
+                        nextStep.getAssigneeCcgid(),
                         nextStep.getAssigneePositionId(),
                         nextStep.getScopeSnapshotHash(),
                         nextStep.getResolvedAt());
@@ -123,7 +123,7 @@ public class WorkflowInstance {
         for (WorkflowStepAssignment step : steps) {
             if (step.getStepNo() == 1) {
                 step.reopenReady(
-                        managerReady.getAssigneeUserId(),
+                        managerReady.getAssigneeCcgid(),
                         managerReady.getAssigneePositionId(),
                         managerReady.getScopeSnapshotHash(),
                         managerReady.getResolvedAt());

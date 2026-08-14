@@ -69,7 +69,7 @@ public class ExerciseSharedKpiLine {
     private Instant createdAt;
 
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     protected ExerciseSharedKpiLine() {
     }
@@ -88,7 +88,7 @@ public class ExerciseSharedKpiLine {
             String carrier,
             String customerCountry,
             BigDecimal deliveryHc,
-            UUID createdBy,
+            String createdBy,
             Instant now) {
         ExerciseSharedKpiLine line = new ExerciseSharedKpiLine();
         line.id = UUID.randomUUID();

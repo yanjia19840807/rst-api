@@ -29,7 +29,7 @@ import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeDailyInpu
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeMonthlyInputRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
-import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
+import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.forecast.ForecastApiModels.DailyActual;
 import com.cmacgm.gbs.rst.api.forecast.ForecastApiModels.DailyForecastPointDto;
@@ -51,6 +51,10 @@ import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.ForecastBundleView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.ForecastPointView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.ForecastView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.PersistedForecastIds;
 
 /**
  * Orchestrates Forecast: Calendar + Volume → Python SARIMAX.
@@ -63,7 +67,7 @@ public class ForecastOrchestrationService {
 
     private final ForecastProperties properties;
     private final ForecastClient forecastClient;
-    private final ExerciseService exercises;
+    private final ExerciseAccess exercises;
     private final ScenarioRepository scenarios;
     private final ForecastRunRepository forecastRuns;
     private final ExerciseVolumeMonthlyInputRepository monthlyVolumes;
@@ -79,7 +83,7 @@ public class ForecastOrchestrationService {
     public ForecastOrchestrationService(
             ForecastProperties properties,
             ForecastClient forecastClient,
-            ExerciseService exercises,
+            ExerciseAccess exercises,
             ScenarioRepository scenarios,
             ForecastRunRepository forecastRuns,
             ExerciseVolumeMonthlyInputRepository monthlyVolumes,
@@ -106,10 +110,10 @@ public class ForecastOrchestrationService {
      */
     @Transactional(readOnly = true)
     public ForecastBundleView previewMonthlyAndDailyForecast(
-            UUID ownerId, UUID exerciseId, UUID scenarioId) {
+            String ownerCcgid, UUID exerciseId, UUID scenarioId) {
         requireForecastEnabled();
-        ForecastView monthly = executeMonthlyForecast(ownerId, exerciseId, scenarioId);
-        ForecastView daily = executeDailyForecast(ownerId, exerciseId, scenarioId);
+        ForecastView monthly = executeMonthlyForecast(ownerCcgid, exerciseId, scenarioId);
+        ForecastView daily = executeDailyForecast(ownerCcgid, exerciseId, scenarioId);
         return new ForecastBundleView(monthly, daily);
     }
 
@@ -118,8 +122,8 @@ public class ForecastOrchestrationService {
      */
     @Transactional(readOnly = true)
     public ForecastBundleView runMonthlyAndDailyForecast(
-            UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        return previewMonthlyAndDailyForecast(ownerId, exerciseId, scenarioId);
+            String ownerCcgid, UUID exerciseId, UUID scenarioId) {
+        return previewMonthlyAndDailyForecast(ownerCcgid, exerciseId, scenarioId);
     }
 
     /**
@@ -129,23 +133,23 @@ public class ForecastOrchestrationService {
      */
     @Transactional
     public PersistedForecastIds persistForecastBundle(
-            UUID scenarioId, UUID ownerId, ForecastBundleView bundle) {
+            UUID scenarioId, String ownerCcgid, ForecastBundleView bundle) {
         if (bundle == null || bundle.monthly() == null || bundle.daily() == null) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "forecast-bundle-required",
                     "Monthly and daily forecast results are required to persist.");
         }
-        ForecastRun monthly = forecastRuns.save(toEntity(scenarioId, ownerId, bundle.monthly(), 1));
-        ForecastRun daily = forecastRuns.save(toEntity(scenarioId, ownerId, bundle.daily(), 2));
+        ForecastRun monthly = forecastRuns.save(toEntity(scenarioId, ownerCcgid, bundle.monthly(), 1));
+        ForecastRun daily = forecastRuns.save(toEntity(scenarioId, ownerCcgid, bundle.daily(), 2));
         return new PersistedForecastIds(monthly.getId(), daily.getId());
     }
 
     /**
      * Builds monthly forecast for a DRAFT scenario (not persisted).
      */
-    private ForecastView executeMonthlyForecast(UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        RstExercise exercise = requireEditableDraft(ownerId, exerciseId, scenarioId);
+    private ForecastView executeMonthlyForecast(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
+        RstExercise exercise = requireEditableDraft(ownerCcgid, exerciseId, scenarioId);
         YearMonth sizingMonth = YearMonth.from(exercise.getSizingMonth());
         CalendarContext calendar = loadCalendar(exerciseId);
 
@@ -184,7 +188,7 @@ public class ForecastOrchestrationService {
 
         ForecastRun run = ForecastRun.accepted(
                 scenarioId, 0, "MONTHLY", method, methodVersion, trainingFrom, trainingTo,
-                sha256Hex(request.toString()), metadata, ownerId, now);
+                sha256Hex(request.toString()), metadata, ownerCcgid, now);
         for (ForecastPointDto dto : response.forecasts()) {
             LocalDate start = dto.dateMonth().withDayOfMonth(1);
             LocalDate end = YearMonth.from(start).atEndOfMonth();
@@ -197,8 +201,8 @@ public class ForecastOrchestrationService {
     /**
      * Builds daily forecast for a DRAFT scenario (not persisted).
      */
-    private ForecastView executeDailyForecast(UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        RstExercise exercise = requireEditableDraft(ownerId, exerciseId, scenarioId);
+    private ForecastView executeDailyForecast(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
+        RstExercise exercise = requireEditableDraft(ownerCcgid, exerciseId, scenarioId);
         YearMonth sizingMonth = YearMonth.from(exercise.getSizingMonth());
         YearMonth forecastMonth = sizingMonth.plusMonths(1);
         CalendarContext calendar = loadCalendar(exerciseId);
@@ -253,7 +257,7 @@ public class ForecastOrchestrationService {
 
         ForecastRun run = ForecastRun.accepted(
                 scenarioId, 0, "DAILY", method, methodVersion, trainingFrom, trainingTo,
-                sha256Hex(request.toString()), metadata, ownerId, now);
+                sha256Hex(request.toString()), metadata, ownerCcgid, now);
         for (DailyForecastPointDto dto : response.forecasts()) {
             if (!YearMonth.from(dto.date()).equals(forecastMonth)) {
                 // Bridge days between last Actual and next month are discarded.
@@ -272,7 +276,7 @@ public class ForecastOrchestrationService {
         return toView(run);
     }
 
-    private ForecastRun toEntity(UUID scenarioId, UUID ownerId, ForecastView view, int runNo) {
+    private ForecastRun toEntity(UUID scenarioId, String ownerCcgid, ForecastView view, int runNo) {
         Instant now = clock.instant();
         Instant started = view.startedAt() != null ? view.startedAt() : now;
         ForecastRun run = ForecastRun.accepted(
@@ -285,7 +289,7 @@ public class ForecastOrchestrationService {
                 view.trainingTo(),
                 "committed",
                 view.featureMetadata(),
-                ownerId,
+                ownerCcgid,
                 started);
         for (ForecastPointView point : view.points()) {
             BigDecimal mean = point.forecastMean() != null ? point.forecastMean() : BigDecimal.ZERO;
@@ -304,8 +308,8 @@ public class ForecastOrchestrationService {
      * Returns the latest ACCEPTED forecast (default MONTHLY).
      */
     @Transactional(readOnly = true)
-    public ForecastView getLatestAccepted(UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        return getLatestAccepted(ownerId, exerciseId, scenarioId, "MONTHLY");
+    public ForecastView getLatestAccepted(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
+        return getLatestAccepted(ownerCcgid, exerciseId, scenarioId, "MONTHLY");
     }
 
     /**
@@ -315,8 +319,8 @@ public class ForecastOrchestrationService {
      */
     @Transactional(readOnly = true)
     public ForecastView getLatestAccepted(
-            UUID ownerId, UUID exerciseId, UUID scenarioId, String level) {
-        exercises.requireReadable(ownerId, exerciseId);
+            String ownerCcgid, UUID exerciseId, UUID scenarioId, String level) {
+        exercises.requireReadable(ownerCcgid, exerciseId);
         scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
@@ -530,8 +534,8 @@ public class ForecastOrchestrationService {
         }
     }
 
-    private RstExercise requireEditableDraft(UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
+    private RstExercise requireEditableDraft(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
+        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
         Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
                 .orElseThrow(() -> new ApiException(
@@ -578,40 +582,5 @@ public class ForecastOrchestrationService {
 
     private record CalendarContext(
             String weekendCode, List<LocalDate> nonWorkingHolidays, Set<LocalDate> holidaySet) {
-    }
-
-    /** Monthly + daily forecast results created together. */
-    public record ForecastBundleView(ForecastView monthly, ForecastView daily) {
-    }
-
-    /** Ids of persisted monthly/daily forecast runs after commit. */
-    public record PersistedForecastIds(UUID monthlyForecastRunId, UUID dailyForecastRunId) {
-    }
-
-    /** Latest ACCEPTED forecast response. */
-    public record ForecastView(
-            UUID id,
-            int runNo,
-            String method,
-            String methodVersion,
-            String status,
-            String forecastLevel,
-            LocalDate trainingFrom,
-            LocalDate trainingTo,
-            String featureMetadata,
-            Instant startedAt,
-            Instant completedAt,
-            List<ForecastPointView> points) {
-    }
-
-    /** Forecast point in API responses. */
-    public record ForecastPointView(
-            UUID id,
-            LocalDate periodStart,
-            LocalDate periodEnd,
-            BigDecimal forecastMean,
-            BigDecimal lowerBound,
-            BigDecimal upperBound,
-            BigDecimal acceptedValue) {
     }
 }

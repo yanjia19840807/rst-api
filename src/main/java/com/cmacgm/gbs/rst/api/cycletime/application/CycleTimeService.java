@@ -8,10 +8,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
-
 import com.cmacgm.gbs.rst.api.associateddata.domain.FileArtifact;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.FileArtifactRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
@@ -24,7 +20,7 @@ import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineFileReposit
 import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.ExerciseTmsSessionRepository;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.ExerciseTmsSessionRepository.ExerciseTmsSessionRow;
-import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
+import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -32,6 +28,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import com.cmacgm.gbs.rst.api.cycletime.api.dto.BaselineFileView;
+import com.cmacgm.gbs.rst.api.cycletime.api.dto.BaselineView;
+import com.cmacgm.gbs.rst.api.cycletime.api.dto.ManualBaselineRequest;
+import com.cmacgm.gbs.rst.api.cycletime.api.dto.PatchTmsSessionRequest;
+import com.cmacgm.gbs.rst.api.cycletime.api.dto.PatchTmsSessionResult;
 
 /**
  * Cycle Time service: MANUAL / SYSTEM baselines and Embedded TMS session inclusion.
@@ -43,7 +44,7 @@ public class CycleTimeService {
     private static final String SUPPORT_BUSINESS_TYPE = "EXERCISE";
     private static final long MAX_SUPPORT_FILE_BYTES = 20L * 1024 * 1024;
 
-    private final ExerciseService exercises;
+    private final ExerciseAccess exercises;
     private final CycleTimeBaselineRepository baselines;
     private final CycleTimeBaselineFileRepository baselineFiles;
     private final FileArtifactRepository fileArtifacts;
@@ -55,7 +56,7 @@ public class CycleTimeService {
      * Creates the Cycle Time service.
      */
     public CycleTimeService(
-            ExerciseService exercises,
+            ExerciseAccess exercises,
             CycleTimeBaselineRepository baselines,
             CycleTimeBaselineFileRepository baselineFiles,
             FileArtifactRepository fileArtifacts,
@@ -78,14 +79,14 @@ public class CycleTimeService {
      * Intent: satisfy Official package prerequisites without SYSTEM median calculation.
      * Failure: blank reason, non-positive median, or invalid file ids rejected with 422.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param request manual baseline payload
      * @return new active baseline
      */
     @Transactional
-    public BaselineView createManual(UUID ownerId, UUID exerciseId, ManualBaselineRequest request) {
-        RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
+    public BaselineView createManual(String ownerCcgid, UUID exerciseId, ManualBaselineRequest request) {
+        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
         if (request.manualReason() == null || request.manualReason().isBlank()) {
             throw new ApiException(
@@ -100,10 +101,10 @@ public class CycleTimeService {
         Instant now = clock.instant();
         deactivateActiveBaseline(exerciseId);
         CycleTimeBaseline baseline = CycleTimeBaseline.createManual(
-                exerciseId, request.medianSeconds(), request.manualReason().trim(), ownerId, now);
+                exerciseId, request.medianSeconds(), request.manualReason().trim(), ownerCcgid, now);
         baselines.save(baseline);
         if (!fileIds.isEmpty()) {
-            linkSupportFiles(baseline.getId(), exerciseId, fileIds, ownerId, now);
+            linkSupportFiles(baseline.getId(), exerciseId, fileIds, ownerCcgid, now);
         }
         return toView(baseline);
     }
@@ -111,14 +112,14 @@ public class CycleTimeService {
     /**
      * Uploads a support-file artifact stub for a MANUAL median (SharePoint deferred).
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param file uploaded file
      * @return created file artifact metadata
      */
     @Transactional
-    public BaselineFileView uploadSupportFile(UUID ownerId, UUID exerciseId, MultipartFile file) {
-        RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
+    public BaselineFileView uploadSupportFile(String ownerCcgid, UUID exerciseId, MultipartFile file) {
+        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
         if (file == null || file.isEmpty()) {
             throw new ApiException(
@@ -149,7 +150,7 @@ public class CycleTimeService {
                 fileName.trim(),
                 mimeType,
                 file.getSize(),
-                ownerId,
+                ownerCcgid,
                 now));
         return toFileView(artifact, 0);
     }
@@ -157,13 +158,13 @@ public class CycleTimeService {
     /**
      * Returns the active Cycle Time baseline for an Exercise.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @return active baseline
      */
     @Transactional(readOnly = true)
-    public BaselineView getActive(UUID ownerId, UUID exerciseId) {
-        exercises.requireReadable(ownerId, exerciseId);
+    public BaselineView getActive(String ownerCcgid, UUID exerciseId) {
+        exercises.requireReadable(ownerCcgid, exerciseId);
         CycleTimeBaseline baseline = baselines.findByExerciseIdAndActiveTrue(exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
@@ -178,7 +179,7 @@ public class CycleTimeService {
      * <p>Z-Score uses mean / sample stdev over all linked sessions with a valid cycle time
      * (including excluded rows), then maps values onto the current page.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param page 1-based page
      * @param pageSize page size
@@ -186,8 +187,8 @@ public class CycleTimeService {
      */
     @Transactional(readOnly = true)
     public PageResponse<ExerciseTmsSessionResponse> listTmsSessions(
-            UUID ownerId, UUID exerciseId, int page, int pageSize) {
-        exercises.requireReadable(ownerId, exerciseId);
+            String ownerCcgid, UUID exerciseId, int page, int pageSize) {
+        exercises.requireReadable(ownerCcgid, exerciseId);
         int safePage = Math.max(1, page);
         int safePageSize = Math.min(100, Math.max(1, pageSize));
         var pageable = PageRequest.of(safePage - 1, safePageSize);
@@ -207,7 +208,7 @@ public class CycleTimeService {
      * recalculates a new SYSTEM median from remaining included samples. MANUAL baselines keep
      * their median; only the selection set changes. Leaving zero valid included samples is rejected.
      *
-     * @param ownerId Supervisor id
+     * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @param sessionNo TMS session number
      * @param request inclusion flag
@@ -215,8 +216,8 @@ public class CycleTimeService {
      */
     @Transactional
     public PatchTmsSessionResult patchTmsSessionIncluded(
-            UUID ownerId, UUID exerciseId, String sessionNo, PatchTmsSessionRequest request) {
-        RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
+            String ownerCcgid, UUID exerciseId, String sessionNo, PatchTmsSessionRequest request) {
+        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
 
         ExerciseTmsSession link = exerciseTmsSessions
@@ -244,7 +245,7 @@ public class CycleTimeService {
             Optional<CycleTimeBaseline> active = baselines.findByExerciseIdAndActiveTrue(exerciseId);
             boolean recalculateSystem = active.isEmpty() || "SYSTEM".equals(active.get().getBaselineType());
             if (recalculateSystem) {
-                systemCycleTime.replaceSystem(exerciseId, ownerId, includedValues);
+                systemCycleTime.replaceSystem(exerciseId, ownerCcgid, includedValues);
             }
         }
 
@@ -325,7 +326,7 @@ public class CycleTimeService {
             UUID baselineId,
             UUID exerciseId,
             List<UUID> fileIds,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         int order = 0;
         for (UUID fileId : fileIds) {
@@ -349,7 +350,7 @@ public class CycleTimeService {
                         "Support file does not belong to this exercise: " + artifact.getFileName());
             }
             baselineFiles.save(CycleTimeBaselineFile.link(
-                    baselineId, fileId, order++, actorUserId, now));
+                    baselineId, fileId, order++, actorCcgid, now));
         }
     }
 
@@ -395,45 +396,5 @@ public class CycleTimeService {
         ZScoreStats(double mean, double stdev) {
             this(mean, stdev, true);
         }
-    }
-
-    /** Active baseline response. */
-    public record BaselineView(
-            UUID id,
-            String baselineType,
-            BigDecimal medianSeconds,
-            Integer sampleCount,
-            String calculationMethod,
-            String manualReason,
-            boolean active,
-            Instant calculatedAt,
-            List<BaselineFileView> files) {
-    }
-
-    /** Support file metadata on a MANUAL baseline. */
-    public record BaselineFileView(
-            UUID id,
-            String fileName,
-            String mimeType,
-            Long sizeBytes,
-            String webUrl,
-            int displayOrder) {
-    }
-
-    /** Manual baseline create payload. */
-    public record ManualBaselineRequest(
-            @NotNull @Positive BigDecimal medianSeconds,
-            @NotBlank String manualReason,
-            List<UUID> fileArtifactIds) {
-    }
-
-    /** PATCH inclusion payload. */
-    public record PatchTmsSessionRequest(@NotNull Boolean included) {
-    }
-
-    /** PATCH result with refreshed session and active baseline. */
-    public record PatchTmsSessionResult(
-            ExerciseTmsSessionResponse session,
-            BaselineView baseline) {
     }
 }

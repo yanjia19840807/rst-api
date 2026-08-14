@@ -38,7 +38,7 @@ public class DevAuthenticationFilter extends OncePerRequestFilter {
 
     /**
      * @param properties identity selection from configuration
-     * @param identities resolver that ensures {@code app_user} exists
+     * @param identities resolver for the configured CCGID
      */
     public DevAuthenticationFilter(DevIdentityProperties properties, DevIdentityService identities) {
         this.properties = properties;

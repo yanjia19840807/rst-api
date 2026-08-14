@@ -55,7 +55,7 @@ public class SupervisorToolkitController {
     public ToolkitResponse create(
             @AuthenticationPrincipal RstPrincipal principal,
             @Valid @RequestBody CreateToolkitRequest request) {
-        return toolkits.create(principal.userId(), principal.ccgid(), request);
+        return toolkits.create(principal.ccgid(), request);
     }
 
     @PutMapping("/{id}")
@@ -63,7 +63,7 @@ public class SupervisorToolkitController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id,
             @Valid @RequestBody UpdateToolkitRequest request) {
-        return toolkits.update(principal.userId(), principal.ccgid(), id, request);
+        return toolkits.update(principal.ccgid(), id, request);
     }
 
     @DeleteMapping("/{id}")

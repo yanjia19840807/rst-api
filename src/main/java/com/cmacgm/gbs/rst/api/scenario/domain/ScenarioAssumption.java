@@ -47,13 +47,13 @@ public class ScenarioAssumption {
     private Instant createdAt;
 
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     @Column(name = "updated_by")
-    private UUID updatedBy;
+    private String updatedBy;
 
     protected ScenarioAssumption() {
     }
@@ -64,13 +64,13 @@ public class ScenarioAssumption {
      * @param parameterCode controlled parameter code
      * @param numericValue numeric value
      * @param unit optional unit
-     * @param actorUserId creating user
+     * @param actorCcgid creating user
      * @param now creation timestamp
      * @return assumption entity
      */
     public static ScenarioAssumption numeric(
-            String parameterCode, BigDecimal numericValue, String unit, UUID actorUserId, Instant now) {
-        ScenarioAssumption assumption = base(parameterCode, actorUserId, now);
+            String parameterCode, BigDecimal numericValue, String unit, String actorCcgid, Instant now) {
+        ScenarioAssumption assumption = base(parameterCode, actorCcgid, now);
         assumption.numericValue = numericValue;
         assumption.unit = unit;
         return assumption;
@@ -81,13 +81,13 @@ public class ScenarioAssumption {
      *
      * @param parameterCode controlled parameter code
      * @param textValue text value
-     * @param actorUserId creating user
+     * @param actorCcgid creating user
      * @param now creation timestamp
      * @return assumption entity
      */
     public static ScenarioAssumption text(
-            String parameterCode, String textValue, UUID actorUserId, Instant now) {
-        ScenarioAssumption assumption = base(parameterCode, actorUserId, now);
+            String parameterCode, String textValue, String actorCcgid, Instant now) {
+        ScenarioAssumption assumption = base(parameterCode, actorCcgid, now);
         assumption.textValue = textValue;
         return assumption;
     }
@@ -97,25 +97,25 @@ public class ScenarioAssumption {
      *
      * @param parameterCode controlled parameter code
      * @param booleanValue boolean value
-     * @param actorUserId creating user
+     * @param actorCcgid creating user
      * @param now creation timestamp
      * @return assumption entity
      */
     public static ScenarioAssumption bool(
-            String parameterCode, boolean booleanValue, UUID actorUserId, Instant now) {
-        ScenarioAssumption assumption = base(parameterCode, actorUserId, now);
+            String parameterCode, boolean booleanValue, String actorCcgid, Instant now) {
+        ScenarioAssumption assumption = base(parameterCode, actorCcgid, now);
         assumption.booleanValue = booleanValue;
         return assumption;
     }
 
-    private static ScenarioAssumption base(String parameterCode, UUID actorUserId, Instant now) {
+    private static ScenarioAssumption base(String parameterCode, String actorCcgid, Instant now) {
         ScenarioAssumption assumption = new ScenarioAssumption();
         assumption.id = UUID.randomUUID();
         assumption.parameterCode = parameterCode;
         assumption.createdAt = now;
-        assumption.createdBy = actorUserId;
+        assumption.createdBy = actorCcgid;
         assumption.updatedAt = now;
-        assumption.updatedBy = actorUserId;
+        assumption.updatedBy = actorCcgid;
         return assumption;
     }
 
@@ -126,14 +126,14 @@ public class ScenarioAssumption {
     /**
      * Copies typed values from another assumption (keeps this row's id for unique-key upserts).
      */
-    void overwriteValues(ScenarioAssumption source, UUID actorUserId, Instant now) {
+    void overwriteValues(ScenarioAssumption source, String actorCcgid, Instant now) {
         this.numericValue = source.numericValue;
         this.textValue = source.textValue;
         this.booleanValue = source.booleanValue;
         this.dateValue = source.dateValue;
         this.unit = source.unit;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     public UUID getId() { return id; }

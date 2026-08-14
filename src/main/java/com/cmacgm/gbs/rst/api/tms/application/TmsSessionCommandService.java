@@ -9,8 +9,6 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
-import com.cmacgm.gbs.rst.api.identity.domain.AppUser;
-import com.cmacgm.gbs.rst.api.identity.persistence.AppUserRepository;
 import com.cmacgm.gbs.rst.api.tms.api.dto.StartTmsSessionRequest;
 import com.cmacgm.gbs.rst.api.tms.api.dto.TmsSessionResponse;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSession;
@@ -29,35 +27,32 @@ public class TmsSessionCommandService {
     private static final DateTimeFormatter SESSION_DATE = DateTimeFormatter.BASIC_ISO_DATE;
 
     private final TmsSessionRepository sessionRepository;
-    private final AppUserRepository userRepository;
     private final ToolkitRepository toolkitRepository;
     private final TimesheetReadService timesheet;
     private final Clock clock;
 
     public TmsSessionCommandService(
             TmsSessionRepository sessionRepository,
-            AppUserRepository userRepository,
             ToolkitRepository toolkitRepository,
             TimesheetReadService timesheet,
             Clock clock) {
         this.sessionRepository = sessionRepository;
-        this.userRepository = userRepository;
         this.toolkitRepository = toolkitRepository;
         this.timesheet = timesheet;
         this.clock = clock;
     }
 
     @Transactional
-    public TmsSessionResponse start(UUID userId, String ccgid, StartTmsSessionRequest request) {
-        ensureNoActiveSession(userId);
-        AppUser user = activeUser(userId);
+    public TmsSessionResponse start(
+            String agentCcgid, String agentDisplayName, StartTmsSessionRequest request) {
+        ensureNoActiveSession(agentCcgid);
         Toolkit toolkit = toolkitRepository.findActiveById(request.toolkitId())
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
                         "toolkit-not-found",
                         "The Toolkit was not found."));
         if (!timesheet.agentCanUse(
-                ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code())) {
+                agentCcgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code())) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
                     "toolkit-out-of-scope",
@@ -75,9 +70,13 @@ public class TmsSessionCommandService {
                                 "The selected active Subtask does not belong to the Toolkit."));
 
         var now = clock.instant();
+        String nameSnapshot = agentDisplayName == null || agentDisplayName.isBlank()
+                ? agentCcgid
+                : agentDisplayName.trim();
         TmsSession session = TmsSession.start(
-                nextSessionNumber(ccgid),
-                user,
+                nextSessionNumber(agentCcgid),
+                agentCcgid,
+                nameSnapshot,
                 toolkit,
                 subtask,
                 request.processedVolume(),
@@ -88,17 +87,17 @@ public class TmsSessionCommandService {
     }
 
     @Transactional
-    public TmsSessionResponse pause(UUID userId, String sessionNo) {
-        TmsSession session = ownedSession(userId, sessionNo);
+    public TmsSessionResponse pause(String agentCcgid, String sessionNo) {
+        TmsSession session = ownedSession(agentCcgid, sessionNo);
         var now = clock.instant();
         session.pause(now);
         return TmsSessionResponse.from(session, now);
     }
 
     @Transactional
-    public TmsSessionResponse resume(UUID userId, String sessionNo) {
-        TmsSession session = ownedSession(userId, sessionNo);
-        ensureNoOtherActiveSession(userId, sessionNo);
+    public TmsSessionResponse resume(String agentCcgid, String sessionNo) {
+        TmsSession session = ownedSession(agentCcgid, sessionNo);
+        ensureNoOtherActiveSession(agentCcgid, sessionNo);
         var now = clock.instant();
         session.resume(now);
         sessionRepository.flush();
@@ -106,40 +105,32 @@ public class TmsSessionCommandService {
     }
 
     @Transactional
-    public TmsSessionResponse end(UUID userId, String sessionNo) {
-        TmsSession session = ownedSession(userId, sessionNo);
+    public TmsSessionResponse end(String agentCcgid, String sessionNo) {
+        TmsSession session = ownedSession(agentCcgid, sessionNo);
         var now = clock.instant();
         session.end(now);
         return TmsSessionResponse.from(session, now);
     }
 
     @Transactional
-    public TmsSessionResponse discard(UUID userId, String sessionNo, String reason) {
-        TmsSession session = ownedSession(userId, sessionNo);
+    public TmsSessionResponse discard(String agentCcgid, String sessionNo, String reason) {
+        TmsSession session = ownedSession(agentCcgid, sessionNo);
         var now = clock.instant();
         session.discard(reason == null ? "" : reason.trim(), now);
         return TmsSessionResponse.from(session, now);
     }
 
-    private AppUser activeUser(UUID userId) {
-        return userRepository.findByIdAndActiveTrue(userId)
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.FORBIDDEN,
-                        "inactive-user",
-                        "The current user is not provisioned for RST."));
-    }
-
-    private TmsSession ownedSession(UUID userId, String sessionNo) {
-        return sessionRepository.findBySessionNoAndUserId(sessionNo, userId)
+    private TmsSession ownedSession(String agentCcgid, String sessionNo) {
+        return sessionRepository.findBySessionNoAndAgentCcgid(sessionNo, agentCcgid)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
                         "tms-session-not-found",
                         "The TMS session was not found."));
     }
 
-    private void ensureNoActiveSession(UUID userId) {
-        if (sessionRepository.existsByUserIdAndStatusIn(
-                userId, Set.of(TmsSessionStatus.RUNNING, TmsSessionStatus.PAUSED))) {
+    private void ensureNoActiveSession(String agentCcgid) {
+        if (sessionRepository.existsByAgentCcgidAndStatusIn(
+                agentCcgid, Set.of(TmsSessionStatus.RUNNING, TmsSessionStatus.PAUSED))) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
                     "active-session-exists",
@@ -147,9 +138,9 @@ public class TmsSessionCommandService {
         }
     }
 
-    private void ensureNoOtherActiveSession(UUID userId, String currentSessionNo) {
-        sessionRepository.findFirstByUserIdAndStatusIn(
-                        userId, Set.of(TmsSessionStatus.RUNNING, TmsSessionStatus.PAUSED))
+    private void ensureNoOtherActiveSession(String agentCcgid, String currentSessionNo) {
+        sessionRepository.findFirstByAgentCcgidAndStatusIn(
+                        agentCcgid, Set.of(TmsSessionStatus.RUNNING, TmsSessionStatus.PAUSED))
                 .filter(session -> !session.getSessionNo().equals(currentSessionNo))
                 .ifPresent(session -> {
                     throw new ApiException(

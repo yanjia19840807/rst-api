@@ -41,19 +41,19 @@ public class ExerciseShift {
     private Instant createdAt;
 
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     @Column(name = "updated_by")
-    private UUID updatedBy;
+    private String updatedBy;
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
     @Column(name = "deleted_by")
-    private UUID deletedBy;
+    private String deletedBy;
 
     @Version
     private long version;
@@ -70,7 +70,7 @@ public class ExerciseShift {
      * @param durationMinutes positive duration
      * @param headcount non-negative headcount
      * @param worksOnWeekend whether the shift covers weekends
-     * @param actorUserId creating Supervisor
+     * @param actorCcgid creating Supervisor
      * @param now creation timestamp
      * @return new shift entity
      */
@@ -81,7 +81,7 @@ public class ExerciseShift {
             BigDecimal durationMinutes,
             BigDecimal headcount,
             boolean worksOnWeekend,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         ExerciseShift shift = new ExerciseShift();
         shift.id = UUID.randomUUID();
@@ -92,9 +92,9 @@ public class ExerciseShift {
         shift.headcount = headcount;
         shift.worksOnWeekend = worksOnWeekend;
         shift.createdAt = now;
-        shift.createdBy = actorUserId;
+        shift.createdBy = actorCcgid;
         shift.updatedAt = now;
-        shift.updatedBy = actorUserId;
+        shift.updatedBy = actorCcgid;
         return shift;
     }
 
@@ -106,27 +106,27 @@ public class ExerciseShift {
             BigDecimal durationMinutes,
             BigDecimal headcount,
             boolean worksOnWeekend,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         this.startTime = startTime;
         this.durationMinutes = durationMinutes;
         this.headcount = headcount;
         this.worksOnWeekend = worksOnWeekend;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     /**
      * Soft-deletes this shift.
      *
-     * @param actorUserId deleting Supervisor
+     * @param actorCcgid deleting Supervisor
      * @param now deletion timestamp
      */
-    public void softDelete(UUID actorUserId, Instant now) {
+    public void softDelete(String actorCcgid, Instant now) {
         this.deletedAt = now;
-        this.deletedBy = actorUserId;
+        this.deletedBy = actorCcgid;
         this.updatedAt = now;
-        this.updatedBy = actorUserId;
+        this.updatedBy = actorCcgid;
     }
 
     public UUID getId() { return id; }

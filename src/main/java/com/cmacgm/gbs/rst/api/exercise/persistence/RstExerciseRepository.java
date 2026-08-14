@@ -23,11 +23,11 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
      * to avoid Hibernate {@code MultipleBagFetchException}.
      *
      * @param id Exercise id
-     * @param ownerUserId owner Supervisor id
+     * @param ownerCcgid owner Supervisor ccgid
      * @return optional Exercise
      */
     @EntityGraph(attributePaths = {"toolkitSnapshot"})
-    Optional<RstExercise> findByIdAndOwnerUserIdAndDeletedAtIsNull(UUID id, UUID ownerUserId);
+    Optional<RstExercise> findByIdAndOwnerCcgidAndDeletedAtIsNull(UUID id, String ownerCcgid);
 
     /**
      * Finds a non-deleted Exercise by id (owner or approver read path).
@@ -41,11 +41,11 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
     /**
      * Lists non-deleted Exercises for a Supervisor ordered by recent update.
      *
-     * @param ownerUserId owner Supervisor id
+     * @param ownerCcgid owner Supervisor ccgid
      * @return exercises
      */
     @EntityGraph(attributePaths = {"toolkitSnapshot"})
-    List<RstExercise> findByOwnerUserIdAndDeletedAtIsNullOrderByUpdatedAtDescIdAsc(UUID ownerUserId);
+    List<RstExercise> findByOwnerCcgidAndDeletedAtIsNullOrderByUpdatedAtDescIdAsc(String ownerCcgid);
 
     /**
      * Returns whether any Exercise references the Toolkit.

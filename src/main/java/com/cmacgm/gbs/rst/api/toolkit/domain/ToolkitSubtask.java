@@ -14,8 +14,6 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
-import com.cmacgm.gbs.rst.api.identity.domain.AppUser;
-
 @Entity
 @Table(name = "toolkit_subtask")
 public class ToolkitSubtask {
@@ -39,23 +37,20 @@ public class ToolkitSubtask {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by")
-    private AppUser createdBy;
+    @Column(name = "created_by", length = 64)
+    private String createdBy;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "updated_by")
-    private AppUser updatedBy;
+    @Column(name = "updated_by", length = 64)
+    private String updatedBy;
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "deleted_by")
-    private AppUser deletedBy;
+    @Column(name = "deleted_by", length = 64)
+    private String deletedBy;
 
     @Version
     @Column(nullable = false)
@@ -69,7 +64,7 @@ public class ToolkitSubtask {
             String name,
             String description,
             int displayOrder,
-            AppUser actor,
+            String actorCcgid,
             Instant now) {
         ToolkitSubtask subtask = new ToolkitSubtask();
         subtask.toolkit = toolkit;
@@ -77,9 +72,9 @@ public class ToolkitSubtask {
         subtask.description = description == null || description.isBlank() ? null : description.trim();
         subtask.displayOrder = displayOrder;
         subtask.createdAt = now;
-        subtask.createdBy = actor;
+        subtask.createdBy = actorCcgid;
         subtask.updatedAt = now;
-        subtask.updatedBy = actor;
+        subtask.updatedBy = actorCcgid;
         return subtask;
     }
 

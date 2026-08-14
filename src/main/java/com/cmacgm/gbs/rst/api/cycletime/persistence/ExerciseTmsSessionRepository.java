@@ -52,7 +52,7 @@ public interface ExerciseTmsSessionRepository extends JpaRepository<ExerciseTmsS
             select s.id as tmsSessionId,
                    s.sessionNo as sessionNo,
                    s.reference as reference,
-                   u.displayName as agentName,
+                   s.agentNameSnapshot as agentName,
                    s.subtaskNameSnapshot as subtaskName,
                    s.processedVolume as processedVolume,
                    s.netDurationSeconds as netDurationSeconds,
@@ -61,7 +61,6 @@ public interface ExerciseTmsSessionRepository extends JpaRepository<ExerciseTmsS
                    s.startedAt as startedAt,
                    s.endedAt as endedAt
             from ExerciseTmsSession e, TmsSession s
-            join s.user u
             where e.exerciseId = :exerciseId
               and s.id = e.tmsSessionId
             order by s.sessionNo
@@ -79,7 +78,7 @@ public interface ExerciseTmsSessionRepository extends JpaRepository<ExerciseTmsS
                     select s.id as tmsSessionId,
                            s.sessionNo as sessionNo,
                            s.reference as reference,
-                           u.displayName as agentName,
+                           s.agentNameSnapshot as agentName,
                            s.subtaskNameSnapshot as subtaskName,
                            s.processedVolume as processedVolume,
                            s.netDurationSeconds as netDurationSeconds,
@@ -88,7 +87,6 @@ public interface ExerciseTmsSessionRepository extends JpaRepository<ExerciseTmsS
                            s.startedAt as startedAt,
                            s.endedAt as endedAt
                     from ExerciseTmsSession e, TmsSession s
-                    join s.user u
                     where e.exerciseId = :exerciseId
                       and s.id = e.tmsSessionId
                     order by s.sessionNo

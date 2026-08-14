@@ -17,38 +17,38 @@ import org.springframework.data.repository.query.Param;
 public interface TmsSessionRepository
         extends JpaRepository<TmsSession, UUID>, JpaSpecificationExecutor<TmsSession> {
 
-    boolean existsByUserIdAndStatusIn(UUID userId, Collection<TmsSessionStatus> statuses);
+    boolean existsByAgentCcgidAndStatusIn(String agentCcgid, Collection<TmsSessionStatus> statuses);
 
     boolean existsByToolkit_Id(UUID toolkitId);
 
     @EntityGraph(attributePaths = {"toolkit", "toolkitSubtask", "pauseIntervals"})
-    Optional<TmsSession> findFirstByUserIdAndStatusIn(
-            UUID userId, Collection<TmsSessionStatus> statuses);
+    Optional<TmsSession> findFirstByAgentCcgidAndStatusIn(
+            String agentCcgid, Collection<TmsSessionStatus> statuses);
 
     @EntityGraph(attributePaths = {"toolkit", "toolkitSubtask", "pauseIntervals"})
-    Optional<TmsSession> findBySessionNoAndUserId(String sessionNo, UUID userId);
+    Optional<TmsSession> findBySessionNoAndAgentCcgid(String sessionNo, String agentCcgid);
 
-    @EntityGraph(attributePaths = {"user", "toolkit", "toolkitSubtask", "pauseIntervals"})
+    @EntityGraph(attributePaths = {"toolkit", "toolkitSubtask", "pauseIntervals"})
     Optional<TmsSession> findBySessionNo(String sessionNo);
 
-    long countByUserIdAndStatusAndEndedAtGreaterThanEqualAndEndedAtLessThan(
-            UUID userId,
+    long countByAgentCcgidAndStatusAndEndedAtGreaterThanEqualAndEndedAtLessThan(
+            String agentCcgid,
             TmsSessionStatus status,
             Instant from,
             Instant to);
 
-    long countByUserIdAndStatus(UUID userId, TmsSessionStatus status);
+    long countByAgentCcgidAndStatus(String agentCcgid, TmsSessionStatus status);
 
     @Query("""
             select sum(session.processedVolume)
             from TmsSession session
-            where session.user.id = :userId
+            where session.agentCcgid = :agentCcgid
               and session.status = :status
               and session.endedAt >= :from
               and session.endedAt < :to
             """)
     BigDecimal sumVolume(
-            @Param("userId") UUID userId,
+            @Param("agentCcgid") String agentCcgid,
             @Param("status") TmsSessionStatus status,
             @Param("from") Instant from,
             @Param("to") Instant to);

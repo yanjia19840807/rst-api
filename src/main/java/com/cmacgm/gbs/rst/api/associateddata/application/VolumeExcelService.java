@@ -30,9 +30,9 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.DailyVolumeRequest;
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.MonthlyVolumeRequest;
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.SlotVolumeRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.DailyVolumeRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.MonthlyVolumeRequest;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.SlotVolumeRequest;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 
 /**

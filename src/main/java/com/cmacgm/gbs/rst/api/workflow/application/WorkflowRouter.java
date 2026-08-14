@@ -3,11 +3,8 @@ package com.cmacgm.gbs.rst.api.workflow.application;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
-import com.cmacgm.gbs.rst.api.identity.domain.AppUser;
-import com.cmacgm.gbs.rst.api.identity.persistence.AppUserRepository;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSnapshotRowRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSnapshotRowRepository.ApproverChainRow;
@@ -16,40 +13,36 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 /**
- * Routes workflow steps to Timesheet positions. The occupant User is recorded for display
+ * Routes workflow steps to Timesheet positions. The occupant ccgid is recorded for display
  * only; queue membership and Approve/Return authorization use {@code positionId}.
  */
 @Component
 public class WorkflowRouter {
 
     private final TimesheetSnapshotRowRepository snapshotRows;
-    private final AppUserRepository users;
     private final WorkflowProperties properties;
 
     /**
      * Creates the Timesheet workflow router.
      *
      * @param snapshotRows ACTIVE timesheet rows
-     * @param users app users (occupant lookup)
      * @param properties LTH position fallback
      */
     public WorkflowRouter(
             TimesheetSnapshotRowRepository snapshotRows,
-            AppUserRepository users,
             WorkflowProperties properties) {
         this.snapshotRows = snapshotRows;
-        this.users = users;
         this.properties = properties;
     }
 
     /**
-     * Position that owns a step, plus the current occupant (User) for display.
+     * Position that owns a step, plus the current occupant (ccgid) for display.
      *
      * @param positionId Timesheet position id that the step is waiting on
-     * @param occupantUserId current occupant in {@code app_user}, if provisioned
+     * @param assigneeCcgid current occupant ccgid, if known
      * @param occupantName Timesheet display name of the current occupant
      */
-    public record RoutedStep(String positionId, UUID occupantUserId, String occupantName) {
+    public record RoutedStep(String positionId, String assigneeCcgid, String occupantName) {
     }
 
     /**
@@ -91,7 +84,7 @@ public class WorkflowRouter {
         }
         return new RoutedStep(
                 chain.getSrManagerPositionId(),
-                userIdByCcgid(chain.getSrManagerCcgid()),
+                blankToNull(chain.getSrManagerCcgid()),
                 chain.getSrManagerName());
     }
 
@@ -109,7 +102,7 @@ public class WorkflowRouter {
         }
         return new RoutedStep(
                 chain.getDomainHeadPositionId(),
-                userIdByCcgid(chain.getDomainHeadCcgid()),
+                blankToNull(chain.getDomainHeadCcgid()),
                 chain.getDomainHeadName());
     }
 
@@ -152,7 +145,7 @@ public class WorkflowRouter {
      * Next workflow hop for the Approval Step panel.
      *
      * @param stepLabel next step name
-     * @param reviewerName current occupant of the next position (User display), if known
+     * @param reviewerName current occupant of the next position, if known
      */
     public record NextHop(String stepLabel, String reviewerName) {
     }
@@ -210,7 +203,7 @@ public class WorkflowRouter {
             return new RoutedStep(positionId, null, null);
         }
         OccupantRow row = rows.get(0);
-        return new RoutedStep(positionId, userIdByCcgid(row.getCcgid()), row.getName());
+        return new RoutedStep(positionId, blankToNull(row.getCcgid()), row.getName());
     }
 
     /**
@@ -246,11 +239,8 @@ public class WorkflowRouter {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    private UUID userIdByCcgid(String ccgid) {
-        if (!hasText(ccgid)) {
-            return null;
-        }
-        return users.findByCcgidAndActiveTrue(ccgid).map(AppUser::getId).orElse(null);
+    private static String blankToNull(String value) {
+        return hasText(value) ? value.trim() : null;
     }
 
     private static boolean hasText(String value) {

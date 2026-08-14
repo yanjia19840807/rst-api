@@ -29,8 +29,8 @@ public class WorkflowStepAssignment {
     @Column(name = "required_role_code", nullable = false, length = 40)
     private String requiredRoleCode;
 
-    @Column(name = "assignee_user_id")
-    private UUID assigneeUserId;
+    @Column(name = "assignee_ccgid")
+    private String assigneeCcgid;
 
     @Column(name = "assignee_position_id", length = 80)
     private String assigneePositionId;
@@ -52,7 +52,7 @@ public class WorkflowStepAssignment {
      *
      * @param stepNo step number (1 Manager, 2 CDH, 3 LTH)
      * @param requiredRoleCode required role
-     * @param assigneeUserId current occupant of the position (display only; may be null)
+     * @param assigneeCcgid current occupant of the position (display only; may be null)
      * @param assigneePositionId Timesheet position that owns this step
      * @param scopeSnapshotHash hash of submission scopes used for routing
      * @param now resolution timestamp
@@ -61,7 +61,7 @@ public class WorkflowStepAssignment {
     public static WorkflowStepAssignment ready(
             short stepNo,
             String requiredRoleCode,
-            UUID assigneeUserId,
+            String assigneeCcgid,
             String assigneePositionId,
             String scopeSnapshotHash,
             Instant now) {
@@ -69,7 +69,7 @@ public class WorkflowStepAssignment {
         assignment.id = UUID.randomUUID();
         assignment.stepNo = stepNo;
         assignment.requiredRoleCode = requiredRoleCode;
-        assignment.assigneeUserId = assigneeUserId;
+        assignment.assigneeCcgid = assigneeCcgid;
         assignment.assigneePositionId = assigneePositionId;
         assignment.routingStatus = "READY";
         assignment.scopeSnapshotHash = scopeSnapshotHash;
@@ -80,57 +80,57 @@ public class WorkflowStepAssignment {
     /**
      * Creates a READY Manager step (step 1).
      *
-     * @param assigneeUserId current Manager occupant
+     * @param assigneeCcgid current Manager occupant
      * @param assigneePositionId Manager position id
      * @param scopeSnapshotHash scope hash
      * @param now resolution timestamp
      * @return assignment entity
      */
     public static WorkflowStepAssignment readyManager(
-            UUID assigneeUserId, String assigneePositionId, String scopeSnapshotHash, Instant now) {
-        return ready((short) 1, "MANAGER", assigneeUserId, assigneePositionId, scopeSnapshotHash, now);
+            String assigneeCcgid, String assigneePositionId, String scopeSnapshotHash, Instant now) {
+        return ready((short) 1, "MANAGER", assigneeCcgid, assigneePositionId, scopeSnapshotHash, now);
     }
 
     /**
      * Creates a READY CDH step (step 2).
      *
-     * @param assigneeUserId current CDH occupant
+     * @param assigneeCcgid current CDH occupant
      * @param assigneePositionId CDH position id
      * @param scopeSnapshotHash scope hash
      * @param now resolution timestamp
      * @return assignment entity
      */
     public static WorkflowStepAssignment readyCdh(
-            UUID assigneeUserId, String assigneePositionId, String scopeSnapshotHash, Instant now) {
-        return ready((short) 2, "CDH", assigneeUserId, assigneePositionId, scopeSnapshotHash, now);
+            String assigneeCcgid, String assigneePositionId, String scopeSnapshotHash, Instant now) {
+        return ready((short) 2, "CDH", assigneeCcgid, assigneePositionId, scopeSnapshotHash, now);
     }
 
     /**
      * Creates a READY LTH step (step 3).
      *
-     * @param assigneeUserId current LTH occupant
+     * @param assigneeCcgid current LTH occupant
      * @param assigneePositionId LTH position id
      * @param scopeSnapshotHash scope hash
      * @param now resolution timestamp
      * @return assignment entity
      */
     public static WorkflowStepAssignment readyLth(
-            UUID assigneeUserId, String assigneePositionId, String scopeSnapshotHash, Instant now) {
-        return ready((short) 3, "LTH", assigneeUserId, assigneePositionId, scopeSnapshotHash, now);
+            String assigneeCcgid, String assigneePositionId, String scopeSnapshotHash, Instant now) {
+        return ready((short) 3, "LTH", assigneeCcgid, assigneePositionId, scopeSnapshotHash, now);
     }
 
     /**
      * Reopens this assignment as READY so the same logical step can be used again
      * after Return / resubmit without inserting a duplicate {@code step_no}.
      *
-     * @param assigneeUserId current occupant
+     * @param assigneeCcgid current occupant
      * @param assigneePositionId Timesheet position
      * @param scopeSnapshotHash scope hash
      * @param now resolution timestamp
      */
     public void reopenReady(
-            UUID assigneeUserId, String assigneePositionId, String scopeSnapshotHash, Instant now) {
-        this.assigneeUserId = assigneeUserId;
+            String assigneeCcgid, String assigneePositionId, String scopeSnapshotHash, Instant now) {
+        this.assigneeCcgid = assigneeCcgid;
         this.assigneePositionId = assigneePositionId;
         this.scopeSnapshotHash = scopeSnapshotHash;
         this.routingStatus = "READY";
@@ -167,7 +167,7 @@ public class WorkflowStepAssignment {
     public UUID getId() { return id; }
     public short getStepNo() { return stepNo; }
     public String getRequiredRoleCode() { return requiredRoleCode; }
-    public UUID getAssigneeUserId() { return assigneeUserId; }
+    public String getAssigneeCcgid() { return assigneeCcgid; }
     public String getAssigneePositionId() { return assigneePositionId; }
     public String getRoutingStatus() { return routingStatus; }
     public String getScopeSnapshotHash() { return scopeSnapshotHash; }

@@ -58,11 +58,12 @@ class TmsSessionTests {
         Toolkit toolkit = Toolkit.create(
                 "Bank Reconciliation", null, "POS-SUP-1", "Center", "Finance",
                 "Accounting", "Record to Report", "BANK_REC", "Bank Reconciliation",
-                false, null, START);
+                false, "AGENT001", START);
         ToolkitSubtask subtask = toolkit.addSubtask("Manual match", null, 1, START);
         return TmsSession.start(
                 "TMS-AGENT001-20260805-0001",
-                null,
+                "AGENT001",
+                "Test Agent",
                 toolkit,
                 subtask,
                 BigDecimal.valueOf(25),

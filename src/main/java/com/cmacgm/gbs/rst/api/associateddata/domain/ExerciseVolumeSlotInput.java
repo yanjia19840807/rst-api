@@ -7,12 +7,17 @@ import java.util.UUID;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
+
+import org.springframework.data.domain.Persistable;
 
 /** Slot volume input grain for an Exercise. */
 @Entity
 @Table(name = "exercise_volume_slot_input")
-public class ExerciseVolumeSlotInput {
+public class ExerciseVolumeSlotInput implements Persistable<UUID> {
 
     @Id
     private UUID id;
@@ -39,13 +44,16 @@ public class ExerciseVolumeSlotInput {
     private Instant createdAt;
 
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     @Column(name = "updated_by")
-    private UUID updatedBy;
+    private String updatedBy;
+
+    @Transient
+    private boolean isNew = true;
 
     protected ExerciseVolumeSlotInput() {
     }
@@ -59,7 +67,7 @@ public class ExerciseVolumeSlotInput {
      * @param actualVolume non-negative actual volume
      * @param sourceType MANUAL / ARCHIVE / IMPORT
      * @param importBatchId optional import batch
-     * @param actorUserId creating Supervisor
+     * @param actorCcgid creating Supervisor
      * @param now creation timestamp
      * @return new slot volume row
      */
@@ -70,7 +78,7 @@ public class ExerciseVolumeSlotInput {
             BigDecimal actualVolume,
             String sourceType,
             UUID importBatchId,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         ExerciseVolumeSlotInput row = new ExerciseVolumeSlotInput();
         row.id = UUID.randomUUID();
@@ -81,13 +89,29 @@ public class ExerciseVolumeSlotInput {
         row.sourceType = sourceType == null || sourceType.isBlank() ? "MANUAL" : sourceType;
         row.importBatchId = importBatchId;
         row.createdAt = now;
-        row.createdBy = actorUserId;
+        row.createdBy = actorCcgid;
         row.updatedAt = now;
-        row.updatedBy = actorUserId;
+        row.updatedBy = actorCcgid;
+        row.isNew = true;
         return row;
     }
 
-    public UUID getId() { return id; }
+    @Override
+    public UUID getId() {
+        return id;
+    }
+
+    @Override
+    public boolean isNew() {
+        return isNew;
+    }
+
+    @PrePersist
+    @PostLoad
+    void markNotNew() {
+        this.isNew = false;
+    }
+
     public UUID getExerciseId() { return exerciseId; }
     public Instant getSlotStartAt() { return slotStartAt; }
     public Instant getSlotEndAt() { return slotEndAt; }

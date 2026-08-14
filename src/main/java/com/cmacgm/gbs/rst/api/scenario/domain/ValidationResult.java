@@ -52,7 +52,7 @@ public class ValidationResult {
     private Instant evaluatedAt;
 
     @Column(name = "evaluated_by")
-    private UUID evaluatedBy;
+    private String evaluatedBy;
 
     protected ValidationResult() {
     }
@@ -69,7 +69,7 @@ public class ValidationResult {
      * @param actualValue optional actual value text
      * @param expectedValue optional expected value text
      * @param remarks optional remarks (required for failed SEVERE at submit)
-     * @param actorUserId evaluator
+     * @param actorCcgid evaluator
      * @param now evaluation timestamp
      * @return validation finding
      */
@@ -83,7 +83,7 @@ public class ValidationResult {
             String actualValue,
             String expectedValue,
             String remarks,
-            UUID actorUserId,
+            String actorCcgid,
             Instant now) {
         ValidationResult result = new ValidationResult();
         result.id = UUID.randomUUID();
@@ -97,7 +97,7 @@ public class ValidationResult {
         result.expectedValue = expectedValue;
         result.remarks = remarks;
         result.evaluatedAt = now;
-        result.evaluatedBy = actorUserId;
+        result.evaluatedBy = actorCcgid;
         return result;
     }
 
