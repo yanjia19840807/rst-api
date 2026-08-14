@@ -1,5 +1,7 @@
 package com.cmacgm.gbs.rst.api.official.persistence;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -18,6 +20,22 @@ public interface OfficialPackageRepository extends JpaRepository<OfficialPackage
      * @return optional current package
      */
     Optional<OfficialPackage> findByExerciseIdAndCurrentTrue(UUID exerciseId);
+
+    /**
+     * Finds all Official Packages for an Exercise (including non-current / returned).
+     *
+     * @param exerciseId Exercise id
+     * @return packages
+     */
+    List<OfficialPackage> findByExerciseId(UUID exerciseId);
+
+    /**
+     * Finds all Official Packages for the given Exercises.
+     *
+     * @param exerciseIds Exercise ids
+     * @return packages
+     */
+    List<OfficialPackage> findByExerciseIdIn(Collection<UUID> exerciseIds);
 
     /**
      * Returns the max package version for an Exercise.

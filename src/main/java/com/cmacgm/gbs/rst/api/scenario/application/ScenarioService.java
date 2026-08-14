@@ -3,7 +3,9 @@ package com.cmacgm.gbs.rst.api.scenario.application;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -15,6 +17,7 @@ import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.official.application.OfficialPackageService;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.scenario.domain.ScenarioAssumption;
+import com.cmacgm.gbs.rst.api.scenario.domain.ScenarioShift;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
@@ -60,7 +63,7 @@ public class ScenarioService {
      */
     @Transactional(readOnly = true)
     public List<ScenarioView> list(UUID ownerId, UUID exerciseId) {
-        exercises.requireOwned(ownerId, exerciseId);
+        exercises.requireReadable(ownerId, exerciseId);
         return scenarios.findByExerciseIdAndDeletedAtIsNullOrderByCreatedAtAsc(exerciseId).stream()
                 .map(this::toView)
                 .toList();
@@ -131,7 +134,7 @@ public class ScenarioService {
      */
     @Transactional(readOnly = true)
     public ScenarioView detail(UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        exercises.requireOwned(ownerId, exerciseId);
+        exercises.requireReadable(ownerId, exerciseId);
         return toView(requireScenario(exerciseId, scenarioId));
     }
 
@@ -156,6 +159,24 @@ public class ScenarioService {
         if (request.assumptions() != null) {
             scenario.replaceAssumptions(toAssumptions(request.assumptions(), ownerId, now), ownerId, now);
         }
+        return toView(scenarios.save(scenario));
+    }
+
+    /**
+     * Replaces Slot Simulation shift inputs for a DRAFT scenario.
+     */
+    @Transactional
+    public ScenarioView replaceShifts(
+            UUID ownerId,
+            UUID exerciseId,
+            UUID scenarioId,
+            List<com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.ShiftRequest> requests) {
+        RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
+        exercises.requireEditable(exercise);
+        Scenario scenario = requireScenario(exerciseId, scenarioId);
+        requireDraft(scenario);
+        Instant now = clock.instant();
+        scenario.replaceShifts(toShifts(requests, ownerId, now), ownerId, now);
         return toView(scenarios.save(scenario));
     }
 
@@ -244,6 +265,12 @@ public class ScenarioService {
                         a.getId(), a.getParameterCode(), a.getNumericValue(), a.getTextValue(),
                         a.getBooleanValue(), a.getUnit()))
                 .toList();
+        List<ShiftView> shifts = scenario.getShifts().stream()
+                .sorted(Comparator.comparing(ScenarioShift::getShiftNo))
+                .map(s -> new ShiftView(
+                        s.getId(), s.getShiftNo(), s.getStartTime(), s.getDurationMinutes(),
+                        s.getHeadcount(), s.isWorksOnWeekend()))
+                .toList();
         return new ScenarioView(
                 scenario.getId(),
                 scenario.getScenarioCode(),
@@ -252,7 +279,29 @@ public class ScenarioService {
                 scenario.getStatus(),
                 scenario.getOfficialAt(),
                 scenario.getVersion(),
-                assumptions);
+                assumptions,
+                shifts);
+    }
+
+    List<ScenarioShift> toShifts(
+            List<com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.ShiftRequest> requests,
+            UUID actorUserId,
+            Instant now) {
+        List<ScenarioShift> shifts = new ArrayList<>();
+        if (requests == null) {
+            return shifts;
+        }
+        for (var request : requests) {
+            shifts.add(ScenarioShift.create(
+                    request.shiftNo(),
+                    request.startTime(),
+                    request.durationMinutes(),
+                    request.headcount(),
+                    request.worksOnWeekend(),
+                    actorUserId,
+                    now));
+        }
+        return shifts;
     }
 
     /** Scenario response. */
@@ -264,7 +313,18 @@ public class ScenarioService {
             String status,
             Instant officialAt,
             long version,
-            List<AssumptionView> assumptions) {
+            List<AssumptionView> assumptions,
+            List<ShiftView> shifts) {
+    }
+
+    /** Slot Simulation shift input on a Scenario. */
+    public record ShiftView(
+            UUID id,
+            short shiftNo,
+            LocalTime startTime,
+            BigDecimal durationMinutes,
+            BigDecimal headcount,
+            boolean worksOnWeekend) {
     }
 
     /** Assumption response. */

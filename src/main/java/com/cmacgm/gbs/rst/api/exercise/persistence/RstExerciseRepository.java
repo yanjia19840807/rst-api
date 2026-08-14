@@ -30,6 +30,15 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
     Optional<RstExercise> findByIdAndOwnerUserIdAndDeletedAtIsNull(UUID id, UUID ownerUserId);
 
     /**
+     * Finds a non-deleted Exercise by id (owner or approver read path).
+     *
+     * @param id Exercise id
+     * @return optional Exercise
+     */
+    @EntityGraph(attributePaths = {"toolkitSnapshot"})
+    Optional<RstExercise> findByIdAndDeletedAtIsNull(UUID id);
+
+    /**
      * Lists non-deleted Exercises for a Supervisor ordered by recent update.
      *
      * @param ownerUserId owner Supervisor id

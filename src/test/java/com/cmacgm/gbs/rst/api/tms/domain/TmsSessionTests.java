@@ -3,6 +3,7 @@ package com.cmacgm.gbs.rst.api.tms.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 import com.cmacgm.gbs.rst.api.toolkit.domain.Toolkit;
@@ -64,7 +65,7 @@ class TmsSessionTests {
                 null,
                 toolkit,
                 subtask,
-                25,
+                BigDecimal.valueOf(25),
                 "INV-1",
                 "",
                 START);

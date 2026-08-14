@@ -3,7 +3,8 @@ package com.cmacgm.gbs.rst.api.toolkit.api;
 import java.util.List;
 
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
-import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitQueryService;
+import com.cmacgm.gbs.rst.api.toolkit.api.dto.ToolkitResponse;
+import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,15 +15,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/toolkits")
 public class AgentToolkitController {
 
-    private final ToolkitQueryService toolkitQueryService;
+    private final ToolkitService toolkits;
 
-    public AgentToolkitController(ToolkitQueryService toolkitQueryService) {
-        this.toolkitQueryService = toolkitQueryService;
+    public AgentToolkitController(ToolkitService toolkits) {
+        this.toolkits = toolkits;
     }
 
     @GetMapping
     @PreAuthorize("hasRole('AGENT')")
     public List<ToolkitResponse> list(@AuthenticationPrincipal RstPrincipal principal) {
-        return toolkitQueryService.agentToolkits(principal.ccgid());
+        return toolkits.agentToolkits(principal.ccgid());
     }
 }

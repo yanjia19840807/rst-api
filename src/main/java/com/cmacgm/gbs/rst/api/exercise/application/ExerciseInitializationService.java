@@ -17,7 +17,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import com.cmacgm.gbs.rst.api.associateddata.application.SupportDerivedRefresher;
 import com.cmacgm.gbs.rst.api.associateddata.application.VolumeTrainWindows;
 import com.cmacgm.gbs.rst.api.associateddata.application.VolumeTrainWindows.SlotBound;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseCalendar;
@@ -28,7 +27,6 @@ import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup.TeamSetupI
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeDailyInput;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeMonthlyInput;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeSlotInput;
-import com.cmacgm.gbs.rst.api.associateddata.domain.SupportWorkloadMath;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseHolidayRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSupportItemRepository;
@@ -74,7 +72,6 @@ public class ExerciseInitializationService {
     private final TmsSessionRepository tmsSessions;
     private final ExerciseTmsSessionRepository exerciseTmsSessions;
     private final HolidayTemplateService holidayTemplates;
-    private final SupportDerivedRefresher supportDerivedRefresher;
     private final SystemCycleTimeBaselineWriter systemCycleTime;
     private final Clock clock;
 
@@ -90,7 +87,6 @@ public class ExerciseInitializationService {
             TmsSessionRepository tmsSessions,
             ExerciseTmsSessionRepository exerciseTmsSessions,
             HolidayTemplateService holidayTemplates,
-            SupportDerivedRefresher supportDerivedRefresher,
             SystemCycleTimeBaselineWriter systemCycleTime,
             Clock clock) {
         this.exercises = exercises;
@@ -104,7 +100,6 @@ public class ExerciseInitializationService {
         this.tmsSessions = tmsSessions;
         this.exerciseTmsSessions = exerciseTmsSessions;
         this.holidayTemplates = holidayTemplates;
-        this.supportDerivedRefresher = supportDerivedRefresher;
         this.systemCycleTime = systemCycleTime;
         this.clock = clock;
     }
@@ -154,8 +149,6 @@ public class ExerciseInitializationService {
             copyCalendarHeader(archive.get().getId(), exercise.getId(), actorUserId, now);
             copyCustomHolidays(
                     archive.get().getId(), exercise.getId(), holidayYears, actorUserId, now);
-            holidayTemplates.refreshWorkingDaysForExercise(exercise.getId(), actorUserId);
-            supportDerivedRefresher.refresh(exercise.getId());
         }
 
         syncVolumeGrids(exercise, archive.map(RstExercise::getId).orElse(null), actorUserId);
@@ -262,41 +255,19 @@ public class ExerciseInitializationService {
                 .orElseThrow(() -> initializationConflict(
                         "archive-team-setup-missing",
                         "The archived Exercise has no Team Setup to copy."));
-        // Cycle Time is not copied from archive; capacity refreshes after SYSTEM baseline.
-        target.replaceInputs(toInput(source), null, actorUserId, now);
-        if (source.getWorkingDaysPerYear() != null) {
-            target.applyCalendarWorkingDays(
-                    source.getWorkingDaysPerYear(), null, actorUserId, now);
-        }
+        target.replaceInputs(toInput(source), actorUserId, now);
         teamSetups.save(target);
     }
 
     private void copySupport(RstExercise source, RstExercise target, UUID actorUserId, Instant now) {
-        ExerciseTeamSetup targetSetup = teamSetups.findById(target.getId())
-                .orElseThrow(() -> initializationConflict(
-                        "exercise-team-setup-shell-missing",
-                        "The target Exercise Team Setup shell is missing."));
-        BigDecimal workingDays = targetSetup.getWorkingDaysPerYear();
-        BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(targetSetup);
         List<ExerciseProductionSupportItem> copies = supportItems
                 .findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(source.getId())
                 .stream()
-                .map(sourceItem -> {
-                    BigDecimal multiplier;
-                    try {
-                        multiplier = SupportWorkloadMath.annualMultiplier(
-                                sourceItem.getFrequencyCode(), workingDays);
-                    } catch (IllegalArgumentException ex) {
-                        multiplier = sourceItem.getAnnualMultiplier();
-                    }
-                    return ExerciseProductionSupportItem.createFromArchive(
-                            target.getId(),
-                            sourceItem,
-                            multiplier,
-                            fteHours,
-                            actorUserId,
-                            now);
-                })
+                .map(sourceItem -> ExerciseProductionSupportItem.createFromArchive(
+                        target.getId(),
+                        sourceItem,
+                        actorUserId,
+                        now))
                 .toList();
         supportItems.saveAll(copies);
     }
@@ -317,9 +288,6 @@ public class ExerciseInitializationService {
                     source.getBaselineVersion(),
                     actorUserId,
                     now);
-            if (source.getWorkingDaysPerYear() != null) {
-                target.setWorkingDaysPerYear(source.getWorkingDaysPerYear());
-            }
             calendars.save(target);
         });
     }
@@ -525,14 +493,10 @@ public class ExerciseInitializationService {
                 source.getAgents6To24m(),
                 source.getAgents24To48m(),
                 source.getAgentsGt48m(),
-                source.getDeliveryHc(),
-                source.getWorkingHoursPerDay(),
                 source.getPaidLeaveDays(),
                 source.getOtherLeaveDays(),
-                source.getWeekendCode(),
                 source.getAvailabilityRatio(),
                 source.getAutomationRatio(),
-                source.getCapacityRatio(),
                 source.getMaxOvertimeMinutes(),
                 source.getSlaType(),
                 source.getSlaTargetRatio(),

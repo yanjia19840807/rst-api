@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.tms.persistence;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Optional;
@@ -39,14 +40,14 @@ public interface TmsSessionRepository
     long countByUserIdAndStatus(UUID userId, TmsSessionStatus status);
 
     @Query("""
-            select coalesce(sum(session.processedVolume), 0)
+            select sum(session.processedVolume)
             from TmsSession session
             where session.user.id = :userId
               and session.status = :status
               and session.endedAt >= :from
               and session.endedAt < :to
             """)
-    long sumVolume(
+    BigDecimal sumVolume(
             @Param("userId") UUID userId,
             @Param("status") TmsSessionStatus status,
             @Param("from") Instant from,

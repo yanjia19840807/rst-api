@@ -13,7 +13,6 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
 import com.cmacgm.gbs.rst.api.associateddata.domain.FileArtifact;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.FileArtifactRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
@@ -49,21 +48,11 @@ public class CycleTimeService {
     private final CycleTimeBaselineFileRepository baselineFiles;
     private final FileArtifactRepository fileArtifacts;
     private final ExerciseTmsSessionRepository exerciseTmsSessions;
-    private final ExerciseTeamSetupRepository teamSetups;
     private final SystemCycleTimeBaselineWriter systemCycleTime;
     private final Clock clock;
 
     /**
      * Creates the Cycle Time service.
-     *
-     * @param exercises Exercise service
-     * @param baselines baseline repository
-     * @param baselineFiles MANUAL baseline evidence links
-     * @param fileArtifacts file artifact repository
-     * @param exerciseTmsSessions Exercise ↔ TMS session selections
-     * @param teamSetups Team Setup repository (refresh daily capacity)
-     * @param systemCycleTime shared SYSTEM baseline writer
-     * @param clock clock
      */
     public CycleTimeService(
             ExerciseService exercises,
@@ -71,7 +60,6 @@ public class CycleTimeService {
             CycleTimeBaselineFileRepository baselineFiles,
             FileArtifactRepository fileArtifacts,
             ExerciseTmsSessionRepository exerciseTmsSessions,
-            ExerciseTeamSetupRepository teamSetups,
             SystemCycleTimeBaselineWriter systemCycleTime,
             Clock clock) {
         this.exercises = exercises;
@@ -79,7 +67,6 @@ public class CycleTimeService {
         this.baselineFiles = baselineFiles;
         this.fileArtifacts = fileArtifacts;
         this.exerciseTmsSessions = exerciseTmsSessions;
-        this.teamSetups = teamSetups;
         this.systemCycleTime = systemCycleTime;
         this.clock = clock;
     }
@@ -118,11 +105,6 @@ public class CycleTimeService {
         if (!fileIds.isEmpty()) {
             linkSupportFiles(baseline.getId(), exerciseId, fileIds, ownerId, now);
         }
-
-        teamSetups.findById(exerciseId).ifPresent(setup -> {
-            setup.recalculateDerived(request.medianSeconds());
-            teamSetups.save(setup);
-        });
         return toView(baseline);
     }
 
@@ -181,7 +163,7 @@ public class CycleTimeService {
      */
     @Transactional(readOnly = true)
     public BaselineView getActive(UUID ownerId, UUID exerciseId) {
-        exercises.requireOwned(ownerId, exerciseId);
+        exercises.requireReadable(ownerId, exerciseId);
         CycleTimeBaseline baseline = baselines.findByExerciseIdAndActiveTrue(exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
@@ -205,7 +187,7 @@ public class CycleTimeService {
     @Transactional(readOnly = true)
     public PageResponse<ExerciseTmsSessionResponse> listTmsSessions(
             UUID ownerId, UUID exerciseId, int page, int pageSize) {
-        exercises.requireOwned(ownerId, exerciseId);
+        exercises.requireReadable(ownerId, exerciseId);
         int safePage = Math.max(1, page);
         int safePageSize = Math.min(100, Math.max(1, pageSize));
         var pageable = PageRequest.of(safePage - 1, safePageSize);

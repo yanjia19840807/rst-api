@@ -1,10 +1,12 @@
 package com.cmacgm.gbs.rst.api.associateddata.domain;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Locale;
 
 /**
- * BRD Production Support annualization and FTE denominator helpers.
+ * Production Support annualization and FTE formulas (BRD).
+ * Computed at read / simulation time from Support inputs + Team Setup + Calendar.
  */
 public final class SupportWorkloadMath {
 
@@ -12,6 +14,7 @@ public final class SupportWorkloadMath {
     private static final BigDecimal MONTHLY = BigDecimal.valueOf(12);
     private static final BigDecimal DEFAULT_WORKING_DAYS = BigDecimal.valueOf(261);
     private static final BigDecimal FALLBACK_ANNUAL_HOURS = BigDecimal.valueOf(2080);
+    private static final BigDecimal SIXTY = new BigDecimal("60");
 
     private SupportWorkloadMath() {
     }
@@ -37,23 +40,42 @@ public final class SupportWorkloadMath {
      * BRD FTE denominator: WorkingHrPerDay × Availability × WorkingDays × CapacityRatio.
      * Falls back to 2080 when Team Setup inputs are incomplete.
      */
-    public static BigDecimal fteAnnualHours(ExerciseTeamSetup setup) {
+    public static BigDecimal fteAnnualHours(ExerciseTeamSetup setup, BigDecimal workingDaysPerYear) {
         if (setup == null) {
             return FALLBACK_ANNUAL_HOURS;
         }
-        BigDecimal hours = setup.getWorkingHoursPerDay();
+        BigDecimal hours = setup.workingHoursPerDay();
         BigDecimal availability = setup.getAvailabilityRatio();
-        BigDecimal workingDays = setup.getWorkingDaysPerYear();
-        BigDecimal capacity = setup.getCapacityRatio();
-        if (hours == null || availability == null || workingDays == null || capacity == null) {
+        BigDecimal capacity = setup.capacityRatio(workingDaysPerYear);
+        if (hours == null || availability == null || workingDaysPerYear == null || capacity == null) {
             return FALLBACK_ANNUAL_HOURS;
         }
         if (hours.compareTo(BigDecimal.ZERO) <= 0
                 || availability.compareTo(BigDecimal.ZERO) <= 0
-                || workingDays.compareTo(BigDecimal.ZERO) <= 0
+                || workingDaysPerYear.compareTo(BigDecimal.ZERO) <= 0
                 || capacity.compareTo(BigDecimal.ZERO) <= 0) {
             return FALLBACK_ANNUAL_HOURS;
         }
-        return hours.multiply(availability).multiply(workingDays).multiply(capacity);
+        return hours.multiply(availability).multiply(workingDaysPerYear).multiply(capacity);
+    }
+
+    /**
+     * Derives annual hours and FTE for one support activity.
+     */
+    public static Derived derive(
+            ExerciseProductionSupportItem item,
+            BigDecimal workingDaysPerYear,
+            BigDecimal fteAnnualHours) {
+        BigDecimal multiplier = annualMultiplier(item.getFrequencyCode(), workingDaysPerYear);
+        BigDecimal hours = item.getVolume()
+                .multiply(item.getWorkloadPerUnitMinutes())
+                .multiply(multiplier)
+                .divide(SIXTY, 6, RoundingMode.HALF_UP);
+        BigDecimal fte = hours.divide(fteAnnualHours, 6, RoundingMode.HALF_UP);
+        return new Derived(multiplier, hours, fte);
+    }
+
+    public record Derived(
+            BigDecimal annualMultiplier, BigDecimal workloadPerYearHours, BigDecimal supportFte) {
     }
 }

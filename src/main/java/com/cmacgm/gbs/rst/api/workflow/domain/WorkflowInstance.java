@@ -92,13 +92,45 @@ public class WorkflowInstance {
     }
 
     /**
-     * Advances the workflow after a mid-chain Approve: increments current step and adds the next READY assignment.
+     * Advances the workflow after a mid-chain Approve: reuses the existing row for that
+     * {@code step_no} when present (resubmit after a previous cycle), otherwise inserts it.
      *
      * @param nextStep next step assignment (step 2 CDH or step 3 LTH)
      */
     public void advanceAfterApprove(WorkflowStepAssignment nextStep) {
         this.currentStep = nextStep.getStepNo();
+        for (WorkflowStepAssignment step : steps) {
+            if (step.getStepNo() == nextStep.getStepNo()) {
+                step.reopenReady(
+                        nextStep.getAssigneeUserId(),
+                        nextStep.getAssigneePositionId(),
+                        nextStep.getScopeSnapshotHash(),
+                        nextStep.getResolvedAt());
+                return;
+            }
+        }
         addStep(nextStep);
+    }
+
+    /**
+     * Reopens a RETURNED/CANCELLED workflow at Manager step 1.
+     * Reuses the existing Manager assignment so {@code uk_workflow_step} stays valid.
+     */
+    public void reopenAtManager(WorkflowStepAssignment managerReady) {
+        this.status = "ACTIVE";
+        this.completedAt = null;
+        this.currentStep = 1;
+        for (WorkflowStepAssignment step : steps) {
+            if (step.getStepNo() == 1) {
+                step.reopenReady(
+                        managerReady.getAssigneeUserId(),
+                        managerReady.getAssigneePositionId(),
+                        managerReady.getScopeSnapshotHash(),
+                        managerReady.getResolvedAt());
+                return;
+            }
+        }
+        addStep(managerReady);
     }
 
     /**

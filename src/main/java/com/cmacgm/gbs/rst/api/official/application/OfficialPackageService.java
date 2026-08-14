@@ -6,7 +6,10 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
@@ -25,6 +28,8 @@ import com.cmacgm.gbs.rst.api.scenario.domain.SimulationRun;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ForecastRunRepository;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
 import com.cmacgm.gbs.rst.api.scenario.persistence.SimulationRunRepository;
+import com.cmacgm.gbs.rst.api.submission.domain.Submission;
+import com.cmacgm.gbs.rst.api.submission.persistence.SubmissionRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +48,7 @@ public class OfficialPackageService {
     private final SimulationRunRepository simulationRuns;
     private final CycleTimeBaselineRepository baselines;
     private final ExerciseTeamSetupRepository teamSetups;
+    private final SubmissionRepository submissions;
     private final Clock clock;
 
     /**
@@ -56,6 +62,7 @@ public class OfficialPackageService {
      * @param simulationRuns simulation repository
      * @param baselines cycle-time baseline repository
      * @param teamSetups Team Setup repository
+     * @param submissions submission repository (detect in-place refresh after Return)
      * @param clock clock
      */
     public OfficialPackageService(
@@ -67,6 +74,7 @@ public class OfficialPackageService {
             SimulationRunRepository simulationRuns,
             CycleTimeBaselineRepository baselines,
             ExerciseTeamSetupRepository teamSetups,
+            SubmissionRepository submissions,
             Clock clock) {
         this.exercises = exercises;
         this.exerciseRepository = exerciseRepository;
@@ -76,6 +84,7 @@ public class OfficialPackageService {
         this.simulationRuns = simulationRuns;
         this.baselines = baselines;
         this.teamSetups = teamSetups;
+        this.submissions = submissions;
         this.clock = clock;
     }
 
@@ -84,8 +93,10 @@ public class OfficialPackageService {
      *
      * <p>Inputs: editable Exercise, DRAFT scenario, active CT baseline, ACCEPTED forecast,
      * ACCEPTED MONTHLY_SIZING and SLOT runs.
-     * Intent: atomically promote Scenario, supersede prior Official, create package sections,
-     * and set {@code rst_exercise.official_scenario_id}.
+     * Intent: atomically promote Scenario and set {@code rst_exercise.official_scenario_id}.
+     * After Return/Withdraw the current package already has a submission, so the snapshot is
+     * refreshed in place (same package id / version / submission). First-time save still
+     * supersedes any prior unsubmitted package and creates a new version.
      * Failure: missing prerequisites return 422; non-draft returns 409.
      *
      * @param ownerId Supervisor id
@@ -136,57 +147,70 @@ public class OfficialPackageService {
         Instant now = clock.instant();
         scenarios.findByExerciseIdAndStatusAndDeletedAtIsNull(exerciseId, "OFFICIAL")
                 .ifPresent(previous -> {
-                    previous.markSuperseded(ownerId, now);
-                    scenarios.save(previous);
+                    if (!previous.getId().equals(scenarioId)) {
+                        previous.markSuperseded(ownerId, now);
+                        scenarios.save(previous);
+                    }
                 });
-        packages.findByExerciseIdAndCurrentTrue(exerciseId).ifPresent(previous -> {
-            previous.clearCurrent();
-            packages.save(previous);
-        });
 
         scenario.markOfficial(ownerId, now);
         scenarios.save(scenario);
         exercise.setOfficialScenario(scenario.getId(), ownerId, now);
         exerciseRepository.save(exercise);
 
-        int version = packages.findMaxPackageVersion(exerciseId).orElse(0) + 1;
         UUID timesheetSyncRunId = exercise.getSharedKpiLines().isEmpty()
                 ? exercise.getToolkitSnapshot().getTimesheetSyncRunId()
                 : exercise.getSharedKpiLines().getFirst().getTimesheetSyncRunId();
         String inputHash = sha256(
                 exerciseId + "|" + scenarioId + "|" + forecast.getId() + "|" + monthly.getId()
                         + "|" + slot.getId() + "|" + baseline.getId());
-        String packageHash = sha256(inputHash + "|v" + version);
 
-        OfficialPackage pkg = OfficialPackage.create(
-                exerciseId,
-                scenarioId,
-                version,
-                forecast.getId(),
-                monthly.getId(),
-                null,
-                slot.getId(),
-                timesheetSyncRunId,
-                baseline.getId(),
-                inputHash,
-                packageHash,
-                ownerId,
-                now);
+        OfficialPackage refresh = findPackageToRefresh(exerciseId);
+        OfficialPackage pkg;
+        if (refresh != null) {
+            packages.findByExerciseIdAndCurrentTrue(exerciseId)
+                    .filter(current -> !current.getId().equals(refresh.getId()))
+                    .ifPresent(orphan -> {
+                        orphan.clearCurrent();
+                        packages.saveAndFlush(orphan);
+                    });
+            String packageHash = sha256(inputHash + "|v" + refresh.getPackageVersion());
+            refresh.replaceSnapshot(
+                    scenarioId,
+                    forecast.getId(),
+                    monthly.getId(),
+                    null,
+                    slot.getId(),
+                    timesheetSyncRunId,
+                    baseline.getId(),
+                    inputHash,
+                    packageHash);
+            packages.saveAndFlush(refresh);
+            pkg = refresh;
+        } else {
+            packages.findByExerciseIdAndCurrentTrue(exerciseId).ifPresent(previous -> {
+                previous.clearCurrent();
+                packages.save(previous);
+            });
+            int version = packages.findMaxPackageVersion(exerciseId).orElse(0) + 1;
+            String packageHash = sha256(inputHash + "|v" + version);
+            pkg = OfficialPackage.create(
+                    exerciseId,
+                    scenarioId,
+                    version,
+                    forecast.getId(),
+                    monthly.getId(),
+                    null,
+                    slot.getId(),
+                    timesheetSyncRunId,
+                    baseline.getId(),
+                    inputHash,
+                    packageHash,
+                    ownerId,
+                    now);
+        }
 
-        String teamSetupJson = teamSetups.findById(exerciseId)
-                .map(setup -> "{\"calculationVersion\":\"" + setup.getCalculationVersion()
-                        + "\",\"totalAgents\":"
-                        + (setup.getTotalAgents() == null ? "null" : setup.getTotalAgents())
-                        + "}")
-                .orElse("{\"empty\":true}");
-        addSection(pkg, "EXERCISE", compactExercise(exercise), now);
-        addSection(pkg, "TOOLKIT", compactToolkit(exercise), now);
-        addSection(pkg, "TEAM_SETUP", teamSetupJson, now);
-        addSection(pkg, "SHARED_KPI", "{\"count\":" + exercise.getSharedKpiLines().size() + "}", now);
-        addSection(pkg, "FORECAST", "{\"forecastRunId\":\"" + forecast.getId() + "\"}", now);
-        addSection(pkg, "SIMULATION",
-                "{\"monthlyRunId\":\"" + monthly.getId() + "\",\"slotRunId\":\"" + slot.getId() + "\"}",
-                now);
+        addSnapshotSections(pkg, exercise, forecast, monthly, slot, now);
         packages.save(pkg);
 
         return new ScenarioView(
@@ -201,6 +225,11 @@ public class OfficialPackageService {
                         .map(a -> new com.cmacgm.gbs.rst.api.scenario.application.ScenarioService.AssumptionView(
                                 a.getId(), a.getParameterCode(), a.getNumericValue(), a.getTextValue(),
                                 a.getBooleanValue(), a.getUnit()))
+                        .toList(),
+                scenario.getShifts().stream()
+                        .map(s -> new com.cmacgm.gbs.rst.api.scenario.application.ScenarioService.ShiftView(
+                                s.getId(), s.getShiftNo(), s.getStartTime(), s.getDurationMinutes(),
+                                s.getHeadcount(), s.isWorksOnWeekend()))
                         .toList());
     }
 
@@ -217,6 +246,56 @@ public class OfficialPackageService {
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "official-package-required",
                         "An Official Package is required before Submit."));
+    }
+
+    /**
+     * After Return/Withdraw the submission stays on the original package. Refresh that row
+     * instead of creating a new version. Prefers the current package when it already has
+     * a returned submission; otherwise heals leftover un-current packages from the old model.
+     */
+    private OfficialPackage findPackageToRefresh(UUID exerciseId) {
+        List<OfficialPackage> all = packages.findByExerciseId(exerciseId);
+        if (all.isEmpty()) {
+            return null;
+        }
+        Set<UUID> reopenable = submissions.findByOfficialPackageIdIn(
+                        all.stream().map(OfficialPackage::getId).toList())
+                .stream()
+                .filter(row -> "RETURNED".equals(row.getStatus()) || "ARCHIVED".equals(row.getStatus()))
+                .map(Submission::getOfficialPackageId)
+                .collect(Collectors.toSet());
+        if (reopenable.isEmpty()) {
+            return null;
+        }
+        return all.stream()
+                .filter(pkg -> pkg.isCurrent() && reopenable.contains(pkg.getId()))
+                .findFirst()
+                .orElseGet(() -> all.stream()
+                        .filter(pkg -> reopenable.contains(pkg.getId()))
+                        .findFirst()
+                        .orElse(null));
+    }
+
+    private void addSnapshotSections(
+            OfficialPackage pkg,
+            RstExercise exercise,
+            ForecastRun forecast,
+            SimulationRun monthly,
+            SimulationRun slot,
+            Instant now) {
+        String teamSetupJson = teamSetups.findById(exercise.getId())
+                .map(setup -> "{\"totalAgents\":"
+                        + (setup.totalAgents() == null ? "null" : setup.totalAgents())
+                        + "}")
+                .orElse("{\"empty\":true}");
+        addSection(pkg, "EXERCISE", compactExercise(exercise), now);
+        addSection(pkg, "TOOLKIT", compactToolkit(exercise), now);
+        addSection(pkg, "TEAM_SETUP", teamSetupJson, now);
+        addSection(pkg, "SHARED_KPI", "{\"count\":" + exercise.getSharedKpiLines().size() + "}", now);
+        addSection(pkg, "FORECAST", "{\"forecastRunId\":\"" + forecast.getId() + "\"}", now);
+        addSection(pkg, "SIMULATION",
+                "{\"monthlyRunId\":\"" + monthly.getId() + "\",\"slotRunId\":\"" + slot.getId() + "\"}",
+                now);
     }
 
     private void addSection(OfficialPackage pkg, String type, String json, Instant now) {

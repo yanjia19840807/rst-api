@@ -1,10 +1,12 @@
 package com.cmacgm.gbs.rst.api.tms.application;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -20,8 +22,8 @@ import com.cmacgm.gbs.rst.api.tms.domain.TmsSessionStatus;
 import com.cmacgm.gbs.rst.api.tms.persistence.TmsSessionRepository;
 import com.cmacgm.gbs.rst.api.tms.persistence.TmsSessionSpecification;
 import com.cmacgm.gbs.rst.api.tms.persistence.TmsSessionSpecification.Filter;
-import com.cmacgm.gbs.rst.api.toolkit.api.ToolkitResponse;
-import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitQueryService;
+import com.cmacgm.gbs.rst.api.toolkit.api.dto.ToolkitResponse;
+import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitService;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -32,19 +34,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class TmsSessionQueryService {
 
     private final TmsSessionRepository sessionRepository;
-    private final ToolkitQueryService toolkitQueryService;
+    private final ToolkitService toolkits;
     private final TimesheetReadService timesheet;
     private final AppUserRepository users;
     private final Clock clock;
 
     public TmsSessionQueryService(
             TmsSessionRepository sessionRepository,
-            ToolkitQueryService toolkitQueryService,
+            ToolkitService toolkits,
             TimesheetReadService timesheet,
             AppUserRepository users,
             Clock clock) {
         this.sessionRepository = sessionRepository;
-        this.toolkitQueryService = toolkitQueryService;
+        this.toolkits = toolkits;
         this.timesheet = timesheet;
         this.users = users;
         this.clock = clock;
@@ -217,11 +219,11 @@ public class TmsSessionQueryService {
                         TmsSessionStatus.COMPLETED,
                         from,
                         to),
-                sessionRepository.sumVolume(
+                Optional.ofNullable(sessionRepository.sumVolume(
                         userId,
                         TmsSessionStatus.COMPLETED,
                         from,
-                        to),
+                        to)).orElse(BigDecimal.ZERO),
                 sessionRepository.countByUserIdAndStatus(userId, TmsSessionStatus.PAUSED));
     }
 
@@ -246,7 +248,7 @@ public class TmsSessionQueryService {
     }
 
     private Set<UUID> scopedToolkitIds(String supervisorCcgid) {
-        return toolkitQueryService.supervisorToolkits(supervisorCcgid).stream()
+        return toolkits.supervisorToolkits(supervisorCcgid).stream()
                 .map(ToolkitResponse::id)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }

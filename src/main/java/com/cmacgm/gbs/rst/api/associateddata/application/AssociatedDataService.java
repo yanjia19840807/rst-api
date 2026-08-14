@@ -45,6 +45,7 @@ import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseInitializationService;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
+import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService.ApplyTemplatesResult;
@@ -74,7 +75,6 @@ public class AssociatedDataService {
     private final VolumeExcelService volumeExcel;
     private final FileArtifactRepository fileArtifacts;
     private final DataImportBatchRepository importBatches;
-    private final SupportDerivedRefresher supportDerivedRefresher;
     private final Clock clock;
 
     /**
@@ -96,7 +96,6 @@ public class AssociatedDataService {
             VolumeExcelService volumeExcel,
             FileArtifactRepository fileArtifacts,
             DataImportBatchRepository importBatches,
-            SupportDerivedRefresher supportDerivedRefresher,
             Clock clock) {
         this.exercises = exercises;
         this.teamSetups = teamSetups;
@@ -113,7 +112,6 @@ public class AssociatedDataService {
         this.volumeExcel = volumeExcel;
         this.fileArtifacts = fileArtifacts;
         this.importBatches = importBatches;
-        this.supportDerivedRefresher = supportDerivedRefresher;
         this.clock = clock;
     }
 
@@ -126,12 +124,12 @@ public class AssociatedDataService {
      */
     @Transactional(readOnly = true)
     public TeamSetupView getTeamSetup(UUID ownerId, UUID exerciseId) {
-        exercises.requireOwned(ownerId, exerciseId);
-        return toTeamSetup(requireTeamSetup(exerciseId));
+        RstExercise exercise = exercises.requireReadable(ownerId, exerciseId);
+        return toTeamSetup(exercise, requireTeamSetup(exerciseId));
     }
 
     /**
-     * Replaces Team Setup inputs and recalculates derived fields.
+     * Replaces Team Setup inputs. Derived metrics are computed on the response.
      *
      * @param ownerId Supervisor id
      * @param exerciseId Exercise id
@@ -142,19 +140,9 @@ public class AssociatedDataService {
     public TeamSetupView putTeamSetup(UUID ownerId, UUID exerciseId, TeamSetupRequest request) {
         RstExercise exercise = editable(ownerId, exerciseId);
         ExerciseTeamSetup setup = requireTeamSetup(exercise.getId());
-        BigDecimal calendarWorkingDays = calendars.findById(exerciseId)
-                .map(ExerciseCalendar::getWorkingDaysPerYear)
-                .orElse(null);
-        BigDecimal cycleTimeSeconds = activeCycleTimeSeconds(exerciseId);
         Instant now = clock.instant();
-        setup.replaceInputs(request.toInput(), cycleTimeSeconds, ownerId, now);
-        if (calendarWorkingDays != null) {
-            setup.applyCalendarWorkingDays(
-                    calendarWorkingDays, cycleTimeSeconds, ownerId, now);
-        }
-        TeamSetupView view = toTeamSetup(teamSetups.save(setup));
-        supportDerivedRefresher.refresh(exerciseId);
-        return view;
+        setup.replaceInputs(request.toInput(), ownerId, now);
+        return toTeamSetup(exercise, teamSetups.save(setup));
     }
 
     /**
@@ -166,7 +154,7 @@ public class AssociatedDataService {
      */
     @Transactional(readOnly = true)
     public List<ShiftView> getShifts(UUID ownerId, UUID exerciseId) {
-        exercises.requireOwned(ownerId, exerciseId);
+        exercises.requireReadable(ownerId, exerciseId);
         return shifts.findByExerciseIdAndDeletedAtIsNullOrderByShiftNoAsc(exerciseId).stream()
                 .map(this::toShift)
                 .toList();
@@ -231,10 +219,10 @@ public class AssociatedDataService {
      */
     @Transactional(readOnly = true)
     public List<SupportItemView> listSupport(UUID ownerId, UUID exerciseId) {
-        RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
+        RstExercise exercise = exercises.requireReadable(ownerId, exerciseId);
         return supportItems.findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(exercise.getId())
                 .stream()
-                .map(this::toSupport)
+                .map(item -> toSupport(item, exerciseId))
                 .toList();
     }
 
@@ -250,22 +238,13 @@ public class AssociatedDataService {
     public SupportItemView createSupport(UUID ownerId, UUID exerciseId, SupportItemRequest request) {
         editable(ownerId, exerciseId);
         Instant now = clock.instant();
-        ExerciseTeamSetup setup = requireTeamSetup(exerciseId);
-        BigDecimal multiplier;
-        try {
-            multiplier = SupportWorkloadMath.annualMultiplier(
-                    request.frequencyCode(), setup.getWorkingDaysPerYear());
-        } catch (IllegalArgumentException ex) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-frequency", ex.getMessage());
-        }
+        requireValidFrequency(request.frequencyCode(), exerciseId);
         ExerciseProductionSupportItem item = ExerciseProductionSupportItem.create(
                 exerciseId, request.category(), request.activity(), request.frequencyCode(),
                 request.volume(), request.unitOfMeasure(), request.workloadPerUnitMinutes(),
-                multiplier, request.comments(), ownerId, now);
-        item.applyDerived(multiplier, SupportWorkloadMath.fteAnnualHours(setup));
+                request.comments(), ownerId, now);
         supportItems.save(item);
-        return toSupport(item);
+        return toSupport(item, exerciseId);
     }
 
     /**
@@ -285,22 +264,13 @@ public class AssociatedDataService {
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "support-item-not-found", "The support item was not found."));
         Instant now = clock.instant();
-        ExerciseTeamSetup setup = requireTeamSetup(exerciseId);
-        BigDecimal multiplier;
-        try {
-            multiplier = SupportWorkloadMath.annualMultiplier(
-                    request.frequencyCode(), setup.getWorkingDaysPerYear());
-        } catch (IllegalArgumentException ex) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-frequency", ex.getMessage());
-        }
+        requireValidFrequency(request.frequencyCode(), exerciseId);
         item.update(
                 request.category(), request.activity(), request.frequencyCode(), request.volume(),
-                request.unitOfMeasure(), request.workloadPerUnitMinutes(), multiplier,
+                request.unitOfMeasure(), request.workloadPerUnitMinutes(),
                 request.comments(), ownerId, now);
-        item.applyDerived(multiplier, SupportWorkloadMath.fteAnnualHours(setup));
         supportItems.save(item);
-        return toSupport(item);
+        return toSupport(item, exerciseId);
     }
 
     /**
@@ -329,7 +299,7 @@ public class AssociatedDataService {
      */
     @Transactional(readOnly = true)
     public CalendarView getCalendar(UUID ownerId, UUID exerciseId) {
-        RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
+        RstExercise exercise = exercises.requireReadable(ownerId, exerciseId);
         ExerciseCalendar calendar = requireCalendar(exerciseId);
         List<HolidayView> holidayViews = holidays
                 .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)
@@ -347,7 +317,7 @@ public class AssociatedDataService {
                 calendar.getWeekendCode(),
                 calendar.getBaselineSource(), calendar.getBaselineVersion(),
                 calendar.getSourceTemplateId(), calendar.getSourceTemplateVersion(),
-                calendar.getBaselineYear(), calendar.getWorkingDaysPerYear(),
+                calendar.getBaselineYear(), holidayTemplates.workingDaysPerYear(calendar),
                 calendar.getVersion(), holidayViews,
                 update != null,
                 update != null ? update.publishedVersion() : null,
@@ -384,8 +354,6 @@ public class AssociatedDataService {
                         holiday.holidayType(), null, ownerId, now));
             }
         }
-        holidayTemplates.refreshWorkingDaysForExercise(exerciseId, ownerId);
-        supportDerivedRefresher.refresh(exerciseId);
         return getCalendar(ownerId, exerciseId);
     }
 
@@ -407,7 +375,6 @@ public class AssociatedDataService {
                 ExerciseInitializationService.resolveHolidayYears(exercise),
                 ownerId,
                 true);
-        supportDerivedRefresher.refresh(exerciseId);
         return new ReapplyCalendarResult(getCalendar(ownerId, exerciseId), applied.notices());
     }
 
@@ -420,7 +387,7 @@ public class AssociatedDataService {
      */
     @Transactional(readOnly = true)
     public List<MonthlyVolumeView> getMonthlyVolumes(UUID ownerId, UUID exerciseId) {
-        exercises.requireOwned(ownerId, exerciseId);
+        exercises.requireReadable(ownerId, exerciseId);
         return monthlyVolumes.findByExerciseIdOrderByMonthAsc(exerciseId).stream()
                 .map(v -> new MonthlyVolumeView(
                         v.getId(),
@@ -488,7 +455,7 @@ public class AssociatedDataService {
      */
     @Transactional(readOnly = true)
     public List<DailyVolumeView> getDailyVolumes(UUID ownerId, UUID exerciseId) {
-        exercises.requireOwned(ownerId, exerciseId);
+        exercises.requireReadable(ownerId, exerciseId);
         return dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(exerciseId).stream()
                 .map(v -> new DailyVolumeView(
                         v.getId(),
@@ -556,7 +523,7 @@ public class AssociatedDataService {
      */
     @Transactional(readOnly = true)
     public List<SlotVolumeView> getSlotVolumes(UUID ownerId, UUID exerciseId) {
-        exercises.requireOwned(ownerId, exerciseId);
+        exercises.requireReadable(ownerId, exerciseId);
         return slotVolumes.findByExerciseIdOrderBySlotStartAtAsc(exerciseId).stream()
                 .map(v -> new SlotVolumeView(
                         v.getId(),
@@ -739,18 +706,42 @@ public class AssociatedDataService {
                         HttpStatus.NOT_FOUND, "calendar-not-found", "Calendar was not found."));
     }
 
-    private TeamSetupView toTeamSetup(ExerciseTeamSetup setup) {
+    private TeamSetupView toTeamSetup(RstExercise exercise, ExerciseTeamSetup setup) {
+        ExerciseCalendar calendar = calendars.findById(exercise.getId()).orElse(null);
+        BigDecimal workingDays = holidayTemplates.workingDaysPerYear(exercise.getId());
+        BigDecimal cycleTime = activeCycleTimeSeconds(exercise.getId());
+        String weekend = calendar != null ? calendar.getWeekendCode() : null;
         return new TeamSetupView(
                 setup.getAgentsLt6m(), setup.getAgents6To24m(), setup.getAgents24To48m(),
-                setup.getAgentsGt48m(), setup.getDeliveryHc(), setup.getWorkingHoursPerDay(),
-                setup.getPaidLeaveDays(), setup.getOtherLeaveDays(), setup.getWeekendCode(),
-                setup.getAvailabilityRatio(), setup.getAutomationRatio(), setup.getCapacityRatio(),
+                setup.getAgentsGt48m(), deliveryHc(exercise), setup.workingHoursPerDay(),
+                setup.getPaidLeaveDays(), setup.getOtherLeaveDays(), weekend,
+                setup.getAvailabilityRatio(), setup.getAutomationRatio(), setup.capacityRatio(workingDays),
                 setup.getMaxOvertimeMinutes(), setup.getSlaType(), setup.getSlaTargetRatio(),
                 setup.getSlaTurnaroundMinutes(), setup.getSlaStartTime(), setup.getSlaEndTime(),
                 setup.getSlaWeekendEnabled(), setup.getWeekendShiftHc(), setup.getSkeletonRatio(),
-                setup.getTotalAgents(), setup.getAverageTenureYears(), setup.getWorkingDaysPerYear(),
-                setup.getMaxCapacityDays(), setup.getDailyCapacityPerAgent(),
-                setup.getCalculationVersion(), setup.getVersion());
+                setup.totalAgents(), setup.averageTenureYears(), workingDays,
+                setup.maxCapacityDays(workingDays), setup.dailyCapacityPerAgent(cycleTime),
+                null, setup.getVersion());
+    }
+
+    private BigDecimal deliveryHc(RstExercise exercise) {
+        BigDecimal sum = BigDecimal.ZERO;
+        for (ExerciseSharedKpiLine line : exercise.getSharedKpiLines()) {
+            if (line.getDeliveryHc() != null) {
+                sum = sum.add(line.getDeliveryHc());
+            }
+        }
+        return sum;
+    }
+
+    private void requireValidFrequency(String frequencyCode, UUID exerciseId) {
+        try {
+            SupportWorkloadMath.annualMultiplier(
+                    frequencyCode, holidayTemplates.workingDaysPerYear(exerciseId));
+        } catch (IllegalArgumentException ex) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-frequency", ex.getMessage());
+        }
     }
 
     private ShiftView toShift(ExerciseShift shift) {
@@ -759,13 +750,17 @@ public class AssociatedDataService {
                 shift.getHeadcount(), shift.isWorksOnWeekend());
     }
 
-    private SupportItemView toSupport(ExerciseProductionSupportItem item) {
+    private SupportItemView toSupport(ExerciseProductionSupportItem item, UUID exerciseId) {
+        ExerciseTeamSetup setup = teamSetups.findById(exerciseId).orElse(null);
+        BigDecimal workingDays = holidayTemplates.workingDaysPerYear(exerciseId);
+        BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup, workingDays);
+        SupportWorkloadMath.Derived derived = SupportWorkloadMath.derive(item, workingDays, fteHours);
         return new SupportItemView(
                 item.getId(), item.getLineageId(), item.getCategory(), item.getActivity(),
                 item.getFrequencyCode(), item.getVolume(), item.getUnitOfMeasure(),
-                item.getWorkloadPerUnitMinutes(), item.getAnnualMultiplier(),
-                item.getWorkloadPerYearHours(), item.getSupportFte(), item.getComments(),
-                item.getCalculationVersion());
+                item.getWorkloadPerUnitMinutes(), derived.annualMultiplier(),
+                derived.workloadPerYearHours(), derived.supportFte(), item.getComments(),
+                null);
     }
 
     private HolidayView toHoliday(ExerciseHoliday holiday) {
@@ -780,8 +775,8 @@ public class AssociatedDataService {
             BigDecimal agentsGt48m, BigDecimal deliveryHc, BigDecimal workingHoursPerDay,
             BigDecimal paidLeaveDays, BigDecimal otherLeaveDays, String weekendCode,
             BigDecimal availabilityRatio, BigDecimal automationRatio, BigDecimal capacityRatio,
-            Integer maxOvertimeMinutes, String slaType, BigDecimal slaTargetRatio,
-            Integer slaTurnaroundMinutes, LocalTime slaStartTime, LocalTime slaEndTime,
+            BigDecimal maxOvertimeMinutes, String slaType, BigDecimal slaTargetRatio,
+            BigDecimal slaTurnaroundMinutes, LocalTime slaStartTime, LocalTime slaEndTime,
             Boolean slaWeekendEnabled, BigDecimal weekendShiftHc, BigDecimal skeletonRatio,
             BigDecimal totalAgents, BigDecimal averageTenureYears, BigDecimal workingDaysPerYear,
             BigDecimal maxCapacityDays, BigDecimal dailyCapacityPerAgent,
@@ -791,11 +786,10 @@ public class AssociatedDataService {
     /** Team Setup PUT payload. */
     public record TeamSetupRequest(
             BigDecimal agentsLt6m, BigDecimal agents6To24m, BigDecimal agents24To48m,
-            BigDecimal agentsGt48m, BigDecimal deliveryHc, BigDecimal workingHoursPerDay,
-            BigDecimal paidLeaveDays, BigDecimal otherLeaveDays, String weekendCode,
-            BigDecimal availabilityRatio, BigDecimal automationRatio, BigDecimal capacityRatio,
-            Integer maxOvertimeMinutes, String slaType, BigDecimal slaTargetRatio,
-            Integer slaTurnaroundMinutes, LocalTime slaStartTime, LocalTime slaEndTime,
+            BigDecimal agentsGt48m, BigDecimal paidLeaveDays, BigDecimal otherLeaveDays,
+            BigDecimal availabilityRatio, BigDecimal automationRatio,
+            BigDecimal maxOvertimeMinutes, String slaType, BigDecimal slaTargetRatio,
+            BigDecimal slaTurnaroundMinutes, LocalTime slaStartTime, LocalTime slaEndTime,
             Boolean slaWeekendEnabled, BigDecimal weekendShiftHc, BigDecimal skeletonRatio) {
         /**
          * Converts to domain input.
@@ -804,9 +798,9 @@ public class AssociatedDataService {
          */
         public TeamSetupInput toInput() {
             return new TeamSetupInput(
-                    agentsLt6m, agents6To24m, agents24To48m, agentsGt48m, deliveryHc,
-                    workingHoursPerDay, paidLeaveDays, otherLeaveDays, weekendCode,
-                    availabilityRatio, automationRatio, capacityRatio, maxOvertimeMinutes,
+                    agentsLt6m, agents6To24m, agents24To48m, agentsGt48m,
+                    paidLeaveDays, otherLeaveDays,
+                    availabilityRatio, automationRatio, maxOvertimeMinutes,
                     slaType, slaTargetRatio, slaTurnaroundMinutes, slaStartTime, slaEndTime,
                     slaWeekendEnabled, weekendShiftHc, skeletonRatio);
         }
@@ -814,13 +808,13 @@ public class AssociatedDataService {
 
     /** Shift response. */
     public record ShiftView(
-            UUID id, short shiftNo, LocalTime startTime, int durationMinutes,
+            UUID id, short shiftNo, LocalTime startTime, BigDecimal durationMinutes,
             BigDecimal headcount, boolean worksOnWeekend) {
     }
 
     /** Shift request row. */
     public record ShiftRequest(
-            short shiftNo, @NotNull LocalTime startTime, int durationMinutes,
+            short shiftNo, @NotNull LocalTime startTime, BigDecimal durationMinutes,
             @NotNull BigDecimal headcount, boolean worksOnWeekend) {
     }
 

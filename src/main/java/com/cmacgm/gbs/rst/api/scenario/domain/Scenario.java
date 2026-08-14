@@ -13,6 +13,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
@@ -71,6 +72,10 @@ public class Scenario {
     @OneToMany(mappedBy = "scenario", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ScenarioAssumption> assumptions = new ArrayList<>();
 
+    @OneToMany(mappedBy = "scenario", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("shiftNo ASC")
+    private List<ScenarioShift> shifts = new ArrayList<>();
+
     protected Scenario() {
     }
 
@@ -104,32 +109,6 @@ public class Scenario {
         scenario.updatedAt = now;
         scenario.updatedBy = actorUserId;
         return scenario;
-    }
-
-    /**
-     * Supersedes an Official scenario and clones a new DRAFT revision for Supervisor rework.
-     *
-     * <p>Copies name/description with a {@code -R1} style code suffix and sets lineage via
-     * {@code derived_from_scenario_id}. Callers must copy assumptions onto the returned draft.
-     *
-     * @param official Official scenario being superseded
-     * @param revisionCode unique draft code within the Exercise (e.g. {@code SCN-1-R1})
-     * @param actorUserId actor
-     * @param now timestamp
-     * @return new DRAFT scenario derived from the official
-     */
-    public static Scenario supersedeOfficialAndCloneDraft(
-            Scenario official, String revisionCode, UUID actorUserId, Instant now) {
-        official.markSuperseded(actorUserId, now);
-        Scenario draft = createDraft(
-                official.exerciseId,
-                revisionCode,
-                official.name,
-                official.description,
-                actorUserId,
-                now);
-        draft.derivedFromScenarioId = official.id;
-        return draft;
     }
 
     /**
@@ -183,6 +162,37 @@ public class Scenario {
     }
 
     /**
+     * Replaces Slot Simulation shift inputs for a DRAFT scenario.
+     *
+     * <p>Upserts by {@code shift_no} so Hibernate does not INSERT a duplicate before
+     * deleting the old row (which violates {@code uk_scenario_shift}).
+     */
+    public void replaceShifts(List<ScenarioShift> replacements, UUID actorUserId, Instant now) {
+        Map<Short, ScenarioShift> incoming = new LinkedHashMap<>();
+        for (ScenarioShift shift : replacements) {
+            incoming.put(shift.getShiftNo(), shift);
+        }
+
+        shifts.removeIf(existing -> !incoming.containsKey(existing.getShiftNo()));
+
+        Map<Short, ScenarioShift> existingByNo = new LinkedHashMap<>();
+        for (ScenarioShift existing : shifts) {
+            existingByNo.put(existing.getShiftNo(), existing);
+        }
+        for (ScenarioShift next : incoming.values()) {
+            ScenarioShift current = existingByNo.get(next.getShiftNo());
+            if (current != null) {
+                current.overwriteValues(next, actorUserId, now);
+            } else {
+                next.attach(this);
+                shifts.add(next);
+            }
+        }
+        this.updatedAt = now;
+        this.updatedBy = actorUserId;
+    }
+
+    /**
      * Marks this scenario OFFICIAL.
      *
      * @param actorUserId Supervisor making it official
@@ -192,6 +202,20 @@ public class Scenario {
         this.status = "OFFICIAL";
         this.officialAt = now;
         this.officialBy = actorUserId;
+        this.updatedAt = now;
+        this.updatedBy = actorUserId;
+    }
+
+    /**
+     * Reverts an Official scenario back to DRAFT after Return or Withdraw.
+     *
+     * @param actorUserId actor
+     * @param now timestamp
+     */
+    public void revertToDraft(UUID actorUserId, Instant now) {
+        this.status = "DRAFT";
+        this.officialAt = null;
+        this.officialBy = null;
         this.updatedAt = now;
         this.updatedBy = actorUserId;
     }
@@ -233,4 +257,5 @@ public class Scenario {
     public Instant getDeletedAt() { return deletedAt; }
     public long getVersion() { return version; }
     public List<ScenarioAssumption> getAssumptions() { return Collections.unmodifiableList(assumptions); }
+    public List<ScenarioShift> getShifts() { return Collections.unmodifiableList(shifts); }
 }

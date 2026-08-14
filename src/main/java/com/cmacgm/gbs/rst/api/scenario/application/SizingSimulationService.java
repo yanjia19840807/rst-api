@@ -28,6 +28,7 @@ import com.cmacgm.gbs.rst.api.forecast.ForecastOrchestrationService.ForecastView
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseHoliday;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
+import com.cmacgm.gbs.rst.api.associateddata.domain.SupportWorkloadMath;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseHolidayRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSupportItemRepository;
@@ -37,6 +38,7 @@ import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
 import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
+import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator.MonthDayCounts;
@@ -452,7 +454,7 @@ public class SizingSimulationService {
 
     @Transactional(readOnly = true)
     public MonthlySizingView getLatestMonthly(UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        exercises.requireOwned(ownerId, exerciseId);
+        exercises.requireReadable(ownerId, exerciseId);
         requireScenario(exerciseId, scenarioId);
         SimulationRun run = simulationRuns
                 .findFirstByScenarioIdAndRunTypeAndStatusOrderByRunNoDesc(
@@ -469,7 +471,7 @@ public class SizingSimulationService {
 
     @Transactional(readOnly = true)
     public DailySizingView getLatestDaily(UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        exercises.requireOwned(ownerId, exerciseId);
+        exercises.requireReadable(ownerId, exerciseId);
         requireScenario(exerciseId, scenarioId);
         SimulationRun run = simulationRuns
                 .findFirstByScenarioIdAndRunTypeAndStatusOrderByRunNoDesc(
@@ -566,9 +568,24 @@ public class SizingSimulationService {
                         "calendar-required",
                         "Exercise calendar is required before sizing."));
 
-        BigDecimal workingHours = requirePositive(team.getWorkingHoursPerDay(), "Working hours per day");
+        String weekendCode = calendar.getWeekendCode() != null ? calendar.getWeekendCode() : "SAT_SUN";
+        List<LocalDate> holidayDates = new ArrayList<>();
+        for (ExerciseHoliday holiday : holidays
+                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)) {
+            if (Boolean.TRUE.equals(holiday.getWorkingDayOverride())) {
+                continue;
+            }
+            holidayDates.add(holiday.getHolidayDate());
+        }
+        int year = calendar.getBaselineYear() != null
+                ? calendar.getBaselineYear()
+                : LocalDate.now(clock).getYear();
+        BigDecimal workingDaysYear = BigDecimal.valueOf(
+                workingDaysCalculator.networkDays(year, weekendCode, holidayDates));
+
+        BigDecimal workingHours = requirePositive(team.workingHoursPerDay(), "Working hours per day");
         BigDecimal availability = requirePositive(team.getAvailabilityRatio(), "Availability ratio");
-        BigDecimal capacity = requirePositive(team.getCapacityRatio(), "Capacity ratio");
+        BigDecimal capacity = requirePositive(team.capacityRatio(workingDaysYear), "Capacity ratio");
         BigDecimal cycleTime = requirePositive(baseline.getMedianSeconds(), "Cycle time");
         BigDecimal rightSizingHc = rightSizingHcOverride != null
                 ? rightSizingHcOverride
@@ -579,25 +596,24 @@ public class SizingSimulationService {
                 ? team.getWeekendShiftHc() : BigDecimal.ZERO;
         BigDecimal skeleton = team.getSkeletonRatio() != null
                 ? team.getSkeletonRatio() : BigDecimal.ZERO;
-        BigDecimal delivery = team.getDeliveryHc() != null
-                ? team.getDeliveryHc() : BigDecimal.ZERO;
-        int maxOt = team.getMaxOvertimeMinutes() != null ? team.getMaxOvertimeMinutes() : 0;
-        String weekendCode = calendar.getWeekendCode() != null ? calendar.getWeekendCode() : "SAT_SUN";
-
-        List<LocalDate> holidayDates = new ArrayList<>();
-        for (ExerciseHoliday holiday : holidays
-                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)) {
-            if (Boolean.TRUE.equals(holiday.getWorkingDayOverride())) {
-                continue;
+        BigDecimal delivery = BigDecimal.ZERO;
+        for (ExerciseSharedKpiLine line : exercise.getSharedKpiLines()) {
+            if (line.getDeliveryHc() != null) {
+                delivery = delivery.add(line.getDeliveryHc());
             }
-            holidayDates.add(holiday.getHolidayDate());
         }
+        BigDecimal maxOt = team.getMaxOvertimeMinutes() != null
+                ? team.getMaxOvertimeMinutes() : BigDecimal.ZERO;
 
+        BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(team, workingDaysYear);
         BigDecimal supportFte = BigDecimal.ZERO;
         for (ExerciseProductionSupportItem item : supportItems
                 .findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(exerciseId)) {
-            if (item.getSupportFte() != null) {
-                supportFte = supportFte.add(item.getSupportFte());
+            try {
+                supportFte = supportFte.add(
+                        SupportWorkloadMath.derive(item, workingDaysYear, fteHours).supportFte());
+            } catch (IllegalArgumentException ignored) {
+                // Skip historical rows whose frequency codes are no longer recognized.
             }
         }
         supportFte = supportFte.setScale(6, RoundingMode.HALF_UP);
@@ -704,7 +720,7 @@ public class SizingSimulationService {
             BigDecimal weekendShiftHc,
             BigDecimal skeletonRatio,
             BigDecimal deliveryHc,
-            int maxOvertimeMinutes,
+            BigDecimal maxOvertimeMinutes,
             BigDecimal cycleTimeSeconds,
             BigDecimal rightSizingHc,
             BigDecimal supportFte) {

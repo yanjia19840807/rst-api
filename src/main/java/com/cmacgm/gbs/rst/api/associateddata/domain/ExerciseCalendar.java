@@ -1,6 +1,5 @@
 package com.cmacgm.gbs.rst.api.associateddata.domain;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -38,9 +37,6 @@ public class ExerciseCalendar {
 
     @Column(name = "baseline_year")
     private Short baselineYear;
-
-    @Column(name = "working_days_per_year")
-    private BigDecimal workingDaysPerYear;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -113,10 +109,6 @@ public class ExerciseCalendar {
         touch(actorUserId, now);
     }
 
-    public void setWorkingDaysPerYear(BigDecimal workingDaysPerYear) {
-        this.workingDaysPerYear = workingDaysPerYear;
-    }
-
     public void touch(UUID actorUserId, Instant now) {
         this.updatedAt = now;
         this.updatedBy = actorUserId;
@@ -129,6 +121,5 @@ public class ExerciseCalendar {
     public UUID getSourceTemplateId() { return sourceTemplateId; }
     public Integer getSourceTemplateVersion() { return sourceTemplateVersion; }
     public Short getBaselineYear() { return baselineYear; }
-    public BigDecimal getWorkingDaysPerYear() { return workingDaysPerYear; }
     public long getVersion() { return version; }
 }

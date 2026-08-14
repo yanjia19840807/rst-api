@@ -1,6 +1,6 @@
 package com.cmacgm.gbs.rst.api.exercise.api;
 
-import java.util.List;
+import java.time.LocalDate;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
@@ -11,8 +11,29 @@ import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService.CreateExercise;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService.CreateExerciseResult;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService.Exercise;
+import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService.ExerciseListView;
+import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService.ListQuery;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService.UpdateExercisePeriods;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService.UpdateExercisePeriodsResult;
+import com.cmacgm.gbs.rst.api.security.RstPrincipal;
+import com.cmacgm.gbs.rst.api.submission.application.SubmissionService;
+import com.cmacgm.gbs.rst.api.submission.application.SubmissionService.SubmitPreviewView;
+import com.cmacgm.gbs.rst.api.submission.application.SubmissionService.SubmitRequest;
+import com.cmacgm.gbs.rst.api.submission.application.SubmissionService.SubmittedDetailsView;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.submission.application.SubmissionService;
 import com.cmacgm.gbs.rst.api.submission.application.SubmissionService.SubmitPreviewView;
@@ -36,7 +57,6 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/supervisor/exercises")
-@PreAuthorize("hasRole('SUPERVISOR')")
 public class ExerciseController {
 
     private final ExerciseService service;
@@ -58,14 +78,70 @@ public class ExerciseController {
     }
 
     /**
-     * Lists Exercises for the current Supervisor.
+     * Lists Exercises for the current Supervisor, applying tab and field filters on the server.
      *
+     * @param tab {@code IN_PROGRESS} or {@code ARCHIVED}
+     * @param exerciseCode optional exercise code contains
+     * @param toolkitName optional exact toolkit name
+     * @param pl3Name optional exact PL3 name
+     * @param workflowStatus optional exact workflow status within the tab
+     * @param reviewStage optional required role ({@code MANAGER} / {@code CDH} / {@code LTH})
+     * @param handler optional current reviewer display name
+     * @param officialScenario {@code ASSIGNED} or {@code UNASSIGNED}
+     * @param createdFrom optional created date from
+     * @param createdTo optional created date to
+     * @param submittedFrom optional submitted date from
+     * @param submittedTo optional submitted date to
+     * @param archivedFrom optional archived date from
+     * @param archivedTo optional archived date to
      * @param principal authenticated Supervisor
-     * @return exercises
+     * @return filtered exercises and filter options
      */
     @GetMapping
-    public List<Exercise> list(@AuthenticationPrincipal RstPrincipal principal) {
-        return service.list(principal.userId());
+    @PreAuthorize("hasRole('SUPERVISOR')")
+    public ExerciseListView list(
+            @RequestParam(required = false, defaultValue = "IN_PROGRESS") String tab,
+            @RequestParam(required = false) String exerciseCode,
+            @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false) String pl3Name,
+            @RequestParam(required = false) String workflowStatus,
+            @RequestParam(required = false) String reviewStage,
+            @RequestParam(required = false) String handler,
+            @RequestParam(required = false) String officialScenario,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate createdFrom,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate createdTo,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedFrom,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedTo,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate archivedFrom,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate archivedTo,
+            @AuthenticationPrincipal RstPrincipal principal) {
+        return service.list(principal.userId(), new ListQuery(
+                tab,
+                exerciseCode,
+                toolkitName,
+                pl3Name,
+                workflowStatus,
+                reviewStage,
+                handler,
+                officialScenario,
+                createdFrom,
+                createdTo,
+                submittedFrom,
+                submittedTo,
+                archivedFrom,
+                archivedTo));
     }
 
     /**
@@ -77,6 +153,7 @@ public class ExerciseController {
      */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('SUPERVISOR')")
     public CreateExerciseResult create(
             @AuthenticationPrincipal RstPrincipal principal,
             @Valid @RequestBody CreateExercise request) {
@@ -91,6 +168,7 @@ public class ExerciseController {
      * @return Exercise detail
      */
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
     public Exercise detail(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
@@ -105,6 +183,7 @@ public class ExerciseController {
      */
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('SUPERVISOR')")
     public void delete(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
@@ -120,6 +199,7 @@ public class ExerciseController {
      * @return updated Exercise and notices
      */
     @PutMapping("/{id}/periods")
+    @PreAuthorize("hasRole('SUPERVISOR')")
     public UpdateExercisePeriodsResult updatePeriods(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id,
@@ -135,6 +215,7 @@ public class ExerciseController {
      * @return submit preview
      */
     @PostMapping("/{id}/validations/submit-preview")
+    @PreAuthorize("hasRole('SUPERVISOR')")
     public SubmitPreviewView submitPreview(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
@@ -151,6 +232,7 @@ public class ExerciseController {
      */
     @PostMapping("/{id}/submit")
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('SUPERVISOR')")
     public SubmittedDetailsView submit(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id,
@@ -167,6 +249,7 @@ public class ExerciseController {
      * @return submitted details
      */
     @GetMapping("/{id}/submitted-details")
+    @PreAuthorize("hasRole('SUPERVISOR')")
     public SubmittedDetailsView submittedDetails(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
@@ -181,6 +264,7 @@ public class ExerciseController {
      * @return review detail after withdraw
      */
     @PostMapping("/{id}/withdraw")
+    @PreAuthorize("hasRole('SUPERVISOR')")
     public ApprovalDetailView withdraw(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {

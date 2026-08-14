@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.cycletime.api.dto;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
@@ -10,7 +11,7 @@ public record ExerciseTmsSessionResponse(
         String reference,
         String agentName,
         String subtaskName,
-        Integer processedVolume,
+        BigDecimal processedVolume,
         long netDurationSeconds,
         Integer cycleTimeSeconds,
         Double zScore,

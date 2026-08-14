@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.tms.api.dto;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.UUID;
@@ -20,7 +21,7 @@ public record TmsSessionResponse(
         String pl2,
         String pl3Code,
         String pl3Name,
-        Integer processedVolume,
+        BigDecimal processedVolume,
         String reference,
         String remarks,
         String status,

@@ -1,6 +1,7 @@
 package com.cmacgm.gbs.rst.api.supervisor.api;
 
 import static org.hamcrest.Matchers.greaterThan;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -181,6 +182,65 @@ class SupervisorApiIntegrationTests {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.type")
                         .value("https://rst.cmacgm.com/problems/toolkit-hierarchy-exists"));
+    }
+
+    @Test
+    void filtersSupervisorToolkitListByNameAndPl3() throws Exception {
+        createToolkit("Bank Reconciliation Toolkit");
+
+        mockMvc.perform(get("/api/v1/supervisor/toolkits")
+                        .header("X-Dev-Role", "SUPERVISOR"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].name").value("Bank Reconciliation Toolkit"))
+                .andExpect(jsonPath("$.pl3Names[0]").value("Bank Reconciliation"));
+
+        mockMvc.perform(get("/api/v1/supervisor/toolkits")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .queryParam("name", "reconcil"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1));
+
+        mockMvc.perform(get("/api/v1/supervisor/toolkits")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .queryParam("name", "invoice"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0))
+                .andExpect(jsonPath("$.pl3Names[0]").value("Bank Reconciliation"));
+
+        mockMvc.perform(get("/api/v1/supervisor/toolkits")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .queryParam("pl3Name", "Bank Reconciliation"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1));
+
+        mockMvc.perform(get("/api/v1/supervisor/toolkits")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .queryParam("pl3Name", "Invoice Processing"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0));
+    }
+
+    @Test
+    void allowsReusingNameAndHierarchyAfterSoftDelete() throws Exception {
+        String created = createToolkit("Reusable Toolkit");
+        String toolkitId = JsonPath.read(created, "$.id");
+
+        mockMvc.perform(delete("/api/v1/supervisor/toolkits/{id}", toolkitId)
+                        .header("X-Dev-Role", "SUPERVISOR"))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/v1/supervisor/toolkits")
+                        .header("X-Dev-Role", "SUPERVISOR"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0));
+
+        mockMvc.perform(post("/api/v1/supervisor/toolkits")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createToolkitRequest("Reusable Toolkit", true)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("Reusable Toolkit"));
     }
 
     @Test
@@ -597,11 +657,10 @@ class SupervisorApiIntegrationTests {
                 """
                 insert into exercise_production_support_item
                     (id, exercise_id, lineage_id, category, activity, frequency_code,
-                     volume, unit_of_measure, workload_per_unit_minutes, annual_multiplier,
-                     workload_per_year_hours, support_fte, calculation_version,
+                     volume, unit_of_measure, workload_per_unit_minutes,
                      created_at, created_by, updated_at, updated_by, version)
                 values (?, ?, ?, 'Operations', 'Archive reporting', 'MONTHLY',
-                        10, 'case', 5, 12, 10, 0.005, 'v1.2',
+                        10, 'case', 5,
                         ?, ?, ?, ?, 0)
                 """,
                 supportItemId,

@@ -57,3 +57,6 @@ rst:
     read-timeout-ms: ${RST_FORECAST_READ_TIMEOUT_MS:60000}
     enabled: ${RST_FORECAST_ENABLED:true}
     confidence-level: ${RST_FORECAST_CONFIDENCE:0.95}
+  workflow:
+    # Timesheet has no LTH column yet; LTH steps share this position until IAM provides one.
+    lth-position-id: ${RST_WORKFLOW_LTH_POSITION_ID:LTH}

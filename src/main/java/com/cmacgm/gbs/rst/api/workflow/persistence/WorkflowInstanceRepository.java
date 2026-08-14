@@ -1,5 +1,7 @@
 package com.cmacgm.gbs.rst.api.workflow.persistence;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -16,4 +18,12 @@ public interface WorkflowInstanceRepository extends JpaRepository<WorkflowInstan
      * @return optional workflow
      */
     Optional<WorkflowInstance> findBySubmissionId(UUID submissionId);
+
+    /**
+     * Finds workflow instances for the given submissions.
+     *
+     * @param submissionIds submission ids
+     * @return workflows
+     */
+    List<WorkflowInstance> findBySubmissionIdIn(Collection<UUID> submissionIds);
 }

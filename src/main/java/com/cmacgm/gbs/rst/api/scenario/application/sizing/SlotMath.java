@@ -53,6 +53,23 @@ public final class SlotMath {
     /**
      * Whether a shift covers the slot local-time window.
      * Shift window is {@code [start, start + duration)} and may wrap past midnight.
+     * Fractional minutes are rounded to the nearest whole minute for overlap.
+     */
+    public static boolean withinShift(
+            LocalTime slotStartLocal,
+            LocalTime slotEndLocal,
+            LocalTime shiftStart,
+            BigDecimal durationMinutes) {
+        if (durationMinutes == null || durationMinutes.signum() <= 0) {
+            return false;
+        }
+        int minutes = durationMinutes.setScale(0, RoundingMode.HALF_UP).intValue();
+        return withinShift(slotStartLocal, slotEndLocal, shiftStart, minutes);
+    }
+
+    /**
+     * Whether a shift covers the slot local-time window.
+     * Shift window is {@code [start, start + duration)} and may wrap past midnight.
      */
     public static boolean withinShift(
             LocalTime slotStartLocal,
@@ -131,22 +148,25 @@ public final class SlotMath {
     /**
      * Applicability On when calendar SLA ≤ 24h, or business-hours SLA ≤ 8h.
      */
-    public static boolean applicabilityOn(String slaType, Integer slaTurnaroundMinutes) {
-        if (slaTurnaroundMinutes == null || slaTurnaroundMinutes <= 0) {
+    public static boolean applicabilityOn(String slaType, BigDecimal slaTurnaroundMinutes) {
+        if (slaTurnaroundMinutes == null || slaTurnaroundMinutes.signum() <= 0) {
             return false;
         }
         String type = slaType == null ? "" : slaType.trim().toUpperCase();
         boolean businessHours = type.contains("BUSINESS") || type.contains("BH");
-        int limit = businessHours ? 8 * 60 : 24 * 60;
-        return slaTurnaroundMinutes <= limit;
+        BigDecimal limit = BigDecimal.valueOf(businessHours ? 8 * 60 : 24 * 60);
+        return slaTurnaroundMinutes.compareTo(limit) <= 0;
     }
 
     /** Number of 30-min (or slot) steps allowed before volume ages out of SLA. */
-    public static int slaSlotLimit(int slaTurnaroundMinutes, int slotMinutes) {
-        if (slaTurnaroundMinutes <= 0 || slotMinutes <= 0) {
+    public static int slaSlotLimit(BigDecimal slaTurnaroundMinutes, int slotMinutes) {
+        if (slaTurnaroundMinutes == null || slaTurnaroundMinutes.signum() <= 0 || slotMinutes <= 0) {
             return 1;
         }
-        return Math.max(1, (int) Math.ceil(slaTurnaroundMinutes / (double) slotMinutes));
+        return Math.max(1, slaTurnaroundMinutes
+                .divide(BigDecimal.valueOf(slotMinutes), 8, RoundingMode.HALF_UP)
+                .setScale(0, RoundingMode.CEILING)
+                .intValue());
     }
 
     /**

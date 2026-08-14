@@ -18,29 +18,15 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
+
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
 
 import com.cmacgm.gbs.rst.api.identity.domain.AppUser;
 
 @Entity
-@Table(
-        name = "toolkit",
-        uniqueConstraints = {
-            @UniqueConstraint(
-                    name = "uk_toolkit_hierarchy",
-                    columnNames = {
-                        "supervisor_position_id",
-                        "center",
-                        "domain",
-                        "pl1",
-                        "pl2",
-                        "primary_pl3_code"
-                    }),
-            @UniqueConstraint(
-                    name = "uk_toolkit_name_per_position",
-                    columnNames = {"supervisor_position_id", "name"})
-        })
+@Table(name = "toolkit")
 public class Toolkit {
 
     @Id
@@ -110,6 +96,7 @@ public class Toolkit {
     private List<ToolkitSubtask> subtasks = new ArrayList<>();
 
     @OneToMany(mappedBy = "toolkit", cascade = CascadeType.ALL)
+    @Fetch(FetchMode.SUBSELECT)
     private List<ToolkitSharedKpiSelection> sharedKpiSelections = new ArrayList<>();
 
     protected Toolkit() {

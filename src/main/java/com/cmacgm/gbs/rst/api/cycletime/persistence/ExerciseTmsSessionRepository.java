@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.cycletime.persistence;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -121,7 +122,7 @@ public interface ExerciseTmsSessionRepository extends JpaRepository<ExerciseTmsS
 
         String getSubtaskName();
 
-        Integer getProcessedVolume();
+        BigDecimal getProcessedVolume();
 
         long getNetDurationSeconds();
 

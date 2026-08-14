@@ -316,7 +316,7 @@ public class ForecastOrchestrationService {
     @Transactional(readOnly = true)
     public ForecastView getLatestAccepted(
             UUID ownerId, UUID exerciseId, UUID scenarioId, String level) {
-        exercises.requireOwned(ownerId, exerciseId);
+        exercises.requireReadable(ownerId, exerciseId);
         scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));

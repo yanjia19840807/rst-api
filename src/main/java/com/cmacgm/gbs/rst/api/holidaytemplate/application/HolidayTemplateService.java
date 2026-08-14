@@ -23,10 +23,7 @@ import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseCalendar;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseHoliday;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseHolidayRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
-import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
-import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateExcelService.LineDraft;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.CenterCountryDefaults;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.CenterHolidayTemplate;
@@ -53,8 +50,6 @@ public class HolidayTemplateService {
     private final CenterHolidayTemplateSnapshotRepository snapshots;
     private final ExerciseCalendarRepository calendars;
     private final ExerciseHolidayRepository holidays;
-    private final ExerciseTeamSetupRepository teamSetups;
-    private final CycleTimeBaselineRepository cycleTimeBaselines;
     private final WorkingDaysCalculator workingDaysCalculator;
     private final HolidayTemplateExcelService excel;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -66,8 +61,6 @@ public class HolidayTemplateService {
             CenterHolidayTemplateSnapshotRepository snapshots,
             ExerciseCalendarRepository calendars,
             ExerciseHolidayRepository holidays,
-            ExerciseTeamSetupRepository teamSetups,
-            CycleTimeBaselineRepository cycleTimeBaselines,
             WorkingDaysCalculator workingDaysCalculator,
             HolidayTemplateExcelService excel,
             Clock clock) {
@@ -76,8 +69,6 @@ public class HolidayTemplateService {
         this.snapshots = snapshots;
         this.calendars = calendars;
         this.holidays = holidays;
-        this.teamSetups = teamSetups;
-        this.cycleTimeBaselines = cycleTimeBaselines;
         this.workingDaysCalculator = workingDaysCalculator;
         this.excel = excel;
         this.clock = clock;
@@ -286,16 +277,6 @@ public class HolidayTemplateService {
                 ? primary.weekendCode()
                 : defaults.weekendCode();
 
-        List<LocalDate> allNonWorking = nonWorkingDates(holidays
-                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)
-                .stream()
-                .map(h -> new HolidayDateFlag(h.getHolidayDate(), h.getWorkingDayOverride()))
-                .toList())
-                .stream()
-                .filter(d -> d.getYear() == primaryYear)
-                .toList();
-        int workingDays = workingDaysCalculator.networkDays(primaryYear, weekend, allNonWorking);
-
         if (primary != null) {
             calendar.applyTemplateMeta(
                     weekend,
@@ -330,9 +311,7 @@ public class HolidayTemplateService {
                     + "; Working Days / Year computed for " + primaryYear + ".");
         }
 
-        calendar.setWorkingDaysPerYear(BigDecimal.valueOf(workingDays));
         calendars.save(calendar);
-        syncTeamSetupWorkingDays(exerciseId, calendar, actorUserId, now);
         return new ApplyTemplatesResult(primary != null, notices);
     }
 
@@ -429,38 +408,34 @@ public class HolidayTemplateService {
         }
     }
 
-    @Transactional
-    public void refreshWorkingDaysForExercise(UUID exerciseId, UUID actorUserId) {
-        Instant now = clock.instant();
-        ExerciseCalendar calendar = calendars.findById(exerciseId)
-                .orElseThrow(() -> notFound("calendar-not-found", "Calendar was not found."));
+    /**
+     * NETWORKDAYS for the Exercise calendar year (weekend + non-working holidays).
+     * Not persisted; computed at read / simulation time.
+     */
+    @Transactional(readOnly = true)
+    public BigDecimal workingDaysPerYear(UUID exerciseId) {
+        return calendars.findById(exerciseId)
+                .map(this::workingDaysPerYear)
+                .orElse(null);
+    }
+
+    /**
+     * NETWORKDAYS for a loaded calendar row.
+     */
+    public BigDecimal workingDaysPerYear(ExerciseCalendar calendar) {
+        if (calendar == null) {
+            return null;
+        }
         int year = calendar.getBaselineYear() != null
                 ? calendar.getBaselineYear()
                 : LocalDate.now(clock).getYear();
         List<LocalDate> nonWorking = nonWorkingDates(holidays
-                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)
+                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(calendar.getExerciseId())
                 .stream()
                 .map(h -> new HolidayDateFlag(h.getHolidayDate(), h.getWorkingDayOverride()))
                 .toList());
         String weekend = calendar.getWeekendCode() != null ? calendar.getWeekendCode() : "SAT_SUN";
-        int workingDays = workingDaysCalculator.networkDays(year, weekend, nonWorking);
-        calendar.setWorkingDaysPerYear(BigDecimal.valueOf(workingDays));
-        calendar.touch(actorUserId, now);
-        calendars.save(calendar);
-        syncTeamSetupWorkingDays(exerciseId, calendar, actorUserId, now);
-    }
-
-    private void syncTeamSetupWorkingDays(
-            UUID exerciseId, ExerciseCalendar calendar, UUID actorUserId, Instant now) {
-        BigDecimal cycleTimeSeconds = cycleTimeBaselines.findByExerciseIdAndActiveTrue(exerciseId)
-                .map(CycleTimeBaseline::getMedianSeconds)
-                .orElse(null);
-        teamSetups.findById(exerciseId).ifPresent(setup -> {
-            setup.syncWeekendFromCalendar(calendar.getWeekendCode(), actorUserId, now);
-            setup.applyCalendarWorkingDays(
-                    calendar.getWorkingDaysPerYear(), cycleTimeSeconds, actorUserId, now);
-            teamSetups.save(setup);
-        });
+        return BigDecimal.valueOf(workingDaysCalculator.networkDays(year, weekend, nonWorking));
     }
 
     private void replaceLines(

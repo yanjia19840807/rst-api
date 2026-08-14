@@ -61,12 +61,12 @@ public final class SizingMath {
             BigDecimal workDays,
             BigDecimal weekendDays,
             BigDecimal workingHoursPerDay,
-            int maxOvertimeMinutes,
+            BigDecimal maxOvertimeMinutes,
             BigDecimal availabilityRatio,
             BigDecimal capacityRatio,
             BigDecimal weekendShiftHc) {
         BigDecimal hoursWithOt = workingHoursPerDay.add(
-                BigDecimal.valueOf(maxOvertimeMinutes).divide(SIXTY, MC), MC);
+                nz(maxOvertimeMinutes).divide(SIXTY, MC), MC);
         BigDecimal denominator = workDays
                 .multiply(hoursWithOt, MC)
                 .multiply(nz(availabilityRatio), MC)
@@ -135,18 +135,18 @@ public final class SizingMath {
     public static BigDecimal overtimeCapacity(
             boolean workingDay,
             BigDecimal simulationHc,
-            int maxOvertimeMinutes,
+            BigDecimal maxOvertimeMinutes,
             BigDecimal availabilityRatio,
             BigDecimal capacityRatio,
             BigDecimal cycleTimeSeconds) {
-        if (!workingDay || maxOvertimeMinutes <= 0) {
+        if (!workingDay || maxOvertimeMinutes == null || maxOvertimeMinutes.signum() <= 0) {
             return BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
         }
         if (cycleTimeSeconds == null || cycleTimeSeconds.signum() <= 0) {
             throw new IllegalArgumentException("Cycle time must be positive.");
         }
         return nz(simulationHc)
-                .multiply(BigDecimal.valueOf(maxOvertimeMinutes), MC)
+                .multiply(maxOvertimeMinutes, MC)
                 .multiply(SIXTY, MC)
                 .multiply(nz(availabilityRatio), MC)
                 .multiply(nz(capacityRatio), MC)

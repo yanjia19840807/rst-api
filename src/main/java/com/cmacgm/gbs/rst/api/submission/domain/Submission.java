@@ -92,6 +92,13 @@ public class Submission {
     }
 
     /**
+     * Clears frozen scopes so a resubmit can snapshot the current KPI lines.
+     */
+    public void clearScopes() {
+        scopes.clear();
+    }
+
+    /**
      * Advances submission status after a successful Approve at the given step.
      *
      * <p>Step 1 → {@code AWAITING_CDH}, step 2 → {@code AWAITING_LTH}, step 3 → {@code VALIDATED}.
@@ -123,6 +130,18 @@ public class Submission {
     public void markReturned(Instant now) {
         this.status = "RETURNED";
         this.returnedAt = now;
+    }
+
+    /**
+     * Reopens a returned/withdrawn submission back to Manager review.
+     */
+    public void reopenAwaitingManager(String remarks, UUID actorUserId, Instant now) {
+        this.status = "AWAITING_MANAGER";
+        this.currentStep = 1;
+        this.returnedAt = null;
+        this.remarks = remarks;
+        this.submittedAt = now;
+        this.submittedBy = actorUserId;
     }
 
     /**

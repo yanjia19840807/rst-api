@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.tms.domain;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -49,8 +50,8 @@ public class TmsSession {
     @JoinColumn(name = "toolkit_subtask_id")
     private ToolkitSubtask toolkitSubtask;
 
-    @Column(name = "processed_volume")
-    private Integer processedVolume;
+    @Column(name = "processed_volume", precision = 18, scale = 6)
+    private BigDecimal processedVolume;
 
     @Column(nullable = false, length = 100)
     private String reference;
@@ -129,7 +130,7 @@ public class TmsSession {
             AppUser user,
             Toolkit toolkit,
             ToolkitSubtask subtask,
-            Integer processedVolume,
+            BigDecimal processedVolume,
             String reference,
             String remarks,
             Instant now) {
@@ -257,7 +258,7 @@ public class TmsSession {
         return toolkitSubtask;
     }
 
-    public Integer getProcessedVolume() {
+    public BigDecimal getProcessedVolume() {
         return processedVolume;
     }
 

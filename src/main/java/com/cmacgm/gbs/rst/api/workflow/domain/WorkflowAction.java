@@ -140,6 +140,28 @@ public class WorkflowAction {
         return action;
     }
 
+    /**
+     * Creates a WITHDRAW action recorded against the step that was waiting.
+     *
+     * @param stepNo current READY step when withdrawn
+     * @param actorUserId withdrawing Supervisor
+     * @param requestId audit request id
+     * @param now action timestamp
+     * @return action entity
+     */
+    public static WorkflowAction withdraw(
+            short stepNo, UUID actorUserId, UUID requestId, Instant now) {
+        WorkflowAction action = new WorkflowAction();
+        action.id = UUID.randomUUID();
+        action.stepNo = stepNo;
+        action.actionType = "WITHDRAW";
+        action.actorUserId = actorUserId;
+        action.actorRoleCode = "SUPERVISOR";
+        action.actionAt = now;
+        action.requestId = requestId;
+        return action;
+    }
+
     void attach(WorkflowInstance workflowInstance, int actionSeq) {
         this.workflowInstance = workflowInstance;
         this.actionSeq = actionSeq;
@@ -153,4 +175,5 @@ public class WorkflowAction {
     public String getComments() { return comments; }
     public Instant getActionAt() { return actionAt; }
     public UUID getRequestId() { return requestId; }
+    public int getActionSeq() { return actionSeq; }
 }

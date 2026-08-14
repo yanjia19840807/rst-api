@@ -6,9 +6,7 @@ import java.util.UUID;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 
-import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService;
 import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.ShiftRequest;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
@@ -45,7 +43,6 @@ public class ScenarioCommitService {
     private final ExerciseService exercises;
     private final ScenarioRepository scenarios;
     private final ScenarioService scenarioService;
-    private final AssociatedDataService associatedData;
     private final ForecastOrchestrationService forecasts;
     private final SizingSimulationService sizing;
     private final SlotSimulationService slots;
@@ -60,7 +57,6 @@ public class ScenarioCommitService {
             ExerciseService exercises,
             ScenarioRepository scenarios,
             ScenarioService scenarioService,
-            AssociatedDataService associatedData,
             ForecastOrchestrationService forecasts,
             SizingSimulationService sizing,
             SlotSimulationService slots,
@@ -73,7 +69,6 @@ public class ScenarioCommitService {
         this.exercises = exercises;
         this.scenarios = scenarios;
         this.scenarioService = scenarioService;
-        this.associatedData = associatedData;
         this.forecasts = forecasts;
         this.sizing = sizing;
         this.slots = slots;
@@ -103,19 +98,14 @@ public class ScenarioCommitService {
                     "scenario-not-draft",
                     "Only DRAFT scenarios can be saved.");
         }
-        if (request.shifts() == null) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY,
-                    "shifts-required",
-                    "Shifts are required when saving a scenario.");
-        }
 
-        ScenarioView saved = scenarioService.update(
+        scenarioService.update(
                 ownerId,
                 exerciseId,
                 scenarioId,
                 new UpdateScenarioRequest(request.name(), request.description(), request.assumptions()));
-        associatedData.putShifts(ownerId, exerciseId, request.shifts());
+        ScenarioView saved = scenarioService.replaceShifts(
+                ownerId, exerciseId, scenarioId, request.shifts() != null ? request.shifts() : List.of());
 
         clearScenarioResults(scenarioId);
 
@@ -185,7 +175,7 @@ public class ScenarioCommitService {
             @NotBlank String name,
             String description,
             List<AssumptionRequest> assumptions,
-            @NotNull List<@Valid ShiftRequest> shifts,
+            List<@Valid ShiftRequest> shifts,
             CommitResults results) {
     }
 

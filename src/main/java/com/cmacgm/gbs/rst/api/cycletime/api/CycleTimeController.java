@@ -33,7 +33,7 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @RestController
 @RequestMapping("/api/v1/supervisor/exercises/{exerciseId}/cycle-time")
-@PreAuthorize("hasRole('SUPERVISOR')")
+@PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
 public class CycleTimeController {
 
     private final CycleTimeService service;

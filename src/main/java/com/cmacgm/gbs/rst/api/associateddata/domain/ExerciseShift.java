@@ -28,8 +28,8 @@ public class ExerciseShift {
     @Column(name = "start_time", nullable = false)
     private LocalTime startTime;
 
-    @Column(name = "duration_minutes", nullable = false)
-    private int durationMinutes;
+    @Column(name = "duration_minutes", nullable = false, precision = 18, scale = 6)
+    private BigDecimal durationMinutes;
 
     @Column(nullable = false, precision = 18, scale = 6)
     private BigDecimal headcount;
@@ -78,7 +78,7 @@ public class ExerciseShift {
             UUID exerciseId,
             short shiftNo,
             LocalTime startTime,
-            int durationMinutes,
+            BigDecimal durationMinutes,
             BigDecimal headcount,
             boolean worksOnWeekend,
             UUID actorUserId,
@@ -103,7 +103,7 @@ public class ExerciseShift {
      */
     public void replace(
             LocalTime startTime,
-            int durationMinutes,
+            BigDecimal durationMinutes,
             BigDecimal headcount,
             boolean worksOnWeekend,
             UUID actorUserId,
@@ -133,7 +133,7 @@ public class ExerciseShift {
     public UUID getExerciseId() { return exerciseId; }
     public short getShiftNo() { return shiftNo; }
     public LocalTime getStartTime() { return startTime; }
-    public int getDurationMinutes() { return durationMinutes; }
+    public BigDecimal getDurationMinutes() { return durationMinutes; }
     public BigDecimal getHeadcount() { return headcount; }
     public boolean isWorksOnWeekend() { return worksOnWeekend; }
     public Instant getDeletedAt() { return deletedAt; }

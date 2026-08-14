@@ -93,9 +93,6 @@ Spring Data uses 0-based pages internally.
 - `GET /api/v1/toolkits`
 - `GET|POST /api/v1/supervisor/toolkits`
 - `GET|PUT|DELETE /api/v1/supervisor/toolkits/{id}`
-- `POST /api/v1/supervisor/toolkits/{id}/subtasks`
-- `DELETE /api/v1/supervisor/toolkits/{id}/subtasks/{subtaskId}`
-- `PUT /api/v1/supervisor/toolkits/{id}/shared-kpis`
 - `GET /api/v1/timesheet/active`
 - `GET /api/v1/timesheet/toolkit-hierarchy`
 - `GET /api/v1/timesheet/shared-kpi-candidates`

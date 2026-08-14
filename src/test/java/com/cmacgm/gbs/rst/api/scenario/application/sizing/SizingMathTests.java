@@ -37,4 +37,16 @@ class SizingMathTests {
                 new BigDecimal("10"));
         assertThat(end).isEqualByComparingTo("0.000000");
     }
+
+    @Test
+    void overtimeCapacityAcceptsFractionalMinutes() {
+        BigDecimal overtime = SizingMath.overtimeCapacity(
+                true,
+                new BigDecimal("2"),
+                new BigDecimal("0.5"),
+                new BigDecimal("1"),
+                new BigDecimal("1"),
+                new BigDecimal("60"));
+        assertThat(overtime).isEqualByComparingTo("1.000000");
+    }
 }

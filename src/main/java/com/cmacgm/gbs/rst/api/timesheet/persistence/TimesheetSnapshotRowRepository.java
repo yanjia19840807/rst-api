@@ -203,6 +203,114 @@ public interface TimesheetSnapshotRowRepository extends JpaRepository<TimesheetS
             """)
     List<TeamAgentRow> findDistinctAgentsBySupervisorCcgid(@Param("ccgid") String ccgid);
 
+    /**
+     * Lists Manager position ids currently occupied by this CCGID.
+     *
+     * @param ccgid senior manager CCGID
+     * @return distinct sr_manager_position_id values
+     */
+    @Query("""
+            select distinct r.srManagerPositionId
+            from TimesheetSnapshotRow r
+            where r.syncRun.status = 'ACTIVE'
+              and upper(r.srManagerCcgid) = upper(:ccgid)
+              and r.srManagerPositionId is not null
+              and r.srManagerPositionId <> ''
+            """)
+    List<String> findSrManagerPositionIdsByCcgid(@Param("ccgid") String ccgid);
+
+    /**
+     * Lists CDH / Domain Head position ids currently occupied by this CCGID.
+     *
+     * @param ccgid domain head CCGID
+     * @return distinct domain_head_position_id values
+     */
+    @Query("""
+            select distinct r.domainHeadPositionId
+            from TimesheetSnapshotRow r
+            where r.syncRun.status = 'ACTIVE'
+              and upper(r.domainHeadCcgid) = upper(:ccgid)
+              and r.domainHeadPositionId is not null
+              and r.domainHeadPositionId <> ''
+            """)
+    List<String> findDomainHeadPositionIdsByCcgid(@Param("ccgid") String ccgid);
+
+    /** Approver chain for a Supervisor position (Manager then CDH). */
+    interface ApproverChainRow {
+        String getSrManagerPositionId();
+
+        String getSrManagerCcgid();
+
+        String getSrManagerName();
+
+        String getDomainHeadPositionId();
+
+        String getDomainHeadCcgid();
+
+        String getDomainHeadName();
+    }
+
+    /**
+     * Resolves Manager and CDH positions for a Supervisor position from the ACTIVE snapshot.
+     *
+     * @param supervisorPositionId toolkit supervisor position
+     * @return chain rows (hierarchy is unique per supervisor position)
+     */
+    @Query("""
+            select r.srManagerPositionId as srManagerPositionId,
+                   r.srManagerCcgid as srManagerCcgid,
+                   r.srManagerName as srManagerName,
+                   r.domainHeadPositionId as domainHeadPositionId,
+                   r.domainHeadCcgid as domainHeadCcgid,
+                   r.domainHeadName as domainHeadName
+            from TimesheetSnapshotRow r
+            where r.syncRun.status = 'ACTIVE'
+              and r.supervisorPositionId = :supervisorPositionId
+              and r.srManagerPositionId is not null
+              and r.srManagerPositionId <> ''
+            """)
+    List<ApproverChainRow> findApproverChainBySupervisorPositionId(
+            @Param("supervisorPositionId") String supervisorPositionId);
+
+    /** Current occupant of a Manager or CDH position. */
+    interface OccupantRow {
+        String getCcgid();
+
+        String getName();
+    }
+
+    /**
+     * Resolves the current occupant of a senior manager position.
+     *
+     * @param positionId sr_manager_position_id
+     * @return occupant rows (hierarchy is unique per position)
+     */
+    @Query("""
+            select distinct r.srManagerCcgid as ccgid, r.srManagerName as name
+            from TimesheetSnapshotRow r
+            where r.syncRun.status = 'ACTIVE'
+              and r.srManagerPositionId = :positionId
+              and r.srManagerCcgid is not null
+              and r.srManagerCcgid <> ''
+            """)
+    List<OccupantRow> findSrManagerOccupantByPositionId(@Param("positionId") String positionId);
+
+    /**
+     * Resolves the current occupant of a Domain Head / CDH position.
+     *
+     * @param positionId domain_head_position_id
+     * @return occupant rows
+     */
+    @Query("""
+            select distinct r.domainHeadCcgid as ccgid, r.domainHeadName as name
+            from TimesheetSnapshotRow r
+            where r.syncRun.status = 'ACTIVE'
+              and r.domainHeadPositionId = :positionId
+              and r.domainHeadCcgid is not null
+              and r.domainHeadCcgid <> ''
+            """)
+    List<OccupantRow> findDomainHeadOccupantByPositionId(@Param("positionId") String positionId);
+
     /** Projection for supervisor team agent filter options. */
     interface TeamAgentRow {
         String getEmpCcgid();

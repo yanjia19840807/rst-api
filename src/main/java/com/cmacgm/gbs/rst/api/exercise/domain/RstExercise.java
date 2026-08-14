@@ -228,16 +228,30 @@ public class RstExercise {
     }
 
     /**
-     * Reopens the Exercise after Return/Withdraw: clears Official pointer, clears validatedAt,
-     * and sets workflow status to {@code IN_PROGRESS} for Supervisor editing.
+     * Reopens the Exercise after Return: sets {@code RETURNED} for Supervisor editing
+     * while keeping the Official Scenario pointer.
      *
      * @param actorUserId actor
      * @param now update timestamp
      */
     public void markReturned(UUID actorUserId, Instant now) {
-        this.officialScenarioId = null;
+        reopenForEditing(actorUserId, now, "RETURNED");
+    }
+
+    /**
+     * Reopens the Exercise after Withdraw: returns to {@code IN_PROGRESS}
+     * while keeping the Official Scenario pointer.
+     *
+     * @param actorUserId actor
+     * @param now update timestamp
+     */
+    public void markWithdrawn(UUID actorUserId, Instant now) {
+        reopenForEditing(actorUserId, now, "IN_PROGRESS");
+    }
+
+    private void reopenForEditing(UUID actorUserId, Instant now, String status) {
         this.validatedAt = null;
-        this.workflowStatus = "IN_PROGRESS";
+        this.workflowStatus = status;
         this.updatedAt = now;
         this.updatedBy = actorUserId;
     }
@@ -286,7 +300,7 @@ public class RstExercise {
     }
 
     /**
-     * Returns whether Submit is allowed (has Official Scenario and not yet submitted).
+     * Returns whether Submit is allowed (has Official Scenario and is editable).
      *
      * @return true when Official exists and status is still editable
      */

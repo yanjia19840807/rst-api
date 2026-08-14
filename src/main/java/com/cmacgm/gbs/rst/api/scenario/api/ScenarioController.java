@@ -42,7 +42,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/supervisor/exercises/{exerciseId}/scenarios")
-@PreAuthorize("hasRole('SUPERVISOR')")
+@PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
 public class ScenarioController {
 
     private final ScenarioService scenarios;

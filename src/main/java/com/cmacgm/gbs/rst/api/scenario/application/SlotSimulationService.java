@@ -25,11 +25,9 @@ import jakarta.validation.constraints.NotNull;
 
 import com.cmacgm.gbs.rst.api.associateddata.application.AssociatedDataService.ShiftRequest;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseCalendar;
-import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseShift;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeSlotInput;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseShiftRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeSlotInputRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
@@ -41,6 +39,7 @@ import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WeekendCode;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SlotMath;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SlotMath.SlaQueue;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
+import com.cmacgm.gbs.rst.api.scenario.domain.ScenarioShift;
 import com.cmacgm.gbs.rst.api.scenario.domain.SimulationRun;
 import com.cmacgm.gbs.rst.api.scenario.domain.SlotSimulationResult;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
@@ -64,7 +63,6 @@ public class SlotSimulationService {
     private final SimulationRunRepository simulationRuns;
     private final SlotSimulationResultRepository slotResults;
     private final ExerciseVolumeSlotInputRepository slotVolumes;
-    private final ExerciseShiftRepository shifts;
     private final ExerciseTeamSetupRepository teamSetups;
     private final CycleTimeBaselineRepository baselines;
     private final ExerciseCalendarRepository calendars;
@@ -79,7 +77,6 @@ public class SlotSimulationService {
             SimulationRunRepository simulationRuns,
             SlotSimulationResultRepository slotResults,
             ExerciseVolumeSlotInputRepository slotVolumes,
-            ExerciseShiftRepository shifts,
             ExerciseTeamSetupRepository teamSetups,
             CycleTimeBaselineRepository baselines,
             ExerciseCalendarRepository calendars,
@@ -89,7 +86,6 @@ public class SlotSimulationService {
         this.simulationRuns = simulationRuns;
         this.slotResults = slotResults;
         this.slotVolumes = slotVolumes;
-        this.shifts = shifts;
         this.teamSetups = teamSetups;
         this.baselines = baselines;
         this.calendars = calendars;
@@ -97,7 +93,7 @@ public class SlotSimulationService {
     }
 
     /**
-     * Previews slot simulation using request-body shifts (not persisted, does not putShifts).
+     * Previews slot simulation using request-body shifts (not persisted).
      */
     @Transactional(readOnly = true)
     public SlotSimulationView previewSlot(
@@ -108,7 +104,7 @@ public class SlotSimulationService {
                     "shifts-required",
                     "At least one shift is required before slot simulation.");
         }
-        List<ExerciseShift> draftShifts = toDraftShifts(exerciseId, ownerId, request.shifts());
+        List<SlotShift> draftShifts = toSlotShifts(request.shifts());
         Context ctx = loadContext(ownerId, exerciseId, scenarioId, draftShifts);
         Instant now = clock.instant();
         SimulationRun run = SimulationRun.accepted(
@@ -126,7 +122,7 @@ public class SlotSimulationService {
     }
 
     /**
-     * @deprecated Prefer {@link #previewSlot}; no longer persists and reads DB shifts.
+     * @deprecated Prefer {@link #previewSlot}; no longer persists and reads scenario shifts.
      */
     @Transactional(readOnly = true)
     public SlotSimulationView runSlot(UUID ownerId, UUID exerciseId, UUID scenarioId) {
@@ -191,10 +187,8 @@ public class SlotSimulationService {
         slotResults.saveAll(rows);
     }
 
-    private List<ExerciseShift> toDraftShifts(
-            UUID exerciseId, UUID ownerId, List<ShiftRequest> requests) {
-        Instant now = clock.instant();
-        List<ExerciseShift> draft = new ArrayList<>(requests.size());
+    private List<SlotShift> toSlotShifts(List<ShiftRequest> requests) {
+        List<SlotShift> draft = new ArrayList<>(requests.size());
         for (ShiftRequest request : requests) {
             if (request.startTime() == null) {
                 throw new ApiException(
@@ -202,7 +196,7 @@ public class SlotSimulationService {
                         "shift-start-required",
                         "Shift start time is required.");
             }
-            if (request.durationMinutes() <= 0) {
+            if (request.durationMinutes() == null || request.durationMinutes().signum() <= 0) {
                 throw new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "shift-duration-invalid",
@@ -214,18 +208,27 @@ public class SlotSimulationService {
                         "shift-headcount-invalid",
                         "Shift headcount must be zero or greater.");
             }
-            draft.add(ExerciseShift.create(
-                    exerciseId,
+            draft.add(new SlotShift(
                     request.shiftNo(),
                     request.startTime(),
                     request.durationMinutes(),
                     request.headcount(),
-                    request.worksOnWeekend(),
-                    ownerId,
-                    now));
+                    request.worksOnWeekend()));
         }
-        draft.sort(Comparator.comparing(ExerciseShift::getShiftNo));
+        draft.sort(Comparator.comparing(SlotShift::shiftNo));
         return draft;
+    }
+
+    private static List<SlotShift> toSlotShifts(Scenario scenario) {
+        return scenario.getShifts().stream()
+                .sorted(Comparator.comparing(ScenarioShift::getShiftNo))
+                .map(shift -> new SlotShift(
+                        shift.getShiftNo(),
+                        shift.getStartTime(),
+                        shift.getDurationMinutes(),
+                        shift.getHeadcount(),
+                        shift.isWorksOnWeekend()))
+                .toList();
     }
 
     /**
@@ -233,8 +236,8 @@ public class SlotSimulationService {
      */
     @Transactional(readOnly = true)
     public SlotSimulationView getLatest(UUID ownerId, UUID exerciseId, UUID scenarioId) {
-        exercises.requireOwned(ownerId, exerciseId);
-        scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
+        exercises.requireReadable(ownerId, exerciseId);
+        Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
         SimulationRun run = simulationRuns
@@ -275,8 +278,7 @@ public class SlotSimulationService {
         BigDecimal tatOnPeriod = SlotMath.tat(outsideSum, manualSum);
         BigDecimal actualVs = SlotMath.actualVsTheoretical(capacitySum, manualSum);
 
-        List<ExerciseShift> shiftRows =
-                shifts.findByExerciseIdAndDeletedAtIsNullOrderByShiftNoAsc(exerciseId);
+        List<SlotShift> shiftRows = toSlotShifts(scenario);
         ExerciseTeamSetup team = teamSetups.findById(exerciseId).orElse(null);
         ExerciseCalendar calendar = calendars.findById(exerciseId).orElse(null);
         String weekendCode = calendar != null && calendar.getWeekendCode() != null
@@ -305,15 +307,15 @@ public class SlotSimulationService {
 
     private Map<String, List<BigDecimal>> rebuildShiftSeries(
             List<SlotSimulationResult> rows,
-            List<ExerciseShift> shiftRows,
+            List<SlotShift> shiftRows,
             String weekendCode) {
         Map<String, List<BigDecimal>> series = new LinkedHashMap<>();
         if (shiftRows.isEmpty()) {
             series.put("total", rows.stream().map(r -> nz(r.getShiftFte())).toList());
             return series;
         }
-        for (ExerciseShift shift : shiftRows) {
-            series.put("shift" + shift.getShiftNo(), new ArrayList<>(rows.size()));
+        for (SlotShift shift : shiftRows) {
+            series.put("shift" + shift.shiftNo(), new ArrayList<>(rows.size()));
         }
         WeekendCode weekend = WeekendCode.parse(weekendCode);
         for (SlotSimulationResult row : rows) {
@@ -322,15 +324,15 @@ public class SlotSimulationService {
             LocalTime slotStartLocal = row.getSlotStartAt().atZone(zone).toLocalTime();
             LocalTime slotEndLocal = row.getSlotEndAt().atZone(zone).toLocalTime();
             boolean weekendDay = weekend.days().contains(day.getDayOfWeek());
-            for (ExerciseShift shift : shiftRows) {
+            for (SlotShift shift : shiftRows) {
                 boolean covers = SlotMath.withinShift(
                         slotStartLocal,
                         slotEndLocal,
-                        shift.getStartTime(),
-                        shift.getDurationMinutes());
+                        shift.startTime(),
+                        shift.durationMinutes());
                 BigDecimal contrib = SlotMath.shiftContribution(
-                        weekendDay, shift.isWorksOnWeekend(), covers, shift.getHeadcount());
-                series.get("shift" + shift.getShiftNo()).add(contrib);
+                        weekendDay, shift.worksOnWeekend(), covers, shift.headcount());
+                series.get("shift" + shift.shiftNo()).add(contrib);
             }
         }
         return series;
@@ -358,8 +360,8 @@ public class SlotSimulationService {
         List<BigDecimal> shiftFteSeries = new ArrayList<>(volumes.size());
         List<BigDecimal> tatSeries = new ArrayList<>(volumes.size());
         Map<Short, List<BigDecimal>> perShift = new LinkedHashMap<>();
-        for (ExerciseShift shift : ctx.shifts()) {
-            perShift.put(shift.getShiftNo(), new ArrayList<>(volumes.size()));
+        for (SlotShift shift : ctx.shifts()) {
+            perShift.put(shift.shiftNo(), new ArrayList<>(volumes.size()));
         }
 
         WeekendCode weekend = WeekendCode.parse(ctx.weekendCode());
@@ -387,15 +389,15 @@ public class SlotSimulationService {
             BigDecimal theoretical = SlotMath.theoreticalFte(manual, cases);
 
             BigDecimal shiftTotal = BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
-            for (ExerciseShift shift : ctx.shifts()) {
+            for (SlotShift shift : ctx.shifts()) {
                 boolean covers = SlotMath.withinShift(
                         slotStartLocal,
                         slotEndLocal,
-                        shift.getStartTime(),
-                        shift.getDurationMinutes());
+                        shift.startTime(),
+                        shift.durationMinutes());
                 BigDecimal contrib = SlotMath.shiftContribution(
-                        weekendDay, shift.isWorksOnWeekend(), covers, shift.getHeadcount());
-                perShift.get(shift.getShiftNo()).add(contrib);
+                        weekendDay, shift.worksOnWeekend(), covers, shift.headcount());
+                perShift.get(shift.shiftNo()).add(contrib);
                 shiftTotal = shiftTotal.add(contrib);
             }
 
@@ -447,7 +449,7 @@ public class SlotSimulationService {
     }
 
     private Context loadContext(
-            UUID ownerId, UUID exerciseId, UUID scenarioId, List<ExerciseShift> overrideShifts) {
+            UUID ownerId, UUID exerciseId, UUID scenarioId, List<SlotShift> overrideShifts) {
         RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
         exercises.requireEditable(exercise);
         Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
@@ -468,9 +470,9 @@ public class SlotSimulationService {
                     "slot-volume-required",
                     "Slot volume inputs are required before slot simulation.");
         }
-        List<ExerciseShift> shiftRows = overrideShifts != null
+        List<SlotShift> shiftRows = overrideShifts != null
                 ? overrideShifts
-                : shifts.findByExerciseIdAndDeletedAtIsNullOrderByShiftNoAsc(exerciseId);
+                : toSlotShifts(scenario);
         if (shiftRows.isEmpty()) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
@@ -498,7 +500,8 @@ public class SlotSimulationService {
                 ? team.getAutomationRatio() : BigDecimal.ZERO;
         BigDecimal cycleTime = requirePositive(baseline.getMedianSeconds(), "Cycle time");
         String weekendCode = calendar.getWeekendCode() != null ? calendar.getWeekendCode() : "SAT_SUN";
-        int slaMinutes = team.getSlaTurnaroundMinutes() != null ? team.getSlaTurnaroundMinutes() : 0;
+        BigDecimal slaMinutes = team.getSlaTurnaroundMinutes() != null
+                ? team.getSlaTurnaroundMinutes() : BigDecimal.ZERO;
 
         return new Context(
                 volumes,
@@ -576,14 +579,22 @@ public class SlotSimulationService {
 
     private record Context(
             List<ExerciseVolumeSlotInput> volumes,
-            List<ExerciseShift> shifts,
+            List<SlotShift> shifts,
             BigDecimal automationRatio,
             BigDecimal availabilityRatio,
             BigDecimal cycleTimeSeconds,
             String weekendCode,
             String slaType,
-            int slaTurnaroundMinutes,
+            BigDecimal slaTurnaroundMinutes,
             BigDecimal slaTargetRatio) {
+    }
+
+    private record SlotShift(
+            short shiftNo,
+            LocalTime startTime,
+            BigDecimal durationMinutes,
+            BigDecimal headcount,
+            boolean worksOnWeekend) {
     }
 
     private record Computed(

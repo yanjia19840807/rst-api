@@ -20,6 +20,14 @@ public interface SubmissionRepository extends JpaRepository<Submission, UUID> {
     Optional<Submission> findByOfficialPackageId(UUID officialPackageId);
 
     /**
+     * Finds submissions for the given Official Packages.
+     *
+     * @param officialPackageIds package ids
+     * @return submissions
+     */
+    List<Submission> findByOfficialPackageIdIn(Collection<UUID> officialPackageIds);
+
+    /**
      * Lists submissions in the given statuses, newest first.
      *
      * @param statuses status filter

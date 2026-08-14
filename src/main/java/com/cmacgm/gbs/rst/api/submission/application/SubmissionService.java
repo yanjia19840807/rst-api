@@ -6,15 +6,23 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
+import com.cmacgm.gbs.rst.api.identity.domain.AppUser;
+import com.cmacgm.gbs.rst.api.identity.persistence.AppUserRepository;
 import com.cmacgm.gbs.rst.api.official.application.OfficialPackageService;
 import com.cmacgm.gbs.rst.api.official.domain.OfficialPackage;
 import com.cmacgm.gbs.rst.api.official.persistence.OfficialPackageRepository;
@@ -24,7 +32,9 @@ import com.cmacgm.gbs.rst.api.scenario.persistence.ValidationResultRepository;
 import com.cmacgm.gbs.rst.api.submission.domain.Submission;
 import com.cmacgm.gbs.rst.api.submission.domain.SubmissionScope;
 import com.cmacgm.gbs.rst.api.submission.persistence.SubmissionRepository;
-import com.cmacgm.gbs.rst.api.workflow.application.DevWorkflowRouter;
+import com.cmacgm.gbs.rst.api.approval.application.ApprovalWorkspaceAssembler;
+import com.cmacgm.gbs.rst.api.approval.application.ApprovalWorkspaceView;
+import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
 import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowAction;
 import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowInstance;
 import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowStepAssignment;
@@ -47,7 +57,9 @@ public class SubmissionService {
     private final ValidationResultRepository validations;
     private final ScenarioRepository scenarios;
     private final WorkflowInstanceRepository workflows;
-    private final DevWorkflowRouter workflowRouter;
+    private final WorkflowRouter workflowRouter;
+    private final ApprovalWorkspaceAssembler workspaceAssembler;
+    private final AppUserRepository users;
     private final Clock clock;
 
     /**
@@ -61,7 +73,9 @@ public class SubmissionService {
      * @param validations validation repository
      * @param scenarios scenario repository
      * @param workflows workflow repository
-     * @param workflowRouter Manager assignee router
+     * @param workflowRouter Timesheet position router
+     * @param workspaceAssembler Approval tab workspace (completed / read-only)
+     * @param users user repository for display names
      * @param clock clock
      */
     public SubmissionService(
@@ -73,7 +87,9 @@ public class SubmissionService {
             ValidationResultRepository validations,
             ScenarioRepository scenarios,
             WorkflowInstanceRepository workflows,
-            DevWorkflowRouter workflowRouter,
+            WorkflowRouter workflowRouter,
+            ApprovalWorkspaceAssembler workspaceAssembler,
+            AppUserRepository users,
             Clock clock) {
         this.exercises = exercises;
         this.exerciseRepository = exerciseRepository;
@@ -84,6 +100,8 @@ public class SubmissionService {
         this.scenarios = scenarios;
         this.workflows = workflows;
         this.workflowRouter = workflowRouter;
+        this.workspaceAssembler = workspaceAssembler;
+        this.users = users;
         this.clock = clock;
     }
 
@@ -114,9 +132,10 @@ public class SubmissionService {
      * Submits the current Official Package into Manager approval.
      *
      * <p>Inputs: Official package, optional remarks, optional idempotency request id.
-     * Intent: persist validation findings, submission + scopes, workflow instance/step1/action,
-     * package SUBMITTED, Exercise UNDER_REVIEW + submitted_at.
-     * Failure: missing Official / routing assignee, or SEVERE failures without remarks.
+     * Intent: first submit creates submission + workflow; after Return/Withdraw the same
+     * submission and workflow are reopened at Manager step 1 (history stays continuous).
+     * Failure: missing Official / routing assignee, SEVERE failures without remarks,
+     * or resubmit before Save Official.
      *
      * @param ownerId Supervisor id
      * @param exerciseId Exercise id
@@ -133,11 +152,6 @@ public class SubmissionService {
                     "Exercise must have an Official Scenario and be editable to submit.");
         }
         OfficialPackage pkg = officialPackages.requireCurrent(exerciseId);
-        Submission existing = submissions.findByOfficialPackageId(pkg.getId()).orElse(null);
-        if (existing != null) {
-            return submittedDetails(ownerId, exerciseId);
-        }
-
         Instant now = clock.instant();
         UUID requestId = request.requestId() == null ? UUID.randomUUID() : request.requestId();
         List<ValidationFinding> findings =
@@ -151,9 +165,118 @@ public class SubmissionService {
                     "SEVERE validation failures require remarks before Submit.");
         }
 
+        Submission existing = submissions.findByOfficialPackageId(pkg.getId()).orElse(null);
+        if (existing == null) {
+            Submission leftover = findReopenableSubmission(exerciseId);
+            if (leftover != null) {
+                throw new ApiException(
+                        HttpStatus.CONFLICT,
+                        "save-official-required",
+                        "Save Official to continue the existing approval before Submit.");
+            }
+        } else if (existing.isAwaitingReview()) {
+            return submittedDetails(ownerId, exerciseId);
+        } else if ("RETURNED".equals(existing.getStatus()) || "ARCHIVED".equals(existing.getStatus())) {
+            if (!"CREATED".equals(pkg.getStatus())) {
+                throw new ApiException(
+                        HttpStatus.CONFLICT,
+                        "save-official-required",
+                        "Save Official after Return before Submit.");
+            }
+            return reopenSubmission(ownerId, exercise, pkg, existing, request.remarks(), requestId, now);
+        } else {
+            return submittedDetails(ownerId, exerciseId);
+        }
+
         String code = "SUB-" + exercise.getExerciseCode();
         Submission submission = Submission.createAwaitingManager(
                 pkg.getId(), code, request.remarks(), ownerId, now);
+        attachScopes(exercise, submission);
+        submissions.save(submission);
+
+        String supervisorPositionId = exercise.getToolkitSnapshot() == null
+                ? null
+                : exercise.getToolkitSnapshot().getSupervisorPositionId();
+        WorkflowRouter.RoutedStep manager = workflowRouter.resolveManager(supervisorPositionId);
+        String scopeHash = sha256(submission.getId() + "|scopes|" + submission.getScopes().size());
+        WorkflowInstance workflow = WorkflowInstance.start(submission.getId(), now);
+        workflow.addStep(WorkflowStepAssignment.readyManager(
+                manager.occupantUserId(), manager.positionId(), scopeHash, now));
+        workflow.addAction(WorkflowAction.submit(
+                ownerId,
+                request.remarks(),
+                "{\"scopeCount\":" + submission.getScopes().size() + "}",
+                requestId,
+                now));
+        workflows.save(workflow);
+
+        pkg.markSubmitted();
+        packageRepository.save(pkg);
+        exercise.markSubmitted(ownerId, now);
+        exerciseRepository.save(exercise);
+
+        return toDetails(exercise, pkg, submission, workflow);
+    }
+
+    private SubmittedDetailsView reopenSubmission(
+            UUID ownerId,
+            RstExercise exercise,
+            OfficialPackage pkg,
+            Submission submission,
+            String remarks,
+            UUID requestId,
+            Instant now) {
+        WorkflowInstance workflow = workflows.findBySubmissionId(submission.getId())
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        "workflow-not-found",
+                        "No workflow exists for this submission."));
+        if (workflow.findActionByRequestId(requestId).isPresent()) {
+            return toDetails(exercise, pkg, submission, workflow);
+        }
+
+        submission.clearScopes();
+        submissions.saveAndFlush(submission);
+        attachScopes(exercise, submission);
+        submission.reopenAwaitingManager(remarks, ownerId, now);
+        submissions.save(submission);
+
+        String supervisorPositionId = exercise.getToolkitSnapshot() == null
+                ? null
+                : exercise.getToolkitSnapshot().getSupervisorPositionId();
+        WorkflowRouter.RoutedStep manager = workflowRouter.resolveManager(supervisorPositionId);
+        String scopeHash = sha256(submission.getId() + "|scopes|" + submission.getScopes().size());
+        workflow.reopenAtManager(WorkflowStepAssignment.readyManager(
+                manager.occupantUserId(), manager.positionId(), scopeHash, now));
+        workflow.addAction(WorkflowAction.submit(
+                ownerId,
+                remarks,
+                "{\"scopeCount\":" + submission.getScopes().size() + "}",
+                requestId,
+                now));
+        workflows.save(workflow);
+
+        pkg.markSubmitted();
+        packageRepository.save(pkg);
+        exercise.markSubmitted(ownerId, now);
+        exerciseRepository.save(exercise);
+        return toDetails(exercise, pkg, submission, workflow);
+    }
+
+    private Submission findReopenableSubmission(UUID exerciseId) {
+        List<OfficialPackage> all = packageRepository.findByExerciseId(exerciseId);
+        if (all.isEmpty()) {
+            return null;
+        }
+        return submissions.findByOfficialPackageIdIn(
+                        all.stream().map(OfficialPackage::getId).toList())
+                .stream()
+                .filter(row -> "RETURNED".equals(row.getStatus()) || "ARCHIVED".equals(row.getStatus()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private void attachScopes(RstExercise exercise, Submission submission) {
         for (ExerciseSharedKpiLine line : exercise.getSharedKpiLines()) {
             String scopeKey = sha256(
                     line.getCenter() + "|" + line.getSite() + "|" + line.getDomain() + "|"
@@ -172,45 +295,32 @@ public class SubmissionService {
                     line.getCarrier(),
                     line.getCustomerCountry()));
         }
-        submissions.save(submission);
-
-        UUID managerId = workflowRouter.resolveManagerAssignee();
-        String scopeHash = sha256(submission.getId() + "|scopes|" + submission.getScopes().size());
-        WorkflowInstance workflow = WorkflowInstance.start(submission.getId(), now);
-        workflow.addStep(WorkflowStepAssignment.ready(
-                (short) 1, "MANAGER", managerId, scopeHash, now));
-        workflow.addAction(WorkflowAction.submit(
-                ownerId,
-                request.remarks(),
-                "{\"scopeCount\":" + submission.getScopes().size() + "}",
-                requestId,
-                now));
-        workflows.save(workflow);
-
-        pkg.markSubmitted();
-        packageRepository.save(pkg);
-        exercise.markSubmitted(ownerId, now);
-        exerciseRepository.save(exercise);
-
-        return toDetails(exercise, pkg, submission, workflow);
     }
 
     /**
-     * Returns Submitted Details for an Exercise that has been submitted.
-     *
-     * @param ownerId Supervisor id
-     * @param exerciseId Exercise id
-     * @return submitted details
+     * Returns Submitted Details for the latest package that actually has a submission.
+     * A newer unsubmitted Official Package (created after Return) is ignored.
      */
     @Transactional(readOnly = true)
     public SubmittedDetailsView submittedDetails(UUID ownerId, UUID exerciseId) {
         RstExercise exercise = exercises.requireOwned(ownerId, exerciseId);
-        OfficialPackage pkg = officialPackages.requireCurrent(exerciseId);
-        Submission submission = submissions.findByOfficialPackageId(pkg.getId())
+        List<OfficialPackage> packages = packageRepository.findByExerciseId(exerciseId);
+        if (packages.isEmpty()) {
+            throw new ApiException(
+                    HttpStatus.NOT_FOUND,
+                    "official-package-not-found",
+                    "No Official Package found for this Exercise.");
+        }
+        Map<UUID, OfficialPackage> byId = packages.stream()
+                .collect(Collectors.toMap(OfficialPackage::getId, Function.identity()));
+        Submission submission = submissions.findByOfficialPackageIdIn(byId.keySet()).stream()
+                .max(Comparator.comparingInt(row ->
+                        byId.get(row.getOfficialPackageId()).getPackageVersion()))
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
                         "submission-not-found",
                         "No submission exists for this Exercise."));
+        OfficialPackage pkg = byId.get(submission.getOfficialPackageId());
         WorkflowInstance workflow = workflows.findBySubmissionId(submission.getId())
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
@@ -267,19 +377,34 @@ public class SubmissionService {
         String scenarioName = scenarios.findById(pkg.getScenarioId())
                 .map(s -> s.getName())
                 .orElse(null);
+        Map<UUID, String> displayNames = displayNames(workflow);
         List<ScopeView> scopes = submission.getScopes().stream()
                 .map(s -> new ScopeView(
                         s.getScopeLevel(), s.getCenter(), s.getSite(), s.getDomain(),
                         s.getPl3Code(), s.getCarrier(), s.getCustomerCountry()))
                 .toList();
+        String supervisorPositionId = exercise.getToolkitSnapshot() == null
+                ? null
+                : exercise.getToolkitSnapshot().getSupervisorPositionId();
         List<StepView> steps = workflow.getSteps().stream()
-                .map(s -> new StepView(
-                        s.getStepNo(), s.getRequiredRoleCode(), s.getAssigneeUserId(),
-                        s.getRoutingStatus()))
+                .map(s -> toStepView(s, displayNames, supervisorPositionId))
                 .toList();
         List<ActionView> actions = workflow.getActions().stream()
-                .map(a -> new ActionView(a.getActionType(), a.getRequestId()))
+                .map(a -> new ActionView(
+                        a.getStepNo(),
+                        a.getActionType(),
+                        a.getActorUserId(),
+                        a.getActorRoleCode(),
+                        displayNames.get(a.getActorUserId()),
+                        a.getComments(),
+                        a.getActionAt(),
+                        a.getRequestId()))
                 .toList();
+        String requiredRole = workflow.findCurrentReadyStep()
+                .map(WorkflowStepAssignment::getRequiredRoleCode)
+                .orElseGet(() -> roleForStep(workflow.getCurrentStep()));
+        ApprovalWorkspaceView workspace = workspaceAssembler.completed(
+                submission, workflow, exercise, null, displayNames);
         return new SubmittedDetailsView(
                 exercise.getId(),
                 exercise.getExerciseCode(),
@@ -293,12 +418,69 @@ public class SubmissionService {
                 submission.getSubmissionCode(),
                 submission.getStatus(),
                 submission.getCurrentStep(),
+                requiredRole,
                 submission.getRemarks(),
                 scopes,
                 workflow.getId(),
                 workflow.getStatus(),
                 steps,
-                actions);
+                actions,
+                workspace);
+    }
+
+    private StepView toStepView(
+            WorkflowStepAssignment step,
+            Map<UUID, String> displayNames,
+            String supervisorPositionId) {
+        String positionId = hasText(step.getAssigneePositionId())
+                ? step.getAssigneePositionId()
+                : workflowRouter.positionIdOrNull(supervisorPositionId, step.getRequiredRoleCode());
+        String liveName = workflowRouter.occupantName(step.getRequiredRoleCode(), positionId);
+        String name = liveName != null
+                ? liveName
+                : (step.getAssigneeUserId() == null ? null : displayNames.get(step.getAssigneeUserId()));
+        return new StepView(
+                step.getStepNo(),
+                step.getRequiredRoleCode(),
+                step.getAssigneeUserId(),
+                positionId,
+                name,
+                step.getRoutingStatus());
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private Map<UUID, String> displayNames(WorkflowInstance workflow) {
+        Set<UUID> ids = new HashSet<>();
+        workflow.getSteps().forEach(s -> {
+            if (s.getAssigneeUserId() != null) {
+                ids.add(s.getAssigneeUserId());
+            }
+        });
+        workflow.getActions().forEach(a -> {
+            if (a.getActorUserId() != null) {
+                ids.add(a.getActorUserId());
+            }
+        });
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return users.findAllById(ids).stream()
+                .collect(Collectors.toMap(AppUser::getId, AppUser::getDisplayName));
+    }
+
+    private static String roleForStep(Short step) {
+        if (step == null) {
+            return null;
+        }
+        return switch (step) {
+            case 1 -> "MANAGER";
+            case 2 -> "CDH";
+            case 3 -> "LTH";
+            default -> null;
+        };
     }
 
     private static ValidationFinding toFinding(ValidationResult result) {
@@ -344,12 +526,14 @@ public class SubmissionService {
             String submissionCode,
             String submissionStatus,
             Short currentStep,
+            String requiredRole,
             String remarks,
             List<ScopeView> scopes,
             UUID workflowInstanceId,
             String workflowStatusLabel,
             List<StepView> steps,
-            List<ActionView> actions) {
+            List<ActionView> actions,
+            ApprovalWorkspaceView workspace) {
     }
 
     /** Submission scope view. */
@@ -360,10 +544,23 @@ public class SubmissionService {
 
     /** Workflow step view. */
     public record StepView(
-            short stepNo, String requiredRoleCode, UUID assigneeUserId, String routingStatus) {
+            short stepNo,
+            String requiredRoleCode,
+            UUID assigneeUserId,
+            String assigneePositionId,
+            String assigneeDisplayName,
+            String routingStatus) {
     }
 
     /** Workflow action view. */
-    public record ActionView(String actionType, UUID requestId) {
+    public record ActionView(
+            short stepNo,
+            String actionType,
+            UUID actorUserId,
+            String actorRoleCode,
+            String actorDisplayName,
+            String comments,
+            Instant actionAt,
+            UUID requestId) {
     }
 }

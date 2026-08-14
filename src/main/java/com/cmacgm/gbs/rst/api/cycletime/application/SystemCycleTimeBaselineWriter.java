@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.ExerciseTmsSessionRepository;
@@ -26,17 +25,14 @@ public final class SystemCycleTimeBaselineWriter {
 
     private final CycleTimeBaselineRepository baselines;
     private final ExerciseTmsSessionRepository exerciseTmsSessions;
-    private final ExerciseTeamSetupRepository teamSetups;
     private final Clock clock;
 
     public SystemCycleTimeBaselineWriter(
             CycleTimeBaselineRepository baselines,
             ExerciseTmsSessionRepository exerciseTmsSessions,
-            ExerciseTeamSetupRepository teamSetups,
             Clock clock) {
         this.baselines = baselines;
         this.exerciseTmsSessions = exerciseTmsSessions;
-        this.teamSetups = teamSetups;
         this.clock = clock;
     }
 
@@ -70,10 +66,6 @@ public final class SystemCycleTimeBaselineWriter {
         BigDecimal median = medianOf(includedValues);
         baselines.save(CycleTimeBaseline.createSystem(
                 exerciseId, median, includedValues.size(), actorUserId, now));
-        teamSetups.findById(exerciseId).ifPresent(setup -> {
-            setup.recalculateDerived(median);
-            teamSetups.save(setup);
-        });
     }
 
     public static List<Double> includedSecondsPerUnit(List<ExerciseTmsSessionRow> rows) {
@@ -90,11 +82,11 @@ public final class SystemCycleTimeBaselineWriter {
         return values;
     }
 
-    public static Double secondsPerUnit(Integer volume, long netDurationSeconds) {
-        if (volume == null || volume <= 0) {
+    public static Double secondsPerUnit(BigDecimal volume, long netDurationSeconds) {
+        if (volume == null || volume.signum() <= 0) {
             return null;
         }
-        return (double) netDurationSeconds / volume;
+        return netDurationSeconds / volume.doubleValue();
     }
 
     public static BigDecimal medianOf(List<Double> values) {

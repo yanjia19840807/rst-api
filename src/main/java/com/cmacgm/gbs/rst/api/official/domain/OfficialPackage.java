@@ -146,11 +146,38 @@ public class OfficialPackage {
     }
 
     /**
-     * Marks package returned and clears the current flag.
+     * Marks package returned. The package stays current so the Supervisor can
+     * recalc, save, and resubmit the same snapshot row.
      */
     public void markReturned() {
         this.status = "RETURNED";
-        this.current = false;
+    }
+
+    /**
+     * Replaces forecast/simulation snapshot in place after Return (same package, same submission).
+     */
+    public void replaceSnapshot(
+            UUID scenarioId,
+            UUID forecastRunId,
+            UUID monthlySimulationRunId,
+            UUID dailySimulationRunId,
+            UUID slotSimulationRunId,
+            UUID timesheetSyncRunId,
+            UUID cycleTimeBaselineId,
+            String inputHash,
+            String packageHash) {
+        this.scenarioId = scenarioId;
+        this.forecastRunId = forecastRunId;
+        this.monthlySimulationRunId = monthlySimulationRunId;
+        this.dailySimulationRunId = dailySimulationRunId;
+        this.slotSimulationRunId = slotSimulationRunId;
+        this.timesheetSyncRunId = timesheetSyncRunId;
+        this.cycleTimeBaselineId = cycleTimeBaselineId;
+        this.inputHash = inputHash;
+        this.packageHash = packageHash;
+        this.status = "CREATED";
+        this.current = true;
+        this.sections.clear();
     }
 
     /**

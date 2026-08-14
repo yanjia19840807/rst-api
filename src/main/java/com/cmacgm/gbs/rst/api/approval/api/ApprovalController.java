@@ -1,6 +1,6 @@
 package com.cmacgm.gbs.rst.api.approval.api;
 
-import java.util.List;
+import java.time.LocalDate;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
@@ -8,10 +8,12 @@ import jakarta.validation.constraints.NotBlank;
 
 import com.cmacgm.gbs.rst.api.approval.application.ApprovalService;
 import com.cmacgm.gbs.rst.api.approval.application.ApprovalService.ApprovalDetailView;
-import com.cmacgm.gbs.rst.api.approval.application.ApprovalService.ApprovalQueueItem;
+import com.cmacgm.gbs.rst.api.approval.application.ApprovalService.ApprovalQueueView;
 import com.cmacgm.gbs.rst.api.approval.application.ApprovalService.ApproveRequest;
+import com.cmacgm.gbs.rst.api.approval.application.ApprovalService.QueueQuery;
 import com.cmacgm.gbs.rst.api.approval.application.ApprovalService.ReturnRequest;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,28 +44,68 @@ public class ApprovalController {
     }
 
     /**
-     * Lists submissions awaiting review, or archived when {@code archived=true}.
+     * Lists submissions awaiting a Timesheet position the caller occupies, or completed
+     * by that position when {@code completed=true}. The User who acted is on each action.
      *
      * @param status optional status filter; default {@code AWAITING} for open queue
-     * @param archived when true, list VALIDATED/RETURNED/ARCHIVED
-     * @return queue items
+     * @param completed when true, list tasks this position has already Approved or Returned
+     * @param exerciseCode optional exercise code contains
+     * @param toolkitName optional exact toolkit name
+     * @param pl3Name optional exact PL3 name
+     * @param submittedFrom optional submitted date from
+     * @param submittedTo optional submitted date to
+     * @param completedFrom optional position-completion date from
+     * @param completedTo optional position-completion date to
+     * @param decision optional Approved / Returned (this position's decision)
+     * @param principal current approver
+     * @return filtered queue, filter options, and awaiting metrics
      */
     @GetMapping("/queue")
-    public List<ApprovalQueueItem> queue(
+    public ApprovalQueueView queue(
             @RequestParam(required = false, defaultValue = "AWAITING") String status,
-            @RequestParam(required = false, defaultValue = "false") boolean archived) {
-        return approvals.queue(status, archived);
+            @RequestParam(required = false, defaultValue = "false") boolean completed,
+            @RequestParam(required = false) String exerciseCode,
+            @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false) String pl3Name,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedFrom,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedTo,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate completedFrom,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate completedTo,
+            @RequestParam(required = false) String decision,
+            @AuthenticationPrincipal RstPrincipal principal) {
+        return approvals.queue(principal, new QueueQuery(
+                status,
+                completed,
+                exerciseCode,
+                toolkitName,
+                pl3Name,
+                submittedFrom,
+                submittedTo,
+                completedFrom,
+                completedTo,
+                decision));
     }
 
     /**
-     * Returns review detail for a submission.
+     * Returns review detail for a submission, including {@code canDecide} for the caller's position.
      *
+     * @param principal current approver
      * @param submissionId submission id
      * @return review detail
      */
     @GetMapping("/{submissionId}")
-    public ApprovalDetailView detail(@PathVariable UUID submissionId) {
-        return approvals.detail(submissionId);
+    public ApprovalDetailView detail(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID submissionId) {
+        return approvals.detail(principal, submissionId);
     }
 
     /**
@@ -81,7 +123,7 @@ public class ApprovalController {
             @RequestBody(required = false) ApproveBody request) {
         ApproveBody payload = request == null ? new ApproveBody(null, null) : request;
         return approvals.approve(
-                principal.userId(),
+                principal,
                 submissionId,
                 new ApproveRequest(payload.comments(), payload.requestId()));
     }
@@ -100,7 +142,7 @@ public class ApprovalController {
             @PathVariable UUID submissionId,
             @Valid @RequestBody ReturnBody request) {
         return approvals.returnToSupervisor(
-                principal.userId(),
+                principal,
                 submissionId,
                 new ReturnRequest(request.comments(), request.requestId()));
     }
