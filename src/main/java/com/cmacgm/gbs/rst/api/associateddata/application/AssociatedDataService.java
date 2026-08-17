@@ -369,14 +369,14 @@ public class AssociatedDataService {
             for (HolidayRequest holiday : request.holidays()) {
                 holidays.save(ExerciseHoliday.create(
                         exerciseId, holiday.holidayDate(), holiday.holidayName(),
-                        holiday.holidayType(), null, ownerCcgid, now));
+                        holiday.holidayType(), ownerCcgid, now));
             }
         }
         return getCalendar(ownerCcgid, exerciseId);
     }
 
     /**
-     * Re-applies the published Center holiday template for the Exercise sizing year.
+     * Re-applies the Center holiday template for the Exercise sizing year.
      * Preserves CUSTOM holidays.
      */
     @Transactional
@@ -790,6 +790,6 @@ public class AssociatedDataService {
     private HolidayView toHoliday(ExerciseHoliday holiday) {
         return new HolidayView(
                 holiday.getId(), holiday.getHolidayDate(), holiday.getHolidayName(),
-                holiday.getHolidayType(), holiday.getWorkingDayOverride());
+                holiday.getHolidayType());
     }
 }

@@ -24,6 +24,7 @@ import com.cmacgm.gbs.rst.api.associateddata.domain.SupportWorkloadMath;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSupportItemRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
@@ -38,6 +39,7 @@ import com.cmacgm.gbs.rst.api.submission.domain.Submission;
 import com.cmacgm.gbs.rst.api.submission.persistence.SubmissionRepository;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
 import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowAction;
+import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowAging;
 import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowInstance;
 import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowStepAssignment;
 import com.cmacgm.gbs.rst.api.workflow.persistence.WorkflowInstanceRepository;
@@ -118,10 +120,12 @@ public class ApprovalService {
      *
      * @param principal current approver
      * @param query tab, status, and field filters
-     * @return filtered rows, filter options, and awaiting-me metrics
+     * @param page 1-based page
+     * @param pageSize page size
+     * @return one page of filtered rows, filter options, and awaiting-me metrics
      */
     @Transactional(readOnly = true)
-    public ApprovalQueueView queue(RstPrincipal principal, QueueQuery query) {
+    public ApprovalQueueView queue(RstPrincipal principal, QueueQuery query, int page, int pageSize) {
         if (principal == null) {
             throw new ApiException(
                     HttpStatus.UNAUTHORIZED, "unauthenticated", "Authentication is required.");
@@ -142,8 +146,13 @@ public class ApprovalService {
         List<ApprovalQueueItem> items = source.stream()
                 .filter(item -> matches(item, query))
                 .toList();
+        PageResponse<ApprovalQueueItem> paged = PageResponse.ofList(items, page, pageSize);
         return new ApprovalQueueView(
-                items,
+                paged.items(),
+                paged.page(),
+                paged.pageSize(),
+                paged.total(),
+                paged.totalPages(),
                 toMetrics(awaiting),
                 distinctNames(source, ApprovalQueueItem::toolkitName),
                 distinctNames(source, ApprovalQueueItem::pl3Name));
@@ -587,7 +596,7 @@ public class ApprovalService {
                 ? displayName(last.getActorCcgid(), names)
                 : supervisor;
         Instant previousStepAt = last != null ? last.getActionAt() : submission.getSubmittedAt();
-        Instant agingFrom = previous != null ? previous.getActionAt() : submission.getSubmittedAt();
+        Instant agingFrom = WorkflowAging.currentStepStartedAt(workflow, submission.getSubmittedAt());
         int agingDays = daysBetween(agingFrom, clock.instant());
 
         Instant archivedAt = archivedAt(exercise, workflow, submission);
@@ -674,13 +683,7 @@ public class ApprovalService {
     }
 
     private static WorkflowAction previousReviewAction(WorkflowInstance workflow) {
-        if (workflow == null) {
-            return null;
-        }
-        return workflow.getActions().stream()
-                .filter(action -> "APPROVE".equals(action.getActionType()))
-                .max(Comparator.comparing(WorkflowAction::getActionAt))
-                .orElse(null);
+        return WorkflowAging.lastApprove(workflow);
     }
 
     private static WorkflowAction lastCompletedAction(WorkflowInstance workflow) {

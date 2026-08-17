@@ -576,9 +576,6 @@ public class SizingSimulationService {
         List<LocalDate> holidayDates = new ArrayList<>();
         for (ExerciseHoliday holiday : holidays
                 .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)) {
-            if (Boolean.TRUE.equals(holiday.getWorkingDayOverride())) {
-                continue;
-            }
             holidayDates.add(holiday.getHolidayDate());
         }
         int year = calendar.getBaselineYear() != null

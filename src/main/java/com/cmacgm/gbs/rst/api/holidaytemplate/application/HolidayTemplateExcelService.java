@@ -95,7 +95,7 @@ public class HolidayTemplateExcelService {
                 if (!keys.add(key)) {
                     throw conflict("invalid-excel", "Row " + (i + 1) + ": duplicate holiday_date + holiday_name.");
                 }
-                rows.add(new LineDraft(date, name.trim(), null));
+                rows.add(new LineDraft(date, name.trim()));
             }
             return rows;
         } catch (ApiException ex) {
@@ -140,6 +140,6 @@ public class HolidayTemplateExcelService {
         return new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, code, message);
     }
 
-    public record LineDraft(LocalDate holidayDate, String holidayName, Boolean workingDayOverride) {
+    public record LineDraft(LocalDate holidayDate, String holidayName) {
     }
 }

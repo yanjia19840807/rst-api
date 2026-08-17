@@ -517,9 +517,6 @@ public class ForecastOrchestrationService {
         List<LocalDate> dates = new ArrayList<>();
         for (ExerciseHoliday holiday : holidays
                 .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)) {
-            if (Boolean.TRUE.equals(holiday.getWorkingDayOverride())) {
-                continue;
-            }
             dates.add(holiday.getHolidayDate());
         }
         return dates;

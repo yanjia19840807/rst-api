@@ -30,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import com.cmacgm.gbs.rst.api.cycletime.api.dto.BaselineFileView;
 import com.cmacgm.gbs.rst.api.cycletime.api.dto.BaselineView;
+import com.cmacgm.gbs.rst.api.cycletime.api.dto.CycleTimeChartView;
 import com.cmacgm.gbs.rst.api.cycletime.api.dto.ManualBaselineRequest;
 import com.cmacgm.gbs.rst.api.cycletime.api.dto.PatchTmsSessionRequest;
 import com.cmacgm.gbs.rst.api.cycletime.api.dto.PatchTmsSessionResult;
@@ -174,6 +175,23 @@ public class CycleTimeService {
     }
 
     /**
+     * SYSTEM Cycle Time control chart from included Embedded TMS samples.
+     *
+     * @param ownerCcgid Supervisor CCGID
+     * @param exerciseId Exercise id
+     * @return daily median / rolling median / control-limit series
+     */
+    @Transactional(readOnly = true)
+    public CycleTimeChartView controlChart(String ownerCcgid, UUID exerciseId) {
+        RstExercise exercise = exercises.requireReadable(ownerCcgid, exerciseId);
+        boolean combineByReference = exercise.getToolkitSnapshot() != null
+                && exercise.getToolkitSnapshot().isCombineSubtasksTime();
+        List<ExerciseTmsSessionRow> rows = exerciseTmsSessions.findAllSessionRowsByExerciseId(exerciseId);
+        return CycleTimeControlChartMath.build(
+                SystemCycleTimeBaselineWriter.includedDatedSamples(rows, combineByReference));
+    }
+
+    /**
      * Lists TMS sessions selected into the Exercise Embedded TMS population.
      *
      * <p>Z-Score uses mean / sample stdev over all linked sessions with a valid cycle time
@@ -205,8 +223,10 @@ public class CycleTimeService {
      * Updates whether a linked TMS session is included in the SYSTEM median population.
      *
      * <p>Exclusion does not require a reason. If the active baseline is SYSTEM (or missing),
-     * recalculates a new SYSTEM median from remaining included samples. MANUAL baselines keep
-     * their median; only the selection set changes. Leaving zero valid included samples is rejected.
+     * recalculates a new SYSTEM median from remaining included samples. When Combined Subtasks
+     * Time is frozen on the Toolkit, samples with the same Reference are summed first.
+     * MANUAL baselines keep their median; only the selection set changes. Leaving zero valid
+     * included samples is rejected.
      *
      * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
@@ -233,8 +253,10 @@ public class CycleTimeService {
 
             List<ExerciseTmsSessionRow> allRows =
                     exerciseTmsSessions.findAllSessionRowsByExerciseId(exerciseId);
+            boolean combineByReference = exercise.getToolkitSnapshot() != null
+                    && exercise.getToolkitSnapshot().isCombineSubtasksTime();
             List<Double> includedValues =
-                    SystemCycleTimeBaselineWriter.includedSecondsPerUnit(allRows);
+                    SystemCycleTimeBaselineWriter.includedSecondsPerUnit(allRows, combineByReference);
             if (includedValues.isEmpty()) {
                 throw new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,

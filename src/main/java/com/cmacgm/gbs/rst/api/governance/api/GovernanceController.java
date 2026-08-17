@@ -1,29 +1,61 @@
 package com.cmacgm.gbs.rst.api.governance.api;
 
-import java.util.List;
-import java.util.Map;
+import java.time.LocalDate;
 
-import com.cmacgm.gbs.rst.api.governance.application.GovernancePrototypeService;
+import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingQuery;
+import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingView;
+import com.cmacgm.gbs.rst.api.governance.api.dto.DashboardView;
+import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryListQuery;
+import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryListView;
+import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryQuery;
+import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryView;
+import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationWorkflowQuery;
+import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationWorkflowView;
+import com.cmacgm.gbs.rst.api.governance.application.BenchmarkingService;
+import com.cmacgm.gbs.rst.api.governance.application.DashboardService;
+import com.cmacgm.gbs.rst.api.governance.application.RstRepositoryService;
+import com.cmacgm.gbs.rst.api.governance.application.SupportRepositoryService;
+import com.cmacgm.gbs.rst.api.governance.application.ValidationWorkflowService;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Prototype governance report endpoints (static mock payloads for LTH/HO UI).
+ * Governance report endpoints for LTH / HO.
  */
 @RestController
 @RequestMapping("/api/v1/governance")
 public class GovernanceController {
 
-    private final GovernancePrototypeService governance;
+    private final DashboardService dashboardService;
+    private final RstRepositoryService rstRepository;
+    private final SupportRepositoryService supportRepositoryService;
+    private final ValidationWorkflowService validationWorkflowService;
+    private final BenchmarkingService benchmarkingService;
 
     /**
      * Creates the governance controller.
      *
-     * @param governance prototype data service
+     * @param dashboardService completion, aging, and YTD capacity
+     * @param rstRepository APPROVED Shared KPI repository
+     * @param supportRepositoryService APPROVED Production Support repository
+     * @param validationWorkflowService UNDER_REVIEW stuck-exercise list
+     * @param benchmarkingService same-PL3 benchmarking
      */
-    public GovernanceController(GovernancePrototypeService governance) {
-        this.governance = governance;
+    public GovernanceController(
+            DashboardService dashboardService,
+            RstRepositoryService rstRepository,
+            SupportRepositoryService supportRepositoryService,
+            ValidationWorkflowService validationWorkflowService,
+            BenchmarkingService benchmarkingService) {
+        this.dashboardService = dashboardService;
+        this.rstRepository = rstRepository;
+        this.supportRepositoryService = supportRepositoryService;
+        this.validationWorkflowService = validationWorkflowService;
+        this.benchmarkingService = benchmarkingService;
     }
 
     /**
@@ -32,47 +64,173 @@ public class GovernanceController {
      * @return dashboard payload
      */
     @GetMapping("/dashboard")
-    public Map<String, Object> dashboard() {
-        return governance.dashboard();
+    @PreAuthorize("hasAnyRole('LTH','HO')")
+    public DashboardView dashboard() {
+        return dashboardService.build();
     }
 
     /**
-     * RST repository Shared KPI rows.
+     * RST repository Shared KPI rows for APPROVED Exercises, filtered on the server.
      *
-     * @return repository rows
+     * @param exerciseCode optional exercise code contains
+     * @param center optional exact GBS Center
+     * @param domain optional exact domain
+     * @param pl3Name optional exact PL3 name
+     * @param toolkitName optional exact toolkit name
+     * @param submittedFrom optional submitted date from
+     * @param submittedTo optional submitted date to
+     * @param page 1-based page
+     * @param pageSize page size
+     * @return one page of filtered rows and unfiltered dropdown options
      */
     @GetMapping("/repository")
-    public List<Map<String, Object>> repository() {
-        return governance.repository();
+    @PreAuthorize("hasAnyRole('LTH','HO')")
+    public RepositoryListView repository(
+            @RequestParam(required = false) String exerciseCode,
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String domain,
+            @RequestParam(required = false) String pl3Name,
+            @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedFrom,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedTo,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        return rstRepository.listApproved(
+                new RepositoryListQuery(
+                        exerciseCode,
+                        center,
+                        domain,
+                        pl3Name,
+                        toolkitName,
+                        submittedFrom,
+                        submittedTo),
+                page,
+                pageSize);
     }
 
     /**
-     * Support repository summary and granular rows.
+     * Support repository activity rows for APPROVED Exercises, filtered on the server.
+     * Totals and category mix follow the filtered rows; dropdown options do not shrink.
      *
-     * @return support repository payload
+     * @param center optional exact GBS Center
+     * @param category optional exact standard category
+     * @param toolkitName optional exact toolkit name
+     * @param submittedFrom optional submitted date from
+     * @param submittedTo optional submitted date to
+     * @param page 1-based page
+     * @param pageSize page size
+     * @return one page of filtered rows, summaries from all matches, and unfiltered dropdown options
      */
     @GetMapping("/support-repository")
-    public Map<String, Object> supportRepository() {
-        return governance.supportRepository();
+    @PreAuthorize("hasAnyRole('LTH','HO')")
+    public SupportRepositoryView supportRepository(
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedFrom,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedTo,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        return supportRepositoryService.listApproved(
+                new SupportRepositoryQuery(
+                        center,
+                        category,
+                        toolkitName,
+                        submittedFrom,
+                        submittedTo),
+                page,
+                pageSize);
     }
 
     /**
-     * Same-PL3 benchmarking payload.
+     * Same-PL3 benchmarking for APPROVED Shared KPI lines. Cards follow all filtered
+     * matches; dropdown options do not shrink. Rows require {@code pl3Code}.
      *
-     * @return benchmarking payload
+     * @param center optional exact GBS Center
+     * @param domain optional exact domain
+     * @param pl1 optional exact PL1
+     * @param pl2 optional exact PL2
+     * @param pl3Code required exact PL3 code for like-for-like rows
+     * @param submittedFrom optional submitted date from
+     * @param submittedTo optional submitted date to
+     * @param page 1-based page
+     * @param pageSize page size
+     * @return one page of rows, cards from all matches, and unfiltered dropdown options
      */
     @GetMapping("/benchmarking")
-    public Map<String, Object> benchmarking() {
-        return governance.benchmarking();
+    @PreAuthorize("hasAnyRole('LTH','HO')")
+    public BenchmarkingView benchmarking(
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String domain,
+            @RequestParam(required = false) String pl1,
+            @RequestParam(required = false) String pl2,
+            @RequestParam(required = false) String pl3Code,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedFrom,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedTo,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        return benchmarkingService.listApproved(
+                new BenchmarkingQuery(center, domain, pl1, pl2, pl3Code, submittedFrom, submittedTo),
+                page,
+                pageSize);
     }
 
     /**
-     * Validation workflow stuck-exercise rows.
+     * UNDER_REVIEW Exercises waiting on Manager / CDH / LTH, filtered on the server.
+     * Dropdown options do not shrink with the current filters.
      *
-     * @return validation workflow rows
+     * @param exerciseCode optional exercise code contains
+     * @param center optional exact GBS Center
+     * @param domain optional exact domain
+     * @param pl3Name optional exact PL3 name
+     * @param toolkitName optional exact toolkit name
+     * @param agingMinDays optional minimum current-step wait in days
+     * @param submittedFrom optional submitted date from
+     * @param submittedTo optional submitted date to
+     * @param page 1-based page
+     * @param pageSize page size
+     * @return one page of filtered rows and unfiltered dropdown options
      */
     @GetMapping("/validation-workflow")
-    public List<Map<String, Object>> validationWorkflow() {
-        return governance.validationWorkflow();
+    @PreAuthorize("hasRole('LTH')")
+    public ValidationWorkflowView validationWorkflow(
+            @RequestParam(required = false) String exerciseCode,
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String domain,
+            @RequestParam(required = false) String pl3Name,
+            @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false) Integer agingMinDays,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedFrom,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedTo,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        return validationWorkflowService.listUnderReview(
+                new ValidationWorkflowQuery(
+                        exerciseCode,
+                        center,
+                        domain,
+                        pl3Name,
+                        toolkitName,
+                        agingMinDays,
+                        submittedFrom,
+                        submittedTo),
+                page,
+                pageSize);
     }
 }

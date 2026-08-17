@@ -77,8 +77,10 @@ public class SupervisorExerciseController {
      * @param submittedTo optional submitted date to
      * @param archivedFrom optional archived date from
      * @param archivedTo optional archived date to
+     * @param page 1-based page
+     * @param pageSize page size
      * @param principal authenticated Supervisor
-     * @return filtered exercises and filter options
+     * @return one page of filtered exercises and filter options
      */
     @GetMapping
     @PreAuthorize("hasRole('SUPERVISOR')")
@@ -109,6 +111,8 @@ public class SupervisorExerciseController {
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
                     LocalDate archivedTo,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize,
             @AuthenticationPrincipal RstPrincipal principal) {
         return service.list(principal.ccgid(), new ExerciseListQuery(
                 tab,
@@ -124,7 +128,7 @@ public class SupervisorExerciseController {
                 submittedFrom,
                 submittedTo,
                 archivedFrom,
-                archivedTo));
+                archivedTo), page, pageSize);
     }
 
     /**

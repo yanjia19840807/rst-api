@@ -35,12 +35,24 @@ public class SupervisorToolkitController {
         this.toolkits = toolkits;
     }
 
+    /**
+     * Lists Supervisor-managed Toolkits.
+     *
+     * @param principal authenticated Supervisor
+     * @param name optional toolkit name contains
+     * @param pl3Name optional exact PL3 name
+     * @param page 1-based page
+     * @param pageSize page size
+     * @return one page of toolkits and unfiltered PL3 options
+     */
     @GetMapping
     public ToolkitListView managed(
             @AuthenticationPrincipal RstPrincipal principal,
             @RequestParam(required = false) String name,
-            @RequestParam(required = false) String pl3Name) {
-        return toolkits.supervisorToolkitList(principal.ccgid(), name, pl3Name);
+            @RequestParam(required = false) String pl3Name,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        return toolkits.supervisorToolkitList(principal.ccgid(), name, pl3Name, page, pageSize);
     }
 
     @GetMapping("/{id}")

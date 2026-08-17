@@ -52,7 +52,7 @@ public class TmsSessionQueryService {
     public TmsSessionResponse current(String agentCcgid) {
         var now = clock.instant();
         return sessionRepository.findFirstByAgentCcgidAndStatusIn(
-                        agentCcgid, Set.of(TmsSessionStatus.RUNNING, TmsSessionStatus.PAUSED))
+                        agentCcgid, Set.of(TmsSessionStatus.RUNNING))
                 .map(session -> TmsSessionResponse.from(session, now))
                 .orElse(null);
     }

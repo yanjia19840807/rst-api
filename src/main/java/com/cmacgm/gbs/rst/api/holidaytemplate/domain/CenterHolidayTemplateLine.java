@@ -27,9 +27,6 @@ public class CenterHolidayTemplateLine {
     @Column(name = "holiday_name", nullable = false, length = 200)
     private String holidayName;
 
-    @Column(name = "is_working_day_override")
-    private Boolean workingDayOverride;
-
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -59,7 +56,6 @@ public class CenterHolidayTemplateLine {
             UUID templateId,
             LocalDate holidayDate,
             String holidayName,
-            Boolean workingDayOverride,
             String actorCcgid,
             Instant now) {
         CenterHolidayTemplateLine line = new CenterHolidayTemplateLine();
@@ -67,7 +63,6 @@ public class CenterHolidayTemplateLine {
         line.templateId = templateId;
         line.holidayDate = holidayDate;
         line.holidayName = holidayName;
-        line.workingDayOverride = workingDayOverride;
         line.createdAt = now;
         line.createdBy = actorCcgid;
         line.updatedAt = now;
@@ -86,6 +81,5 @@ public class CenterHolidayTemplateLine {
     public UUID getTemplateId() { return templateId; }
     public LocalDate getHolidayDate() { return holidayDate; }
     public String getHolidayName() { return holidayName; }
-    public Boolean getWorkingDayOverride() { return workingDayOverride; }
     public Instant getDeletedAt() { return deletedAt; }
 }

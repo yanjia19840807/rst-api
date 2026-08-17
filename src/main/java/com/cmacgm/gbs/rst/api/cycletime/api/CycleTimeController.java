@@ -9,6 +9,7 @@ import com.cmacgm.gbs.rst.api.cycletime.api.dto.ExerciseTmsSessionResponse;
 import com.cmacgm.gbs.rst.api.cycletime.application.CycleTimeService;
 import com.cmacgm.gbs.rst.api.cycletime.api.dto.BaselineFileView;
 import com.cmacgm.gbs.rst.api.cycletime.api.dto.BaselineView;
+import com.cmacgm.gbs.rst.api.cycletime.api.dto.CycleTimeChartView;
 import com.cmacgm.gbs.rst.api.cycletime.api.dto.ManualBaselineRequest;
 import com.cmacgm.gbs.rst.api.cycletime.api.dto.PatchTmsSessionRequest;
 import com.cmacgm.gbs.rst.api.cycletime.api.dto.PatchTmsSessionResult;
@@ -92,6 +93,19 @@ public class CycleTimeController {
     public BaselineView getActive(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
         return service.getActive(principal.ccgid(), exerciseId);
+    }
+
+    /**
+     * Returns the SYSTEM control-chart series for included TMS samples.
+     *
+     * @param principal authenticated Supervisor
+     * @param exerciseId Exercise id
+     * @return daily median, rolling median, and control limits
+     */
+    @GetMapping("/chart")
+    public CycleTimeChartView chart(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return service.controlChart(principal.ccgid(), exerciseId);
     }
 
     /**

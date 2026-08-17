@@ -1,5 +1,7 @@
 package com.cmacgm.gbs.rst.api.cycletime.persistence;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,6 +21,14 @@ public interface CycleTimeBaselineRepository extends JpaRepository<CycleTimeBase
      * @return optional active baseline
      */
     Optional<CycleTimeBaseline> findByExerciseIdAndActiveTrue(UUID exerciseId);
+
+    /**
+     * Finds active baselines for a set of Exercises.
+     *
+     * @param exerciseIds Exercise ids
+     * @return active baselines
+     */
+    List<CycleTimeBaseline> findByExerciseIdInAndActiveTrue(Collection<UUID> exerciseIds);
 
     /**
      * Deactivates the current active baseline for an Exercise (partial unique index safe).

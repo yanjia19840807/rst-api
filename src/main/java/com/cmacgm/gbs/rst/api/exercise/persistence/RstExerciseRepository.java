@@ -70,4 +70,54 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
             @Param("toolkitId") UUID toolkitId,
             @Param("statuses") Collection<String> statuses,
             Pageable pageable);
+
+    /**
+     * APPROVED Exercises for RST Repository, with Toolkit snapshot and Shared KPI lines.
+     *
+     * @return approved exercises
+     */
+    @EntityGraph(attributePaths = {"toolkitSnapshot", "sharedKpiLines"})
+    @Query("""
+            select e from RstExercise e
+            where e.deletedAt is null
+              and e.workflowStatus = 'APPROVED'
+            order by e.submittedAt desc, e.exerciseCode asc, e.id asc
+            """)
+    List<RstExercise> findApprovedRepositoryExercises();
+
+    /**
+     * APPROVED Exercises for Support Repository, with Toolkit snapshot only.
+     *
+     * @return approved exercises
+     */
+    @EntityGraph(attributePaths = {"toolkitSnapshot"})
+    @Query("""
+            select e from RstExercise e
+            where e.deletedAt is null
+              and e.workflowStatus = 'APPROVED'
+            order by e.submittedAt desc, e.exerciseCode asc, e.id asc
+            """)
+    List<RstExercise> findApprovedSupportRepositoryExercises();
+
+    /**
+     * UNDER_REVIEW Exercises for Validation Workflow, with Toolkit snapshot and Shared KPI lines.
+     *
+     * @return in-review exercises
+     */
+    @EntityGraph(attributePaths = {"toolkitSnapshot", "sharedKpiLines"})
+    @Query("""
+            select e from RstExercise e
+            where e.deletedAt is null
+              and e.workflowStatus = 'UNDER_REVIEW'
+            order by e.submittedAt desc, e.exerciseCode asc, e.id asc
+            """)
+    List<RstExercise> findUnderReviewValidationExercises();
+
+    /**
+     * Counts non-deleted Exercises in one workflow status.
+     *
+     * @param workflowStatus workflow status
+     * @return count
+     */
+    long countByDeletedAtIsNullAndWorkflowStatus(String workflowStatus);
 }

@@ -28,6 +28,7 @@ import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarReposit
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSupportItemRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.CreateExerciseRequest;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.CreateExerciseResult;
@@ -56,6 +57,7 @@ import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
 import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowAction;
+import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowAging;
 import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowInstance;
 import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowStepAssignment;
 import com.cmacgm.gbs.rst.api.workflow.persistence.WorkflowInstanceRepository;
@@ -165,10 +167,12 @@ public class ExerciseService {
      *
      * @param ownerCcgid Supervisor CCGID
      * @param query tab and field filters
-     * @return filtered rows and filter options for the current tab
+     * @param page 1-based page
+     * @param pageSize page size
+     * @return one page of filtered rows and filter options for the current tab
      */
     @Transactional(readOnly = true)
-    public ExerciseListView list(String ownerCcgid, ExerciseListQuery query) {
+    public ExerciseListView list(String ownerCcgid, ExerciseListQuery query, int page, int pageSize) {
         List<RstExercise> owned =
                 exercises.findByOwnerCcgidAndDeletedAtIsNullOrderByUpdatedAtDescIdAsc(ownerCcgid);
         Set<String> tabStatuses = tabStatuses(query.tab());
@@ -182,8 +186,13 @@ public class ExerciseService {
         List<ExerciseResponse> items = source.stream()
                 .filter(item -> matches(item, query))
                 .toList();
+        PageResponse<ExerciseResponse> paged = PageResponse.ofList(items, page, pageSize);
         return new ExerciseListView(
-                items,
+                paged.items(),
+                paged.page(),
+                paged.pageSize(),
+                paged.total(),
+                paged.totalPages(),
                 distinctNames(source, item -> item.snapshot().toolkit().name()),
                 distinctNames(source, item -> item.snapshot().toolkit().pl3Name()),
                 distinctNames(source, ExerciseResponse::currentReviewer));
@@ -428,6 +437,7 @@ public class ExerciseService {
         Integer agingDays = null;
         if ("UNDER_REVIEW".equals(exercise.getWorkflowStatus())
                 || "RETURNED".equals(exercise.getWorkflowStatus())) {
+            // UNDER_REVIEW: wait on the current READY step. RETURNED: wait since the return.
             Instant agingFrom = progress != null && progress.agingFrom() != null
                     ? progress.agingFrom()
                     : exercise.getSubmittedAt();
@@ -534,12 +544,13 @@ public class ExerciseService {
                     : firstNonBlank(
                             workflowRouter.occupantName(ready.getRequiredRoleCode(), positionId),
                             displayName(names, ready.getAssigneeCcgid()));
+            Instant agingFrom = WorkflowAging.currentStepStartedAt(workflow, exercise.getSubmittedAt());
             result.put(exercise.getId(), new ReviewProgress(
                     submission.getCurrentStep(),
                     role,
                     reviewer,
                     null,
-                    exercise.getSubmittedAt()));
+                    agingFrom));
         }
         return result;
     }

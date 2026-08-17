@@ -130,23 +130,23 @@ public class TmsSessionCommandService {
 
     private void ensureNoActiveSession(String agentCcgid) {
         if (sessionRepository.existsByAgentCcgidAndStatusIn(
-                agentCcgid, Set.of(TmsSessionStatus.RUNNING, TmsSessionStatus.PAUSED))) {
+                agentCcgid, Set.of(TmsSessionStatus.RUNNING))) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
                     "active-session-exists",
-                    "Complete or discard the current running/paused session before starting another.");
+                    "Pause or end the running session before starting another.");
         }
     }
 
     private void ensureNoOtherActiveSession(String agentCcgid, String currentSessionNo) {
         sessionRepository.findFirstByAgentCcgidAndStatusIn(
-                        agentCcgid, Set.of(TmsSessionStatus.RUNNING, TmsSessionStatus.PAUSED))
+                        agentCcgid, Set.of(TmsSessionStatus.RUNNING))
                 .filter(session -> !session.getSessionNo().equals(currentSessionNo))
                 .ifPresent(session -> {
                     throw new ApiException(
                             HttpStatus.CONFLICT,
                             "active-session-exists",
-                            "Another running/paused session already exists.");
+                            "Pause or end the running session before resuming another.");
                 });
     }
 

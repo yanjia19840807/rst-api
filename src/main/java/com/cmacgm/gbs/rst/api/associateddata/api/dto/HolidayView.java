@@ -7,6 +7,5 @@ import java.util.UUID;
  * Holiday response.
  */
 public record HolidayView(
-        UUID id, LocalDate holidayDate, String holidayName, String holidayType,
-        Boolean workingDayOverride) {
+        UUID id, LocalDate holidayDate, String holidayName, String holidayType) {
 }

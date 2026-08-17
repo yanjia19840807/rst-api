@@ -317,4 +317,51 @@ public interface TimesheetSnapshotRowRepository extends JpaRepository<TimesheetS
 
         String getEmpName();
     }
+
+    /**
+     * Distinct RST obligations in the ACTIVE snapshot: one Supervisor × PL3 per GBS Center.
+     * Domain is the min name when a key spans more than one domain.
+     *
+     * @return obligation rows
+     */
+    @Query("""
+            select r.center as center,
+                   min(r.domain) as domain,
+                   r.supervisorPositionId as supervisorPositionId,
+                   r.pl3Code as pl3Code
+            from TimesheetSnapshotRow r
+            where r.syncRun.status = 'ACTIVE'
+              and r.center is not null
+              and r.center <> ''
+              and r.supervisorPositionId is not null
+              and r.supervisorPositionId <> ''
+              and r.pl3Code is not null
+              and r.pl3Code <> ''
+            group by r.center, r.supervisorPositionId, r.pl3Code
+            order by r.center, r.supervisorPositionId, r.pl3Code
+            """)
+    List<DashboardObligationRow> findActiveDashboardObligations();
+
+    /**
+     * Sums Delivery HC across the ACTIVE Timesheet snapshot.
+     *
+     * @return total hc, or 0 when the snapshot is empty
+     */
+    @Query("""
+            select coalesce(sum(r.hc), 0)
+            from TimesheetSnapshotRow r
+            where r.syncRun.status = 'ACTIVE'
+            """)
+    BigDecimal sumActiveHeadcount();
+
+    /** One applicable dashboard unit from ACTIVE Timesheet. */
+    interface DashboardObligationRow {
+        String getCenter();
+
+        String getDomain();
+
+        String getSupervisorPositionId();
+
+        String getPl3Code();
+    }
 }

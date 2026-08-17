@@ -111,7 +111,8 @@ Spring Data uses 0-based pages internally.
 - `POST /api/v1/tms/sessions/{id}/end`
 - `POST /api/v1/tms/sessions/{id}/discard`
 
-The database and application enforce at most one combined `RUNNING`/`PAUSED` session per Agent.
+The database and application enforce at most one `RUNNING` session per Agent. Multiple `PAUSED`
+sessions are allowed; start and resume are blocked only while another session is already running.
 Starting a session revalidates Agent access against the ACTIVE Timesheet snapshot. Existing sessions
 remain operable if the next Timesheet snapshot changes access; their display fields are historical
 snapshots. Discard is a state transition and never physically deletes TMS history.

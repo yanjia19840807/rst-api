@@ -17,48 +17,41 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseCalendar;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseHoliday;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseHolidayRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateExcelService.LineDraft;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.CenterCountryDefaults;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.CenterHolidayTemplate;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.CenterHolidayTemplateLine;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.CenterHolidayTemplateSnapshot;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator;
 import com.cmacgm.gbs.rst.api.holidaytemplate.persistence.CenterHolidayTemplateLineRepository;
 import com.cmacgm.gbs.rst.api.holidaytemplate.persistence.CenterHolidayTemplateRepository;
-import com.cmacgm.gbs.rst.api.holidaytemplate.persistence.CenterHolidayTemplateSnapshotRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Center holiday template CRUD, publish/snapshot, Excel IO, and Exercise seeding.
+ * Center holiday template CRUD, Excel IO, and Exercise seeding.
+ * Save is immediately live; there is no draft / publish snapshot.
  */
 @Service
 public class HolidayTemplateService {
 
     private final CenterHolidayTemplateRepository templates;
     private final CenterHolidayTemplateLineRepository lines;
-    private final CenterHolidayTemplateSnapshotRepository snapshots;
     private final ExerciseCalendarRepository calendars;
     private final ExerciseHolidayRepository holidays;
     private final WorkingDaysCalculator workingDaysCalculator;
     private final HolidayTemplateExcelService excel;
-    private final ObjectMapper objectMapper = new ObjectMapper();
     private final Clock clock;
 
     public HolidayTemplateService(
             CenterHolidayTemplateRepository templates,
             CenterHolidayTemplateLineRepository lines,
-            CenterHolidayTemplateSnapshotRepository snapshots,
             ExerciseCalendarRepository calendars,
             ExerciseHolidayRepository holidays,
             WorkingDaysCalculator workingDaysCalculator,
@@ -66,7 +59,6 @@ public class HolidayTemplateService {
             Clock clock) {
         this.templates = templates;
         this.lines = lines;
-        this.snapshots = snapshots;
         this.calendars = calendars;
         this.holidays = holidays;
         this.workingDaysCalculator = workingDaysCalculator;
@@ -74,11 +66,24 @@ public class HolidayTemplateService {
         this.clock = clock;
     }
 
+    /**
+     * Lists holiday templates matching optional Center / year / status filters.
+     *
+     * @param center optional exact Center
+     * @param year optional year
+     * @param status unused compatibility filter (templates are always live)
+     * @param page 1-based page
+     * @param pageSize page size
+     * @return one page of summaries
+     */
     @Transactional(readOnly = true)
-    public List<TemplateSummary> list(String center, Short year, String status) {
-        return templates.search(emptyToNull(center), year, emptyToNull(status)).stream()
+    public PageResponse<TemplateSummary> list(
+            String center, Short year, String status, int page, int pageSize) {
+        List<TemplateSummary> items = templates.search(emptyToNull(center), year, emptyToNull(status))
+                .stream()
                 .map(this::toSummary)
                 .toList();
+        return PageResponse.ofList(items, page, pageSize);
     }
 
     @Transactional(readOnly = true)
@@ -100,7 +105,7 @@ public class HolidayTemplateService {
         }
         var defaults = CenterCountryDefaults.resolve(center);
         String weekend = optionalText(request.defaultWeekendCode(), defaults.weekendCode());
-        CenterHolidayTemplate template = CenterHolidayTemplate.createDraft(
+        CenterHolidayTemplate template = CenterHolidayTemplate.create(
                 center, year, weekend, request.sourceNote(), actorCcgid, now);
         templates.save(template);
         replaceLines(template.getId(), request.holidays(), year, actorCcgid, now);
@@ -112,32 +117,16 @@ public class HolidayTemplateService {
         Instant now = clock.instant();
         CenterHolidayTemplate template = requireTemplate(id);
         template.ensureEditable();
-        if (CenterHolidayTemplate.STATUS_PUBLISHED.equals(template.getStatus())) {
-            template.reopenDraft(actorCcgid, now);
-        }
         template.updateHeader(
                 optionalText(request.defaultWeekendCode(), template.getDefaultWeekendCode()),
                 request.sourceNote() != null ? request.sourceNote() : template.getSourceNote(),
                 actorCcgid,
                 now);
+        template.bumpVersion(actorCcgid, now);
         templates.save(template);
         if (request.holidays() != null) {
             replaceLines(template.getId(), request.holidays(), template.getYear(), actorCcgid, now);
         }
-        return get(template.getId());
-    }
-
-    @Transactional
-    public TemplateDetail publish(String actorCcgid, UUID id) {
-        Instant now = clock.instant();
-        CenterHolidayTemplate template = requireTemplate(id);
-        List<CenterHolidayTemplateLine> active = activeLines(template.getId());
-        if (active.isEmpty()) {
-            throw unprocessable("empty-template", "Publish requires at least one holiday line.");
-        }
-        template.markPublished(actorCcgid, now);
-        templates.save(template);
-        snapshots.save(CenterHolidayTemplateSnapshot.create(template, toLinesJson(active), actorCcgid, now));
         return get(template.getId());
     }
 
@@ -156,8 +145,7 @@ public class HolidayTemplateService {
     @Transactional(readOnly = true)
     public Optional<TemplateDetail> findPublishedByCenterYear(String center, short year) {
         return templates
-                .findByCenterIgnoreCaseAndYearAndStatusAndDeletedAtIsNull(
-                        center, year, CenterHolidayTemplate.STATUS_PUBLISHED)
+                .findByCenterIgnoreCaseAndYearAndDeletedAtIsNull(center, year)
                 .map(template -> toDetail(template, activeLines(template.getId())));
     }
 
@@ -165,8 +153,7 @@ public class HolidayTemplateService {
     public byte[] exportExcel(UUID id) {
         CenterHolidayTemplate template = requireTemplate(id);
         List<LineDraft> drafts = activeLines(template.getId()).stream()
-                .map(line -> new LineDraft(
-                        line.getHolidayDate(), line.getHolidayName(), line.getWorkingDayOverride()))
+                .map(line -> new LineDraft(line.getHolidayDate(), line.getHolidayName()))
                 .toList();
         return excel.exportLines(drafts);
     }
@@ -176,24 +163,24 @@ public class HolidayTemplateService {
         return excel.exportBlankTemplate();
     }
 
-    @Transactional
-    public TemplateDetail importExcel(String actorCcgid, UUID id, java.io.InputStream inputStream) {
-        CenterHolidayTemplate template = requireTemplate(id);
-        List<LineDraft> drafts = excel.parse(inputStream, template.getYear());
-        List<HolidayLineRequest> holidays = drafts.stream()
-                .map(d -> new HolidayLineRequest(d.holidayDate(), d.holidayName(), d.workingDayOverride()))
+    /**
+     * Parses holiday Excel into lines without persisting.
+     */
+    @Transactional(readOnly = true)
+    public List<HolidayLineView> parseExcel(short year, java.io.InputStream inputStream) {
+        if (year < 2000 || year > 2100) {
+            throw unprocessable("invalid-year", "year must be between 2000 and 2100.");
+        }
+        return excel.parse(inputStream, year).stream()
+                .map(d -> new HolidayLineView(null, d.holidayDate(), d.holidayName()))
                 .toList();
-        return update(actorCcgid, id, new UpdateTemplateRequest(
-                template.getDefaultWeekendCode(),
-                template.getSourceNote(),
-                holidays));
     }
 
     /**
-     * Seeds or refreshes an Exercise calendar from the published Center template for the sizing year.
+     * Seeds or refreshes an Exercise calendar from the Center template for the sizing year.
      * Existing CUSTOM holidays are preserved; BASELINE rows are replaced.
      *
-     * @return true when a published template was applied for the primary year
+     * @return true when a template was applied for the primary year
      */
     @Transactional
     public boolean applyPublishedTemplateToExercise(
@@ -209,7 +196,7 @@ public class HolidayTemplateService {
     }
 
     /**
-     * Applies published Center templates for all years in the Exercise window.
+     * Applies Center templates for all years in the Exercise window.
      * Working Days / Year are always computed for {@code primaryYear} only.
      */
     @Transactional
@@ -265,7 +252,6 @@ public class HolidayTemplateService {
                         exerciseId,
                         line.holidayDate(),
                         line.holidayName(),
-                        null,
                         line.sourceLineId(),
                         actorCcgid,
                         now));
@@ -297,13 +283,13 @@ public class HolidayTemplateService {
                     null,
                     actorCcgid,
                     now);
-            notices.add("No published holiday template for Center "
+            notices.add("No holiday template for Center "
                     + center + " / " + primaryYear
-                    + ". Create and Publish a template for that year, then Re-apply.");
+                    + ". Create a template for that year, then Re-apply.");
         }
         if (!missingYears.isEmpty()) {
             String missing = missingYears.stream().map(String::valueOf).collect(Collectors.joining(", "));
-            notices.add("Missing published holiday template(s) for year(s): " + missing + ".");
+            notices.add("Missing holiday template(s) for year(s): " + missing + ".");
         }
         if (years.size() > 1) {
             notices.add("Holiday lines merged for years "
@@ -316,7 +302,7 @@ public class HolidayTemplateService {
     }
 
     /**
-     * True when a newer published template exists than the one applied on the Exercise calendar.
+     * True when a newer Center template exists than the one applied on the Exercise calendar.
      */
     @Transactional(readOnly = true)
     public Optional<TemplateUpdateHint> findTemplateUpdate(UUID exerciseId, String center) {
@@ -343,9 +329,8 @@ public class HolidayTemplateService {
     }
 
     /**
-     * Resolves holiday lines to apply for a Center + year.
-     * Uses live PUBLISHED header lines, otherwise the latest publish snapshot
-     * (so Save-draft reopen does not block Apply).
+     * Resolves holiday lines to apply for a Center + year from the live template rows.
+     * Templates with no holiday lines are treated as missing.
      */
     private Optional<ResolvedPublishedTemplate> resolvePublishedTemplate(String center, Short year) {
         if (center == null || center.isBlank() || year == null) {
@@ -353,59 +338,23 @@ public class HolidayTemplateService {
         }
         Optional<CenterHolidayTemplate> header =
                 templates.findByCenterIgnoreCaseAndYearAndDeletedAtIsNull(center, year);
-        if (header.isPresent()
-                && CenterHolidayTemplate.STATUS_PUBLISHED.equals(header.get().getStatus())) {
-            CenterHolidayTemplate template = header.get();
-            List<ResolvedHolidayLine> resolved = activeLines(template.getId()).stream()
-                    .map(line -> new ResolvedHolidayLine(
-                            line.getId(), line.getHolidayDate(), line.getHolidayName()))
-                    .toList();
-            return Optional.of(new ResolvedPublishedTemplate(
-                    template.getId(),
-                    template.getVersion(),
-                    template.getDefaultWeekendCode(),
-                    resolved));
+        if (header.isEmpty()) {
+            return Optional.empty();
         }
-        return snapshots.findFirstByCenterIgnoreCaseAndYearOrderByVersionDesc(center, year)
-                .map(snapshot -> new ResolvedPublishedTemplate(
-                        snapshot.getTemplateId(),
-                        snapshot.getVersion(),
-                        snapshot.getDefaultWeekendCode(),
-                        parseSnapshotLines(snapshot.getLinesJson())));
-    }
-
-    private List<ResolvedHolidayLine> parseSnapshotLines(String linesJson) {
-        if (linesJson == null || linesJson.isBlank()) {
-            return List.of();
+        CenterHolidayTemplate template = header.get();
+        List<CenterHolidayTemplateLine> active = activeLines(template.getId());
+        if (active.isEmpty()) {
+            return Optional.empty();
         }
-        try {
-            List<Map<String, Object>> rows = objectMapper.readValue(
-                    linesJson, new TypeReference<List<Map<String, Object>>>() { });
-            List<ResolvedHolidayLine> result = new ArrayList<>();
-            for (Map<String, Object> row : rows) {
-                Object dateRaw = row.get("holidayDate");
-                Object nameRaw = row.get("holidayName");
-                if (dateRaw == null || nameRaw == null || String.valueOf(nameRaw).isBlank()) {
-                    continue;
-                }
-                UUID sourceId = null;
-                Object idRaw = row.get("id");
-                if (idRaw != null && !String.valueOf(idRaw).isBlank()) {
-                    try {
-                        sourceId = UUID.fromString(String.valueOf(idRaw));
-                    } catch (IllegalArgumentException ignored) {
-                        sourceId = null;
-                    }
-                }
-                result.add(new ResolvedHolidayLine(
-                        sourceId,
-                        LocalDate.parse(String.valueOf(dateRaw)),
-                        String.valueOf(nameRaw).trim()));
-            }
-            return result;
-        } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("Unable to parse holiday snapshot JSON", ex);
-        }
+        List<ResolvedHolidayLine> resolved = active.stream()
+                .map(line -> new ResolvedHolidayLine(
+                        line.getId(), line.getHolidayDate(), line.getHolidayName()))
+                .toList();
+        return Optional.of(new ResolvedPublishedTemplate(
+                template.getId(),
+                template.getVersion(),
+                template.getDefaultWeekendCode(),
+                resolved));
     }
 
     /**
@@ -429,11 +378,12 @@ public class HolidayTemplateService {
         int year = calendar.getBaselineYear() != null
                 ? calendar.getBaselineYear()
                 : LocalDate.now(clock).getYear();
-        List<LocalDate> nonWorking = nonWorkingDates(holidays
+        List<LocalDate> nonWorking = holidays
                 .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(calendar.getExerciseId())
                 .stream()
-                .map(h -> new HolidayDateFlag(h.getHolidayDate(), h.getWorkingDayOverride()))
-                .toList());
+                .map(ExerciseHoliday::getHolidayDate)
+                .filter(java.util.Objects::nonNull)
+                .toList();
         String weekend = calendar.getWeekendCode() != null ? calendar.getWeekendCode() : "SAT_SUN";
         return BigDecimal.valueOf(workingDaysCalculator.networkDays(year, weekend, nonWorking));
     }
@@ -470,7 +420,6 @@ public class HolidayTemplateService {
                     templateId,
                     holiday.holidayDate(),
                     holiday.holidayName().trim(),
-                    holiday.workingDayOverride(),
                     actorCcgid,
                     now));
         }
@@ -501,9 +450,10 @@ public class HolidayTemplateService {
     }
 
     private TemplateDetail toDetail(CenterHolidayTemplate template, List<CenterHolidayTemplateLine> active) {
-        List<LocalDate> nonWorking = nonWorkingDates(active.stream()
-                .map(l -> new HolidayDateFlag(l.getHolidayDate(), l.getWorkingDayOverride()))
-                .toList());
+        List<LocalDate> nonWorking = active.stream()
+                .map(CenterHolidayTemplateLine::getHolidayDate)
+                .filter(java.util.Objects::nonNull)
+                .toList();
         int workingDays = workingDaysCalculator.networkDays(
                 template.getYear(), template.getDefaultWeekendCode(), nonWorking);
         return new TemplateDetail(
@@ -521,37 +471,8 @@ public class HolidayTemplateService {
                         .map(line -> new HolidayLineView(
                                 line.getId(),
                                 line.getHolidayDate(),
-                                line.getHolidayName(),
-                                line.getWorkingDayOverride()))
+                                line.getHolidayName()))
                         .toList());
-    }
-
-    private String toLinesJson(List<CenterHolidayTemplateLine> active) {
-        List<Map<String, Object>> payload = active.stream()
-                .map(line -> {
-                    Map<String, Object> row = new LinkedHashMap<>();
-                    row.put("id", line.getId().toString());
-                    row.put("holidayDate", line.getHolidayDate().toString());
-                    row.put("holidayName", line.getHolidayName());
-                    row.put("workingDayOverride", line.getWorkingDayOverride());
-                    return row;
-                })
-                .toList();
-        try {
-            return objectMapper.writeValueAsString(payload);
-        } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("Unable to serialize holiday snapshot", ex);
-        }
-    }
-
-    private static List<LocalDate> nonWorkingDates(List<HolidayDateFlag> flags) {
-        List<LocalDate> dates = new ArrayList<>();
-        for (HolidayDateFlag flag : flags) {
-            if (flag.date() != null && !Boolean.TRUE.equals(flag.workingDayOverride())) {
-                dates.add(flag.date());
-            }
-        }
-        return dates;
     }
 
     private static String requireText(String value, String field) {
@@ -581,9 +502,6 @@ public class HolidayTemplateService {
         return new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, code, message);
     }
 
-    private record HolidayDateFlag(LocalDate date, Boolean workingDayOverride) {
-    }
-
     public record TemplateSummary(
             UUID id, String center, short year,
             String defaultWeekendCode, String status, int version, int holidayCount,
@@ -598,11 +516,11 @@ public class HolidayTemplateService {
     }
 
     public record HolidayLineView(
-            UUID id, LocalDate holidayDate, String holidayName, Boolean workingDayOverride) {
+            UUID id, LocalDate holidayDate, String holidayName) {
     }
 
     public record HolidayLineRequest(
-            LocalDate holidayDate, String holidayName, Boolean workingDayOverride) {
+            LocalDate holidayDate, String holidayName) {
     }
 
     public record CreateTemplateRequest(
@@ -615,11 +533,11 @@ public class HolidayTemplateService {
             List<HolidayLineRequest> holidays) {
     }
 
-    /** Result of applying one or more published Center templates to an Exercise. */
+    /** Result of applying one or more Center templates to an Exercise. */
     public record ApplyTemplatesResult(boolean primaryApplied, List<String> notices) {
     }
 
-    /** Hint that a newer published template is available for an in-progress Exercise. */
+    /** Hint that a newer Center template is available for an in-progress Exercise. */
     public record TemplateUpdateHint(
             UUID templateId, int publishedVersion, Integer appliedVersion, String message) {
     }

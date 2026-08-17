@@ -30,9 +30,6 @@ public class ExerciseHoliday {
     @Column(name = "holiday_type", nullable = false, length = 20)
     private String holidayType;
 
-    @Column(name = "is_working_day_override")
-    private Boolean workingDayOverride;
-
     @Column(name = "source_template_line_id")
     private UUID sourceTemplateLineId;
 
@@ -67,7 +64,6 @@ public class ExerciseHoliday {
      * @param holidayDate calendar date
      * @param holidayName display name
      * @param holidayType BASELINE or CUSTOM
-     * @param workingDayOverride optional working-day override
      * @param actorCcgid creating Supervisor
      * @param now creation timestamp
      * @return new holiday entity
@@ -77,7 +73,6 @@ public class ExerciseHoliday {
             LocalDate holidayDate,
             String holidayName,
             String holidayType,
-            Boolean workingDayOverride,
             String actorCcgid,
             Instant now) {
         ExerciseHoliday holiday = new ExerciseHoliday();
@@ -86,7 +81,6 @@ public class ExerciseHoliday {
         holiday.holidayDate = holidayDate;
         holiday.holidayName = holidayName;
         holiday.holidayType = holidayType;
-        holiday.workingDayOverride = workingDayOverride;
         holiday.createdAt = now;
         holiday.createdBy = actorCcgid;
         holiday.updatedAt = now;
@@ -101,12 +95,11 @@ public class ExerciseHoliday {
             UUID exerciseId,
             LocalDate holidayDate,
             String holidayName,
-            Boolean workingDayOverride,
             UUID sourceTemplateLineId,
             String actorCcgid,
             Instant now) {
         ExerciseHoliday holiday = create(
-                exerciseId, holidayDate, holidayName, "BASELINE", workingDayOverride, actorCcgid, now);
+                exerciseId, holidayDate, holidayName, "BASELINE", actorCcgid, now);
         holiday.sourceTemplateLineId = sourceTemplateLineId;
         return holiday;
     }
@@ -129,7 +122,6 @@ public class ExerciseHoliday {
     public LocalDate getHolidayDate() { return holidayDate; }
     public String getHolidayName() { return holidayName; }
     public String getHolidayType() { return holidayType; }
-    public Boolean getWorkingDayOverride() { return workingDayOverride; }
     public UUID getSourceTemplateLineId() { return sourceTemplateLineId; }
     public Instant getDeletedAt() { return deletedAt; }
 }

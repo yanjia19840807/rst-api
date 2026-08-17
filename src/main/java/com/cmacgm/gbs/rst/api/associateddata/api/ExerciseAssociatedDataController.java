@@ -211,7 +211,7 @@ public class ExerciseAssociatedDataController {
     }
 
     /**
-     * Re-applies the published Center holiday template for this Exercise (keeps CUSTOM rows).
+     * Re-applies the Center holiday template for this Exercise (keeps CUSTOM rows).
      */
     @PostMapping("/calendar/reapply-template")
     public ReapplyCalendarResult reapplyHolidayTemplate(

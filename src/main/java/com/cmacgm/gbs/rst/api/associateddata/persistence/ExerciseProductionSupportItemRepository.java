@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.associateddata.persistence;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -17,6 +18,14 @@ public interface ExerciseProductionSupportItemRepository extends JpaRepository<E
      * @return active items
      */
     List<ExerciseProductionSupportItem> findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(UUID exerciseId);
+
+    /**
+     * Lists active support items for many Exercises.
+     *
+     * @param exerciseIds Exercise ids
+     * @return active items
+     */
+    List<ExerciseProductionSupportItem> findByExerciseIdInAndDeletedAtIsNull(Collection<UUID> exerciseIds);
 
     /**
      * Finds an active support item owned by an Exercise.

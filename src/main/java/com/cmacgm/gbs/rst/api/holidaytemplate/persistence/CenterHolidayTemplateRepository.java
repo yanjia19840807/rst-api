@@ -33,7 +33,4 @@ public interface CenterHolidayTemplateRepository extends JpaRepository<CenterHol
 
     Optional<CenterHolidayTemplate> findByCenterIgnoreCaseAndYearAndDeletedAtIsNull(
             String center, short year);
-
-    Optional<CenterHolidayTemplate> findByCenterIgnoreCaseAndYearAndStatusAndDeletedAtIsNull(
-            String center, short year, String status);
 }

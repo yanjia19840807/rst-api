@@ -11,6 +11,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.tms.persistence.TmsSessionRepository;
@@ -62,8 +63,19 @@ public class ToolkitService {
                 .toList();
     }
 
+    /**
+     * Lists Supervisor-managed Toolkits, filtered on the server.
+     *
+     * @param ccgid Supervisor CCGID
+     * @param name optional toolkit name contains
+     * @param pl3Name optional exact PL3 name
+     * @param page 1-based page
+     * @param pageSize page size
+     * @return one page of rows and unfiltered PL3 options
+     */
     @Transactional(readOnly = true)
-    public ToolkitListView supervisorToolkitList(String ccgid, String name, String pl3Name) {
+    public ToolkitListView supervisorToolkitList(
+            String ccgid, String name, String pl3Name, int page, int pageSize) {
         List<Toolkit> scoped = scopedSupervisorToolkits(ccgid);
         List<String> pl3Names = scoped.stream()
                 .map(Toolkit::getPl3Name)
@@ -79,7 +91,14 @@ public class ToolkitService {
                 .filter(toolkit -> pl3Query.isEmpty() || pl3Query.equals(toolkit.getPl3Name()))
                 .map(ToolkitResponse::from)
                 .toList();
-        return new ToolkitListView(items, pl3Names);
+        PageResponse<ToolkitResponse> paged = PageResponse.ofList(items, page, pageSize);
+        return new ToolkitListView(
+                paged.items(),
+                paged.page(),
+                paged.pageSize(),
+                paged.total(),
+                paged.totalPages(),
+                pl3Names);
     }
 
     @Transactional(readOnly = true)

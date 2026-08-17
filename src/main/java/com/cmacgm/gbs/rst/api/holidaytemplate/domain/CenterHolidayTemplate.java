@@ -14,7 +14,6 @@ import jakarta.persistence.Version;
 @Table(name = "center_holiday_template")
 public class CenterHolidayTemplate {
 
-    public static final String STATUS_DRAFT = "DRAFT";
     public static final String STATUS_PUBLISHED = "PUBLISHED";
 
     @Id
@@ -70,9 +69,9 @@ public class CenterHolidayTemplate {
     }
 
     /**
-     * Creates a draft template header.
+     * Creates a live template header (immediately available for Exercise Apply).
      */
-    public static CenterHolidayTemplate createDraft(
+    public static CenterHolidayTemplate create(
             String center,
             short year,
             String defaultWeekendCode,
@@ -86,9 +85,11 @@ public class CenterHolidayTemplate {
         template.defaultWeekendCode = defaultWeekendCode == null || defaultWeekendCode.isBlank()
                 ? WeekendCode.SAT_SUN.name()
                 : defaultWeekendCode;
-        template.status = STATUS_DRAFT;
-        template.version = 0;
+        template.status = STATUS_PUBLISHED;
+        template.version = 1;
         template.sourceNote = sourceNote;
+        template.publishedAt = now;
+        template.publishedBy = actorCcgid;
         template.createdAt = now;
         template.createdBy = actorCcgid;
         template.updatedAt = now;
@@ -109,16 +110,11 @@ public class CenterHolidayTemplate {
         touch(actorCcgid, now);
     }
 
-    public void markPublished(String actorCcgid, Instant now) {
+    public void bumpVersion(String actorCcgid, Instant now) {
         this.status = STATUS_PUBLISHED;
         this.version = this.version + 1;
         this.publishedAt = now;
         this.publishedBy = actorCcgid;
-        touch(actorCcgid, now);
-    }
-
-    public void reopenDraft(String actorCcgid, Instant now) {
-        this.status = STATUS_DRAFT;
         touch(actorCcgid, now);
     }
 

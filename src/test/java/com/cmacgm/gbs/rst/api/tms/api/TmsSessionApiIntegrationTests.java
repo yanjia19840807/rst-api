@@ -213,6 +213,47 @@ class TmsSessionApiIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("paused"));
 
+        mockMvc.perform(get("/api/v1/tms/sessions/current")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT"))
+                .andExpect(status().isOk())
+                .andExpect(result -> {
+                    String body = result.getResponse().getContentAsString().trim();
+                    if (!body.isEmpty() && !"null".equals(body)) {
+                        throw new AssertionError("Expected no running session, got: " + body);
+                    }
+                });
+
+        String secondResponse = mockMvc.perform(post("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolkitId": "%s",
+                                  "subtaskId": "%s",
+                                  "processedVolume": 3,
+                                  "reference": "INV-101"
+                                }
+                                """.formatted(TOOLKIT_ID, SUBTASK_ID)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("running"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String secondSessionId = JsonPath.read(secondResponse, "$.id");
+
+        mockMvc.perform(post("/api/v1/tms/sessions/{id}/resume", sessionId)
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT"))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(post("/api/v1/tms/sessions/{id}/end", secondSessionId)
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("completed"));
+
         mockMvc.perform(post("/api/v1/tms/sessions/{id}/resume", sessionId)
                         .header("X-Dev-Ccgid", "AGENT001")
                         .header("X-Dev-Role", "AGENT"))

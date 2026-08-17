@@ -1,10 +1,12 @@
 package com.cmacgm.gbs.rst.api.scenario.persistence;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -19,6 +21,16 @@ public interface ScenarioRepository extends JpaRepository<Scenario, UUID> {
      * @return scenarios
      */
     List<Scenario> findByExerciseIdAndDeletedAtIsNullOrderByCreatedAtAsc(UUID exerciseId);
+
+    /**
+     * Loads scenarios with assumptions for repository allocation.
+     *
+     * @param ids scenario ids
+     * @return scenarios
+     */
+    @EntityGraph(attributePaths = "assumptions")
+    @Query("select s from Scenario s where s.id in :ids")
+    List<Scenario> findWithAssumptionsByIdIn(@Param("ids") Collection<UUID> ids);
 
     /**
      * Finds a non-deleted scenario owned by an Exercise.

@@ -319,7 +319,6 @@ public class ExerciseInitializationService {
                         date,
                         holiday.getHolidayName(),
                         "CUSTOM",
-                        holiday.getWorkingDayOverride(),
                         actorCcgid,
                         now));
             }

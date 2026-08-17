@@ -10,5 +10,5 @@ import jakarta.validation.constraints.NotNull;
  */
 public record HolidayRequest(
         @NotNull LocalDate holidayDate, @NotBlank String holidayName,
-        @NotBlank String holidayType, Boolean workingDayOverride) {
+        @NotBlank String holidayType) {
 }

@@ -57,8 +57,10 @@ public class ApprovalController {
      * @param completedFrom optional position-completion date from
      * @param completedTo optional position-completion date to
      * @param decision optional Approved / Returned (this position's decision)
+     * @param page 1-based page
+     * @param pageSize page size
      * @param principal current approver
-     * @return filtered queue, filter options, and awaiting metrics
+     * @return one page of filtered queue, filter options, and awaiting metrics
      */
     @GetMapping("/queue")
     public ApprovalQueueView queue(
@@ -80,6 +82,8 @@ public class ApprovalController {
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
                     LocalDate completedTo,
             @RequestParam(required = false) String decision,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize,
             @AuthenticationPrincipal RstPrincipal principal) {
         return approvals.queue(principal, new QueueQuery(
                 status,
@@ -91,7 +95,7 @@ public class ApprovalController {
                 submittedTo,
                 completedFrom,
                 completedTo,
-                decision));
+                decision), page, pageSize);
     }
 
     /**

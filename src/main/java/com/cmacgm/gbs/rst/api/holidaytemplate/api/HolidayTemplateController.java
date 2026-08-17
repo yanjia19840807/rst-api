@@ -9,9 +9,11 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService.CreateTemplateRequest;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService.HolidayLineRequest;
+import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService.HolidayLineView;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService.TemplateDetail;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService.TemplateSummary;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService.UpdateTemplateRequest;
@@ -48,12 +50,24 @@ public class HolidayTemplateController {
         this.service = service;
     }
 
+    /**
+     * Lists holiday templates for the current LTH.
+     *
+     * @param center optional exact Center
+     * @param year optional year
+     * @param status unused compatibility filter
+     * @param page 1-based page
+     * @param pageSize page size
+     * @return one page of summaries
+     */
     @GetMapping
-    public List<TemplateSummary> list(
+    public PageResponse<TemplateSummary> list(
             @RequestParam(required = false) String center,
             @RequestParam(required = false) Short year,
-            @RequestParam(required = false) String status) {
-        return service.list(center, year, status);
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        return service.list(center, year, status, page, pageSize);
     }
 
     @GetMapping("/by-center")
@@ -64,12 +78,19 @@ public class HolidayTemplateController {
                 .orElseThrow(() -> new com.cmacgm.gbs.rst.api.common.error.ApiException(
                         HttpStatus.NOT_FOUND,
                         "template-not-found",
-                        "No published holiday template for this Center and year."));
+                        "No holiday template for this Center and year."));
     }
 
     @GetMapping("/export-blank")
     public ResponseEntity<byte[]> exportBlank() {
         return excelResponse(service.blankExcel(), "holiday-template-blank.xlsx");
+    }
+
+    @PostMapping(path = "/parse", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public List<HolidayLineView> parseExcel(
+            @RequestParam short year,
+            @RequestParam("file") MultipartFile file) throws Exception {
+        return service.parseExcel(year, file.getInputStream());
     }
 
     @GetMapping("/{id}")
@@ -93,12 +114,6 @@ public class HolidayTemplateController {
         return service.update(principal.ccgid(), id, request.toService());
     }
 
-    @PostMapping("/{id}/publish")
-    public TemplateDetail publish(
-            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID id) {
-        return service.publish(principal.ccgid(), id);
-    }
-
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(
@@ -113,14 +128,6 @@ public class HolidayTemplateController {
                 + detail.center().replaceAll("\\s+", "-")
                 + "-" + detail.year() + ".xlsx";
         return excelResponse(service.exportExcel(id), filename);
-    }
-
-    @PostMapping(path = "/{id}/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public TemplateDetail importExcel(
-            @AuthenticationPrincipal RstPrincipal principal,
-            @PathVariable UUID id,
-            @RequestParam("file") MultipartFile file) throws Exception {
-        return service.importExcel(principal.ccgid(), id, file.getInputStream());
     }
 
     private static ResponseEntity<byte[]> excelResponse(byte[] body, String filename) {
@@ -161,10 +168,9 @@ public class HolidayTemplateController {
 
     public record LineBody(
             @NotNull java.time.LocalDate holidayDate,
-            @NotBlank String holidayName,
-            Boolean workingDayOverride) {
+            @NotBlank String holidayName) {
         HolidayLineRequest toService() {
-            return new HolidayLineRequest(holidayDate, holidayName, workingDayOverride);
+            return new HolidayLineRequest(holidayDate, holidayName);
         }
     }
 }
