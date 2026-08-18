@@ -24,3 +24,7 @@ rst:
     confidence-level: 0.95
   workflow:
     lth-position-id: LTH
+
+microsoft:
+  graph:
+    enabled: false

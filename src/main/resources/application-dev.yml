@@ -1,21 +1,18 @@
-spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/rst
-    username: postgres
-    password: "001456"
-
 app:
   security:
     # Simulate one login: set ccgid + role (AGENT|SUPERVISOR|MANAGER|CDH|LTH|HO).
     # Restart API after changing. Optional per-request: X-Dev-Ccgid / X-Dev-Role.
     dev-identity:
-      ccgid: S00628182
-      role: SUPERVISOR
+      ccgid: LTH001
+      role: LTH
 
-rst:
-  forecast:
-    base-url: http://localhost:8000
+microsoft:
+  graph:
     enabled: true
+    secret-name: timesheet-prd-microsoft-graph-credentials
+    client-id: ${MS_GRAPH_CLIENT_ID:5282c4c7-7d9a-4ddc-b8bb-955921a0adf7}
+    client-secret: ${MS_GRAPH_CLIENT_SECRET:}
+    env-prefix: ${MS_GRAPH_ENV_PREFIX:3.Production}
 
 # Log SQL with parameters substituted into '?' (dev only). p6spy does this natively.
 decorator:
@@ -37,3 +34,4 @@ logging:
     org.hibernate.orm.jdbc.bind: warn
     p6spy: info
     com.cmacgm.gbs.rst.api.forecast: info
+    com.cmacgm.gbs.rst.api.graph: info

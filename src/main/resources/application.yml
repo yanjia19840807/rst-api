@@ -5,6 +5,8 @@ spring:
   # Production must set SPRING_PROFILES_ACTIVE (e.g. prod) explicitly.
   profiles:
     default: dev
+  config:
+    import: optional:file:.env[.properties]
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/rst}
     username: ${DB_USERNAME:postgres}
@@ -60,3 +62,18 @@ rst:
   workflow:
     # Timesheet has no LTH column yet; LTH steps share this position until IAM provides one.
     lth-position-id: ${RST_WORKFLOW_LTH_POSITION_ID:LTH}
+
+microsoft:
+  graph:
+    enabled: ${MS_GRAPH_ENABLED:false}
+    # Azure / K8s secret that supplies client-id + client-secret in production.
+    secret-name: ${MS_GRAPH_SECRET_NAME:timesheet-prd-microsoft-graph-credentials}
+    tenant-id: ${MS_GRAPH_TENANT_ID:${AZURE_TENANT_ID:}}
+    auth-uri: ${MS_GRAPH_AUTH_URI:https://login.microsoftonline.com/${AZURE_TENANT_ID:}/oauth2/v2.0/token}
+    client-id: ${MS_GRAPH_CLIENT_ID:}
+    client-secret: ${MS_GRAPH_CLIENT_SECRET:}
+    scope: https://graph.microsoft.com/.default
+    graph-host: https://graph.microsoft.com/v1.0
+    sharepoint-site: ${MS_GRAPH_SHAREPOINT_SITE:https://cmacgmgroup.sharepoint.com/sites/CMA-SharedKPIAutomation}
+    list-name: ${MS_GRAPH_LIST_NAME:Timesheet}
+    env-prefix: ${MS_GRAPH_ENV_PREFIX:3.Production}

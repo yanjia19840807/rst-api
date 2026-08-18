@@ -11,15 +11,16 @@ Spring Boot API for the Right Sizing Tool.
 
 ### Database
 
-Connect to local PostgreSQL. Credentials and walkthrough identity live in
-`src/main/resources/application-dev.yml` (default profile is `dev`).
+Connect to local PostgreSQL. JDBC URL, username and password come from
+environment variables (local file: `.env`, gitignored). Copy `.env.example`
+to `.env` and fill `DB_PASSWORD`.
 
-| Setting | Value in `application-dev.yml` |
+| Variable | Example |
 | --- | --- |
-| JDBC URL | `jdbc:postgresql://localhost:5432/rst` |
-| Username | `postgres` |
-| Password | set in `application-dev.yml` |
-| Dev identity CCGID | `app.security.dev-identity.ccgid` |
+| `DB_URL` | `jdbc:postgresql://localhost:5432/rst` |
+| `DB_USERNAME` | `postgres` |
+| `DB_PASSWORD` | local Postgres password |
+| Dev identity CCGID | `app.security.dev-identity.ccgid` in `application-dev.yml` |
 
 Create database `rst` if needed. This project does **not** use Docker Compose / Testcontainers.
 
@@ -61,11 +62,18 @@ To connect `rst-web`, set `VITE_API_BASE_URL=http://localhost:8080` and
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `DB_URL` | from `application-dev.yml` / env | PostgreSQL JDBC URL |
-| `DB_USERNAME` | from `application-dev.yml` / env | Database user |
-| `DB_PASSWORD` | from `application-dev.yml` / env | Database password |
+| `DB_URL` | `jdbc:postgresql://localhost:5432/rst` | PostgreSQL JDBC URL |
+| `DB_USERNAME` | `postgres` | Database user |
+| `DB_PASSWORD` | empty | Database password; local `.env`, never commit |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated SPA origins |
-| `AZURE_TENANT_ID` | empty | Required outside dev/test |
+| `AZURE_TENANT_ID` | empty | Azure AD tenant; local `.env`, required for Graph and prod JWT |
+| `MS_GRAPH_AUTH_URI` | `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token` | Microsoft identity token endpoint |
+| `MS_GRAPH_ENABLED` | `false` (`true` in dev) | Enable Microsoft Graph / SharePoint access |
+| `MS_GRAPH_CLIENT_ID` | empty (dev default set) | Graph application (client) id |
+| `MS_GRAPH_CLIENT_SECRET` | empty | Graph client secret; local `.env`, never commit |
+| `MS_GRAPH_SECRET_NAME` | `timesheet-prd-microsoft-graph-credentials` | Azure / K8s secret name for Graph credentials |
+| `RST_FORECAST_BASE_URL` | `http://localhost:8000` | Python forecast service base URL |
+| `RST_FORECAST_ENABLED` | `true` | Enable forecast HTTP calls |
 
 Production validates Azure JWTs. Authorization is derived from the authenticated principal; API
 requests cannot select another user's scope.
@@ -81,6 +89,7 @@ api -> application -> domain/persistence
 - `common`: ProblemDetail errors and shared paging.
 - `config` / `security`: CORS, OAuth2 Resource Server, OpenAPI, clock and principals.
 - `identity`: application users.
+- `graph`: Microsoft Graph client-credentials client for the Timesheet SharePoint library.
 - `timesheet`: read-only ACTIVE snapshot, hierarchy, KPI and headcount queries.
 - `toolkit`: Supervisor CRUD and Agent dynamic Toolkit access.
 - `exercise`: immutable Toolkit/Subtask/KPI/HC snapshots.
