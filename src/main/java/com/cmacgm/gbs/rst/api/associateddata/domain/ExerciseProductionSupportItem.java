@@ -27,6 +27,9 @@ public class ExerciseProductionSupportItem {
     @Column(name = "lineage_id", nullable = false)
     private UUID lineageId;
 
+    @Column(name = "category_id")
+    private UUID categoryId;
+
     @Column(nullable = false, length = 120)
     private String category;
 
@@ -76,6 +79,7 @@ public class ExerciseProductionSupportItem {
      */
     public static ExerciseProductionSupportItem create(
             UUID exerciseId,
+            UUID categoryId,
             String category,
             String activity,
             String frequencyCode,
@@ -89,6 +93,7 @@ public class ExerciseProductionSupportItem {
         item.id = UUID.randomUUID();
         item.exerciseId = exerciseId;
         item.lineageId = item.id;
+        item.categoryId = categoryId;
         item.category = category;
         item.activity = activity;
         item.frequencyCode = frequencyCode;
@@ -113,6 +118,7 @@ public class ExerciseProductionSupportItem {
             Instant now) {
         ExerciseProductionSupportItem item = create(
                 exerciseId,
+                source.getCategoryId(),
                 source.getCategory(),
                 source.getActivity(),
                 source.getFrequencyCode(),
@@ -130,6 +136,7 @@ public class ExerciseProductionSupportItem {
      * Updates editable Supervisor inputs.
      */
     public void update(
+            UUID categoryId,
             String category,
             String activity,
             String frequencyCode,
@@ -139,6 +146,7 @@ public class ExerciseProductionSupportItem {
             String comments,
             String actorCcgid,
             Instant now) {
+        this.categoryId = categoryId;
         this.category = category;
         this.activity = activity;
         this.frequencyCode = frequencyCode;
@@ -163,6 +171,7 @@ public class ExerciseProductionSupportItem {
     public UUID getId() { return id; }
     public UUID getExerciseId() { return exerciseId; }
     public UUID getLineageId() { return lineageId; }
+    public UUID getCategoryId() { return categoryId; }
     public String getCategory() { return category; }
     public String getActivity() { return activity; }
     public String getFrequencyCode() { return frequencyCode; }

@@ -9,13 +9,13 @@ import java.util.Map;
 public final class CenterCountryDefaults {
 
     private static final Map<String, String> WEEKEND_BY_CENTER = Map.ofEntries(
-            Map.entry("GBS China", "SAT_SUN"),
-            Map.entry("GBS India", "SAT_SUN"),
-            Map.entry("GBS Philippines", "SAT_SUN"),
-            Map.entry("GBS Costa Rica", "SAT_SUN"),
-            Map.entry("GBS Lebanon", "SAT_SUN"),
-            Map.entry("GBS Estonia", "SAT_SUN"),
-            Map.entry("GBS Portugal", "SAT_SUN"));
+            Map.entry("GBS China", WeekendCode.DEFAULT_STORED),
+            Map.entry("GBS India", WeekendCode.DEFAULT_STORED),
+            Map.entry("GBS Philippines", WeekendCode.DEFAULT_STORED),
+            Map.entry("GBS Costa Rica", WeekendCode.DEFAULT_STORED),
+            Map.entry("GBS Lebanon", WeekendCode.DEFAULT_STORED),
+            Map.entry("GBS Estonia", WeekendCode.DEFAULT_STORED),
+            Map.entry("GBS Portugal", WeekendCode.DEFAULT_STORED));
 
     private CenterCountryDefaults() {
     }
@@ -25,7 +25,7 @@ public final class CenterCountryDefaults {
      */
     public static Defaults resolve(String center) {
         if (center == null || center.isBlank()) {
-            return new Defaults("SAT_SUN");
+            return new Defaults(WeekendCode.DEFAULT_STORED);
         }
         String known = WEEKEND_BY_CENTER.get(center.trim());
         if (known != null) {
@@ -37,7 +37,7 @@ public final class CenterCountryDefaults {
                 return new Defaults(entry.getValue());
             }
         }
-        return new Defaults("SAT_SUN");
+        return new Defaults(WeekendCode.DEFAULT_STORED);
     }
 
     /** Weekend default for a Center. */

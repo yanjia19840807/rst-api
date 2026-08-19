@@ -63,7 +63,7 @@ public class ExerciseHoliday {
      * @param exerciseId owning Exercise
      * @param holidayDate calendar date
      * @param holidayName display name
-     * @param holidayType BASELINE or CUSTOM
+     * @param holidayType HOLIDAY, WEEKEND, or NORMAL
      * @param actorCcgid creating Supervisor
      * @param now creation timestamp
      * @return new holiday entity

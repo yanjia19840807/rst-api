@@ -1,6 +1,7 @@
 package com.cmacgm.gbs.rst.api.governance.api;
 
 import java.time.LocalDate;
+import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingView;
@@ -117,7 +118,7 @@ public class GovernanceController {
      * Totals and category mix follow the filtered rows; dropdown options do not shrink.
      *
      * @param center optional exact GBS Center
-     * @param category optional exact standard category
+     * @param categoryId optional catalog Category id
      * @param toolkitName optional exact toolkit name
      * @param submittedFrom optional submitted date from
      * @param submittedTo optional submitted date to
@@ -129,7 +130,7 @@ public class GovernanceController {
     @PreAuthorize("hasAnyRole('LTH','HO')")
     public SupportRepositoryView supportRepository(
             @RequestParam(required = false) String center,
-            @RequestParam(required = false) String category,
+            @RequestParam(required = false) UUID categoryId,
             @RequestParam(required = false) String toolkitName,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
@@ -142,7 +143,7 @@ public class GovernanceController {
         return supportRepositoryService.listApproved(
                 new SupportRepositoryQuery(
                         center,
-                        category,
+                        categoryId,
                         toolkitName,
                         submittedFrom,
                         submittedTo),

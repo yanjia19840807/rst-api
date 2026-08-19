@@ -19,14 +19,19 @@ import java.util.stream.Collectors;
 
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseCalendar;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseHoliday;
+import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseHolidayRepository;
+import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
+import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
+import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateExcelService.LineDraft;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.CenterCountryDefaults;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.CenterHolidayTemplate;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.CenterHolidayTemplateLine;
+import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WeekendCode;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator;
 import com.cmacgm.gbs.rst.api.holidaytemplate.persistence.CenterHolidayTemplateLineRepository;
 import com.cmacgm.gbs.rst.api.holidaytemplate.persistence.CenterHolidayTemplateRepository;
@@ -45,6 +50,8 @@ public class HolidayTemplateService {
     private final CenterHolidayTemplateLineRepository lines;
     private final ExerciseCalendarRepository calendars;
     private final ExerciseHolidayRepository holidays;
+    private final ExerciseTeamSetupRepository teamSetups;
+    private final RstExerciseRepository exercises;
     private final WorkingDaysCalculator workingDaysCalculator;
     private final HolidayTemplateExcelService excel;
     private final Clock clock;
@@ -54,6 +61,8 @@ public class HolidayTemplateService {
             CenterHolidayTemplateLineRepository lines,
             ExerciseCalendarRepository calendars,
             ExerciseHolidayRepository holidays,
+            ExerciseTeamSetupRepository teamSetups,
+            RstExerciseRepository exercises,
             WorkingDaysCalculator workingDaysCalculator,
             HolidayTemplateExcelService excel,
             Clock clock) {
@@ -61,6 +70,8 @@ public class HolidayTemplateService {
         this.lines = lines;
         this.calendars = calendars;
         this.holidays = holidays;
+        this.teamSetups = teamSetups;
+        this.exercises = exercises;
         this.workingDaysCalculator = workingDaysCalculator;
         this.excel = excel;
         this.clock = clock;
@@ -358,34 +369,39 @@ public class HolidayTemplateService {
     }
 
     /**
-     * NETWORKDAYS for the Exercise calendar year (weekend + non-working holidays).
+     * NETWORKDAYS for the Exercise sizing year from Team Setup weekend only
+     * (Excel Input C24 — holidays are not subtracted).
      * Not persisted; computed at read / simulation time.
      */
     @Transactional(readOnly = true)
     public BigDecimal workingDaysPerYear(UUID exerciseId) {
-        return calendars.findById(exerciseId)
+        return exercises.findById(exerciseId)
                 .map(this::workingDaysPerYear)
                 .orElse(null);
     }
 
     /**
-     * NETWORKDAYS for a loaded calendar row.
+     * NETWORKDAYS for a loaded calendar row (delegates to Team Setup weekend).
      */
     public BigDecimal workingDaysPerYear(ExerciseCalendar calendar) {
         if (calendar == null) {
             return null;
         }
-        int year = calendar.getBaselineYear() != null
-                ? calendar.getBaselineYear()
-                : LocalDate.now(clock).getYear();
-        List<LocalDate> nonWorking = holidays
-                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(calendar.getExerciseId())
-                .stream()
-                .map(ExerciseHoliday::getHolidayDate)
-                .filter(java.util.Objects::nonNull)
-                .toList();
-        String weekend = calendar.getWeekendCode() != null ? calendar.getWeekendCode() : "SAT_SUN";
-        return BigDecimal.valueOf(workingDaysCalculator.networkDays(year, weekend, nonWorking));
+        return workingDaysPerYear(calendar.getExerciseId());
+    }
+
+    /**
+     * NETWORKDAYS for a loaded Exercise.
+     */
+    public BigDecimal workingDaysPerYear(RstExercise exercise) {
+        if (exercise == null || exercise.getSizingMonth() == null) {
+            return null;
+        }
+        String weekend = teamSetups.findById(exercise.getId())
+                .map(ExerciseTeamSetup::getWeekendCode)
+                .orElse(WeekendCode.DEFAULT_STORED);
+        int year = YearMonth.from(exercise.getSizingMonth()).getYear();
+        return BigDecimal.valueOf(workingDaysCalculator.networkDays(year, weekend, List.of()));
     }
 
     private void replaceLines(

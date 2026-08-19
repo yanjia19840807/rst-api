@@ -46,7 +46,6 @@ import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService.ApplyTemplatesResult;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.scenario.domain.ScenarioAssumption;
@@ -264,23 +263,12 @@ public class ExerciseService {
 
         List<String> notices = new ArrayList<>();
         if (previousYear != nextYear) {
-            String center = exercise.getToolkitSnapshot() != null
-                    ? exercise.getToolkitSnapshot().getCenter()
-                    : null;
-            ApplyTemplatesResult applied = holidayTemplates.applyPublishedTemplates(
-                    exercise.getId(),
-                    center,
-                    nextYear,
-                    ExerciseInitializationService.resolveHolidayYears(exercise),
-                    ownerCcgid,
-                    true);
             notices.add(
                     "Sizing year changed ("
                             + previousYear
                             + " → "
                             + nextYear
-                            + "). Holiday templates were re-applied.");
-            notices.addAll(applied.notices());
+                            + "). Review holiday dates in Calendar.");
         }
         initialization.ensureTrainVolumeGrids(exercise, ownerCcgid);
         notices.add("Volume Input grids refreshed for the updated training windows.");

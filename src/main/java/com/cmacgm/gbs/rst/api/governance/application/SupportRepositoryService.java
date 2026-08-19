@@ -22,6 +22,8 @@ import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryRow;
 import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryView;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
+import com.cmacgm.gbs.rst.api.supporttaxonomy.api.dto.SupportTaxonomyOption;
+import com.cmacgm.gbs.rst.api.supporttaxonomy.application.SupportTaxonomyService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,27 +37,32 @@ public class SupportRepositoryService {
     private final ExerciseProductionSupportItemRepository supportItems;
     private final ExerciseTeamSetupRepository teamSetups;
     private final HolidayTemplateService holidayTemplates;
+    private final SupportTaxonomyService supportTaxonomy;
 
     /**
      * @param exercises Exercise aggregate
      * @param supportItems production support inputs
      * @param teamSetups Team Setup used for Support FTE
      * @param holidayTemplates working days for Support FTE
+     * @param supportTaxonomy Category lookup for dropdowns
      */
     public SupportRepositoryService(
             RstExerciseRepository exercises,
             ExerciseProductionSupportItemRepository supportItems,
             ExerciseTeamSetupRepository teamSetups,
-            HolidayTemplateService holidayTemplates) {
+            HolidayTemplateService holidayTemplates,
+            SupportTaxonomyService supportTaxonomy) {
         this.exercises = exercises;
         this.supportItems = supportItems;
         this.teamSetups = teamSetups;
         this.holidayTemplates = holidayTemplates;
+        this.supportTaxonomy = supportTaxonomy;
     }
 
     /**
      * Lists APPROVED Production Support rows, newest submission first.
-     * Summaries follow the filtered row set; dropdown options come from all APPROVED rows.
+     * Summaries follow the filtered row set; Center / Toolkit options come from all APPROVED
+     * rows. Category options come from the database lookup.
      *
      * @param query field filters
      * @param page 1-based page
@@ -87,6 +94,7 @@ public class SupportRepositoryService {
                 .toList();
         SupportRepositoryMath.Summary summary = SupportRepositoryMath.summarize(items);
         PageResponse<SupportRepositoryRow> paged = PageResponse.ofList(items, page, pageSize);
+        List<SupportTaxonomyOption> categoryOptions = supportTaxonomy.listActive();
         return new SupportRepositoryView(
                 summary.totalSupportFte(),
                 summary.topCategory(),
@@ -98,7 +106,7 @@ public class SupportRepositoryService {
                 paged.total(),
                 paged.totalPages(),
                 SupportRepositoryFilters.distinct(source, SupportRepositoryRow::center),
-                SupportRepositoryFilters.distinct(source, SupportRepositoryRow::standardCategory),
+                categoryOptions,
                 SupportRepositoryFilters.distinct(source, SupportRepositoryRow::toolkit));
     }
 
@@ -133,6 +141,7 @@ public class SupportRepositoryService {
                     domain,
                     pl3,
                     toolkit,
+                    item.getCategoryId(),
                     item.getCategory(),
                     item.getActivity(),
                     SupportRepositoryMath.frequencyLabel(item.getFrequencyCode()),
@@ -164,7 +173,7 @@ public class SupportRepositoryService {
         return setups;
     }
 
-    private static SupportRepositoryView emptyView(int page, int pageSize) {
+    private SupportRepositoryView emptyView(int page, int pageSize) {
         SupportRepositoryMath.Summary summary = SupportRepositoryMath.summarize(List.of());
         PageResponse<SupportRepositoryRow> paged = PageResponse.ofList(List.of(), page, pageSize);
         return new SupportRepositoryView(
@@ -178,7 +187,7 @@ public class SupportRepositoryService {
                 paged.total(),
                 paged.totalPages(),
                 List.of(),
-                List.of(),
+                supportTaxonomy.listActive(),
                 List.of());
     }
 }

@@ -1,6 +1,7 @@
 package com.cmacgm.gbs.rst.api.governance.api.dto;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 /**
  * One Support Repository row: a Production Support activity on an APPROVED Exercise.
@@ -11,6 +12,7 @@ public record SupportRepositoryRow(
         String domain,
         String pl3,
         String toolkit,
+        UUID categoryId,
         String standardCategory,
         String activity,
         String frequency,

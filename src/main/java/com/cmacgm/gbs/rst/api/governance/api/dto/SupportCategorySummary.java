@@ -8,6 +8,5 @@ import java.math.BigDecimal;
 public record SupportCategorySummary(
         String category,
         BigDecimal supportFte,
-        String pctOfSupport,
-        String topActivity) {
+        String pctOfSupport) {
 }

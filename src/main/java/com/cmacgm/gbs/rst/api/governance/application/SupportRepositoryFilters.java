@@ -30,7 +30,7 @@ public final class SupportRepositoryFilters {
         if (hasText(query.center()) && !query.center().equals(row.center())) {
             return false;
         }
-        if (hasText(query.category()) && !query.category().equals(row.standardCategory())) {
+        if (query.categoryId() != null && !query.categoryId().equals(row.categoryId())) {
             return false;
         }
         if (hasText(query.toolkitName()) && !query.toolkitName().equals(row.toolkit())) {

@@ -280,9 +280,7 @@ public class SlotSimulationService {
 
         List<SlotShift> shiftRows = toSlotShifts(scenario);
         ExerciseTeamSetup team = teamSetups.findById(exerciseId).orElse(null);
-        ExerciseCalendar calendar = calendars.findById(exerciseId).orElse(null);
-        String weekendCode = calendar != null && calendar.getWeekendCode() != null
-                ? calendar.getWeekendCode() : "SAT_SUN";
+        String weekendCode = WeekendCode.storedValue(team != null ? team.getWeekendCode() : null);
         Map<String, List<BigDecimal>> shiftSeries = rebuildShiftSeries(rows, shiftRows, weekendCode);
         boolean applicability = team != null
                 && SlotMath.applicabilityOn(team.getSlaType(), team.getSlaTurnaroundMinutes());
@@ -499,7 +497,7 @@ public class SlotSimulationService {
         BigDecimal automation = team.getAutomationRatio() != null
                 ? team.getAutomationRatio() : BigDecimal.ZERO;
         BigDecimal cycleTime = requirePositive(baseline.getMedianSeconds(), "Cycle time");
-        String weekendCode = calendar.getWeekendCode() != null ? calendar.getWeekendCode() : "SAT_SUN";
+        String weekendCode = WeekendCode.storedValue(team.getWeekendCode());
         BigDecimal slaMinutes = team.getSlaTurnaroundMinutes() != null
                 ? team.getSlaTurnaroundMinutes() : BigDecimal.ZERO;
 

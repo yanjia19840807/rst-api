@@ -34,23 +34,12 @@ public final class SupportRepositoryMath {
             return new Summary(ZERO, "", null, List.of());
         }
         Map<String, BigDecimal> fteByCategory = new HashMap<>();
-        Map<String, String> topActivity = new HashMap<>();
-        Map<String, BigDecimal> topActivityFte = new HashMap<>();
         BigDecimal total = BigDecimal.ZERO;
         for (SupportRepositoryRow row : items) {
             BigDecimal fte = row.fte() == null ? BigDecimal.ZERO : row.fte();
             total = total.add(fte);
             String category = blankToEmpty(row.standardCategory());
             fteByCategory.merge(category, fte, BigDecimal::add);
-            String activity = blankToEmpty(row.activity());
-            BigDecimal best = topActivityFte.get(category);
-            if (best == null
-                    || fte.compareTo(best) > 0
-                    || (fte.compareTo(best) == 0
-                            && activity.compareTo(topActivity.getOrDefault(category, "")) < 0)) {
-                topActivity.put(category, activity);
-                topActivityFte.put(category, fte);
-            }
         }
         BigDecimal scaledTotal = total.setScale(2, RoundingMode.HALF_UP);
         List<SupportCategorySummary> summaries = new ArrayList<>();
@@ -59,8 +48,7 @@ public final class SupportRepositoryMath {
             summaries.add(new SupportCategorySummary(
                     entry.getKey(),
                     categoryFte,
-                    percent(entry.getValue(), scaledTotal),
-                    topActivity.getOrDefault(entry.getKey(), "")));
+                    percent(entry.getValue(), scaledTotal)));
         }
         summaries.sort(Comparator
                 .comparing(SupportCategorySummary::supportFte, Comparator.reverseOrder())

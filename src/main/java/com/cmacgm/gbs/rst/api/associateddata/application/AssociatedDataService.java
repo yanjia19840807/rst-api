@@ -5,7 +5,6 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.YearMonth;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -44,13 +43,14 @@ import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
 import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
-import com.cmacgm.gbs.rst.api.exercise.application.ExerciseInitializationService;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService.ApplyTemplatesResult;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService.TemplateUpdateHint;
+import com.cmacgm.gbs.rst.api.holidaytemplate.domain.HolidayDayKind;
+import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WeekendCode;
+import com.cmacgm.gbs.rst.api.supporttaxonomy.application.SupportTaxonomyService;
+import com.cmacgm.gbs.rst.api.supporttaxonomy.application.SupportTaxonomyService.ResolvedCategory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,7 +62,6 @@ import com.cmacgm.gbs.rst.api.associateddata.api.dto.HolidayRequest;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.HolidayView;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.MonthlyVolumeRequest;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.MonthlyVolumeView;
-import com.cmacgm.gbs.rst.api.associateddata.api.dto.ReapplyCalendarResult;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.ShiftRequest;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.ShiftView;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.SlotVolumeRequest;
@@ -88,6 +87,7 @@ public class AssociatedDataService {
     private final ExerciseVolumeDailyInputRepository dailyVolumes;
     private final ExerciseVolumeSlotInputRepository slotVolumes;
     private final HolidayTemplateService holidayTemplates;
+    private final SupportTaxonomyService supportTaxonomy;
     private final CycleTimeBaselineRepository cycleTimeBaselines;
     private final VolumeInputValidator volumeValidator;
     private final VolumeExcelService volumeExcel;
@@ -109,6 +109,7 @@ public class AssociatedDataService {
             ExerciseVolumeDailyInputRepository dailyVolumes,
             ExerciseVolumeSlotInputRepository slotVolumes,
             HolidayTemplateService holidayTemplates,
+            SupportTaxonomyService supportTaxonomy,
             CycleTimeBaselineRepository cycleTimeBaselines,
             VolumeInputValidator volumeValidator,
             VolumeExcelService volumeExcel,
@@ -125,6 +126,7 @@ public class AssociatedDataService {
         this.dailyVolumes = dailyVolumes;
         this.slotVolumes = slotVolumes;
         this.holidayTemplates = holidayTemplates;
+        this.supportTaxonomy = supportTaxonomy;
         this.cycleTimeBaselines = cycleTimeBaselines;
         this.volumeValidator = volumeValidator;
         this.volumeExcel = volumeExcel;
@@ -257,8 +259,13 @@ public class AssociatedDataService {
         editable(ownerCcgid, exerciseId);
         Instant now = clock.instant();
         requireValidFrequency(request.frequencyCode(), exerciseId);
+        ResolvedCategory taxonomy = supportTaxonomy.resolveForWrite(request.categoryId(), null);
         ExerciseProductionSupportItem item = ExerciseProductionSupportItem.create(
-                exerciseId, request.category(), request.activity(), request.frequencyCode(),
+                exerciseId,
+                taxonomy.categoryId(),
+                taxonomy.categoryName(),
+                request.activity(),
+                request.frequencyCode(),
                 request.volume(), request.unitOfMeasure(), request.workloadPerUnitMinutes(),
                 request.comments(), ownerCcgid, now);
         supportItems.save(item);
@@ -283,8 +290,13 @@ public class AssociatedDataService {
                         HttpStatus.NOT_FOUND, "support-item-not-found", "The support item was not found."));
         Instant now = clock.instant();
         requireValidFrequency(request.frequencyCode(), exerciseId);
+        ResolvedCategory taxonomy = supportTaxonomy.resolveForWrite(
+                request.categoryId(), item.getCategoryId());
         item.update(
-                request.category(), request.activity(), request.frequencyCode(), request.volume(),
+                taxonomy.categoryId(),
+                taxonomy.categoryName(),
+                request.activity(),
+                request.frequencyCode(), request.volume(),
                 request.unitOfMeasure(), request.workloadPerUnitMinutes(),
                 request.comments(), ownerCcgid, now);
         supportItems.save(item);
@@ -324,26 +336,19 @@ public class AssociatedDataService {
                 .stream()
                 .map(this::toHoliday)
                 .toList();
-        String center = exercise.getToolkitSnapshot() != null
-                ? exercise.getToolkitSnapshot().getCenter()
-                : null;
-        boolean editable = exercise.canEdit();
-        TemplateUpdateHint update = editable
-                ? holidayTemplates.findTemplateUpdate(exerciseId, center).orElse(null)
-                : null;
         return new CalendarView(
-                calendar.getWeekendCode(),
+                null,
                 calendar.getBaselineSource(), calendar.getBaselineVersion(),
                 calendar.getSourceTemplateId(), calendar.getSourceTemplateVersion(),
-                calendar.getBaselineYear(), holidayTemplates.workingDaysPerYear(calendar),
+                calendar.getBaselineYear(), null,
                 calendar.getVersion(), holidayViews,
-                update != null,
-                update != null ? update.publishedVersion() : null,
-                update != null ? update.message() : null);
+                false,
+                null,
+                null);
     }
 
     /**
-     * Replaces calendar header and full holiday list.
+     * Replaces the holiday list (Excel PH Dates). Weekend code is stored on Team Setup.
      *
      * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
@@ -355,9 +360,7 @@ public class AssociatedDataService {
         editable(ownerCcgid, exerciseId);
         Instant now = clock.instant();
         ExerciseCalendar calendar = requireCalendar(exerciseId);
-        calendar.replace(
-                request.weekendCode(),
-                request.baselineSource(), request.baselineVersion(), ownerCcgid, now);
+        calendar.touch(ownerCcgid, now);
         calendars.save(calendar);
         for (ExerciseHoliday existing : holidays
                 .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)) {
@@ -366,34 +369,28 @@ public class AssociatedDataService {
         }
         holidays.flush();
         if (request.holidays() != null) {
+            Set<LocalDate> seen = new HashSet<>();
             for (HolidayRequest holiday : request.holidays()) {
+                HolidayDayKind kind;
+                try {
+                    kind = HolidayDayKind.require(holiday.holidayType());
+                } catch (IllegalArgumentException ex) {
+                    throw new ApiException(
+                            HttpStatus.UNPROCESSABLE_ENTITY, "invalid-holiday-type", ex.getMessage());
+                }
+                if (holiday.holidayDate() == null || !seen.add(holiday.holidayDate())) {
+                    throw new ApiException(
+                            HttpStatus.UNPROCESSABLE_ENTITY,
+                            "duplicate-holiday-date",
+                            "Each date can appear only once in the holiday list.");
+                }
+                String name = holiday.holidayName() == null ? "" : holiday.holidayName().trim();
                 holidays.save(ExerciseHoliday.create(
-                        exerciseId, holiday.holidayDate(), holiday.holidayName(),
-                        holiday.holidayType(), ownerCcgid, now));
+                        exerciseId, holiday.holidayDate(), name,
+                        kind.name(), ownerCcgid, now));
             }
         }
         return getCalendar(ownerCcgid, exerciseId);
-    }
-
-    /**
-     * Re-applies the Center holiday template for the Exercise sizing year.
-     * Preserves CUSTOM holidays.
-     */
-    @Transactional
-    public ReapplyCalendarResult reapplyHolidayTemplate(String ownerCcgid, UUID exerciseId) {
-        RstExercise exercise = editable(ownerCcgid, exerciseId);
-        String center = exercise.getToolkitSnapshot() != null
-                ? exercise.getToolkitSnapshot().getCenter()
-                : null;
-        short primaryYear = (short) YearMonth.from(exercise.getSizingMonth()).getYear();
-        ApplyTemplatesResult applied = holidayTemplates.applyPublishedTemplates(
-                exerciseId,
-                center,
-                primaryYear,
-                ExerciseInitializationService.resolveHolidayYears(exercise),
-                ownerCcgid,
-                true);
-        return new ReapplyCalendarResult(getCalendar(ownerCcgid, exerciseId), applied.notices());
     }
 
     /**
@@ -731,10 +728,9 @@ public class AssociatedDataService {
     }
 
     private TeamSetupView toTeamSetup(RstExercise exercise, ExerciseTeamSetup setup) {
-        ExerciseCalendar calendar = calendars.findById(exercise.getId()).orElse(null);
-        BigDecimal workingDays = holidayTemplates.workingDaysPerYear(exercise.getId());
+        BigDecimal workingDays = holidayTemplates.workingDaysPerYear(exercise);
         BigDecimal cycleTime = activeCycleTimeSeconds(exercise.getId());
-        String weekend = calendar != null ? calendar.getWeekendCode() : null;
+        String weekend = WeekendCode.storedValue(setup.getWeekendCode());
         return new TeamSetupView(
                 setup.getAgentsLt6m(), setup.getAgents6To24m(), setup.getAgents24To48m(),
                 setup.getAgentsGt48m(), deliveryHc(exercise), setup.workingHoursPerDay(),
@@ -780,7 +776,8 @@ public class AssociatedDataService {
         BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup, workingDays);
         SupportWorkloadMath.Derived derived = SupportWorkloadMath.derive(item, workingDays, fteHours);
         return new SupportItemView(
-                item.getId(), item.getLineageId(), item.getCategory(), item.getActivity(),
+                item.getId(), item.getLineageId(), item.getCategoryId(), item.getCategory(),
+                item.getActivity(),
                 item.getFrequencyCode(), item.getVolume(), item.getUnitOfMeasure(),
                 item.getWorkloadPerUnitMinutes(), derived.annualMultiplier(),
                 derived.workloadPerYearHours(), derived.supportFte(), item.getComments(),

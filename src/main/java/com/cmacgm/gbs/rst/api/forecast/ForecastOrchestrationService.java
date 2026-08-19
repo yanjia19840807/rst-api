@@ -19,12 +19,13 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.associateddata.application.VolumeTrainWindows;
-import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseCalendar;
-import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseHoliday;
+import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeDailyInput;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeMonthlyInput;
+import com.cmacgm.gbs.rst.api.associateddata.domain.HolidayDays;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseHolidayRepository;
+import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeDailyInputRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeMonthlyInputRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
@@ -41,8 +42,11 @@ import com.cmacgm.gbs.rst.api.forecast.ForecastApiModels.MonthlyActual;
 import com.cmacgm.gbs.rst.api.forecast.ForecastApiModels.MonthlyForecastRequest;
 import com.cmacgm.gbs.rst.api.forecast.ForecastApiModels.MonthlyForecastResponse;
 import com.cmacgm.gbs.rst.api.forecast.ForecastApiModels.MonthlyFuture;
+import com.cmacgm.gbs.rst.api.holidaytemplate.domain.HolidayDayKind;
+import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WeekendCode;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator.MonthDayCounts;
+import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator.VolumeDayFlags;
 import com.cmacgm.gbs.rst.api.scenario.domain.ForecastPoint;
 import com.cmacgm.gbs.rst.api.scenario.domain.ForecastRun;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
@@ -74,6 +78,7 @@ public class ForecastOrchestrationService {
     private final ExerciseVolumeDailyInputRepository dailyVolumes;
     private final ExerciseCalendarRepository calendars;
     private final ExerciseHolidayRepository holidays;
+    private final ExerciseTeamSetupRepository teamSetups;
     private final WorkingDaysCalculator workingDaysCalculator;
     private final Clock clock;
 
@@ -90,6 +95,7 @@ public class ForecastOrchestrationService {
             ExerciseVolumeDailyInputRepository dailyVolumes,
             ExerciseCalendarRepository calendars,
             ExerciseHolidayRepository holidays,
+            ExerciseTeamSetupRepository teamSetups,
             WorkingDaysCalculator workingDaysCalculator,
             Clock clock) {
         this.properties = properties;
@@ -101,6 +107,7 @@ public class ForecastOrchestrationService {
         this.dailyVolumes = dailyVolumes;
         this.calendars = calendars;
         this.holidays = holidays;
+        this.teamSetups = teamSetups;
         this.workingDaysCalculator = workingDaysCalculator;
         this.clock = clock;
     }
@@ -221,14 +228,14 @@ public class ForecastOrchestrationService {
                 volumeByDate,
                 volumeByMonth,
                 calendar.weekendCode(),
-                calendar.holidaySet());
+                calendar.kinds());
         LocalDate lastHistory = history.getLast().date();
         List<DailyFuture> future = buildDailyFuture(
                 lastHistory,
                 forecastMonth,
                 volumeByMonth,
                 calendar.weekendCode(),
-                calendar.holidaySet());
+                calendar.kinds());
 
         DailyForecastRequest request = new DailyForecastRequest(
                 history, future, properties.confidenceLevel());
@@ -427,7 +434,7 @@ public class ForecastOrchestrationService {
             Map<LocalDate, ExerciseVolumeDailyInput> volumeByDate,
             Map<LocalDate, ExerciseVolumeMonthlyInput> volumeByMonth,
             String weekendCode,
-            Set<LocalDate> holidaySet) {
+            Map<LocalDate, HolidayDayKind> kinds) {
         List<LocalDate> trainDates = VolumeTrainWindows.dailyTrainDates(sizingMonth);
         if (trainDates.isEmpty()) {
             throw new ApiException(
@@ -451,11 +458,12 @@ public class ForecastOrchestrationService {
             if (row == null || row.getActualVolume() == null) {
                 continue;
             }
+            VolumeDayFlags flags = workingDaysCalculator.volumeDay(day, weekendCode, kinds.get(day));
             history.add(new DailyActual(
                     day,
                     row.getActualVolume(),
-                    workingDaysCalculator.isWorkingDay(day, weekendCode, holidaySet),
-                    holidaySet.contains(day),
+                    flags.workingDay(),
+                    flags.publicHoliday(),
                     commercialForDate(day, volumeByMonth)));
         }
         if (history.isEmpty()) {
@@ -476,7 +484,7 @@ public class ForecastOrchestrationService {
             YearMonth forecastMonth,
             Map<LocalDate, ExerciseVolumeMonthlyInput> volumeByMonth,
             String weekendCode,
-            Set<LocalDate> holidaySet) {
+            Map<LocalDate, HolidayDayKind> kinds) {
         LocalDate cursor = lastHistory.plusDays(1);
         LocalDate end = forecastMonth.atEndOfMonth();
         if (cursor.isAfter(end)) {
@@ -487,10 +495,12 @@ public class ForecastOrchestrationService {
         }
         List<DailyFuture> future = new ArrayList<>();
         while (!cursor.isAfter(end)) {
+            VolumeDayFlags flags = workingDaysCalculator.volumeDay(
+                    cursor, weekendCode, kinds.get(cursor));
             future.add(new DailyFuture(
                     cursor,
-                    workingDaysCalculator.isWorkingDay(cursor, weekendCode, holidaySet),
-                    holidaySet.contains(cursor),
+                    flags.workingDay(),
+                    flags.publicHoliday(),
                     commercialForDate(cursor, volumeByMonth)));
             cursor = cursor.plusDays(1);
         }
@@ -503,23 +513,19 @@ public class ForecastOrchestrationService {
     }
 
     private CalendarContext loadCalendar(UUID exerciseId) {
-        ExerciseCalendar calendar = calendars.findById(exerciseId)
+        calendars.findById(exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.UNPROCESSABLE_CONTENT,
                         "calendar-required",
                         "Exercise calendar is required before forecast."));
-        String weekendCode = calendar.getWeekendCode() != null ? calendar.getWeekendCode() : "SAT_SUN";
-        List<LocalDate> nonWorking = nonWorkingHolidayDates(exerciseId);
-        return new CalendarContext(weekendCode, nonWorking, new HashSet<>(nonWorking));
-    }
-
-    private List<LocalDate> nonWorkingHolidayDates(UUID exerciseId) {
-        List<LocalDate> dates = new ArrayList<>();
-        for (ExerciseHoliday holiday : holidays
-                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)) {
-            dates.add(holiday.getHolidayDate());
-        }
-        return dates;
+        String weekendCode = WeekendCode.storedValue(
+                teamSetups.findById(exerciseId)
+                        .map(ExerciseTeamSetup::getWeekendCode)
+                        .orElse(WeekendCode.DEFAULT_STORED));
+        Map<LocalDate, HolidayDayKind> kinds = HolidayDays.kinds(holidays
+                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId));
+        List<LocalDate> rest = HolidayDays.restDates(kinds);
+        return new CalendarContext(weekendCode, rest, new HashSet<>(rest), kinds);
     }
 
     private void requireForecastEnabled() {
@@ -578,6 +584,9 @@ public class ForecastOrchestrationService {
     }
 
     private record CalendarContext(
-            String weekendCode, List<LocalDate> nonWorkingHolidays, Set<LocalDate> holidaySet) {
+            String weekendCode,
+            List<LocalDate> nonWorkingHolidays,
+            Set<LocalDate> holidaySet,
+            Map<LocalDate, HolidayDayKind> kinds) {
     }
 }

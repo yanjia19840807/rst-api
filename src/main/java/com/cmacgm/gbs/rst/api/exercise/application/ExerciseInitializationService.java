@@ -10,7 +10,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -19,7 +18,6 @@ import java.util.stream.Collectors;
 
 import com.cmacgm.gbs.rst.api.associateddata.application.VolumeTrainWindows;
 import com.cmacgm.gbs.rst.api.associateddata.application.VolumeTrainWindows.SlotBound;
-import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseCalendar;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseHoliday;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
@@ -27,7 +25,6 @@ import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup.TeamSetupI
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeDailyInput;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeMonthlyInput;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeSlotInput;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseHolidayRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSupportItemRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
@@ -40,8 +37,7 @@ import com.cmacgm.gbs.rst.api.cycletime.domain.ExerciseTmsSession;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.ExerciseTmsSessionRepository;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService.ApplyTemplatesResult;
+import com.cmacgm.gbs.rst.api.holidaytemplate.domain.HolidayDayKind;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSession;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSessionStatus;
 import com.cmacgm.gbs.rst.api.tms.persistence.TmsSessionRepository;
@@ -63,7 +59,6 @@ public class ExerciseInitializationService {
 
     private final RstExerciseRepository exercises;
     private final ExerciseTeamSetupRepository teamSetups;
-    private final ExerciseCalendarRepository calendars;
     private final ExerciseHolidayRepository holidays;
     private final ExerciseProductionSupportItemRepository supportItems;
     private final ExerciseVolumeMonthlyInputRepository monthlyVolumes;
@@ -71,14 +66,12 @@ public class ExerciseInitializationService {
     private final ExerciseVolumeSlotInputRepository slotVolumes;
     private final TmsSessionRepository tmsSessions;
     private final ExerciseTmsSessionRepository exerciseTmsSessions;
-    private final HolidayTemplateService holidayTemplates;
     private final SystemCycleTimeBaselineWriter systemCycleTime;
     private final Clock clock;
 
     public ExerciseInitializationService(
             RstExerciseRepository exercises,
             ExerciseTeamSetupRepository teamSetups,
-            ExerciseCalendarRepository calendars,
             ExerciseHolidayRepository holidays,
             ExerciseProductionSupportItemRepository supportItems,
             ExerciseVolumeMonthlyInputRepository monthlyVolumes,
@@ -86,12 +79,10 @@ public class ExerciseInitializationService {
             ExerciseVolumeSlotInputRepository slotVolumes,
             TmsSessionRepository tmsSessions,
             ExerciseTmsSessionRepository exerciseTmsSessions,
-            HolidayTemplateService holidayTemplates,
             SystemCycleTimeBaselineWriter systemCycleTime,
             Clock clock) {
         this.exercises = exercises;
         this.teamSetups = teamSetups;
-        this.calendars = calendars;
         this.holidays = holidays;
         this.supportItems = supportItems;
         this.monthlyVolumes = monthlyVolumes;
@@ -99,7 +90,6 @@ public class ExerciseInitializationService {
         this.slotVolumes = slotVolumes;
         this.tmsSessions = tmsSessions;
         this.exerciseTmsSessions = exerciseTmsSessions;
-        this.holidayTemplates = holidayTemplates;
         this.systemCycleTime = systemCycleTime;
         this.clock = clock;
     }
@@ -111,9 +101,6 @@ public class ExerciseInitializationService {
     public List<String> initialize(RstExercise exercise, String actorCcgid) {
         Instant now = clock.instant();
         List<String> notices = new ArrayList<>();
-        String center = exercise.getToolkitSnapshot() != null
-                ? exercise.getToolkitSnapshot().getCenter()
-                : null;
         Set<Short> holidayYears = resolveHolidayYears(exercise);
         short primaryYear = primaryYear(exercise.getSizingMonth());
 
@@ -128,27 +115,13 @@ public class ExerciseInitializationService {
             if (archivePrimary != primaryYear) {
                 notices.add("Sizing year differs from the archive ("
                         + archivePrimary + " → " + primaryYear
-                        + "). Holidays were merged for " + formatYears(holidayYears) + ".");
+                        + "). Holidays were copied for " + formatYears(holidayYears) + ".");
             }
+            copyHolidays(source.getId(), exercise.getId(), holidayYears, actorCcgid, now);
         } else {
             notices.add(
                     "No approved exercise found for this Toolkit. "
-                            + "Associated Data starts empty; Calendar uses Center templates.");
-        }
-
-        ApplyTemplatesResult applied = holidayTemplates.applyPublishedTemplates(
-                exercise.getId(),
-                center,
-                primaryYear,
-                holidayYears,
-                actorCcgid,
-                false);
-        notices.addAll(applied.notices());
-
-        if (archive.isPresent()) {
-            copyCalendarHeader(archive.get().getId(), exercise.getId(), actorCcgid, now);
-            copyCustomHolidays(
-                    archive.get().getId(), exercise.getId(), holidayYears, actorCcgid, now);
+                            + "Associated Data starts empty. Add holiday dates in Calendar if needed.");
         }
 
         syncVolumeGrids(exercise, archive.map(RstExercise::getId).orElse(null), actorCcgid);
@@ -272,53 +245,30 @@ public class ExerciseInitializationService {
         supportItems.saveAll(copies);
     }
 
-    private void copyCalendarHeader(
-            UUID sourceId, UUID targetId, String actorCcgid, Instant now) {
-        ExerciseCalendar target = calendars.findById(targetId)
-                .orElseThrow(() -> initializationConflict(
-                        "exercise-calendar-shell-missing",
-                        "The target Exercise Calendar shell is missing."));
-        calendars.findById(sourceId).ifPresent(source -> {
-            target.applyTemplateMeta(
-                    source.getWeekendCode(),
-                    source.getSourceTemplateId(),
-                    source.getSourceTemplateVersion(),
-                    source.getBaselineYear(),
-                    source.getBaselineSource(),
-                    source.getBaselineVersion(),
-                    actorCcgid,
-                    now);
-            calendars.save(target);
-        });
-    }
-
-    private void copyCustomHolidays(
+    private void copyHolidays(
             UUID sourceId,
             UUID targetId,
             Set<Short> holidayYears,
             String actorCcgid,
             Instant now) {
-        Set<String> existingKeys = holidays
+        Set<LocalDate> existingDates = holidays
                 .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(targetId)
                 .stream()
-                .map(ExerciseInitializationService::holidayKey)
+                .map(ExerciseHoliday::getHolidayDate)
                 .collect(Collectors.toSet());
         List<ExerciseHoliday> copies = new ArrayList<>();
         for (ExerciseHoliday holiday : holidays
                 .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(sourceId)) {
             LocalDate date = holiday.getHolidayDate();
-            if (!"CUSTOM".equalsIgnoreCase(holiday.getHolidayType())
-                    || date == null
-                    || !holidayYears.contains((short) date.getYear())) {
+            if (date == null || !holidayYears.contains((short) date.getYear())) {
                 continue;
             }
-            String key = holidayKey(holiday);
-            if (existingKeys.add(key)) {
+            if (existingDates.add(date)) {
                 copies.add(ExerciseHoliday.create(
                         targetId,
                         date,
                         holiday.getHolidayName(),
-                        "CUSTOM",
+                        HolidayDayKind.parse(holiday.getHolidayType()).name(),
                         actorCcgid,
                         now));
             }
@@ -476,12 +426,6 @@ public class ExerciseInitializationService {
                 .collect(Collectors.joining(", "));
     }
 
-    private static String holidayKey(ExerciseHoliday holiday) {
-        return holiday.getHolidayDate()
-                + "|"
-                + holiday.getHolidayName().toLowerCase(Locale.ROOT);
-    }
-
     private static ApiException initializationConflict(String code, String message) {
         return new ApiException(HttpStatus.CONFLICT, code, message);
     }
@@ -504,7 +448,8 @@ public class ExerciseInitializationService {
                 source.getSlaEndTime(),
                 source.getSlaWeekendEnabled(),
                 source.getWeekendShiftHc(),
-                source.getSkeletonRatio());
+                source.getSkeletonRatio(),
+                source.getWeekendCode());
     }
 
     private record SlotKey(Instant start, Instant end) {

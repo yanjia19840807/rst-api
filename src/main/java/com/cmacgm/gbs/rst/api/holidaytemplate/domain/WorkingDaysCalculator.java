@@ -10,13 +10,16 @@ import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
- * Java equivalent of Excel NETWORKDAYS.INTL(year start, year end, weekend, holidays).
+ * Java equivalent of Excel NETWORKDAYS.INTL and PH Dates volume-day flags.
  */
 @Component
 public class WorkingDaysCalculator {
 
     /**
      * Counts working days in a calendar year excluding weekends and non-working holidays.
+     *
+     * <p>Team Setup year working days pass an empty holiday list (Excel Input C24).
+     * Monthly WorkDays pass Holiday + Weekend dates only (Excel Public Holidays pivot).
      *
      * @param year calendar year
      * @param weekendCode weekend pattern
@@ -45,7 +48,7 @@ public class WorkingDaysCalculator {
     }
 
     /**
-     * Whether the date is a working day under weekend + holiday rules.
+     * Whether the date is a working day under weekend + rest-holiday rules (no Normal override).
      *
      * @param date date to test
      * @param weekendCode weekend pattern
@@ -53,22 +56,55 @@ public class WorkingDaysCalculator {
      * @return true when the date is a working day
      */
     public boolean isWorkingDay(LocalDate date, String weekendCode, Collection<LocalDate> holidays) {
+        return volumeDay(date, weekendCode, null, holidays).workingDay();
+    }
+
+    /**
+     * Excel Volume per Day flags for one date.
+     *
+     * <ul>
+     *   <li>Type Holiday or Weekend → public holiday, not working</li>
+     *   <li>Type Normal → not a public holiday, is working (makeup)</li>
+     *   <li>Unlisted → Team Setup weekend pattern only</li>
+     * </ul>
+     *
+     * @param date date to test
+     * @param weekendCode Team Setup weekend code
+     * @param kind PH Dates type for this date; null when unlisted
+     * @return volume-day flags
+     */
+    public VolumeDayFlags volumeDay(LocalDate date, String weekendCode, HolidayDayKind kind) {
+        return volumeDay(date, weekendCode, kind, null);
+    }
+
+    private VolumeDayFlags volumeDay(
+            LocalDate date,
+            String weekendCode,
+            HolidayDayKind kind,
+            Collection<LocalDate> restDates) {
         Objects.requireNonNull(date, "date");
+        if (kind != null && kind.isRestDay()) {
+            return new VolumeDayFlags(true, false);
+        }
+        if (kind == HolidayDayKind.NORMAL) {
+            return new VolumeDayFlags(false, true);
+        }
         WeekendCode weekend = WeekendCode.parse(weekendCode);
         if (weekend.days().contains(date.getDayOfWeek())) {
-            return false;
+            return new VolumeDayFlags(false, false);
         }
-        if (holidays != null && holidays.contains(date)) {
-            return false;
+        if (restDates != null && restDates.contains(date)) {
+            return new VolumeDayFlags(true, false);
         }
-        return true;
+        return new VolumeDayFlags(false, true);
     }
 
     /**
      * Counts workdays and weekend days in a calendar month for Forecast exogenous features.
      *
-     * <p>Workdays exclude weekends and non-working holidays. Weekend days follow the weekend
-     * pattern only (holidays on weekend still count as weekend days).
+     * <p>Workdays follow NETWORKDAYS.INTL: weekends plus rest dates (Holiday + Weekend types).
+     * Makeup (Normal) Saturdays are not added back. Weekend days follow the weekend pattern
+     * only (a rest date on Saturday still counts as a weekend day).
      *
      * @param month year-month
      * @param weekendCode weekend pattern
@@ -103,5 +139,9 @@ public class WorkingDaysCalculator {
 
     /** Workday / weekend-day counts for one calendar month. */
     public record MonthDayCounts(int workDays, int weekendDays) {
+    }
+
+    /** Excel Volume per Day: public holiday and working-day flags. */
+    public record VolumeDayFlags(boolean publicHoliday, boolean workingDay) {
     }
 }

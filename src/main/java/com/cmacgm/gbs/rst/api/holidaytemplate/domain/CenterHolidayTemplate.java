@@ -83,8 +83,8 @@ public class CenterHolidayTemplate {
         template.center = center;
         template.year = year;
         template.defaultWeekendCode = defaultWeekendCode == null || defaultWeekendCode.isBlank()
-                ? WeekendCode.SAT_SUN.name()
-                : defaultWeekendCode;
+                ? WeekendCode.DEFAULT_STORED
+                : WeekendCode.storedValue(defaultWeekendCode);
         template.status = STATUS_PUBLISHED;
         template.version = 1;
         template.sourceNote = sourceNote;

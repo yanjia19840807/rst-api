@@ -9,6 +9,6 @@ import jakarta.validation.constraints.NotNull;
  * Holiday request row.
  */
 public record HolidayRequest(
-        @NotNull LocalDate holidayDate, @NotBlank String holidayName,
+        @NotNull LocalDate holidayDate, String holidayName,
         @NotBlank String holidayType) {
 }

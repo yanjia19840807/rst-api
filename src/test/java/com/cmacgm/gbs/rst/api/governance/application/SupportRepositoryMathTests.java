@@ -21,7 +21,7 @@ class SupportRepositoryMathTests {
     }
 
     @Test
-    void rollsUpByCategoryAndPicksTopActivity() {
+    void rollsUpByCategory() {
         SupportRepositoryMath.Summary summary = SupportRepositoryMath.summarize(List.of(
                 row("Quality Control", "Case audit", "0.51"),
                 row("Quality Control", "Spot check", "0.20"),
@@ -33,7 +33,6 @@ class SupportRepositoryMathTests {
         assertThat(summary.categorySummaries()).extracting(SupportCategorySummary::category)
                 .containsExactly("Quality Control", "Reporting");
         assertThat(summary.categorySummaries().getFirst().pctOfSupport()).isEqualTo("88.8%");
-        assertThat(summary.categorySummaries().getFirst().topActivity()).isEqualTo("Case audit");
         assertThat(summary.categorySummaries().get(1).pctOfSupport()).isEqualTo("11.3%");
     }
 
@@ -51,6 +50,7 @@ class SupportRepositoryMathTests {
                 "Finance",
                 "BANK RECONCILIATION",
                 "Bank Rec",
+                null,
                 category,
                 activity,
                 "Weekly",

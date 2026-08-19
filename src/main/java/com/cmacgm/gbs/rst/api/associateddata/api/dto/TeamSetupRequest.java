@@ -14,7 +14,8 @@ public record TeamSetupRequest(
         BigDecimal availabilityRatio, BigDecimal automationRatio,
         BigDecimal maxOvertimeMinutes, String slaType, BigDecimal slaTargetRatio,
         BigDecimal slaTurnaroundMinutes, LocalTime slaStartTime, LocalTime slaEndTime,
-        Boolean slaWeekendEnabled, BigDecimal weekendShiftHc, BigDecimal skeletonRatio) {
+        Boolean slaWeekendEnabled, BigDecimal weekendShiftHc, BigDecimal skeletonRatio,
+        String weekendCode) {
     /**
      * Converts to domain input.
      *
@@ -26,6 +27,6 @@ public record TeamSetupRequest(
                 paidLeaveDays, otherLeaveDays,
                 availabilityRatio, automationRatio, maxOvertimeMinutes,
                 slaType, slaTargetRatio, slaTurnaroundMinutes, slaStartTime, slaEndTime,
-                slaWeekendEnabled, weekendShiftHc, skeletonRatio);
+                slaWeekendEnabled, weekendShiftHc, skeletonRatio, weekendCode);
     }
 }

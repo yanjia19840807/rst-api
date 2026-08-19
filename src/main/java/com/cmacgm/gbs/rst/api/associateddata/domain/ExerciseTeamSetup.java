@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.LocalTime;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WeekendCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -76,6 +77,9 @@ public class ExerciseTeamSetup {
     @Column(name = "skeleton_ratio", precision = 12, scale = 8)
     private BigDecimal skeletonRatio;
 
+    @Column(name = "weekend_code", length = 40)
+    private String weekendCode;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -100,6 +104,7 @@ public class ExerciseTeamSetup {
     public static ExerciseTeamSetup emptyShell(UUID exerciseId, String actorCcgid, Instant now) {
         ExerciseTeamSetup setup = new ExerciseTeamSetup();
         setup.exerciseId = exerciseId;
+        setup.weekendCode = WeekendCode.DEFAULT_STORED;
         setup.createdAt = now;
         setup.createdBy = actorCcgid;
         setup.updatedAt = now;
@@ -128,6 +133,7 @@ public class ExerciseTeamSetup {
         this.slaWeekendEnabled = input.slaWeekendEnabled();
         this.weekendShiftHc = input.weekendShiftHc();
         this.skeletonRatio = input.skeletonRatio();
+        this.weekendCode = WeekendCode.storedValue(input.weekendCode());
         this.updatedAt = now;
         this.updatedBy = actorCcgid;
     }
@@ -220,6 +226,7 @@ public class ExerciseTeamSetup {
     public Boolean getSlaWeekendEnabled() { return slaWeekendEnabled; }
     public BigDecimal getWeekendShiftHc() { return weekendShiftHc; }
     public BigDecimal getSkeletonRatio() { return skeletonRatio; }
+    public String getWeekendCode() { return weekendCode; }
     public long getVersion() { return version; }
 
     /**
@@ -242,6 +249,7 @@ public class ExerciseTeamSetup {
             LocalTime slaEndTime,
             Boolean slaWeekendEnabled,
             BigDecimal weekendShiftHc,
-            BigDecimal skeletonRatio) {
+            BigDecimal skeletonRatio,
+            String weekendCode) {
     }
 }

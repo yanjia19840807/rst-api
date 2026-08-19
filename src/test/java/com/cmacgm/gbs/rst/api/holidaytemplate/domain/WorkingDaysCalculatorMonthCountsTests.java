@@ -15,7 +15,7 @@ class WorkingDaysCalculatorMonthCountsTests {
 
     @Test
     void countsWorkdaysAndWeekendsForMonthWithoutHolidays() {
-        MonthDayCounts counts = calculator.countMonth(YearMonth.of(2026, 8), "SAT_SUN", List.of());
+        MonthDayCounts counts = calculator.countMonth(YearMonth.of(2026, 8), "1", List.of());
         // Aug 2026: 31 days, 5 Sat + 5 Sun = 10 weekend days, 21 weekdays
         assertThat(counts.weekendDays()).isEqualTo(10);
         assertThat(counts.workDays()).isEqualTo(21);
@@ -25,7 +25,7 @@ class WorkingDaysCalculatorMonthCountsTests {
     void weekdayHolidayReducesWorkdaysOnly() {
         MonthDayCounts counts = calculator.countMonth(
                 YearMonth.of(2026, 8),
-                "SAT_SUN",
+                "1",
                 List.of(LocalDate.of(2026, 8, 10))); // Monday
         assertThat(counts.weekendDays()).isEqualTo(10);
         assertThat(counts.workDays()).isEqualTo(20);

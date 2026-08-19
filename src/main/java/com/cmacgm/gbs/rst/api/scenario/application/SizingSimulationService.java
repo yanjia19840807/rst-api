@@ -11,18 +11,16 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseCalendar;
 import com.cmacgm.gbs.rst.api.forecast.ForecastOrchestrationService;
-import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseHoliday;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
+import com.cmacgm.gbs.rst.api.associateddata.domain.HolidayDays;
 import com.cmacgm.gbs.rst.api.associateddata.domain.SupportWorkloadMath;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseHolidayRepository;
@@ -35,8 +33,11 @@ import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
+import com.cmacgm.gbs.rst.api.holidaytemplate.domain.HolidayDayKind;
+import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WeekendCode;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator.MonthDayCounts;
+import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator.VolumeDayFlags;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.scenario.domain.DailySimulationResult;
 import com.cmacgm.gbs.rst.api.scenario.domain.ForecastPoint;
@@ -265,7 +266,7 @@ public class SizingSimulationService {
             YearMonth month = YearMonth.from(point.periodStart());
             BigDecimal forecastVolume = acceptedVolume(point);
             MonthDayCounts counts = workingDaysCalculator.countMonth(
-                    month, ctx.weekendCode(), ctx.holidayDates());
+                    month, ctx.weekendCode(), ctx.restDates());
             if (counts.workDays() <= 0) {
                 throw new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
@@ -339,9 +340,10 @@ public class SizingSimulationService {
         List<DailySimulationResult> rows = new ArrayList<>(points.size());
         for (ForecastPointView point : points) {
             LocalDate day = point.periodStart();
-            boolean holiday = ctx.holidaySet().contains(day);
-            boolean workingDay = workingDaysCalculator.isWorkingDay(
-                    day, ctx.weekendCode(), ctx.holidayDates());
+            VolumeDayFlags flags = workingDaysCalculator.volumeDay(
+                    day, ctx.weekendCode(), ctx.kinds().get(day));
+            boolean holiday = flags.publicHoliday();
+            boolean workingDay = flags.workingDay();
             BigDecimal forecastVolume = acceptedVolume(point);
             BigDecimal manual = SizingMath.dailyManualVolume(forecastVolume, ctx.automationRatio());
             BigDecimal simHc = SizingMath.simulationHc(
@@ -572,17 +574,13 @@ public class SizingSimulationService {
                         "calendar-required",
                         "Exercise calendar is required before sizing."));
 
-        String weekendCode = calendar.getWeekendCode() != null ? calendar.getWeekendCode() : "SAT_SUN";
-        List<LocalDate> holidayDates = new ArrayList<>();
-        for (ExerciseHoliday holiday : holidays
-                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)) {
-            holidayDates.add(holiday.getHolidayDate());
-        }
-        int year = calendar.getBaselineYear() != null
-                ? calendar.getBaselineYear()
-                : LocalDate.now(clock).getYear();
+        String weekendCode = WeekendCode.storedValue(team.getWeekendCode());
+        Map<LocalDate, HolidayDayKind> kinds = HolidayDays.kinds(holidays
+                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId));
+        List<LocalDate> restDates = HolidayDays.restDates(kinds);
+        int year = YearMonth.from(exercise.getSizingMonth()).getYear();
         BigDecimal workingDaysYear = BigDecimal.valueOf(
-                workingDaysCalculator.networkDays(year, weekendCode, holidayDates));
+                workingDaysCalculator.networkDays(year, weekendCode, List.of()));
 
         BigDecimal workingHours = requirePositive(team.workingHoursPerDay(), "Working hours per day");
         BigDecimal availability = requirePositive(team.getAvailabilityRatio(), "Availability ratio");
@@ -621,8 +619,8 @@ public class SizingSimulationService {
 
         return new Context(
                 weekendCode,
-                holidayDates,
-                new HashSet<>(holidayDates),
+                restDates,
+                kinds,
                 workingHours,
                 availability,
                 capacity,
@@ -712,8 +710,8 @@ public class SizingSimulationService {
 
     private record Context(
             String weekendCode,
-            List<LocalDate> holidayDates,
-            Set<LocalDate> holidaySet,
+            List<LocalDate> restDates,
+            Map<LocalDate, HolidayDayKind> kinds,
             BigDecimal workingHoursPerDay,
             BigDecimal availabilityRatio,
             BigDecimal capacityRatio,
