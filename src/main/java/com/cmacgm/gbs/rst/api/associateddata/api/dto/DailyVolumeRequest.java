@@ -8,5 +8,10 @@ import jakarta.validation.constraints.NotNull;
 /**
  * Daily volume request row.
  */
-public record DailyVolumeRequest(@NotNull LocalDate volumeDate, BigDecimal actualVolume) {
+public record DailyVolumeRequest(
+        @NotNull LocalDate volumeDate, BigDecimal actualVolume, BigDecimal dailyAdjustmentRatio) {
+
+    public DailyVolumeRequest(LocalDate volumeDate, BigDecimal actualVolume) {
+        this(volumeDate, actualVolume, null);
+    }
 }

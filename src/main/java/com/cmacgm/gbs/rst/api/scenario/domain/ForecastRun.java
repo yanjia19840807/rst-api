@@ -52,6 +52,10 @@ public class ForecastRun {
     @Column(name = "feature_metadata", columnDefinition = "jsonb")
     private String featureMetadata;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "training_observations", columnDefinition = "jsonb")
+    private List<ForecastTrainingSnapshot> trainingObservations = new ArrayList<>();
+
     @Column(nullable = false, length = 20)
     private String status;
 
@@ -147,6 +151,7 @@ public class ForecastRun {
         run.trainingTo = trainingTo;
         run.inputHash = inputHash;
         run.featureMetadata = featureMetadata;
+        run.trainingObservations = new ArrayList<>();
         run.status = "ACCEPTED";
         run.startedAt = now;
         run.completedAt = now;
@@ -164,6 +169,15 @@ public class ForecastRun {
         this.points.add(point);
     }
 
+    /**
+     * Freezes the actuals that trained this run (Exercise APPROVED only).
+     */
+    public void freezeTrainingObservations(List<ForecastTrainingSnapshot> snapshots) {
+        this.trainingObservations = snapshots == null
+                ? new ArrayList<>()
+                : new ArrayList<>(snapshots);
+    }
+
     public UUID getId() { return id; }
     public UUID getScenarioId() { return scenarioId; }
     public int getRunNo() { return runNo; }
@@ -172,7 +186,13 @@ public class ForecastRun {
     public String getMethodVersion() { return methodVersion; }
     public LocalDate getTrainingFrom() { return trainingFrom; }
     public LocalDate getTrainingTo() { return trainingTo; }
+    public String getInputHash() { return inputHash; }
     public String getFeatureMetadata() { return featureMetadata; }
+    public List<ForecastTrainingSnapshot> getTrainingObservations() {
+        return trainingObservations == null
+                ? List.of()
+                : Collections.unmodifiableList(trainingObservations);
+    }
     public String getStatus() { return status; }
     public Instant getStartedAt() { return startedAt; }
     public Instant getCompletedAt() { return completedAt; }

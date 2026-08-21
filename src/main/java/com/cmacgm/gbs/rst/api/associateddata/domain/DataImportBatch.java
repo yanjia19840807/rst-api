@@ -10,7 +10,7 @@ import jakarta.persistence.Table;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-/** Tracks a volume/holiday template import batch. */
+/** Tracks a volume or holiday import batch. */
 @Entity
 @Table(name = "data_import_batch")
 public class DataImportBatch {

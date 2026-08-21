@@ -20,6 +20,8 @@ import com.cmacgm.gbs.rst.api.associateddata.api.dto.SupportItemRequest;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.SupportItemView;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.TeamSetupRequest;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.TeamSetupView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.ToolkitVolumePointsView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.ToolkitVolumeSummaryView;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -194,7 +196,7 @@ public class ExerciseAssociatedDataController {
     }
 
     /**
-     * Replaces calendar header and holidays.
+     * Replaces holidays.
      *
      * @param principal authenticated Supervisor
      * @param exerciseId Exercise id
@@ -220,6 +222,24 @@ public class ExerciseAssociatedDataController {
     public List<MonthlyVolumeView> getMonthly(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
         return service.getMonthlyVolumes(principal.ccgid(), exerciseId);
+    }
+
+    /**
+     * Canonical Toolkit volume coverage (training source for later exercises).
+     */
+    @GetMapping("/volumes/toolkit-summary")
+    public ToolkitVolumeSummaryView getToolkitVolumeSummary(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return service.getToolkitVolumeSummary(principal.ccgid(), exerciseId);
+    }
+
+    /**
+     * Canonical Toolkit actuals used to pre-fill newly added or imported keys.
+     */
+    @GetMapping("/volumes/toolkit-points")
+    public ToolkitVolumePointsView getToolkitVolumePoints(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return service.getToolkitVolumePoints(principal.ccgid(), exerciseId);
     }
 
     /**

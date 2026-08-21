@@ -144,17 +144,21 @@ public class ExerciseTeamSetup {
         return total.compareTo(BigDecimal.ZERO) > 0 ? total : null;
     }
 
-    /** Weighted midpoints (0.25, 1.25, 3, 5) / totalAgents. */
+    /**
+     * Excel Input C10: (3·&lt;6m + 15·6–24m + 36·24–48m + 48·&gt;48m) / 12 / TotalAgent.
+     * Midpoints in years: 0.25, 1.25, 3, 4.
+     */
     public BigDecimal averageTenureYears() {
         BigDecimal total = totalAgents();
         if (total == null) {
             return null;
         }
-        BigDecimal weighted = nz(agentsLt6m).multiply(new BigDecimal("0.25"))
-                .add(nz(agents6To24m).multiply(new BigDecimal("1.25")))
-                .add(nz(agents24To48m).multiply(new BigDecimal("3")))
-                .add(nz(agentsGt48m).multiply(new BigDecimal("5")));
-        return weighted.divide(total, 6, RoundingMode.HALF_UP);
+        BigDecimal weightedMonths = nz(agentsLt6m).multiply(new BigDecimal("3"))
+                .add(nz(agents6To24m).multiply(new BigDecimal("15")))
+                .add(nz(agents24To48m).multiply(new BigDecimal("36")))
+                .add(nz(agentsGt48m).multiply(new BigDecimal("48")));
+        return weightedMonths.divide(new BigDecimal("12"), 16, RoundingMode.HALF_UP)
+                .divide(total, 6, RoundingMode.HALF_UP);
     }
 
     /**
@@ -189,7 +193,7 @@ public class ExerciseTeamSetup {
         return maxCapacity.divide(workingDaysPerYear, 8, RoundingMode.HALF_UP);
     }
 
-    /** WorkingHours × Availability × 3600 / CycleTime. */
+    /** Excel Input C36: WorkingHrPerDay × Availability × 3600 / CycleTime. */
     public BigDecimal dailyCapacityPerAgent(BigDecimal cycleTimeSeconds) {
         BigDecimal hours = workingHoursPerDay();
         if (hours == null

@@ -16,6 +16,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.cmacgm.gbs.rst.api.associateddata.application.ToolkitVolumeService;
 import com.cmacgm.gbs.rst.api.associateddata.application.VolumeTrainWindows;
 import com.cmacgm.gbs.rst.api.associateddata.application.VolumeTrainWindows.SlotBound;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseHoliday;
@@ -67,6 +68,7 @@ public class ExerciseInitializationService {
     private final TmsSessionRepository tmsSessions;
     private final ExerciseTmsSessionRepository exerciseTmsSessions;
     private final SystemCycleTimeBaselineWriter systemCycleTime;
+    private final ToolkitVolumeService toolkitVolumes;
     private final Clock clock;
 
     public ExerciseInitializationService(
@@ -80,6 +82,7 @@ public class ExerciseInitializationService {
             TmsSessionRepository tmsSessions,
             ExerciseTmsSessionRepository exerciseTmsSessions,
             SystemCycleTimeBaselineWriter systemCycleTime,
+            ToolkitVolumeService toolkitVolumes,
             Clock clock) {
         this.exercises = exercises;
         this.teamSetups = teamSetups;
@@ -91,6 +94,7 @@ public class ExerciseInitializationService {
         this.tmsSessions = tmsSessions;
         this.exerciseTmsSessions = exerciseTmsSessions;
         this.systemCycleTime = systemCycleTime;
+        this.toolkitVolumes = toolkitVolumes;
         this.clock = clock;
     }
 
@@ -125,8 +129,7 @@ public class ExerciseInitializationService {
         }
 
         syncVolumeGrids(exercise, archive.map(RstExercise::getId).orElse(null), actorCcgid);
-        notices.add("Volume Input grids prepared for Sizing and Slot training windows"
-                + (archive.isPresent() ? " (overlapping archive values copied)." : "."));
+        notices.add("Volume Input pre-filled from Toolkit volume when available.");
 
         notices.add(syncTmsPopulation(exercise, actorCcgid));
         return notices;
@@ -278,79 +281,122 @@ public class ExerciseInitializationService {
 
     private void syncVolumeGrids(RstExercise exercise, UUID archiveExerciseId, String actorCcgid) {
         Instant now = clock.instant();
-        syncMonthly(exercise, archiveExerciseId, actorCcgid, now);
-        syncDaily(exercise, archiveExerciseId, actorCcgid, now);
+        syncMonthly(exercise, actorCcgid, now);
+        syncDaily(exercise, actorCcgid, now);
         syncSlot(exercise, archiveExerciseId, actorCcgid, now);
     }
 
-    private void syncMonthly(
-            RstExercise exercise, UUID archiveExerciseId, String actorCcgid, Instant now) {
+    private void syncMonthly(RstExercise exercise, String actorCcgid, Instant now) {
         UUID targetId = exercise.getId();
-        List<LocalDate> expected = VolumeTrainWindows.monthlyTrainMonths(exercise.getSizingMonth());
-        Set<LocalDate> expectedKeys = new HashSet<>(expected);
+        YearMonth sizingYm = YearMonth.from(exercise.getSizingMonth());
         List<ExerciseVolumeMonthlyInput> targetRows =
                 monthlyVolumes.findByExerciseIdOrderByMonthAsc(targetId);
         Map<LocalDate, ExerciseVolumeMonthlyInput> targetByKey = new HashMap<>();
         targetRows.forEach(row -> targetByKey.put(row.getMonth(), row));
-        Map<LocalDate, ExerciseVolumeMonthlyInput> archiveByKey = new HashMap<>();
-        if (archiveExerciseId != null) {
-            monthlyVolumes.findByExerciseIdOrderByMonthAsc(archiveExerciseId)
-                    .forEach(row -> archiveByKey.put(row.getMonth(), row));
-        }
-
-        List<ExerciseVolumeMonthlyInput> missing = new ArrayList<>();
-        for (LocalDate month : expected) {
-            if (targetByKey.containsKey(month)) {
+        Map<LocalDate, BigDecimal> seed = toolkitVolumes.monthlySeedByMonth(exercise.getToolkitId());
+        YearMonth min = null;
+        YearMonth max = null;
+        for (LocalDate month : targetByKey.keySet()) {
+            YearMonth ym = YearMonth.from(month);
+            if (ym.isAfter(sizingYm)) {
                 continue;
             }
-            ExerciseVolumeMonthlyInput seed = archiveByKey.get(month);
-            missing.add(ExerciseVolumeMonthlyInput.create(
-                    targetId,
-                    month,
-                    seed != null ? seed.getActualVolume() : null,
-                    seed != null ? "ARCHIVE" : "MANUAL",
-                    seed != null ? seed.getImportBatchId() : null,
-                    actorCcgid,
-                    now));
+            if (min == null || ym.isBefore(min)) {
+                min = ym;
+            }
+            if (max == null || ym.isAfter(max)) {
+                max = ym;
+            }
+        }
+        for (LocalDate month : seed.keySet()) {
+            YearMonth ym = YearMonth.from(month);
+            if (ym.isAfter(sizingYm)) {
+                continue;
+            }
+            if (min == null || ym.isBefore(min)) {
+                min = ym;
+            }
+            if (max == null || ym.isAfter(max)) {
+                max = ym;
+            }
+        }
+        List<ExerciseVolumeMonthlyInput> missing = new ArrayList<>();
+        if (min != null && max != null) {
+            for (YearMonth ym = min; !ym.isAfter(max); ym = ym.plusMonths(1)) {
+                LocalDate month = ym.atDay(1);
+                if (targetByKey.containsKey(month)) {
+                    continue;
+                }
+                BigDecimal actual = seed.get(month);
+                missing.add(ExerciseVolumeMonthlyInput.create(
+                        targetId,
+                        month,
+                        actual,
+                        null,
+                        actual != null ? "TOOLKIT" : "MANUAL",
+                        null,
+                        actorCcgid,
+                        now));
+            }
         }
         monthlyVolumes.deleteAllInBatch(targetRows.stream()
-                .filter(row -> !expectedKeys.contains(row.getMonth()))
+                .filter(row -> YearMonth.from(row.getMonth()).isAfter(sizingYm))
                 .toList());
         monthlyVolumes.saveAll(missing);
     }
 
-    private void syncDaily(
-            RstExercise exercise, UUID archiveExerciseId, String actorCcgid, Instant now) {
+    private void syncDaily(RstExercise exercise, String actorCcgid, Instant now) {
         UUID targetId = exercise.getId();
-        List<LocalDate> expected = VolumeTrainWindows.dailyTrainDates(exercise.getSizingMonth());
-        Set<LocalDate> expectedKeys = new HashSet<>(expected);
+        LocalDate cutoff = YearMonth.from(exercise.getSizingMonth()).atEndOfMonth();
         List<ExerciseVolumeDailyInput> targetRows =
                 dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(targetId);
         Map<LocalDate, ExerciseVolumeDailyInput> targetByKey = new HashMap<>();
         targetRows.forEach(row -> targetByKey.put(row.getVolumeDate(), row));
-        Map<LocalDate, ExerciseVolumeDailyInput> archiveByKey = new HashMap<>();
-        if (archiveExerciseId != null) {
-            dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(archiveExerciseId)
-                    .forEach(row -> archiveByKey.put(row.getVolumeDate(), row));
-        }
-
-        List<ExerciseVolumeDailyInput> missing = new ArrayList<>();
-        for (LocalDate date : expected) {
-            if (targetByKey.containsKey(date)) {
+        Map<LocalDate, BigDecimal> seed = toolkitVolumes.dailySeedByDate(exercise.getToolkitId());
+        LocalDate min = null;
+        LocalDate max = null;
+        for (LocalDate date : targetByKey.keySet()) {
+            if (date.isAfter(cutoff)) {
                 continue;
             }
-            ExerciseVolumeDailyInput seed = archiveByKey.get(date);
-            missing.add(ExerciseVolumeDailyInput.create(
-                    targetId,
-                    date,
-                    seed != null ? seed.getActualVolume() : null,
-                    seed != null ? "ARCHIVE" : "MANUAL",
-                    seed != null ? seed.getImportBatchId() : null,
-                    actorCcgid,
-                    now));
+            if (min == null || date.isBefore(min)) {
+                min = date;
+            }
+            if (max == null || date.isAfter(max)) {
+                max = date;
+            }
+        }
+        for (LocalDate date : seed.keySet()) {
+            if (date.isAfter(cutoff)) {
+                continue;
+            }
+            if (min == null || date.isBefore(min)) {
+                min = date;
+            }
+            if (max == null || date.isAfter(max)) {
+                max = date;
+            }
+        }
+        List<ExerciseVolumeDailyInput> missing = new ArrayList<>();
+        if (min != null && max != null) {
+            for (LocalDate date = min; !date.isAfter(max); date = date.plusDays(1)) {
+                if (targetByKey.containsKey(date)) {
+                    continue;
+                }
+                BigDecimal actual = seed.get(date);
+                missing.add(ExerciseVolumeDailyInput.create(
+                        targetId,
+                        date,
+                        actual,
+                        null,
+                        actual != null ? "TOOLKIT" : "MANUAL",
+                        null,
+                        actorCcgid,
+                        now));
+            }
         }
         dailyVolumes.deleteAllInBatch(targetRows.stream()
-                .filter(row -> !expectedKeys.contains(row.getVolumeDate()))
+                .filter(row -> row.getVolumeDate().isAfter(cutoff))
                 .toList());
         dailyVolumes.saveAll(missing);
     }

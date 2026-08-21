@@ -22,12 +22,12 @@ class WorkingDaysCalculatorMonthCountsTests {
     }
 
     @Test
-    void weekdayHolidayReducesWorkdaysOnly() {
+    void weekdayHolidayReducesWorkdaysAndIncreasesWeekendDays() {
         MonthDayCounts counts = calculator.countMonth(
                 YearMonth.of(2026, 8),
                 "1",
                 List.of(LocalDate.of(2026, 8, 10))); // Monday
-        assertThat(counts.weekendDays()).isEqualTo(10);
+        assertThat(counts.weekendDays()).isEqualTo(11);
         assertThat(counts.workDays()).isEqualTo(20);
     }
 }

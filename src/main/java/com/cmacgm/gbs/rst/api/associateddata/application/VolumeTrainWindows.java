@@ -12,10 +12,11 @@ import java.util.Set;
 import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
 
 /**
- * Derives Volume Input training windows from Exercise periods (forecast windows excluded).
+ * Derives chart-history and slot Volume Input windows from Exercise periods.
  *
- * <p>Per-slot rows follow the prototype business-day grid: 09:00–22:00 in 30-minute steps
- * (not a full 24-hour clock).
+ * <p>Monthly/daily 3-month and sizing-month day ranges are chart history only; they are not a
+ * Volume Input row type. Per-slot rows follow the prototype business-day grid: 09:00–22:00 in
+ * 30-minute steps (not a full 24-hour clock).
  */
 public final class VolumeTrainWindows {
 
@@ -28,7 +29,7 @@ public final class VolumeTrainWindows {
     private VolumeTrainWindows() {
     }
 
-    /** Monthly train months: sizingMonth-2 … sizingMonth (month-start DATE). */
+    /** Chart history months: sizingMonth-2 … sizingMonth (month-start DATE). */
     public static List<LocalDate> monthlyTrainMonths(LocalDate sizingMonth) {
         YearMonth ym = YearMonth.from(sizingMonth);
         List<LocalDate> months = new ArrayList<>(3);
@@ -38,7 +39,7 @@ public final class VolumeTrainWindows {
         return months;
     }
 
-    /** Daily train dates: every day in the sizing month. */
+    /** Chart history days: every day in the sizing month. */
     public static List<LocalDate> dailyTrainDates(LocalDate sizingMonth) {
         YearMonth ym = YearMonth.from(sizingMonth);
         List<LocalDate> dates = new ArrayList<>();

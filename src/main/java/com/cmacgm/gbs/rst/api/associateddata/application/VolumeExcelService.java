@@ -41,8 +41,10 @@ import com.cmacgm.gbs.rst.api.common.error.ApiException;
 @Component
 public class VolumeExcelService {
 
-    private static final List<String> MONTHLY_HEADERS = List.of("month", "actual_volume");
-    private static final List<String> DAILY_HEADERS = List.of("date", "actual_volume");
+    private static final List<String> MONTHLY_HEADERS = List.of("month", "actual_volume", "commercial_ratio");
+    private static final List<String> DAILY_HEADERS = List.of("date", "actual_volume", "daily_adjustment_ratio");
+    private static final List<String> MONTHLY_REQUIRED = List.of("month", "actual_volume");
+    private static final List<String> DAILY_REQUIRED = List.of("date", "actual_volume");
     private static final List<String> SLOT_HEADERS = List.of("slot_start", "actual_volume");
     private static final long SLOT_MINUTES = 30;
     private static final String SLOT_EXCEL_DATE_FORMAT = "yyyy-mm-dd hh:mm";
@@ -79,7 +81,8 @@ public class VolumeExcelService {
         for (MonthlyVolumeRequest row : rows) {
             body.add(List.of(
                     row.month(),
-                    row.actualVolume() == null ? "" : row.actualVolume().toPlainString()));
+                    row.actualVolume() == null ? "" : row.actualVolume().toPlainString(),
+                    row.commercialRatio() == null ? "" : row.commercialRatio().toPlainString()));
         }
         return writeSheet("Monthly", MONTHLY_HEADERS, body);
     }
@@ -89,7 +92,10 @@ public class VolumeExcelService {
         for (DailyVolumeRequest row : rows) {
             body.add(List.of(
                     row.volumeDate().toString(),
-                    row.actualVolume() == null ? "" : row.actualVolume().toPlainString()));
+                    row.actualVolume() == null ? "" : row.actualVolume().toPlainString(),
+                    row.dailyAdjustmentRatio() == null
+                            ? ""
+                            : row.dailyAdjustmentRatio().toPlainString()));
         }
         return writeSheet("Daily", DAILY_HEADERS, body);
     }
@@ -121,7 +127,7 @@ public class VolumeExcelService {
     }
 
     public List<MonthlyVolumeRequest> parseMonthly(InputStream inputStream) {
-        List<Map<String, String>> rows = parseRows(inputStream, MONTHLY_HEADERS);
+        List<Map<String, String>> rows = parseRows(inputStream, MONTHLY_REQUIRED, List.of("commercial_ratio"));
         List<MonthlyVolumeRequest> out = new ArrayList<>();
         for (int i = 0; i < rows.size(); i++) {
             Map<String, String> row = rows.get(i);
@@ -129,18 +135,24 @@ public class VolumeExcelService {
             if (month == null || month.isBlank()) {
                 throw conflict("invalid-excel", "Row " + (i + 2) + ": month is required.");
             }
-            out.add(new MonthlyVolumeRequest(month.trim(), parseDecimal(row.get("actual_volume"), i)));
+            out.add(new MonthlyVolumeRequest(
+                    month.trim(),
+                    parseDecimal(row.get("actual_volume"), i, "actual_volume"),
+                    parseDecimal(row.get("commercial_ratio"), i, "commercial_ratio")));
         }
         return out;
     }
 
     public List<DailyVolumeRequest> parseDaily(InputStream inputStream) {
-        List<Map<String, String>> rows = parseRows(inputStream, DAILY_HEADERS);
+        List<Map<String, String>> rows = parseRows(inputStream, DAILY_REQUIRED, List.of("daily_adjustment_ratio"));
         List<DailyVolumeRequest> out = new ArrayList<>();
         for (int i = 0; i < rows.size(); i++) {
             Map<String, String> row = rows.get(i);
             LocalDate date = parseDate(row.get("date"), i);
-            out.add(new DailyVolumeRequest(date, parseDecimal(row.get("actual_volume"), i)));
+            out.add(new DailyVolumeRequest(
+                    date,
+                    parseDecimal(row.get("actual_volume"), i, "actual_volume"),
+                    parseDecimal(row.get("daily_adjustment_ratio"), i, "daily_adjustment_ratio")));
         }
         return out;
     }
@@ -161,7 +173,7 @@ public class VolumeExcelService {
                 Instant startAt = readSlotStart(excelRow.getCell(headers.get("slot_start")), i);
                 Instant endAt = startAt.plusSeconds(SLOT_MINUTES * 60L);
                 BigDecimal volume = parseDecimal(
-                        cell(excelRow, headers.get("actual_volume")), i - 1);
+                        cell(excelRow, headers.get("actual_volume")), i - 1, "actual_volume");
                 out.add(new SlotVolumeRequest(
                         startAt,
                         endAt,
@@ -175,13 +187,20 @@ public class VolumeExcelService {
         }
     }
 
-    private List<Map<String, String>> parseRows(InputStream inputStream, List<String> requiredHeaders) {
+    private List<Map<String, String>> parseRows(
+            InputStream inputStream, List<String> requiredHeaders, List<String> optionalHeaders) {
         try (Workbook workbook = new XSSFWorkbook(inputStream)) {
             if (workbook.getNumberOfSheets() == 0) {
                 throw conflict("invalid-excel", "Workbook has no sheets.");
             }
             Sheet sheet = workbook.getSheetAt(0);
             Map<String, Integer> headers = readHeaders(sheet.getRow(0), requiredHeaders);
+            List<String> columns = new ArrayList<>(requiredHeaders);
+            for (String optional : optionalHeaders) {
+                if (headers.containsKey(optional)) {
+                    columns.add(optional);
+                }
+            }
             List<Map<String, String>> rows = new ArrayList<>();
             for (int i = 1; i <= sheet.getLastRowNum(); i++) {
                 Row excelRow = sheet.getRow(i);
@@ -189,8 +208,9 @@ public class VolumeExcelService {
                     continue;
                 }
                 Map<String, String> values = new HashMap<>();
-                for (String header : requiredHeaders) {
-                    values.put(header, cell(excelRow, headers.get(header)));
+                for (String header : columns) {
+                    Integer index = headers.get(header);
+                    values.put(header, index == null ? "" : cell(excelRow, index));
                 }
                 rows.add(values);
             }
@@ -323,14 +343,14 @@ public class VolumeExcelService {
         return null;
     }
 
-    private BigDecimal parseDecimal(String raw, int index) {
+    private BigDecimal parseDecimal(String raw, int index, String field) {
         if (raw == null || raw.isBlank()) {
             return null;
         }
         try {
             return new BigDecimal(raw.trim().replace(",", ""));
         } catch (NumberFormatException ex) {
-            throw conflict("invalid-excel", "Row " + (index + 2) + ": actual_volume must be numeric.");
+            throw conflict("invalid-excel", "Row " + (index + 2) + ": " + field + " must be numeric.");
         }
     }
 

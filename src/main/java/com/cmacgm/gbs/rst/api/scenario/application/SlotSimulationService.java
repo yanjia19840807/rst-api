@@ -19,10 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseCalendar;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeSlotInput;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeSlotInputRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
@@ -65,7 +63,6 @@ public class SlotSimulationService {
     private final ExerciseVolumeSlotInputRepository slotVolumes;
     private final ExerciseTeamSetupRepository teamSetups;
     private final CycleTimeBaselineRepository baselines;
-    private final ExerciseCalendarRepository calendars;
     private final Clock clock;
 
     /**
@@ -79,7 +76,6 @@ public class SlotSimulationService {
             ExerciseVolumeSlotInputRepository slotVolumes,
             ExerciseTeamSetupRepository teamSetups,
             CycleTimeBaselineRepository baselines,
-            ExerciseCalendarRepository calendars,
             Clock clock) {
         this.exercises = exercises;
         this.scenarios = scenarios;
@@ -88,7 +84,6 @@ public class SlotSimulationService {
         this.slotVolumes = slotVolumes;
         this.teamSetups = teamSetups;
         this.baselines = baselines;
-        this.calendars = calendars;
         this.clock = clock;
     }
 
@@ -487,11 +482,6 @@ public class SlotSimulationService {
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "cycle-time-required",
                         "An active Cycle Time baseline is required before slot simulation."));
-        ExerciseCalendar calendar = calendars.findById(exerciseId)
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.UNPROCESSABLE_ENTITY,
-                        "calendar-required",
-                        "Exercise calendar is required before slot simulation."));
 
         BigDecimal availability = requirePositive(team.getAvailabilityRatio(), "Availability ratio");
         BigDecimal automation = team.getAutomationRatio() != null

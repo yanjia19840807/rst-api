@@ -11,6 +11,7 @@ public record DailyVolumeView(
         UUID id,
         LocalDate volumeDate,
         BigDecimal actualVolume,
+        BigDecimal dailyAdjustmentRatio,
         String sourceType,
         UUID importBatchId) {
 }

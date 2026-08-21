@@ -1,9 +1,7 @@
 package com.cmacgm.gbs.rst.api.scenario.application;
 
-import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -15,7 +13,6 @@ import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
-import com.cmacgm.gbs.rst.api.scenario.domain.ScenarioAssumption;
 import com.cmacgm.gbs.rst.api.scenario.domain.ScenarioShift;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ForecastRunRepository;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
@@ -24,8 +21,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.ShiftRequest;
-import com.cmacgm.gbs.rst.api.scenario.api.dto.AssumptionRequest;
-import com.cmacgm.gbs.rst.api.scenario.api.dto.AssumptionView;
 import com.cmacgm.gbs.rst.api.scenario.api.dto.CreateScenarioRequest;
 import com.cmacgm.gbs.rst.api.scenario.api.dto.ScenarioView;
 import com.cmacgm.gbs.rst.api.scenario.api.dto.ShiftView;
@@ -100,10 +95,7 @@ public class ScenarioService {
             name = name.replace(request.scenarioCode(), scenarioCode);
         }
         Scenario scenario = Scenario.createDraft(
-                exerciseId, scenarioCode, name, request.description(), ownerCcgid, now);
-        if (request.assumptions() != null && !request.assumptions().isEmpty()) {
-            scenario.replaceAssumptions(toAssumptions(request.assumptions(), ownerCcgid, now), ownerCcgid, now);
-        }
+                exerciseId, scenarioCode, name, request.description(), request.rightSizingHc(), ownerCcgid, now);
         return toView(scenarios.save(scenario));
     }
 
@@ -150,7 +142,7 @@ public class ScenarioService {
     }
 
     /**
-     * Updates a DRAFT scenario header and assumptions.
+     * Updates a DRAFT scenario header and Right Sizing HC.
      *
      * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
@@ -166,10 +158,7 @@ public class ScenarioService {
         Scenario scenario = requireScenario(exerciseId, scenarioId);
         requireDraft(scenario);
         Instant now = clock.instant();
-        scenario.updateDraft(request.name(), request.description(), ownerCcgid, now);
-        if (request.assumptions() != null) {
-            scenario.replaceAssumptions(toAssumptions(request.assumptions(), ownerCcgid, now), ownerCcgid, now);
-        }
+        scenario.updateDraft(request.name(), request.description(), request.rightSizingHc(), ownerCcgid, now);
         return toView(scenarios.save(scenario));
     }
 
@@ -296,46 +285,7 @@ public class ScenarioService {
         }
     }
 
-    private List<ScenarioAssumption> toAssumptions(
-            List<AssumptionRequest> requests, String actorCcgid, Instant now) {
-        List<ScenarioAssumption> assumptions = new ArrayList<>();
-        for (AssumptionRequest request : requests) {
-            int filled = 0;
-            if (request.numericValue() != null) {
-                filled++;
-            }
-            if (request.textValue() != null) {
-                filled++;
-            }
-            if (request.booleanValue() != null) {
-                filled++;
-            }
-            if (filled != 1) {
-                throw new ApiException(
-                        HttpStatus.UNPROCESSABLE_ENTITY,
-                        "invalid-assumption",
-                        "Exactly one assumption value column must be provided.");
-            }
-            if (request.numericValue() != null) {
-                assumptions.add(ScenarioAssumption.numeric(
-                        request.parameterCode(), request.numericValue(), request.unit(), actorCcgid, now));
-            } else if (request.textValue() != null) {
-                assumptions.add(ScenarioAssumption.text(
-                        request.parameterCode(), request.textValue(), actorCcgid, now));
-            } else {
-                assumptions.add(ScenarioAssumption.bool(
-                        request.parameterCode(), request.booleanValue(), actorCcgid, now));
-            }
-        }
-        return assumptions;
-    }
-
     private ScenarioView toView(Scenario scenario) {
-        List<AssumptionView> assumptions = scenario.getAssumptions().stream()
-                .map(a -> new AssumptionView(
-                        a.getId(), a.getParameterCode(), a.getNumericValue(), a.getTextValue(),
-                        a.getBooleanValue(), a.getUnit()))
-                .toList();
         List<ShiftView> shifts = scenario.getShifts().stream()
                 .sorted(Comparator.comparing(ScenarioShift::getShiftNo))
                 .map(s -> new ShiftView(
@@ -348,9 +298,9 @@ public class ScenarioService {
                 scenario.getName(),
                 scenario.getDescription(),
                 scenario.getStatus(),
+                scenario.getRightSizingHc(),
                 scenario.getOfficialAt(),
                 scenario.getVersion(),
-                assumptions,
                 shifts);
     }
 

@@ -27,9 +27,8 @@ import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationWorkflowQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationWorkflowRow;
 import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationWorkflowView;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
+import com.cmacgm.gbs.rst.api.holidaytemplate.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
-import com.cmacgm.gbs.rst.api.scenario.domain.ScenarioAssumption;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
 import com.cmacgm.gbs.rst.api.submission.domain.Submission;
 import com.cmacgm.gbs.rst.api.submission.persistence.SubmissionRepository;
@@ -54,7 +53,7 @@ public class ValidationWorkflowService {
     private final ScenarioRepository scenarios;
     private final ExerciseProductionSupportItemRepository supportItems;
     private final ExerciseTeamSetupRepository teamSetups;
-    private final HolidayTemplateService holidayTemplates;
+    private final WorkingDaysService workingDaysService;
     private final WorkflowRouter workflowRouter;
     private final TimesheetReadService timesheet;
     private final Clock clock;
@@ -63,10 +62,10 @@ public class ValidationWorkflowService {
      * @param exercises Exercise aggregate
      * @param submissions latest submission per Exercise
      * @param workflows workflow instance for the current review step
-     * @param scenarios Official Scenario + assumptions
+     * @param scenarios Official Scenario + Right Sizing HC
      * @param supportItems production support inputs
      * @param teamSetups Team Setup used for Support FTE
-     * @param holidayTemplates working days for Support FTE
+     * @param workingDaysService working days for Support FTE
      * @param workflowRouter Timesheet occupant names for the current step
      * @param timesheet display-name fallback by ccgid
      * @param clock aging clock
@@ -78,7 +77,7 @@ public class ValidationWorkflowService {
             ScenarioRepository scenarios,
             ExerciseProductionSupportItemRepository supportItems,
             ExerciseTeamSetupRepository teamSetups,
-            HolidayTemplateService holidayTemplates,
+            WorkingDaysService workingDaysService,
             WorkflowRouter workflowRouter,
             TimesheetReadService timesheet,
             Clock clock) {
@@ -88,7 +87,7 @@ public class ValidationWorkflowService {
         this.scenarios = scenarios;
         this.supportItems = supportItems;
         this.teamSetups = teamSetups;
-        this.holidayTemplates = holidayTemplates;
+        this.workingDaysService = workingDaysService;
         this.workflowRouter = workflowRouter;
         this.timesheet = timesheet;
         this.clock = clock;
@@ -246,7 +245,7 @@ public class ValidationWorkflowService {
         if (scenarioIds.isEmpty()) {
             return result;
         }
-        for (Scenario scenario : scenarios.findWithAssumptionsByIdIn(scenarioIds)) {
+        for (Scenario scenario : scenarios.findAllById(scenarioIds)) {
             UUID exerciseId = exerciseByScenario.get(scenario.getId());
             if (exerciseId == null) {
                 continue;
@@ -275,7 +274,7 @@ public class ValidationWorkflowService {
             result.put(exercise.getId(), productionSupport(
                     itemsByExercise.getOrDefault(exercise.getId(), List.of()),
                     setups.get(exercise.getId()),
-                    holidayTemplates.workingDaysPerYear(exercise.getId())));
+                    workingDaysService.workingDaysPerYear(exercise.getId())));
         }
         return result;
     }
@@ -316,13 +315,7 @@ public class ValidationWorkflowService {
     }
 
     private static BigDecimal rightSizingHc(Scenario scenario) {
-        for (ScenarioAssumption assumption : scenario.getAssumptions()) {
-            if ("RIGHT_SIZING_HC".equals(assumption.getParameterCode())
-                    && assumption.getNumericValue() != null) {
-                return assumption.getNumericValue();
-            }
-        }
-        return null;
+        return scenario.getRightSizingHc();
     }
 
     private static BigDecimal productionSupport(

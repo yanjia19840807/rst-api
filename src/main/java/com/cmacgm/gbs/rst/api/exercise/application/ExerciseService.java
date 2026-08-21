@@ -20,11 +20,9 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseCalendar;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.associateddata.domain.SupportWorkloadMath;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSupportItemRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
@@ -45,10 +43,9 @@ import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
+import com.cmacgm.gbs.rst.api.holidaytemplate.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
-import com.cmacgm.gbs.rst.api.scenario.domain.ScenarioAssumption;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
 import com.cmacgm.gbs.rst.api.submission.domain.Submission;
 import com.cmacgm.gbs.rst.api.submission.persistence.SubmissionRepository;
@@ -77,9 +74,8 @@ public class ExerciseService {
     private final TimesheetReadService timesheet;
     private final TimesheetSyncRunRepository syncRuns;
     private final ExerciseTeamSetupRepository teamSetups;
-    private final ExerciseCalendarRepository calendars;
     private final ExerciseInitializationService initialization;
-    private final HolidayTemplateService holidayTemplates;
+    private final WorkingDaysService workingDaysService;
     private final ScenarioRepository scenarios;
     private final ExerciseProductionSupportItemRepository supportItems;
     private final SubmissionRepository submissions;
@@ -97,9 +93,8 @@ public class ExerciseService {
             TimesheetReadService timesheet,
             TimesheetSyncRunRepository syncRuns,
             ExerciseTeamSetupRepository teamSetups,
-            ExerciseCalendarRepository calendars,
             ExerciseInitializationService initialization,
-            HolidayTemplateService holidayTemplates,
+            WorkingDaysService workingDaysService,
             ScenarioRepository scenarios,
             ExerciseProductionSupportItemRepository supportItems,
             SubmissionRepository submissions,
@@ -112,9 +107,8 @@ public class ExerciseService {
         this.timesheet = timesheet;
         this.syncRuns = syncRuns;
         this.teamSetups = teamSetups;
-        this.calendars = calendars;
         this.initialization = initialization;
-        this.holidayTemplates = holidayTemplates;
+        this.workingDaysService = workingDaysService;
         this.scenarios = scenarios;
         this.supportItems = supportItems;
         this.submissions = submissions;
@@ -125,7 +119,7 @@ public class ExerciseService {
 
     /**
      * Creates an Exercise, freezes Toolkit/KPI snapshots, and seeds Associated Data
-     * (archive-first copy + multi-year holiday templates).
+     * (archive-first copy of Team Setup, Support, and holidays).
      *
      * @param ownerCcgid Supervisor CCGID
      * @param request create payload
@@ -156,7 +150,6 @@ public class ExerciseService {
         freeze.applyTo(exercise, now);
         exercise = exercises.saveAndFlush(exercise);
         teamSetups.save(ExerciseTeamSetup.emptyShell(exerciseId, ownerCcgid, now));
-        calendars.save(ExerciseCalendar.emptyShell(exerciseId, ownerCcgid, now));
         List<String> notices = new ArrayList<>(initialization.initialize(exercise, ownerCcgid));
         return new CreateExerciseResult(toResponse(exercise, null), notices);
     }
@@ -231,7 +224,7 @@ public class ExerciseService {
 
     /**
      * Updates sizing / slot / TMS periods on an editable Exercise.
-     * When the sizing year changes, re-applies Center holiday templates (CUSTOM rows kept).
+     * When the sizing year changes, Supervisor is asked to review Calendar holidays.
      *
      * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
@@ -621,13 +614,7 @@ public class ExerciseService {
         if (scenario == null) {
             return null;
         }
-        for (ScenarioAssumption assumption : scenario.getAssumptions()) {
-            if ("RIGHT_SIZING_HC".equals(assumption.getParameterCode())
-                    && assumption.getNumericValue() != null) {
-                return assumption.getNumericValue();
-            }
-        }
-        return null;
+        return scenario.getRightSizingHc();
     }
 
     private BigDecimal productionSupport(UUID exerciseId) {
@@ -637,7 +624,7 @@ public class ExerciseService {
             return BigDecimal.ZERO;
         }
         ExerciseTeamSetup setup = teamSetups.findById(exerciseId).orElse(null);
-        BigDecimal workingDays = holidayTemplates.workingDaysPerYear(exerciseId);
+        BigDecimal workingDays = workingDaysService.workingDaysPerYear(exerciseId);
         BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup, workingDays);
         BigDecimal total = BigDecimal.ZERO;
         for (ExerciseProductionSupportItem item : items) {

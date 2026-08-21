@@ -26,9 +26,8 @@ import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkPl3Option;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkRow;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingView;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
+import com.cmacgm.gbs.rst.api.holidaytemplate.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
-import com.cmacgm.gbs.rst.api.scenario.domain.ScenarioAssumption;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,15 +45,15 @@ public class BenchmarkingService {
     private final ExerciseProductionSupportItemRepository supportItems;
     private final ExerciseTeamSetupRepository teamSetups;
     private final CycleTimeBaselineRepository cycleTimeBaselines;
-    private final HolidayTemplateService holidayTemplates;
+    private final WorkingDaysService workingDaysService;
 
     /**
      * @param exercises Exercise aggregate
-     * @param scenarios Official Scenario + assumptions
+     * @param scenarios Official Scenario + Right Sizing HC
      * @param supportItems production support inputs
      * @param teamSetups Team Setup used for daily capacity and Support FTE
      * @param cycleTimeBaselines active Cycle Time baselines
-     * @param holidayTemplates working days for Support FTE
+     * @param workingDaysService working days for Support FTE
      */
     public BenchmarkingService(
             RstExerciseRepository exercises,
@@ -62,13 +61,13 @@ public class BenchmarkingService {
             ExerciseProductionSupportItemRepository supportItems,
             ExerciseTeamSetupRepository teamSetups,
             CycleTimeBaselineRepository cycleTimeBaselines,
-            HolidayTemplateService holidayTemplates) {
+            WorkingDaysService workingDaysService) {
         this.exercises = exercises;
         this.scenarios = scenarios;
         this.supportItems = supportItems;
         this.teamSetups = teamSetups;
         this.cycleTimeBaselines = cycleTimeBaselines;
-        this.holidayTemplates = holidayTemplates;
+        this.workingDaysService = workingDaysService;
     }
 
     /**
@@ -203,7 +202,7 @@ public class BenchmarkingService {
         if (scenarioIds.isEmpty()) {
             return result;
         }
-        for (Scenario scenario : scenarios.findWithAssumptionsByIdIn(scenarioIds)) {
+        for (Scenario scenario : scenarios.findAllById(scenarioIds)) {
             UUID exerciseId = exerciseByScenario.get(scenario.getId());
             if (exerciseId == null) {
                 continue;
@@ -229,7 +228,7 @@ public class BenchmarkingService {
             result.put(exercise.getId(), productionSupport(
                     itemsByExercise.getOrDefault(exercise.getId(), List.of()),
                     setups.get(exercise.getId()),
-                    holidayTemplates.workingDaysPerYear(exercise.getId())));
+                    workingDaysService.workingDaysPerYear(exercise.getId())));
         }
         return result;
     }
@@ -256,13 +255,7 @@ public class BenchmarkingService {
     }
 
     private static BigDecimal rightSizingHc(Scenario scenario) {
-        for (ScenarioAssumption assumption : scenario.getAssumptions()) {
-            if ("RIGHT_SIZING_HC".equals(assumption.getParameterCode())
-                    && assumption.getNumericValue() != null) {
-                return assumption.getNumericValue();
-            }
-        }
-        return null;
+        return scenario.getRightSizingHc();
     }
 
     private static BigDecimal productionSupport(

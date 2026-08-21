@@ -11,21 +11,24 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseCalendar;
 import com.cmacgm.gbs.rst.api.forecast.ForecastOrchestrationService;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
+import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeDailyInput;
+import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeMonthlyInput;
 import com.cmacgm.gbs.rst.api.associateddata.domain.HolidayDays;
 import com.cmacgm.gbs.rst.api.associateddata.domain.SupportWorkloadMath;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseHolidayRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSupportItemRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
+import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeDailyInputRepository;
+import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeMonthlyInputRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
 import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
@@ -44,7 +47,6 @@ import com.cmacgm.gbs.rst.api.scenario.domain.ForecastPoint;
 import com.cmacgm.gbs.rst.api.scenario.domain.ForecastRun;
 import com.cmacgm.gbs.rst.api.scenario.domain.MonthlySizingResult;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
-import com.cmacgm.gbs.rst.api.scenario.domain.ScenarioAssumption;
 import com.cmacgm.gbs.rst.api.scenario.domain.SimulationRun;
 import com.cmacgm.gbs.rst.api.scenario.persistence.DailySimulationResultRepository;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ForecastRunRepository;
@@ -82,9 +84,10 @@ public class SizingSimulationService {
     private final DailySimulationResultRepository dailyResults;
     private final ExerciseTeamSetupRepository teamSetups;
     private final CycleTimeBaselineRepository baselines;
-    private final ExerciseCalendarRepository calendars;
     private final ExerciseHolidayRepository holidays;
     private final ExerciseProductionSupportItemRepository supportItems;
+    private final ExerciseVolumeMonthlyInputRepository monthlyVolumes;
+    private final ExerciseVolumeDailyInputRepository dailyVolumes;
     private final WorkingDaysCalculator workingDaysCalculator;
     private final Clock clock;
 
@@ -98,9 +101,10 @@ public class SizingSimulationService {
             DailySimulationResultRepository dailyResults,
             ExerciseTeamSetupRepository teamSetups,
             CycleTimeBaselineRepository baselines,
-            ExerciseCalendarRepository calendars,
             ExerciseHolidayRepository holidays,
             ExerciseProductionSupportItemRepository supportItems,
+            ExerciseVolumeMonthlyInputRepository monthlyVolumes,
+            ExerciseVolumeDailyInputRepository dailyVolumes,
             WorkingDaysCalculator workingDaysCalculator,
             Clock clock) {
         this.exercises = exercises;
@@ -112,9 +116,10 @@ public class SizingSimulationService {
         this.dailyResults = dailyResults;
         this.teamSetups = teamSetups;
         this.baselines = baselines;
-        this.calendars = calendars;
         this.holidays = holidays;
         this.supportItems = supportItems;
+        this.monthlyVolumes = monthlyVolumes;
+        this.dailyVolumes = dailyVolumes;
         this.workingDaysCalculator = workingDaysCalculator;
         this.clock = clock;
     }
@@ -275,7 +280,9 @@ public class SizingSimulationService {
             }
             BigDecimal workDays = BigDecimal.valueOf(counts.workDays());
             BigDecimal weekendDays = BigDecimal.valueOf(counts.weekendDays());
-            BigDecimal manual = SizingMath.monthlyManualVolume(forecastVolume, ctx.automationRatio());
+            BigDecimal commercial = ctx.commercialRatio(point.periodStart());
+            BigDecimal manual = SizingMath.monthlyManualVolume(
+                    forecastVolume, ctx.automationRatio(), commercial);
             BigDecimal nominalWo = SizingMath.nominalHcWithoutOt(
                     manual,
                     ctx.cycleTimeSeconds(),
@@ -345,7 +352,10 @@ public class SizingSimulationService {
             boolean holiday = flags.publicHoliday();
             boolean workingDay = flags.workingDay();
             BigDecimal forecastVolume = acceptedVolume(point);
-            BigDecimal manual = SizingMath.dailyManualVolume(forecastVolume, ctx.automationRatio());
+            BigDecimal commercial = ctx.commercialRatio(day);
+            BigDecimal dailyAdj = ctx.dailyAdjustment(day);
+            BigDecimal manual = SizingMath.dailyManualVolume(
+                    forecastVolume, ctx.automationRatio(), commercial, dailyAdj);
             BigDecimal simHc = SizingMath.simulationHc(
                     holiday,
                     workingDay,
@@ -405,6 +415,7 @@ public class SizingSimulationService {
                 forecast.getTrainingFrom(),
                 forecast.getTrainingTo(),
                 forecast.getFeatureMetadata(),
+                forecast.getInputHash(),
                 forecast.getStartedAt(),
                 forecast.getCompletedAt(),
                 points);
@@ -433,6 +444,7 @@ public class SizingSimulationService {
                 forecast.getTrainingFrom(),
                 forecast.getTrainingTo(),
                 forecast.getFeatureMetadata(),
+                forecast.getInputHash(),
                 forecast.getStartedAt(),
                 forecast.getCompletedAt(),
                 points);
@@ -568,11 +580,6 @@ public class SizingSimulationService {
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "cycle-time-required",
                         "An active Cycle Time baseline is required before sizing."));
-        ExerciseCalendar calendar = calendars.findById(exerciseId)
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.UNPROCESSABLE_ENTITY,
-                        "calendar-required",
-                        "Exercise calendar is required before sizing."));
 
         String weekendCode = WeekendCode.storedValue(team.getWeekendCode());
         Map<LocalDate, HolidayDayKind> kinds = HolidayDays.kinds(holidays
@@ -617,6 +624,19 @@ public class SizingSimulationService {
         }
         supportFte = supportFte.setScale(6, RoundingMode.HALF_UP);
 
+        Map<YearMonth, BigDecimal> commercialByMonth = new HashMap<>();
+        for (ExerciseVolumeMonthlyInput row : monthlyVolumes.findByExerciseIdOrderByMonthAsc(exerciseId)) {
+            if (row.getCommercialRatio() != null) {
+                commercialByMonth.put(YearMonth.from(row.getMonth()), row.getCommercialRatio());
+            }
+        }
+        Map<LocalDate, BigDecimal> dailyAdjustmentByDate = new HashMap<>();
+        for (ExerciseVolumeDailyInput row : dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(exerciseId)) {
+            if (row.getDailyAdjustmentRatio() != null) {
+                dailyAdjustmentByDate.put(row.getVolumeDate(), row.getDailyAdjustmentRatio());
+            }
+        }
+
         return new Context(
                 weekendCode,
                 restDates,
@@ -631,7 +651,9 @@ public class SizingSimulationService {
                 maxOt,
                 cycleTime.setScale(6, RoundingMode.HALF_UP),
                 rightSizingHc.setScale(6, RoundingMode.HALF_UP),
-                supportFte);
+                supportFte,
+                commercialByMonth,
+                dailyAdjustmentByDate);
     }
 
     private Scenario requireScenario(UUID exerciseId, UUID scenarioId) {
@@ -671,17 +693,14 @@ public class SizingSimulationService {
     }
 
     private static BigDecimal requireRightSizingHc(Scenario scenario) {
-        for (ScenarioAssumption assumption : scenario.getAssumptions()) {
-            if ("RIGHT_SIZING_HC".equals(assumption.getParameterCode())
-                    && assumption.getNumericValue() != null
-                    && assumption.getNumericValue().signum() > 0) {
-                return assumption.getNumericValue();
-            }
+        BigDecimal value = scenario.getRightSizingHc();
+        if (value != null && value.signum() > 0) {
+            return value;
         }
         throw new ApiException(
                 HttpStatus.UNPROCESSABLE_ENTITY,
                 "right-sizing-hc-required",
-                "Scenario assumption RIGHT_SIZING_HC must be a positive number before sizing.");
+                "rightSizingHc must be a positive number before sizing.");
     }
 
     private static BigDecimal requirePositive(BigDecimal value, String label) {
@@ -722,6 +741,17 @@ public class SizingSimulationService {
             BigDecimal maxOvertimeMinutes,
             BigDecimal cycleTimeSeconds,
             BigDecimal rightSizingHc,
-            BigDecimal supportFte) {
+            BigDecimal supportFte,
+            Map<YearMonth, BigDecimal> commercialByMonth,
+            Map<LocalDate, BigDecimal> dailyAdjustmentByDate) {
+        BigDecimal commercialRatio(LocalDate date) {
+            BigDecimal value = commercialByMonth.get(YearMonth.from(date));
+            return value == null ? BigDecimal.ZERO : value;
+        }
+
+        BigDecimal dailyAdjustment(LocalDate date) {
+            BigDecimal value = dailyAdjustmentByDate.get(date);
+            return value == null ? BigDecimal.ZERO : value;
+        }
     }
 }

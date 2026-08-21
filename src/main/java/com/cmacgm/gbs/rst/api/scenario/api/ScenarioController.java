@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 
 import com.cmacgm.gbs.rst.api.forecast.ForecastOrchestrationService;
 import com.cmacgm.gbs.rst.api.scenario.api.dto.ForecastBundleView;
+import com.cmacgm.gbs.rst.api.scenario.api.dto.ForecastTrainingBundleView;
 import com.cmacgm.gbs.rst.api.scenario.api.dto.ForecastView;
 import com.cmacgm.gbs.rst.api.scenario.application.ScenarioCommitService;
 import com.cmacgm.gbs.rst.api.scenario.api.dto.CommitScenarioRequest;
@@ -132,7 +133,7 @@ public class ScenarioController {
     }
 
     /**
-     * Saves scenario header/assumptions/shifts and replaces the committed simulation snapshot.
+     * Saves scenario header, Right Sizing HC, shifts and replaces the committed simulation snapshot.
      * Omit {@code results} to clear previously saved forecast/sizing/slot data.
      */
     @PutMapping("/{scenarioId}/commit")
@@ -211,6 +212,17 @@ public class ScenarioController {
             @PathVariable UUID scenarioId,
             @RequestParam(defaultValue = "MONTHLY") String level) {
         return forecasts.getLatestAccepted(principal.ccgid(), exerciseId, scenarioId, level);
+    }
+
+    /**
+     * Frozen training actuals for this scenario (populated when the Exercise is APPROVED).
+     */
+    @GetMapping("/{scenarioId}/forecast/training")
+    public ForecastTrainingBundleView getForecastTraining(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @PathVariable UUID scenarioId) {
+        return forecasts.getTrainingObservations(principal.ccgid(), exerciseId, scenarioId);
     }
 
     /**

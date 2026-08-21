@@ -29,11 +29,18 @@ public class VolumeInputValidator {
     private static final long SLOT_MINUTES = 30;
 
     public void validateMonthly(List<MonthlyVolumeRequest> request) {
+        validateMonthlyShape(request);
+    }
+
+    /**
+     * Format, uniqueness and non-negativity only (file rows may be sparse).
+     */
+    public List<YearMonth> validateMonthlyShape(List<MonthlyVolumeRequest> request) {
+        List<YearMonth> months = new ArrayList<>();
         if (request == null || request.isEmpty()) {
-            return;
+            return months;
         }
         Set<String> seen = new HashSet<>();
-        List<YearMonth> months = new ArrayList<>();
         for (int i = 0; i < request.size(); i++) {
             MonthlyVolumeRequest row = request.get(i);
             String month = row.month() == null ? "" : row.month().trim();
@@ -45,13 +52,62 @@ public class VolumeInputValidator {
                 ym = YearMonth.parse(month);
             } catch (DateTimeParseException ex) {
                 fail("volume-month-invalid", "Row " + (i + 1) + ": month must be YYYY-MM.");
-                return;
+                return months;
             }
             if (!seen.add(month)) {
                 fail("volume-month-duplicate", "Duplicate month: " + month + ".");
             }
             requireNonNegative(row.actualVolume(), "actualVolume", i);
             months.add(ym);
+        }
+        return months;
+    }
+
+    /**
+     * Validates a full monthly series stored on an Exercise.
+     */
+    public void validateMonthlyForExercise(List<MonthlyVolumeRequest> request, LocalDate sizingMonth) {
+        List<YearMonth> months = validateMonthlyShape(request);
+        if (request == null || request.isEmpty()) {
+            return;
+        }
+        requireActualVolumes(request);
+        requireContinuousMonths(months);
+        rejectMonthsAfterSizing(request, sizingMonth);
+    }
+
+    /**
+     * File-only monthly checks (partial import allowed). Rejects forecast-period months.
+     */
+    public void validateMonthlyImportRows(List<MonthlyVolumeRequest> request, LocalDate sizingMonth) {
+        validateMonthlyShape(request);
+        if (request == null) {
+            return;
+        }
+        rejectMonthsAfterSizing(request, sizingMonth);
+    }
+
+    private static void rejectMonthsAfterSizing(List<MonthlyVolumeRequest> request, LocalDate sizingMonth) {
+        YearMonth cutoff = YearMonth.from(sizingMonth);
+        for (MonthlyVolumeRequest row : request) {
+            YearMonth ym = YearMonth.parse(row.month().trim());
+            if (ym.isAfter(cutoff)) {
+                fail("volume-month-after-sizing", "Month " + ym + " is after the sizing month and cannot have Actual Volume.");
+            }
+        }
+    }
+
+    private static void requireActualVolumes(List<MonthlyVolumeRequest> request) {
+        for (int i = 0; i < request.size(); i++) {
+            if (request.get(i).actualVolume() == null) {
+                fail("volume-actual-required", "Row " + (i + 1) + ": actualVolume is required.");
+            }
+        }
+    }
+
+    private static void requireContinuousMonths(List<YearMonth> months) {
+        if (months.size() < 2) {
+            return;
         }
         months.sort(Comparator.naturalOrder());
         for (int i = 1; i < months.size(); i++) {
@@ -68,11 +124,18 @@ public class VolumeInputValidator {
     }
 
     public void validateDaily(List<DailyVolumeRequest> request) {
+        validateDailyShape(request);
+    }
+
+    /**
+     * Required date, uniqueness and non-negativity only (file rows may be sparse).
+     */
+    public List<LocalDate> validateDailyShape(List<DailyVolumeRequest> request) {
+        List<LocalDate> dates = new ArrayList<>();
         if (request == null || request.isEmpty()) {
-            return;
+            return dates;
         }
         Set<LocalDate> seen = new HashSet<>();
-        List<LocalDate> dates = new ArrayList<>();
         for (int i = 0; i < request.size(); i++) {
             DailyVolumeRequest row = request.get(i);
             LocalDate date = row.volumeDate();
@@ -84,6 +147,54 @@ public class VolumeInputValidator {
             }
             requireNonNegative(row.actualVolume(), "actualVolume", i);
             dates.add(date);
+        }
+        return dates;
+    }
+
+    /**
+     * Validates a full daily series stored on an Exercise.
+     */
+    public void validateDailyForExercise(List<DailyVolumeRequest> request, LocalDate sizingMonth) {
+        List<LocalDate> dates = validateDailyShape(request);
+        if (request == null || request.isEmpty()) {
+            return;
+        }
+        requireDailyActualVolumes(request);
+        requireContinuousDates(dates);
+        rejectDatesAfterSizing(request, sizingMonth);
+    }
+
+    /**
+     * File-only daily checks (partial import allowed).
+     */
+    public void validateDailyImportRows(List<DailyVolumeRequest> request, LocalDate sizingMonth) {
+        validateDailyShape(request);
+        if (request == null) {
+            return;
+        }
+        rejectDatesAfterSizing(request, sizingMonth);
+    }
+
+    private static void rejectDatesAfterSizing(List<DailyVolumeRequest> request, LocalDate sizingMonth) {
+        LocalDate cutoff = YearMonth.from(sizingMonth).atEndOfMonth();
+        for (DailyVolumeRequest row : request) {
+            if (row.volumeDate().isAfter(cutoff)) {
+                fail("volume-date-after-sizing", "Date " + row.volumeDate() + " is after the sizing month and cannot have Actual Volume.");
+            }
+        }
+    }
+
+    private static void requireDailyActualVolumes(List<DailyVolumeRequest> request) {
+        for (int i = 0; i < request.size(); i++) {
+            if (request.get(i).actualVolume() == null) {
+                fail("volume-actual-required", "Row " + (i + 1) + ": actualVolume is required.");
+            }
+        }
+    }
+
+    private static void requireContinuousDates(List<LocalDate> dates) {
+        if (dates.size() < 2) {
+            return;
         }
         dates.sort(Comparator.naturalOrder());
         for (int i = 1; i < dates.size(); i++) {

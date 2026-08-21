@@ -103,8 +103,8 @@ public class WorkingDaysCalculator {
      * Counts workdays and weekend days in a calendar month for Forecast exogenous features.
      *
      * <p>Workdays follow NETWORKDAYS.INTL: weekends plus rest dates (Holiday + Weekend types).
-     * Makeup (Normal) Saturdays are not added back. Weekend days follow the weekend pattern
-     * only (a rest date on Saturday still counts as a weekend day).
+     * Makeup (Normal) Saturdays are not added back. WeekendDays = TotalDays − WorkDays
+     * (Excel Volume per Month K), so a weekday rest date increases WeekendDays.
      *
      * @param month year-month
      * @param weekendCode weekend pattern
@@ -124,17 +124,14 @@ public class WorkingDaysCalculator {
             }
         }
         int workDays = 0;
-        int weekendDays = 0;
         LocalDate start = month.atDay(1);
         LocalDate end = month.atEndOfMonth();
         for (LocalDate day = start; !day.isAfter(end); day = day.plusDays(1)) {
-            if (weekend.days().contains(day.getDayOfWeek())) {
-                weekendDays++;
-            } else if (!holidays.contains(day)) {
+            if (!weekend.days().contains(day.getDayOfWeek()) && !holidays.contains(day)) {
                 workDays++;
             }
         }
-        return new MonthDayCounts(workDays, weekendDays);
+        return new MonthDayCounts(workDays, month.lengthOfMonth() - workDays);
     }
 
     /** Workday / weekend-day counts for one calendar month. */

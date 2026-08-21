@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.scenario.api.dto;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -13,8 +14,8 @@ public record ScenarioView(
         String name,
         String description,
         String status,
+        BigDecimal rightSizingHc,
         Instant officialAt,
         long version,
-        List<AssumptionView> assumptions,
         List<ShiftView> shifts) {
 }

@@ -90,6 +90,6 @@ class WorkingDaysCalculatorTest {
         MonthDayCounts weekdayHoliday = calculator.countMonth(
                 august, "1", List.of(LocalDate.of(2026, 8, 10)));
         assertEquals(20, weekdayHoliday.workDays());
-        assertEquals(10, weekdayHoliday.weekendDays());
+        assertEquals(11, weekdayHoliday.weekendDays());
     }
 }

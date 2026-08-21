@@ -7,5 +7,10 @@ import java.util.UUID;
  * Monthly volume response.
  */
 public record MonthlyVolumeView(
-        UUID id, String month, BigDecimal actualVolume, String sourceType, UUID importBatchId) {
+        UUID id,
+        String month,
+        BigDecimal actualVolume,
+        BigDecimal commercialRatio,
+        String sourceType,
+        UUID importBatchId) {
 }

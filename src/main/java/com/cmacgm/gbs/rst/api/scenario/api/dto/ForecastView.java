@@ -18,6 +18,7 @@ public record ForecastView(
         LocalDate trainingFrom,
         LocalDate trainingTo,
         String featureMetadata,
+        String inputHash,
         Instant startedAt,
         Instant completedAt,
         List<ForecastPointView> points) {

@@ -6,6 +6,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -18,7 +19,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import com.cmacgm.gbs.rst.api.associateddata.domain.DataImportBatch;
-import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseCalendar;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseHoliday;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseShift;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
@@ -30,7 +30,6 @@ import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeMonthlyInput;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeSlotInput;
 import com.cmacgm.gbs.rst.api.associateddata.domain.FileArtifact;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.DataImportBatchRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseCalendarRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseHolidayRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseShiftRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
@@ -46,7 +45,7 @@ import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
+import com.cmacgm.gbs.rst.api.holidaytemplate.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.HolidayDayKind;
 import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WeekendCode;
 import com.cmacgm.gbs.rst.api.supporttaxonomy.application.SupportTaxonomyService;
@@ -70,6 +69,8 @@ import com.cmacgm.gbs.rst.api.associateddata.api.dto.SupportItemRequest;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.SupportItemView;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.TeamSetupRequest;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.TeamSetupView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.ToolkitVolumePointsView;
+import com.cmacgm.gbs.rst.api.associateddata.api.dto.ToolkitVolumeSummaryView;
 
 /**
  * Associated Data CRUD for Supervisor Exercise Team Setup, Shift, Support, Calendar and Volume.
@@ -81,16 +82,16 @@ public class AssociatedDataService {
     private final ExerciseTeamSetupRepository teamSetups;
     private final ExerciseShiftRepository shifts;
     private final ExerciseProductionSupportItemRepository supportItems;
-    private final ExerciseCalendarRepository calendars;
     private final ExerciseHolidayRepository holidays;
     private final ExerciseVolumeMonthlyInputRepository monthlyVolumes;
     private final ExerciseVolumeDailyInputRepository dailyVolumes;
     private final ExerciseVolumeSlotInputRepository slotVolumes;
-    private final HolidayTemplateService holidayTemplates;
+    private final WorkingDaysService workingDaysService;
     private final SupportTaxonomyService supportTaxonomy;
     private final CycleTimeBaselineRepository cycleTimeBaselines;
     private final VolumeInputValidator volumeValidator;
     private final VolumeExcelService volumeExcel;
+    private final ToolkitVolumeService toolkitVolumes;
     private final FileArtifactRepository fileArtifacts;
     private final DataImportBatchRepository importBatches;
     private final Clock clock;
@@ -103,16 +104,16 @@ public class AssociatedDataService {
             ExerciseTeamSetupRepository teamSetups,
             ExerciseShiftRepository shifts,
             ExerciseProductionSupportItemRepository supportItems,
-            ExerciseCalendarRepository calendars,
             ExerciseHolidayRepository holidays,
             ExerciseVolumeMonthlyInputRepository monthlyVolumes,
             ExerciseVolumeDailyInputRepository dailyVolumes,
             ExerciseVolumeSlotInputRepository slotVolumes,
-            HolidayTemplateService holidayTemplates,
+            WorkingDaysService workingDaysService,
             SupportTaxonomyService supportTaxonomy,
             CycleTimeBaselineRepository cycleTimeBaselines,
             VolumeInputValidator volumeValidator,
             VolumeExcelService volumeExcel,
+            ToolkitVolumeService toolkitVolumes,
             FileArtifactRepository fileArtifacts,
             DataImportBatchRepository importBatches,
             Clock clock) {
@@ -120,16 +121,16 @@ public class AssociatedDataService {
         this.teamSetups = teamSetups;
         this.shifts = shifts;
         this.supportItems = supportItems;
-        this.calendars = calendars;
         this.holidays = holidays;
         this.monthlyVolumes = monthlyVolumes;
         this.dailyVolumes = dailyVolumes;
         this.slotVolumes = slotVolumes;
-        this.holidayTemplates = holidayTemplates;
+        this.workingDaysService = workingDaysService;
         this.supportTaxonomy = supportTaxonomy;
         this.cycleTimeBaselines = cycleTimeBaselines;
         this.volumeValidator = volumeValidator;
         this.volumeExcel = volumeExcel;
+        this.toolkitVolumes = toolkitVolumes;
         this.fileArtifacts = fileArtifacts;
         this.importBatches = importBatches;
         this.clock = clock;
@@ -321,7 +322,7 @@ public class AssociatedDataService {
     }
 
     /**
-     * Returns calendar header and active holidays.
+     * Returns active holidays.
      *
      * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
@@ -329,22 +330,13 @@ public class AssociatedDataService {
      */
     @Transactional(readOnly = true)
     public CalendarView getCalendar(String ownerCcgid, UUID exerciseId) {
-        RstExercise exercise = exercises.requireReadable(ownerCcgid, exerciseId);
-        ExerciseCalendar calendar = requireCalendar(exerciseId);
+        exercises.requireReadable(ownerCcgid, exerciseId);
         List<HolidayView> holidayViews = holidays
                 .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)
                 .stream()
                 .map(this::toHoliday)
                 .toList();
-        return new CalendarView(
-                null,
-                calendar.getBaselineSource(), calendar.getBaselineVersion(),
-                calendar.getSourceTemplateId(), calendar.getSourceTemplateVersion(),
-                calendar.getBaselineYear(), null,
-                calendar.getVersion(), holidayViews,
-                false,
-                null,
-                null);
+        return new CalendarView(holidayViews);
     }
 
     /**
@@ -359,9 +351,6 @@ public class AssociatedDataService {
     public CalendarView putCalendar(String ownerCcgid, UUID exerciseId, CalendarRequest request) {
         editable(ownerCcgid, exerciseId);
         Instant now = clock.instant();
-        ExerciseCalendar calendar = requireCalendar(exerciseId);
-        calendar.touch(ownerCcgid, now);
-        calendars.save(calendar);
         for (ExerciseHoliday existing : holidays
                 .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)) {
             existing.softDelete(ownerCcgid, now);
@@ -408,9 +397,28 @@ public class AssociatedDataService {
                         v.getId(),
                         MonthKeys.formatYearMonth(v.getMonth()),
                         v.getActualVolume(),
+                        v.getCommercialRatio(),
                         v.getSourceType(),
                         v.getImportBatchId()))
                 .toList();
+    }
+
+    /**
+     * Canonical Toolkit volume coverage used as the forecast training source.
+     */
+    @Transactional(readOnly = true)
+    public ToolkitVolumeSummaryView getToolkitVolumeSummary(String ownerCcgid, UUID exerciseId) {
+        RstExercise exercise = exercises.requireReadable(ownerCcgid, exerciseId);
+        return toolkitVolumes.summarize(exercise.getToolkitId());
+    }
+
+    /**
+     * Canonical Toolkit actuals for add-row / import pre-fill.
+     */
+    @Transactional(readOnly = true)
+    public ToolkitVolumePointsView getToolkitVolumePoints(String ownerCcgid, UUID exerciseId) {
+        RstExercise exercise = exercises.requireReadable(ownerCcgid, exerciseId);
+        return toolkitVolumes.listPoints(exercise.getToolkitId());
     }
 
     /**
@@ -443,7 +451,10 @@ public class AssociatedDataService {
     public byte[] exportMonthlyExcel(String ownerCcgid, UUID exerciseId) {
         exercises.requireOwned(ownerCcgid, exerciseId);
         List<MonthlyVolumeRequest> rows = monthlyVolumes.findByExerciseIdOrderByMonthAsc(exerciseId).stream()
-                .map(v -> new MonthlyVolumeRequest(MonthKeys.formatYearMonth(v.getMonth()), v.getActualVolume()))
+                .map(v -> new MonthlyVolumeRequest(
+                        MonthKeys.formatYearMonth(v.getMonth()),
+                        v.getActualVolume(),
+                        v.getCommercialRatio()))
                 .toList();
         return volumeExcel.exportMonthly(rows);
     }
@@ -456,9 +467,11 @@ public class AssociatedDataService {
             String ownerCcgid, UUID exerciseId, InputStream input, String fileName) {
         editable(ownerCcgid, exerciseId);
         List<MonthlyVolumeRequest> parsed = volumeExcel.parseMonthly(input);
-        volumeValidator.validateMonthly(parsed);
+        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
+        volumeValidator.validateMonthlyImportRows(parsed, exercise.getSizingMonth());
         UUID batchId = recordImportBatch(ownerCcgid, exerciseId, "MONTHLY_VOLUME", fileName, parsed.size());
-        return replaceMonthlyVolumes(ownerCcgid, exerciseId, parsed, "IMPORT", batchId);
+        List<MonthlyVolumeRequest> merged = mergeMonthly(exercise, parsed);
+        return replaceMonthlyVolumes(ownerCcgid, exerciseId, merged, "IMPORT", batchId);
     }
 
     /**
@@ -476,6 +489,7 @@ public class AssociatedDataService {
                         v.getId(),
                         v.getVolumeDate(),
                         v.getActualVolume(),
+                        v.getDailyAdjustmentRatio(),
                         v.getSourceType(),
                         v.getImportBatchId()))
                 .toList();
@@ -511,7 +525,8 @@ public class AssociatedDataService {
     public byte[] exportDailyExcel(String ownerCcgid, UUID exerciseId) {
         exercises.requireOwned(ownerCcgid, exerciseId);
         List<DailyVolumeRequest> rows = dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(exerciseId).stream()
-                .map(v -> new DailyVolumeRequest(v.getVolumeDate(), v.getActualVolume()))
+                .map(v -> new DailyVolumeRequest(
+                        v.getVolumeDate(), v.getActualVolume(), v.getDailyAdjustmentRatio()))
                 .toList();
         return volumeExcel.exportDaily(rows);
     }
@@ -524,9 +539,11 @@ public class AssociatedDataService {
             String ownerCcgid, UUID exerciseId, InputStream input, String fileName) {
         editable(ownerCcgid, exerciseId);
         List<DailyVolumeRequest> parsed = volumeExcel.parseDaily(input);
-        volumeValidator.validateDaily(parsed);
+        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
+        volumeValidator.validateDailyImportRows(parsed, exercise.getSizingMonth());
         UUID batchId = recordImportBatch(ownerCcgid, exerciseId, "DAILY_VOLUME", fileName, parsed.size());
-        return replaceDailyVolumes(ownerCcgid, exerciseId, parsed, "IMPORT", batchId);
+        List<DailyVolumeRequest> merged = mergeDaily(exercise, parsed);
+        return replaceDailyVolumes(ownerCcgid, exerciseId, merged, "IMPORT", batchId);
     }
 
     /**
@@ -605,8 +622,8 @@ public class AssociatedDataService {
             List<MonthlyVolumeRequest> request,
             String sourceType,
             UUID importBatchId) {
-        editable(ownerCcgid, exerciseId);
-        volumeValidator.validateMonthly(request);
+        RstExercise exercise = editable(ownerCcgid, exerciseId);
+        volumeValidator.validateMonthlyForExercise(request, exercise.getSizingMonth());
         Instant now = clock.instant();
         monthlyVolumes.deleteByExerciseId(exerciseId);
         monthlyVolumes.flush();
@@ -616,6 +633,7 @@ public class AssociatedDataService {
                     exerciseId,
                     MonthKeys.parseMonthStart(row.month()),
                     row.actualVolume(),
+                    row.commercialRatio(),
                     sourceType,
                     importBatchId,
                     ownerCcgid,
@@ -631,8 +649,8 @@ public class AssociatedDataService {
             List<DailyVolumeRequest> request,
             String sourceType,
             UUID importBatchId) {
-        editable(ownerCcgid, exerciseId);
-        volumeValidator.validateDaily(request);
+        RstExercise exercise = editable(ownerCcgid, exerciseId);
+        volumeValidator.validateDailyForExercise(request, exercise.getSizingMonth());
         Instant now = clock.instant();
         dailyVolumes.deleteByExerciseId(exerciseId);
         dailyVolumes.flush();
@@ -642,6 +660,7 @@ public class AssociatedDataService {
                     exerciseId,
                     row.volumeDate(),
                     row.actualVolume(),
+                    row.dailyAdjustmentRatio(),
                     sourceType,
                     importBatchId,
                     ownerCcgid,
@@ -676,6 +695,101 @@ public class AssociatedDataService {
         }
         slotVolumes.saveAll(rows);
         return getSlotVolumes(ownerCcgid, exerciseId);
+    }
+
+    private List<MonthlyVolumeRequest> mergeMonthly(
+            RstExercise exercise, List<MonthlyVolumeRequest> parsed) {
+        Map<String, MonthlyVolumeRequest> byMonth = new LinkedHashMap<>();
+        for (ExerciseVolumeMonthlyInput row : monthlyVolumes.findByExerciseIdOrderByMonthAsc(exercise.getId())) {
+            String key = MonthKeys.formatYearMonth(row.getMonth());
+            byMonth.put(key, new MonthlyVolumeRequest(key, row.getActualVolume(), row.getCommercialRatio()));
+        }
+        Map<LocalDate, BigDecimal> seed = toolkitVolumes.monthlySeedByMonth(exercise.getToolkitId());
+        for (MonthlyVolumeRequest row : parsed) {
+            String key = row.month().trim();
+            BigDecimal volume = row.actualVolume();
+            BigDecimal commercial = row.commercialRatio();
+            MonthlyVolumeRequest existing = byMonth.get(key);
+            if (!byMonth.containsKey(key) && volume == null) {
+                volume = seed.get(YearMonth.parse(key).atDay(1));
+            }
+            if (commercial == null && existing != null) {
+                commercial = existing.commercialRatio();
+            }
+            byMonth.put(key, new MonthlyVolumeRequest(key, volume, commercial));
+        }
+        YearMonth cutoff = YearMonth.from(exercise.getSizingMonth());
+        fillMonthlyGaps(byMonth, seed, cutoff);
+        return byMonth.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(Map.Entry::getValue)
+                .toList();
+    }
+
+    private List<DailyVolumeRequest> mergeDaily(
+            RstExercise exercise, List<DailyVolumeRequest> parsed) {
+        Map<LocalDate, DailyVolumeRequest> byDate = new LinkedHashMap<>();
+        for (ExerciseVolumeDailyInput row : dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(exercise.getId())) {
+            byDate.put(
+                    row.getVolumeDate(),
+                    new DailyVolumeRequest(
+                            row.getVolumeDate(), row.getActualVolume(), row.getDailyAdjustmentRatio()));
+        }
+        Map<LocalDate, BigDecimal> seed = toolkitVolumes.dailySeedByDate(exercise.getToolkitId());
+        for (DailyVolumeRequest row : parsed) {
+            BigDecimal volume = row.actualVolume();
+            BigDecimal adjustment = row.dailyAdjustmentRatio();
+            DailyVolumeRequest existing = byDate.get(row.volumeDate());
+            if (!byDate.containsKey(row.volumeDate()) && volume == null) {
+                volume = seed.get(row.volumeDate());
+            }
+            if (adjustment == null && existing != null) {
+                adjustment = existing.dailyAdjustmentRatio();
+            }
+            byDate.put(row.volumeDate(), new DailyVolumeRequest(row.volumeDate(), volume, adjustment));
+        }
+        LocalDate cutoff = YearMonth.from(exercise.getSizingMonth()).atEndOfMonth();
+        fillDailyGaps(byDate, seed, cutoff);
+        return byDate.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(Map.Entry::getValue)
+                .toList();
+    }
+
+    private static void fillMonthlyGaps(
+            Map<String, MonthlyVolumeRequest> byMonth,
+            Map<LocalDate, BigDecimal> seed,
+            YearMonth cutoff) {
+        if (byMonth.isEmpty()) {
+            return;
+        }
+        YearMonth min = byMonth.keySet().stream().map(YearMonth::parse).min(YearMonth::compareTo).orElse(cutoff);
+        YearMonth max = byMonth.keySet().stream().map(YearMonth::parse).max(YearMonth::compareTo).orElse(cutoff);
+        if (max.isAfter(cutoff)) {
+            max = cutoff;
+        }
+        for (YearMonth ym = min; !ym.isAfter(max); ym = ym.plusMonths(1)) {
+            String key = ym.toString();
+            LocalDate monthStart = ym.atDay(1);
+            byMonth.putIfAbsent(key, new MonthlyVolumeRequest(key, seed.get(monthStart)));
+        }
+    }
+
+    private static void fillDailyGaps(
+            Map<LocalDate, DailyVolumeRequest> byDate,
+            Map<LocalDate, BigDecimal> seed,
+            LocalDate cutoff) {
+        if (byDate.isEmpty()) {
+            return;
+        }
+        LocalDate min = byDate.keySet().stream().min(LocalDate::compareTo).orElse(cutoff);
+        LocalDate max = byDate.keySet().stream().max(LocalDate::compareTo).orElse(cutoff);
+        if (max.isAfter(cutoff)) {
+            max = cutoff;
+        }
+        for (LocalDate date = min; !date.isAfter(max); date = date.plusDays(1)) {
+            byDate.putIfAbsent(date, new DailyVolumeRequest(date, seed.get(date)));
+        }
     }
 
     private UUID recordImportBatch(
@@ -721,14 +835,8 @@ public class AssociatedDataService {
                 .orElse(null);
     }
 
-    private ExerciseCalendar requireCalendar(UUID exerciseId) {
-        return calendars.findById(exerciseId)
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND, "calendar-not-found", "Calendar was not found."));
-    }
-
     private TeamSetupView toTeamSetup(RstExercise exercise, ExerciseTeamSetup setup) {
-        BigDecimal workingDays = holidayTemplates.workingDaysPerYear(exercise);
+        BigDecimal workingDays = workingDaysService.workingDaysPerYear(exercise);
         BigDecimal cycleTime = activeCycleTimeSeconds(exercise.getId());
         String weekend = WeekendCode.storedValue(setup.getWeekendCode());
         return new TeamSetupView(
@@ -757,7 +865,7 @@ public class AssociatedDataService {
     private void requireValidFrequency(String frequencyCode, UUID exerciseId) {
         try {
             SupportWorkloadMath.annualMultiplier(
-                    frequencyCode, holidayTemplates.workingDaysPerYear(exerciseId));
+                    frequencyCode, workingDaysService.workingDaysPerYear(exerciseId));
         } catch (IllegalArgumentException ex) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY, "invalid-frequency", ex.getMessage());
@@ -772,7 +880,7 @@ public class AssociatedDataService {
 
     private SupportItemView toSupport(ExerciseProductionSupportItem item, UUID exerciseId) {
         ExerciseTeamSetup setup = teamSetups.findById(exerciseId).orElse(null);
-        BigDecimal workingDays = holidayTemplates.workingDaysPerYear(exerciseId);
+        BigDecimal workingDays = workingDaysService.workingDaysPerYear(exerciseId);
         BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup, workingDays);
         SupportWorkloadMath.Derived derived = SupportWorkloadMath.derive(item, workingDays, fteHours);
         return new SupportItemView(

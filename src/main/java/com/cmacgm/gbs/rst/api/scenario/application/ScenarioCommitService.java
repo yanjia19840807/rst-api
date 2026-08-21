@@ -21,8 +21,6 @@ import jakarta.persistence.EntityManager;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.cmacgm.gbs.rst.api.associateddata.api.dto.ShiftRequest;
-import com.cmacgm.gbs.rst.api.scenario.api.dto.AssumptionRequest;
 import com.cmacgm.gbs.rst.api.scenario.api.dto.CommitResults;
 import com.cmacgm.gbs.rst.api.scenario.api.dto.CommitScenarioRequest;
 import com.cmacgm.gbs.rst.api.scenario.api.dto.DailySizingView;
@@ -80,7 +78,7 @@ public class ScenarioCommitService {
     }
 
     /**
-     * Saves scenario assumptions/shifts and replaces the committed simulation snapshot.
+     * Saves scenario header, Right Sizing HC, shifts and replaces the committed simulation snapshot.
      * When {@code results} is null, clears any previously committed forecast/sizing/slot data.
      */
     @Transactional
@@ -102,7 +100,7 @@ public class ScenarioCommitService {
                 ownerCcgid,
                 exerciseId,
                 scenarioId,
-                new UpdateScenarioRequest(request.name(), request.description(), request.assumptions()));
+                new UpdateScenarioRequest(request.name(), request.description(), request.rightSizingHc()));
         ScenarioView saved = scenarioService.replaceShifts(
                 ownerCcgid, exerciseId, scenarioId, request.shifts() != null ? request.shifts() : List.of());
 
@@ -110,7 +108,7 @@ public class ScenarioCommitService {
 
         CommitResults results = request.results();
         if (results != null) {
-            BigDecimal hc = requireRightSizingHc(request.assumptions());
+            BigDecimal hc = requireRightSizingHc(request.rightSizingHc());
             if (results.forecast() == null || results.monthly() == null || results.daily() == null) {
                 throw new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
@@ -153,19 +151,13 @@ public class ScenarioCommitService {
         entityManager.flush();
     }
 
-    private static BigDecimal requireRightSizingHc(List<AssumptionRequest> assumptions) {
-        if (assumptions != null) {
-            for (AssumptionRequest assumption : assumptions) {
-                if ("RIGHT_SIZING_HC".equals(assumption.parameterCode())
-                        && assumption.numericValue() != null
-                        && assumption.numericValue().signum() > 0) {
-                    return assumption.numericValue();
-                }
-            }
+    private static BigDecimal requireRightSizingHc(BigDecimal rightSizingHc) {
+        if (rightSizingHc != null && rightSizingHc.signum() > 0) {
+            return rightSizingHc;
         }
         throw new ApiException(
                 HttpStatus.UNPROCESSABLE_ENTITY,
                 "right-sizing-hc-required",
-                "RIGHT_SIZING_HC must be a positive number when saving sizing results.");
+                "rightSizingHc must be a positive number when saving sizing results.");
     }
 }

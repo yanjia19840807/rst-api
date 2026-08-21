@@ -33,6 +33,9 @@ public class ExerciseVolumeMonthlyInput implements Persistable<UUID> {
     @Column(name = "actual_volume", precision = 24, scale = 6)
     private BigDecimal actualVolume;
 
+    @Column(name = "commercial_ratio", precision = 12, scale = 8)
+    private BigDecimal commercialRatio;
+
     @Column(name = "source_type", nullable = false, length = 30)
     private String sourceType;
 
@@ -63,6 +66,7 @@ public class ExerciseVolumeMonthlyInput implements Persistable<UUID> {
      * @param exerciseId owning Exercise
      * @param month first day of the month
      * @param actualVolume optional actual volume
+     * @param commercialRatio Excel Commercial Ratio; null treated as 0 in sizing
      * @param sourceType MANUAL / ARCHIVE / IMPORT
      * @param importBatchId optional import batch
      * @param actorCcgid creating Supervisor
@@ -73,6 +77,7 @@ public class ExerciseVolumeMonthlyInput implements Persistable<UUID> {
             UUID exerciseId,
             LocalDate month,
             BigDecimal actualVolume,
+            BigDecimal commercialRatio,
             String sourceType,
             UUID importBatchId,
             String actorCcgid,
@@ -82,6 +87,7 @@ public class ExerciseVolumeMonthlyInput implements Persistable<UUID> {
         row.exerciseId = exerciseId;
         row.month = month;
         row.actualVolume = actualVolume;
+        row.commercialRatio = commercialRatio;
         row.sourceType = sourceType == null || sourceType.isBlank() ? "MANUAL" : sourceType;
         row.importBatchId = importBatchId;
         row.createdAt = now;
@@ -111,6 +117,7 @@ public class ExerciseVolumeMonthlyInput implements Persistable<UUID> {
     public UUID getExerciseId() { return exerciseId; }
     public LocalDate getMonth() { return month; }
     public BigDecimal getActualVolume() { return actualVolume; }
+    public BigDecimal getCommercialRatio() { return commercialRatio; }
     public String getSourceType() { return sourceType; }
     public UUID getImportBatchId() { return importBatchId; }
 }

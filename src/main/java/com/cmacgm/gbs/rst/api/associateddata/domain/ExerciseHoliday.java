@@ -10,7 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
-/** Holiday entry belonging to an Exercise calendar. */
+/** Holiday entry belonging to an Exercise. */
 @Entity
 @Table(name = "exercise_holiday")
 public class ExerciseHoliday {
@@ -29,9 +29,6 @@ public class ExerciseHoliday {
 
     @Column(name = "holiday_type", nullable = false, length = 20)
     private String holidayType;
-
-    @Column(name = "source_template_line_id")
-    private UUID sourceTemplateLineId;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -89,22 +86,6 @@ public class ExerciseHoliday {
     }
 
     /**
-     * Creates a BASELINE holiday copied from a Center template line.
-     */
-    public static ExerciseHoliday createFromTemplate(
-            UUID exerciseId,
-            LocalDate holidayDate,
-            String holidayName,
-            UUID sourceTemplateLineId,
-            String actorCcgid,
-            Instant now) {
-        ExerciseHoliday holiday = create(
-                exerciseId, holidayDate, holidayName, "BASELINE", actorCcgid, now);
-        holiday.sourceTemplateLineId = sourceTemplateLineId;
-        return holiday;
-    }
-
-    /**
      * Soft-deletes this holiday.
      *
      * @param actorCcgid deleting Supervisor
@@ -122,6 +103,5 @@ public class ExerciseHoliday {
     public LocalDate getHolidayDate() { return holidayDate; }
     public String getHolidayName() { return holidayName; }
     public String getHolidayType() { return holidayType; }
-    public UUID getSourceTemplateLineId() { return sourceTemplateLineId; }
     public Instant getDeletedAt() { return deletedAt; }
 }

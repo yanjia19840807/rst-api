@@ -12,8 +12,28 @@ class SizingMathTests {
     void monthlyManualVolumeAppliesAutomation() {
         BigDecimal manual = SizingMath.monthlyManualVolume(
                 new BigDecimal("1000"),
-                new BigDecimal("0.10"));
+                new BigDecimal("0.10"),
+                BigDecimal.ZERO);
         assertThat(manual).isEqualByComparingTo("900.000000");
+    }
+
+    @Test
+    void monthlyManualVolumeAppliesCommercialRatio() {
+        BigDecimal manual = SizingMath.monthlyManualVolume(
+                new BigDecimal("1000"),
+                new BigDecimal("0.10"),
+                new BigDecimal("0.05"));
+        assertThat(manual).isEqualByComparingTo("945.000000");
+    }
+
+    @Test
+    void dailyManualVolumeAppliesCommercialAndDailyAdj() {
+        BigDecimal manual = SizingMath.dailyManualVolume(
+                new BigDecimal("100"),
+                new BigDecimal("0.20"),
+                new BigDecimal("0.10"),
+                new BigDecimal("0.05"));
+        assertThat(manual).isEqualByComparingTo("92.400000");
     }
 
     @Test
@@ -47,6 +67,17 @@ class SizingMathTests {
                 new BigDecimal("1"),
                 new BigDecimal("1"),
                 new BigDecimal("60"));
-        assertThat(overtime).isEqualByComparingTo("1.000000");
+        assertThat(overtime).isEqualByComparingTo("1");
+    }
+
+    @Test
+    void standardCapacityRoundsDownLikeExcel() {
+        BigDecimal capacity = SizingMath.standardCapacity(
+                new BigDecimal("2"),
+                new BigDecimal("8"),
+                new BigDecimal("0.85"),
+                new BigDecimal("0.90"),
+                new BigDecimal("120"));
+        assertThat(capacity).isEqualByComparingTo("367");
     }
 }

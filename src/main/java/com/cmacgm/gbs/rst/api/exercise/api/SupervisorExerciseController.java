@@ -132,7 +132,7 @@ public class SupervisorExerciseController {
     }
 
     /**
-     * Creates an Exercise and seeds Associated Data (archive-first + holiday templates).
+     * Creates an Exercise and seeds Associated Data (archive-first copy).
      *
      * @param principal authenticated Supervisor
      * @param request create payload

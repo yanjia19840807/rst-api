@@ -1,6 +1,6 @@
 package com.cmacgm.gbs.rst.api.scenario.api.dto;
 
-import java.util.List;
+import java.math.BigDecimal;
 
 import jakarta.validation.constraints.NotBlank;
 
@@ -11,5 +11,5 @@ public record CreateScenarioRequest(
         @NotBlank String scenarioCode,
         @NotBlank String name,
         String description,
-        List<AssumptionRequest> assumptions) {
+        BigDecimal rightSizingHc) {
 }

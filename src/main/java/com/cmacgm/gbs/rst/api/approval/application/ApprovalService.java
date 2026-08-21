@@ -18,6 +18,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import com.cmacgm.gbs.rst.api.associateddata.application.ToolkitVolumeService;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.associateddata.domain.SupportWorkloadMath;
@@ -28,10 +29,9 @@ import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
+import com.cmacgm.gbs.rst.api.holidaytemplate.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
-import com.cmacgm.gbs.rst.api.scenario.domain.ScenarioAssumption;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
@@ -76,10 +76,11 @@ public class ApprovalService {
     private final ScenarioRepository scenarios;
     private final ExerciseTeamSetupRepository teamSetups;
     private final ExerciseProductionSupportItemRepository supportItems;
-    private final HolidayTemplateService holidayTemplates;
+    private final WorkingDaysService workingDaysService;
     private final TimesheetReadService timesheet;
     private final WorkflowRouter workflowRouter;
     private final ApprovalWorkspaceAssembler workspaceAssembler;
+    private final ToolkitVolumeService toolkitVolumes;
     private final Clock clock;
 
     /**
@@ -92,10 +93,11 @@ public class ApprovalService {
             ScenarioRepository scenarios,
             ExerciseTeamSetupRepository teamSetups,
             ExerciseProductionSupportItemRepository supportItems,
-            HolidayTemplateService holidayTemplates,
+            WorkingDaysService workingDaysService,
             TimesheetReadService timesheet,
             WorkflowRouter workflowRouter,
             ApprovalWorkspaceAssembler workspaceAssembler,
+            ToolkitVolumeService toolkitVolumes,
             Clock clock) {
         this.submissions = submissions;
         this.workflows = workflows;
@@ -103,10 +105,11 @@ public class ApprovalService {
         this.scenarios = scenarios;
         this.teamSetups = teamSetups;
         this.supportItems = supportItems;
-        this.holidayTemplates = holidayTemplates;
+        this.workingDaysService = workingDaysService;
         this.timesheet = timesheet;
         this.workflowRouter = workflowRouter;
         this.workspaceAssembler = workspaceAssembler;
+        this.toolkitVolumes = toolkitVolumes;
         this.clock = clock;
     }
 
@@ -330,6 +333,7 @@ public class ApprovalService {
                     lth.assigneeCcgid(), lth.positionId(), scopeHash, now));
             loaded.submission().advanceAfterApprove(stepNo, now);
         } else if (stepNo == 3) {
+            toolkitVolumes.freezeOfficialTrainingAndUpsert(loaded.exercise(), actorCcgid, now);
             loaded.workflow().complete(now);
             loaded.submission().advanceAfterApprove(stepNo, now);
             loaded.exercise().markApproved(actorCcgid, now);
@@ -653,13 +657,7 @@ public class ApprovalService {
         if (scenario == null) {
             return null;
         }
-        for (ScenarioAssumption assumption : scenario.getAssumptions()) {
-            if ("RIGHT_SIZING_HC".equals(assumption.getParameterCode())
-                    && assumption.getNumericValue() != null) {
-                return assumption.getNumericValue();
-            }
-        }
-        return null;
+        return scenario.getRightSizingHc();
     }
 
     private BigDecimal productionSupport(UUID exerciseId) {
@@ -669,7 +667,7 @@ public class ApprovalService {
             return BigDecimal.ZERO;
         }
         ExerciseTeamSetup setup = teamSetups.findById(exerciseId).orElse(null);
-        BigDecimal workingDays = holidayTemplates.workingDaysPerYear(exerciseId);
+        BigDecimal workingDays = workingDaysService.workingDaysPerYear(exerciseId);
         BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup, workingDays);
         BigDecimal total = BigDecimal.ZERO;
         for (ExerciseProductionSupportItem item : items) {

@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.scenario.domain;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,6 +40,9 @@ public class Scenario {
     @Column(nullable = false, length = 20)
     private String status;
 
+    @Column(name = "right_sizing_hc", precision = 18, scale = 6)
+    private BigDecimal rightSizingHc;
+
     @Column(name = "derived_from_scenario_id")
     private UUID derivedFromScenarioId;
 
@@ -70,9 +74,6 @@ public class Scenario {
     private long version;
 
     @OneToMany(mappedBy = "scenario", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<ScenarioAssumption> assumptions = new ArrayList<>();
-
-    @OneToMany(mappedBy = "scenario", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("shiftNo ASC")
     private List<ScenarioShift> shifts = new ArrayList<>();
 
@@ -86,6 +87,7 @@ public class Scenario {
      * @param scenarioCode business code unique within Exercise
      * @param name display name
      * @param description optional description
+     * @param rightSizingHc Right Sizing HC; null stores 0
      * @param actorCcgid creating Supervisor
      * @param now creation timestamp
      * @return draft scenario
@@ -95,6 +97,7 @@ public class Scenario {
             String scenarioCode,
             String name,
             String description,
+            BigDecimal rightSizingHc,
             String actorCcgid,
             Instant now) {
         Scenario scenario = new Scenario();
@@ -104,6 +107,7 @@ public class Scenario {
         scenario.name = name;
         scenario.description = description;
         scenario.status = "DRAFT";
+        scenario.rightSizingHc = rightSizingHc != null ? rightSizingHc : BigDecimal.ZERO;
         scenario.createdAt = now;
         scenario.createdBy = actorCcgid;
         scenario.updatedAt = now;
@@ -116,46 +120,20 @@ public class Scenario {
      *
      * @param name display name
      * @param description optional description
+     * @param rightSizingHc Right Sizing HC; null keeps the stored value
      * @param actorCcgid updating Supervisor
      * @param now update timestamp
      */
-    public void updateDraft(String name, String description, String actorCcgid, Instant now) {
+    public void updateDraft(
+            String name,
+            String description,
+            BigDecimal rightSizingHc,
+            String actorCcgid,
+            Instant now) {
         this.name = name;
         this.description = description;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
-    }
-
-    /**
-     * Replaces all assumptions for a DRAFT scenario.
-     *
-     * <p>Upserts by {@code parameter_code} so Hibernate does not INSERT a duplicate row before
-     * deleting the old one (which violates {@code uk_scenario_assumption}).
-     *
-     * @param replacements new assumptions
-     * @param actorCcgid updating Supervisor
-     * @param now update timestamp
-     */
-    public void replaceAssumptions(List<ScenarioAssumption> replacements, String actorCcgid, Instant now) {
-        Map<String, ScenarioAssumption> incoming = new LinkedHashMap<>();
-        for (ScenarioAssumption assumption : replacements) {
-            incoming.put(assumption.getParameterCode(), assumption);
-        }
-
-        assumptions.removeIf(existing -> !incoming.containsKey(existing.getParameterCode()));
-
-        Map<String, ScenarioAssumption> existingByCode = new LinkedHashMap<>();
-        for (ScenarioAssumption existing : assumptions) {
-            existingByCode.put(existing.getParameterCode(), existing);
-        }
-        for (ScenarioAssumption next : incoming.values()) {
-            ScenarioAssumption current = existingByCode.get(next.getParameterCode());
-            if (current != null) {
-                current.overwriteValues(next, actorCcgid, now);
-            } else {
-                next.attach(this);
-                assumptions.add(next);
-            }
+        if (rightSizingHc != null) {
+            this.rightSizingHc = rightSizingHc;
         }
         this.updatedAt = now;
         this.updatedBy = actorCcgid;
@@ -252,10 +230,10 @@ public class Scenario {
     public String getName() { return name; }
     public String getDescription() { return description; }
     public String getStatus() { return status; }
+    public BigDecimal getRightSizingHc() { return rightSizingHc; }
     public Instant getOfficialAt() { return officialAt; }
     public String getOfficialBy() { return officialBy; }
     public Instant getDeletedAt() { return deletedAt; }
     public long getVersion() { return version; }
-    public List<ScenarioAssumption> getAssumptions() { return Collections.unmodifiableList(assumptions); }
     public List<ScenarioShift> getShifts() { return Collections.unmodifiableList(shifts); }
 }

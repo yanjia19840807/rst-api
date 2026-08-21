@@ -32,6 +32,9 @@ public class ExerciseVolumeDailyInput implements Persistable<UUID> {
     @Column(name = "actual_volume", precision = 24, scale = 6)
     private BigDecimal actualVolume;
 
+    @Column(name = "daily_adjustment_ratio", precision = 12, scale = 8)
+    private BigDecimal dailyAdjustmentRatio;
+
     @Column(name = "source_type", nullable = false, length = 30)
     private String sourceType;
 
@@ -62,6 +65,7 @@ public class ExerciseVolumeDailyInput implements Persistable<UUID> {
      * @param exerciseId owning Exercise
      * @param volumeDate calendar date
      * @param actualVolume optional actual volume
+     * @param dailyAdjustmentRatio Excel Daily Volume Adjustment Ratio; null treated as 0 in sizing
      * @param sourceType MANUAL / ARCHIVE / IMPORT
      * @param importBatchId optional import batch
      * @param actorCcgid creating Supervisor
@@ -72,6 +76,7 @@ public class ExerciseVolumeDailyInput implements Persistable<UUID> {
             UUID exerciseId,
             LocalDate volumeDate,
             BigDecimal actualVolume,
+            BigDecimal dailyAdjustmentRatio,
             String sourceType,
             UUID importBatchId,
             String actorCcgid,
@@ -81,6 +86,7 @@ public class ExerciseVolumeDailyInput implements Persistable<UUID> {
         row.exerciseId = exerciseId;
         row.volumeDate = volumeDate;
         row.actualVolume = actualVolume;
+        row.dailyAdjustmentRatio = dailyAdjustmentRatio;
         row.sourceType = sourceType == null || sourceType.isBlank() ? "MANUAL" : sourceType;
         row.importBatchId = importBatchId;
         row.createdAt = now;
@@ -110,6 +116,7 @@ public class ExerciseVolumeDailyInput implements Persistable<UUID> {
     public UUID getExerciseId() { return exerciseId; }
     public LocalDate getVolumeDate() { return volumeDate; }
     public BigDecimal getActualVolume() { return actualVolume; }
+    public BigDecimal getDailyAdjustmentRatio() { return dailyAdjustmentRatio; }
     public String getSourceType() { return sourceType; }
     public UUID getImportBatchId() { return importBatchId; }
 }

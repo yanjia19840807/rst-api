@@ -16,16 +16,24 @@ public final class SizingMath {
     private SizingMath() {
     }
 
-    /** Monthly / shared: Forecast × (1 − Auto). */
-    public static BigDecimal monthlyManualVolume(BigDecimal forecastVolume, BigDecimal automationRatio) {
-        return forecastVolume
-                .multiply(BigDecimal.ONE.subtract(nz(automationRatio)), MC)
-                .setScale(6, RoundingMode.HALF_UP);
+    /**
+     * Monthly Excel P: Forecast × (1 − Auto) × (1 + Commercial).
+     */
+    public static BigDecimal monthlyManualVolume(
+            BigDecimal forecastVolume, BigDecimal automationRatio, BigDecimal commercialRatio) {
+        return applyManualMultipliers(forecastVolume, automationRatio, commercialRatio, BigDecimal.ZERO);
     }
 
-    /** Daily: same manual volume base as monthly. */
-    public static BigDecimal dailyManualVolume(BigDecimal forecastVolume, BigDecimal automationRatio) {
-        return monthlyManualVolume(forecastVolume, automationRatio);
+    /**
+     * Daily Excel T: Forecast × (1 − Auto) × (1 + Commercial) × (1 + Daily Adj).
+     */
+    public static BigDecimal dailyManualVolume(
+            BigDecimal forecastVolume,
+            BigDecimal automationRatio,
+            BigDecimal commercialRatio,
+            BigDecimal dailyAdjustmentRatio) {
+        return applyManualMultipliers(
+                forecastVolume, automationRatio, commercialRatio, dailyAdjustmentRatio);
     }
 
     /**
@@ -112,7 +120,7 @@ public final class SizingMath {
         return nz(weekendShiftHc).setScale(6, RoundingMode.HALF_UP);
     }
 
-    /** Daily standard production capacity. */
+    /** Daily standard production capacity (Excel ROUNDDOWN). */
     public static BigDecimal standardCapacity(
             BigDecimal simulationHc,
             BigDecimal workingHoursPerDay,
@@ -128,10 +136,10 @@ public final class SizingMath {
                 .multiply(nz(availabilityRatio), MC)
                 .multiply(nz(capacityRatio), MC)
                 .divide(cycleTimeSeconds, MC)
-                .setScale(6, RoundingMode.HALF_UP);
+                .setScale(0, RoundingMode.FLOOR);
     }
 
-    /** Daily OT production (working days only). */
+    /** Daily OT production on working days (Excel ROUNDDOWN). */
     public static BigDecimal overtimeCapacity(
             boolean workingDay,
             BigDecimal simulationHc,
@@ -140,7 +148,7 @@ public final class SizingMath {
             BigDecimal capacityRatio,
             BigDecimal cycleTimeSeconds) {
         if (!workingDay || maxOvertimeMinutes == null || maxOvertimeMinutes.signum() <= 0) {
-            return BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
+            return BigDecimal.ZERO.setScale(0, RoundingMode.FLOOR);
         }
         if (cycleTimeSeconds == null || cycleTimeSeconds.signum() <= 0) {
             throw new IllegalArgumentException("Cycle time must be positive.");
@@ -151,7 +159,7 @@ public final class SizingMath {
                 .multiply(nz(availabilityRatio), MC)
                 .multiply(nz(capacityRatio), MC)
                 .divide(cycleTimeSeconds, MC)
-                .setScale(6, RoundingMode.HALF_UP);
+                .setScale(0, RoundingMode.FLOOR);
     }
 
     /** Backlog end = max(0, start + manual − std − ot). */
@@ -165,6 +173,18 @@ public final class SizingMath {
             return BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
         }
         return end.setScale(6, RoundingMode.HALF_UP);
+    }
+
+    private static BigDecimal applyManualMultipliers(
+            BigDecimal forecastVolume,
+            BigDecimal automationRatio,
+            BigDecimal commercialRatio,
+            BigDecimal dailyAdjustmentRatio) {
+        return nz(forecastVolume)
+                .multiply(BigDecimal.ONE.subtract(nz(automationRatio)), MC)
+                .multiply(BigDecimal.ONE.add(nz(commercialRatio)), MC)
+                .multiply(BigDecimal.ONE.add(nz(dailyAdjustmentRatio)), MC)
+                .setScale(6, RoundingMode.HALF_UP);
     }
 
     private static BigDecimal nz(BigDecimal value) {

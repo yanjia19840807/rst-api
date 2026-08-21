@@ -21,7 +21,7 @@ import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryRow;
 import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryView;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.HolidayTemplateService;
+import com.cmacgm.gbs.rst.api.holidaytemplate.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.supporttaxonomy.api.dto.SupportTaxonomyOption;
 import com.cmacgm.gbs.rst.api.supporttaxonomy.application.SupportTaxonomyService;
 import org.springframework.stereotype.Service;
@@ -36,26 +36,26 @@ public class SupportRepositoryService {
     private final RstExerciseRepository exercises;
     private final ExerciseProductionSupportItemRepository supportItems;
     private final ExerciseTeamSetupRepository teamSetups;
-    private final HolidayTemplateService holidayTemplates;
+    private final WorkingDaysService workingDaysService;
     private final SupportTaxonomyService supportTaxonomy;
 
     /**
      * @param exercises Exercise aggregate
      * @param supportItems production support inputs
      * @param teamSetups Team Setup used for Support FTE
-     * @param holidayTemplates working days for Support FTE
+     * @param workingDaysService working days for Support FTE
      * @param supportTaxonomy Category lookup for dropdowns
      */
     public SupportRepositoryService(
             RstExerciseRepository exercises,
             ExerciseProductionSupportItemRepository supportItems,
             ExerciseTeamSetupRepository teamSetups,
-            HolidayTemplateService holidayTemplates,
+            WorkingDaysService workingDaysService,
             SupportTaxonomyService supportTaxonomy) {
         this.exercises = exercises;
         this.supportItems = supportItems;
         this.teamSetups = teamSetups;
-        this.holidayTemplates = holidayTemplates;
+        this.workingDaysService = workingDaysService;
         this.supportTaxonomy = supportTaxonomy;
     }
 
@@ -125,7 +125,7 @@ public class SupportRepositoryService {
         String submittedDate = exercise.getSubmittedAt() == null
                 ? ""
                 : exercise.getSubmittedAt().atZone(ZoneOffset.UTC).toLocalDate().toString();
-        BigDecimal workingDays = holidayTemplates.workingDaysPerYear(exercise.getId());
+        BigDecimal workingDays = workingDaysService.workingDaysPerYear(exercise.getId());
         BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup, workingDays);
         List<SupportRepositoryRow> rows = new ArrayList<>();
         for (ExerciseProductionSupportItem item : items) {

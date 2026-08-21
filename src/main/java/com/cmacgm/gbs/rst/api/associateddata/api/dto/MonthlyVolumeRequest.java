@@ -7,5 +7,10 @@ import jakarta.validation.constraints.NotBlank;
 /**
  * Monthly volume request row.
  */
-public record MonthlyVolumeRequest(@NotBlank String month, BigDecimal actualVolume) {
+public record MonthlyVolumeRequest(
+        @NotBlank String month, BigDecimal actualVolume, BigDecimal commercialRatio) {
+
+    public MonthlyVolumeRequest(String month, BigDecimal actualVolume) {
+        this(month, actualVolume, null);
+    }
 }

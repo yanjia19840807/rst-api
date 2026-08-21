@@ -56,7 +56,6 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update("delete from simulation_run");
         jdbcTemplate.update("delete from forecast_point");
         jdbcTemplate.update("delete from forecast_run");
-        jdbcTemplate.update("delete from scenario_assumption");
         jdbcTemplate.update("update rst_exercise set official_scenario_id = null");
         jdbcTemplate.update("delete from scenario");
         jdbcTemplate.update("delete from cycle_time_baseline_file");
@@ -68,7 +67,6 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update("delete from data_import_batch");
         jdbcTemplate.update("delete from file_artifact");
         jdbcTemplate.update("delete from exercise_holiday");
-        jdbcTemplate.update("delete from exercise_calendar");
         jdbcTemplate.update("delete from exercise_production_support_item");
         jdbcTemplate.update("delete from exercise_shift");
         jdbcTemplate.update("delete from exercise_team_setup");
