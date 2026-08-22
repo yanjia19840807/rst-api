@@ -80,8 +80,8 @@ public class CycleTimeBaseline {
      * Creates an active SYSTEM baseline from included TMS samples.
      *
      * @param exerciseId owning Exercise
-     * @param medianSeconds median seconds per unit from included samples
-     * @param sampleCount number of included samples used for the median
+     * @param medianSeconds SYSTEM seconds per unit (session median or sum of subtask medians)
+     * @param sampleCount number of included sessions with a valid cycle time
      * @param actorCcgid calculating Supervisor
      * @param now calculation timestamp
      * @return active system baseline

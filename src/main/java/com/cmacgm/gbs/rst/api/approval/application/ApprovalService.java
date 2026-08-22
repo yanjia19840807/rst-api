@@ -399,8 +399,8 @@ public class ApprovalService {
     }
 
     /**
-     * Withdraws an UNDER_REVIEW submission as Supervisor: cancels workflow, reverts the
-     * Official scenario back to DRAFT, and reopens the Exercise for editing.
+     * Withdraws an UNDER_REVIEW submission as Supervisor: cancels workflow and reopens
+     * the Exercise for editing. Official stays on the Exercise pointer.
      *
      * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
@@ -451,16 +451,10 @@ public class ApprovalService {
 
     /**
      * Reopens the Exercise after Return or Withdraw.
-     * Keeps {@code officialScenarioId}; demotes the Official Scenario to DRAFT so edits /
-     * simulations can run again. Associated Data and scenario content are not rewritten.
+     * Keeps the Official Scenario pointer and status; Official is only a flag.
+     * Associated Data and scenario content are not rewritten.
      */
     private void reopenExercise(Loaded loaded, String actorCcgid, Instant now, boolean returned) {
-        UUID scenarioId = loaded.exercise().getOfficialScenarioId();
-        Scenario official = scenarioId == null ? null : scenarios.findById(scenarioId).orElse(null);
-        if (official != null && "OFFICIAL".equals(official.getStatus())) {
-            official.revertToDraft(actorCcgid, now);
-            scenarios.save(official);
-        }
         if (returned) {
             loaded.exercise().markReturned(actorCcgid, now);
         } else {
@@ -591,7 +585,8 @@ public class ApprovalService {
         BigDecimal productionSupport = productionSupport(exercise.getId());
         BigDecimal capacityCreation = rightSizingHc == null
                 ? null
-                : SizingMath.capacityCreation(deliveryHc, rightSizingHc, productionSupport);
+                : SizingMath.capacityCreation(
+                        actualHeadcount(exercise, deliveryHc), rightSizingHc, productionSupport);
 
         WorkflowAction previous = previousReviewAction(workflow);
         WorkflowAction last = lastCompletedAction(workflow);
@@ -647,6 +642,11 @@ public class ApprovalService {
             }
         }
         return sum;
+    }
+
+    private BigDecimal actualHeadcount(RstExercise exercise, BigDecimal deliveryHc) {
+        ExerciseTeamSetup setup = teamSetups.findById(exercise.getId()).orElse(null);
+        return SizingMath.actualHeadcount(setup == null ? null : setup.totalAgents(), deliveryHc);
     }
 
     private BigDecimal rightSizingHc(UUID scenarioId) {

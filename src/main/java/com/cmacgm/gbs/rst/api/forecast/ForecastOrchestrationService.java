@@ -115,15 +115,6 @@ public class ForecastOrchestrationService {
     }
 
     /**
-     * @deprecated Use {@link #previewMonthlyAndDailyForecast}; kept as alias (no persist).
-     */
-    @Transactional(readOnly = true)
-    public ForecastBundleView runMonthlyAndDailyForecast(
-            String ownerCcgid, UUID exerciseId, UUID scenarioId) {
-        return previewMonthlyAndDailyForecast(ownerCcgid, exerciseId, scenarioId);
-    }
-
-    /**
      * Persists a forecast snapshot (caller must have cleared prior runs).
      *
      * @return persisted monthly and daily forecast run ids
@@ -533,11 +524,11 @@ public class ForecastOrchestrationService {
         Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
-        if (!"DRAFT".equals(scenario.getStatus())) {
+        if (!scenario.isWorking()) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
-                    "scenario-not-draft",
-                    "Simulations can only run against DRAFT scenarios.");
+                    "scenario-not-editable",
+                    "Simulations can only run against a live scenario.");
         }
         return exercise;
     }

@@ -7,7 +7,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 /**
- * Support item write payload. {@code annualMultiplier} is ignored; server derives it.
+ * Support item write payload. Server derives annual multiplier from frequency.
  * Category name is snapshotted from the database lookup; Activity is free text.
  */
 public record SupportItemRequest(
@@ -17,6 +17,5 @@ public record SupportItemRequest(
         @NotNull BigDecimal volume,
         @NotBlank String unitOfMeasure,
         @NotNull BigDecimal workloadPerUnitMinutes,
-        BigDecimal annualMultiplier,
         String comments) {
 }

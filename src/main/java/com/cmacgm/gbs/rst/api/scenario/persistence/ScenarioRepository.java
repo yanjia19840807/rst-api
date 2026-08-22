@@ -30,14 +30,6 @@ public interface ScenarioRepository extends JpaRepository<Scenario, UUID> {
     Optional<Scenario> findByIdAndExerciseIdAndDeletedAtIsNull(UUID id, UUID exerciseId);
 
     /**
-     * Finds the official scenario for an Exercise if present.
-     *
-     * @param exerciseId Exercise id
-     * @return optional official scenario
-     */
-    Optional<Scenario> findByExerciseIdAndStatusAndDeletedAtIsNull(UUID exerciseId, String status);
-
-    /**
      * Returns whether an active (non-deleted) scenario code already exists for an Exercise.
      */
     boolean existsByExerciseIdAndScenarioCodeAndDeletedAtIsNull(UUID exerciseId, String scenarioCode);

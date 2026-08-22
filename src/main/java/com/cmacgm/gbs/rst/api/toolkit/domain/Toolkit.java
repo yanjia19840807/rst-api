@@ -57,6 +57,10 @@ public class Toolkit {
     @Column(name = "owner_ccgid", length = 64)
     private String ownerCcgid;
 
+    /**
+     * When true, SYSTEM Cycle Time is the sum of each subtask's median seconds per unit.
+     * When false, it is the median of all included sessions.
+     */
     @Column(name = "combine_subtasks_time", nullable = false)
     private boolean combineSubtasksTime;
 

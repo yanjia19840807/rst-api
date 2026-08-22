@@ -162,7 +162,7 @@ public class ScenarioController {
     }
 
     /**
-     * Marks a DRAFT scenario Official and points the Exercise at it.
+     * Points the Exercise at this scenario as Official. Does not create a scenario.
      *
      * @param principal authenticated Supervisor
      * @param exerciseId Exercise id

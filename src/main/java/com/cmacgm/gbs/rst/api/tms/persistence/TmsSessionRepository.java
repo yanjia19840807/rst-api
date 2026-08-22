@@ -8,6 +8,9 @@ import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSession;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSessionStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -20,6 +23,9 @@ public interface TmsSessionRepository
     boolean existsByAgentCcgidAndStatusIn(String agentCcgid, Collection<TmsSessionStatus> statuses);
 
     boolean existsByToolkit_Id(UUID toolkitId);
+
+    @EntityGraph(attributePaths = {"toolkit", "toolkitSubtask"})
+    Page<TmsSession> findAll(Specification<TmsSession> spec, Pageable pageable);
 
     @EntityGraph(attributePaths = {"toolkit", "toolkitSubtask", "pauseIntervals"})
     Optional<TmsSession> findFirstByAgentCcgidAndStatusIn(

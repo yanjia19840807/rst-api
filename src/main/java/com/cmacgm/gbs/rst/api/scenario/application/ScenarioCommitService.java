@@ -89,11 +89,11 @@ public class ScenarioCommitService {
         Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
-        if (!"DRAFT".equals(scenario.getStatus())) {
+        if (!scenario.isWorking()) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
-                    "scenario-not-draft",
-                    "Only DRAFT scenarios can be saved.");
+                    "scenario-not-editable",
+                    "Only a live scenario can be saved.");
         }
 
         scenarioService.update(
@@ -149,6 +149,46 @@ public class ScenarioCommitService {
             forecastRuns.deleteAll(forecastList);
         }
         entityManager.flush();
+    }
+
+    /**
+     * Counts scenarios that currently have a saved Forecast or Simulation snapshot.
+     *
+     * @param exerciseId Exercise id
+     * @return number of scenarios with committed results
+     */
+    @Transactional(readOnly = true)
+    public int countScenariosWithResults(UUID exerciseId) {
+        int count = 0;
+        for (Scenario scenario : scenarios.findByExerciseIdAndDeletedAtIsNullOrderByCreatedAtAsc(exerciseId)) {
+            if (!simulationRuns.findByScenarioId(scenario.getId()).isEmpty()
+                    || !forecastRuns.findByScenarioId(scenario.getId()).isEmpty()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Clears saved Forecast / Simulation snapshots for every Scenario on an Exercise.
+     * Used when Exercise periods or Associated Data change so charts cannot show stale results.
+     *
+     * @param exerciseId Exercise id
+     * @return number of scenarios that had results cleared
+     */
+    @Transactional
+    public int clearResultsForExercise(UUID exerciseId) {
+        List<Scenario> items = scenarios.findByExerciseIdAndDeletedAtIsNullOrderByCreatedAtAsc(exerciseId);
+        int cleared = 0;
+        for (Scenario scenario : items) {
+            boolean hadResults = !simulationRuns.findByScenarioId(scenario.getId()).isEmpty()
+                    || !forecastRuns.findByScenarioId(scenario.getId()).isEmpty();
+            clearScenarioResults(scenario.getId());
+            if (hadResults) {
+                cleared++;
+            }
+        }
+        return cleared;
     }
 
     private static BigDecimal requireRightSizingHc(BigDecimal rightSizingHc) {

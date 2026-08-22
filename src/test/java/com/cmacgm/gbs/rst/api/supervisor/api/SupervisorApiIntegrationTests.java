@@ -68,7 +68,6 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update("delete from file_artifact");
         jdbcTemplate.update("delete from exercise_holiday");
         jdbcTemplate.update("delete from exercise_production_support_item");
-        jdbcTemplate.update("delete from exercise_shift");
         jdbcTemplate.update("delete from exercise_team_setup");
         jdbcTemplate.update("delete from exercise_shared_kpi_line");
         jdbcTemplate.update("delete from exercise_subtask");
@@ -463,15 +462,6 @@ class SupervisorApiIntegrationTests {
                 Integer.valueOf(0),
                 jdbcTemplate.queryForObject(
                         """
-                        select count(*) from exercise_shift
-                        where exercise_id = ? and deleted_at is null
-                        """,
-                        Integer.class,
-                        targetExerciseId));
-        org.junit.jupiter.api.Assertions.assertEquals(
-                Integer.valueOf(0),
-                jdbcTemplate.queryForObject(
-                        """
                         select count(*) from cycle_time_baseline
                         where exercise_id = ? and baseline_type = 'MANUAL'
                         """,
@@ -640,19 +630,6 @@ class SupervisorApiIntegrationTests {
                 SUPERVISOR_CCGID);
         jdbcTemplate.update(
                 """
-                insert into exercise_shift
-                    (id, exercise_id, shift_no, start_time, duration_minutes, headcount,
-                     works_on_weekend, created_at, created_by, updated_at, updated_by, version)
-                values (?, ?, 1, time '08:00:00', 480, 2, false, ?, ?, ?, ?, 0)
-                """,
-                UUID.randomUUID(),
-                exerciseId,
-                NOW,
-                SUPERVISOR_CCGID,
-                NOW,
-                SUPERVISOR_CCGID);
-        jdbcTemplate.update(
-                """
                 insert into cycle_time_baseline
                     (id, exercise_id, baseline_type, median_seconds, sample_count,
                      calculation_method, manual_reason, is_active, calculated_at, calculated_by)
@@ -728,27 +705,21 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into tms_session
-                    (id, session_no, agent_ccgid, agent_name_snapshot, toolkit_id, processed_volume,
+                    (id, session_no, agent_ccgid, toolkit_id, processed_volume,
                      reference, remarks, status, started_at, ended_at,
-                     net_duration_seconds, gross_duration_seconds, pause_duration_seconds,
-                     toolkit_name_snapshot, subtask_name_snapshot, domain_snapshot,
-                     pl1_snapshot, pl2_snapshot, pl3_code_snapshot, pl3_name_snapshot,
+                     net_duration_seconds,
                      created_at, updated_at, version)
-                values (?, ?, ?, ?, ?, 10, 'REF', '', ?, ?, ?,
-                        600, 600, 0,
-                        'Bank Rec', 'Manual match', 'Finance',
-                        'Accounting', 'Record to Report', ?, 'Bank Reconciliation',
+                values (?, ?, ?, ?, 10, 'REF', '', ?, ?, ?,
+                        600,
                         ?, ?, 0)
                 """,
                 id,
                 sessionNo,
                 agentCcgid,
-                "TMS Agent",
                 toolkitId,
                 status,
                 startedAt,
                 startedAt.plusSeconds(600),
-                PL3_CODE,
                 NOW,
                 NOW);
     }

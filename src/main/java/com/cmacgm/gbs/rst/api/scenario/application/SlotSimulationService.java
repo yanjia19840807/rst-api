@@ -101,27 +101,12 @@ public class SlotSimulationService {
         }
         List<SlotShift> draftShifts = toSlotShifts(request.shifts());
         Context ctx = loadContext(ownerCcgid, exerciseId, scenarioId, draftShifts);
-        Instant now = clock.instant();
-        SimulationRun run = SimulationRun.accepted(
-                scenarioId,
-                null,
-                "SLOT",
-                0,
-                VERSION,
-                sha256Hex("slot|" + scenarioId + "|" + ctx.volumes().size() + "|" + ctx.shifts().size()),
-                "{\"version\":\"" + VERSION + "\",\"slots\":" + ctx.volumes().size() + "}",
-                ownerCcgid,
-                now);
-        Computed computed = compute(run.getId(), ctx);
-        return toView(run, computed, ctx.shifts().size(), ctx.slaTargetRatio());
-    }
-
-    /**
-     * @deprecated Prefer {@link #previewSlot}; no longer persists and reads scenario shifts.
-     */
-    @Transactional(readOnly = true)
-    public SlotSimulationView runSlot(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
-        Context ctx = loadContext(ownerCcgid, exerciseId, scenarioId, null);
+        if (!SlotMath.applicabilityOn(ctx.slaType(), ctx.slaTurnaroundMinutes())) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "slot-not-applicable",
+                    "Slot Simulation is available when Calendar SLA <= 24h or business-hours SLA <= 8h.");
+        }
         Instant now = clock.instant();
         SimulationRun run = SimulationRun.accepted(
                 scenarioId,
@@ -448,11 +433,11 @@ public class SlotSimulationService {
         Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
-        if (!"DRAFT".equals(scenario.getStatus())) {
+        if (!scenario.isWorking()) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
-                    "scenario-not-draft",
-                    "Simulations can only run against DRAFT scenarios.");
+                    "scenario-not-editable",
+                    "Simulations can only run against a live scenario.");
         }
 
         List<ExerciseVolumeSlotInput> volumes =

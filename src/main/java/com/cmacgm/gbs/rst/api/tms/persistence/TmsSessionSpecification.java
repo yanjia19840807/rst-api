@@ -65,7 +65,7 @@ public final class TmsSessionSpecification {
             }
             if (filter.pl3Code() != null && !filter.pl3Code().isBlank()) {
                 predicates.add(builder.equal(
-                        root.get("pl3CodeSnapshot"), filter.pl3Code().trim()));
+                        root.get("toolkit").get("primaryPl3Code"), filter.pl3Code().trim()));
             }
             if (filter.status() != null) {
                 predicates.add(builder.equal(root.get("status"), filter.status()));
@@ -104,7 +104,7 @@ public final class TmsSessionSpecification {
      * @param agentCcgid when set, restrict to this agent (Agent list or Supervisor agent filter)
      * @param toolkitIds when set, restrict to these toolkits (Supervisor org scope)
      * @param toolkitId optional single toolkit filter within scope
-     * @param pl3Code optional PL3 code filter (snapshot)
+     * @param pl3Code optional PL3 code filter (current Toolkit PL3)
      * @param status optional status
      * @param sessionNo optional session number contains
      * @param reference optional reference contains

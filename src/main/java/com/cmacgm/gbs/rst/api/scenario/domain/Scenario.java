@@ -18,7 +18,7 @@ import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
-/** Scenario aggregate under an Exercise (DRAFT / OFFICIAL / SUPERSEDED / DELETED). */
+/** Scenario aggregate under an Exercise (DRAFT / DELETED). Official is an Exercise pointer. */
 @Entity
 @Table(name = "scenario")
 public class Scenario {
@@ -42,15 +42,6 @@ public class Scenario {
 
     @Column(name = "right_sizing_hc", precision = 18, scale = 6)
     private BigDecimal rightSizingHc;
-
-    @Column(name = "derived_from_scenario_id")
-    private UUID derivedFromScenarioId;
-
-    @Column(name = "official_at")
-    private Instant officialAt;
-
-    @Column(name = "official_by")
-    private String officialBy;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -116,7 +107,15 @@ public class Scenario {
     }
 
     /**
-     * Updates draft scenario header fields.
+     * Returns whether the scenario can still be edited on an In Progress exercise.
+     * Official is an Exercise pointer, not a row status.
+     */
+    public boolean isWorking() {
+        return "DRAFT".equals(status);
+    }
+
+    /**
+     * Updates working-scenario header fields.
      *
      * @param name display name
      * @param description optional description
@@ -171,46 +170,6 @@ public class Scenario {
     }
 
     /**
-     * Marks this scenario OFFICIAL.
-     *
-     * @param actorCcgid Supervisor making it official
-     * @param now official timestamp
-     */
-    public void markOfficial(String actorCcgid, Instant now) {
-        this.status = "OFFICIAL";
-        this.officialAt = now;
-        this.officialBy = actorCcgid;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
-    }
-
-    /**
-     * Reverts an Official scenario back to DRAFT after Return or Withdraw.
-     *
-     * @param actorCcgid actor
-     * @param now timestamp
-     */
-    public void revertToDraft(String actorCcgid, Instant now) {
-        this.status = "DRAFT";
-        this.officialAt = null;
-        this.officialBy = null;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
-    }
-
-    /**
-     * Supersedes a previous official scenario.
-     *
-     * @param actorCcgid actor
-     * @param now timestamp
-     */
-    public void markSuperseded(String actorCcgid, Instant now) {
-        this.status = "SUPERSEDED";
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
-    }
-
-    /**
      * Soft-deletes a draft scenario.
      *
      * @param actorCcgid deleting Supervisor
@@ -231,8 +190,6 @@ public class Scenario {
     public String getDescription() { return description; }
     public String getStatus() { return status; }
     public BigDecimal getRightSizingHc() { return rightSizingHc; }
-    public Instant getOfficialAt() { return officialAt; }
-    public String getOfficialBy() { return officialBy; }
     public Instant getDeletedAt() { return deletedAt; }
     public long getVersion() { return version; }
     public List<ScenarioShift> getShifts() { return Collections.unmodifiableList(shifts); }

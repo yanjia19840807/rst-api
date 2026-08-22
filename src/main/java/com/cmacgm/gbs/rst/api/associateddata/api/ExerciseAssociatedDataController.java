@@ -12,8 +12,6 @@ import com.cmacgm.gbs.rst.api.associateddata.api.dto.DailyVolumeRequest;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.DailyVolumeView;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.MonthlyVolumeRequest;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.MonthlyVolumeView;
-import com.cmacgm.gbs.rst.api.associateddata.api.dto.ShiftRequest;
-import com.cmacgm.gbs.rst.api.associateddata.api.dto.ShiftView;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.SlotVolumeRequest;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.SlotVolumeView;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.SupportItemRequest;
@@ -87,35 +85,6 @@ public class ExerciseAssociatedDataController {
             @PathVariable UUID exerciseId,
             @RequestBody TeamSetupRequest request) {
         return service.putTeamSetup(principal.ccgid(), exerciseId, request);
-    }
-
-    /**
-     * Lists shifts.
-     *
-     * @param principal authenticated Supervisor
-     * @param exerciseId Exercise id
-     * @return shifts
-     */
-    @GetMapping("/shifts")
-    public List<ShiftView> getShifts(
-            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
-        return service.getShifts(principal.ccgid(), exerciseId);
-    }
-
-    /**
-     * Replaces the full shift list.
-     *
-     * @param principal authenticated Supervisor
-     * @param exerciseId Exercise id
-     * @param request shifts
-     * @return active shifts
-     */
-    @PutMapping("/shifts")
-    public List<ShiftView> putShifts(
-            @AuthenticationPrincipal RstPrincipal principal,
-            @PathVariable UUID exerciseId,
-            @RequestBody List<@Valid ShiftRequest> request) {
-        return service.putShifts(principal.ccgid(), exerciseId, request);
     }
 
     /**
@@ -209,6 +178,31 @@ public class ExerciseAssociatedDataController {
             @PathVariable UUID exerciseId,
             @RequestBody CalendarRequest request) {
         return service.putCalendar(principal.ccgid(), exerciseId, request);
+    }
+
+    @GetMapping("/calendar/export-template")
+    public ResponseEntity<byte[]> exportCalendarTemplate(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return excelResponse(
+                service.exportCalendarTemplate(principal.ccgid(), exerciseId),
+                "calendar-template.xlsx");
+    }
+
+    @GetMapping("/calendar/export")
+    public ResponseEntity<byte[]> exportCalendar(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return excelResponse(
+                service.exportCalendarExcel(principal.ccgid(), exerciseId),
+                "calendar.xlsx");
+    }
+
+    @PostMapping(value = "/calendar/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public CalendarView importCalendar(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @RequestParam("file") MultipartFile file) throws Exception {
+        return service.importCalendarExcel(
+                principal.ccgid(), exerciseId, file.getInputStream(), file.getOriginalFilename());
     }
 
     /**

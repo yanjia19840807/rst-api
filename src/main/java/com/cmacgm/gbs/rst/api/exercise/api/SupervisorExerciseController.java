@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 
 import com.cmacgm.gbs.rst.api.approval.application.ApprovalService;
 import com.cmacgm.gbs.rst.api.approval.api.dto.ApprovalDetailView;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.CommittedResultsStatus;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.CreateExerciseRequest;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.CreateExerciseResult;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseListQuery;
@@ -68,7 +69,7 @@ public class SupervisorExerciseController {
      * @param toolkitName optional exact toolkit name
      * @param pl3Name optional exact PL3 name
      * @param workflowStatus optional exact workflow status within the tab
-     * @param reviewStage optional required role ({@code MANAGER} / {@code CDH} / {@code LTH})
+     * @param reviewStage optional current step ({@code SUPERVISOR} / {@code MANAGER} / {@code CDH} / {@code LTH})
      * @param handler optional current reviewer display name
      * @param officialScenario {@code ASSIGNED} or {@code UNASSIGNED}
      * @param createdFrom optional created date from
@@ -192,6 +193,28 @@ public class SupervisorExerciseController {
             @PathVariable UUID id,
             @Valid @RequestBody UpdateExercisePeriodsRequest request) {
         return service.updatePeriods(principal.ccgid(), id, request);
+    }
+
+    /**
+     * Returns how many scenarios have saved Forecast / Simulation snapshots.
+     */
+    @GetMapping("/{id}/committed-results")
+    @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
+    public CommittedResultsStatus committedResults(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID id) {
+        return service.committedResults(principal.ccgid(), id);
+    }
+
+    /**
+     * Clears saved Forecast / Simulation snapshots. Scenario inputs and Official are kept.
+     */
+    @PostMapping("/{id}/committed-results/clear")
+    @PreAuthorize("hasRole('SUPERVISOR')")
+    public CommittedResultsStatus clearCommittedResults(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID id) {
+        return service.clearCommittedResults(principal.ccgid(), id);
     }
 
     /**

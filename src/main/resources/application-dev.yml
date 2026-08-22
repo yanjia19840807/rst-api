@@ -3,7 +3,7 @@ app:
     # Simulate one login: set ccgid + role (AGENT|SUPERVISOR|MANAGER|CDH|LTH|HO).
     # Restart API after changing. Optional per-request: X-Dev-Ccgid / X-Dev-Role.
     dev-identity:
-      ccgid: S00628182
+      ccgid: S00813982
       role: SUPERVISOR
 
 microsoft:

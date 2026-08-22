@@ -40,9 +40,6 @@ public class TmsSession {
     @Column(name = "agent_ccgid", nullable = false, length = 64)
     private String agentCcgid;
 
-    @Column(name = "agent_name_snapshot", nullable = false, length = 160)
-    private String agentNameSnapshot;
-
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "toolkit_id", nullable = false)
     private Toolkit toolkit;
@@ -79,33 +76,6 @@ public class TmsSession {
     @Column(name = "net_duration_seconds", nullable = false)
     private long netDurationSeconds;
 
-    @Column(name = "gross_duration_seconds", nullable = false)
-    private long grossDurationSeconds;
-
-    @Column(name = "pause_duration_seconds", nullable = false)
-    private long pauseDurationSeconds;
-
-    @Column(name = "toolkit_name_snapshot", nullable = false, length = 200)
-    private String toolkitNameSnapshot;
-
-    @Column(name = "subtask_name_snapshot", nullable = false, length = 200)
-    private String subtaskNameSnapshot;
-
-    @Column(name = "domain_snapshot", nullable = false, length = 120)
-    private String domainSnapshot;
-
-    @Column(name = "pl1_snapshot", nullable = false, length = 200)
-    private String pl1Snapshot;
-
-    @Column(name = "pl2_snapshot", nullable = false, length = 200)
-    private String pl2Snapshot;
-
-    @Column(name = "pl3_code_snapshot", nullable = false, length = 80)
-    private String pl3CodeSnapshot;
-
-    @Column(name = "pl3_name_snapshot", nullable = false, length = 200)
-    private String pl3NameSnapshot;
-
     @Column(name = "discard_reason")
     private String discardReason;
 
@@ -129,7 +99,6 @@ public class TmsSession {
     public static TmsSession start(
             String sessionNo,
             String agentCcgid,
-            String agentNameSnapshot,
             Toolkit toolkit,
             ToolkitSubtask subtask,
             BigDecimal processedVolume,
@@ -139,7 +108,6 @@ public class TmsSession {
         TmsSession session = new TmsSession();
         session.sessionNo = sessionNo;
         session.agentCcgid = agentCcgid;
-        session.agentNameSnapshot = agentNameSnapshot == null ? "" : agentNameSnapshot;
         session.toolkit = toolkit;
         session.toolkitSubtask = subtask;
         session.processedVolume = processedVolume;
@@ -149,13 +117,6 @@ public class TmsSession {
         session.startedAt = now;
         session.runningSince = now;
         session.netDurationSeconds = 0;
-        session.toolkitNameSnapshot = toolkit.getName();
-        session.subtaskNameSnapshot = subtask == null ? "—" : subtask.getName();
-        session.domainSnapshot = toolkit.getDomain();
-        session.pl1Snapshot = toolkit.getPl1();
-        session.pl2Snapshot = toolkit.getPl2();
-        session.pl3CodeSnapshot = toolkit.getPrimaryPl3Code();
-        session.pl3NameSnapshot = toolkit.getPl3Name();
         session.createdAt = now;
         session.updatedAt = now;
         return session;
@@ -190,7 +151,6 @@ public class TmsSession {
         runningSince = null;
         endedAt = now;
         status = TmsSessionStatus.COMPLETED;
-        recalculateFinalDurations(now);
         updatedAt = now;
     }
 
@@ -211,7 +171,6 @@ public class TmsSession {
         endedAt = endedAt == null ? now : endedAt;
         status = TmsSessionStatus.DISCARDED;
         discardReason = reason;
-        recalculateFinalDurations(endedAt);
         updatedAt = now;
     }
 
@@ -219,13 +178,6 @@ public class TmsSession {
         return status == TmsSessionStatus.RUNNING
                 ? netDurationSeconds + secondsSinceRunning(now)
                 : netDurationSeconds;
-    }
-
-    private void recalculateFinalDurations(Instant end) {
-        grossDurationSeconds = Duration.between(startedAt, end).toSeconds();
-        pauseDurationSeconds = pauseIntervals.stream()
-                .mapToLong(interval -> interval.durationSeconds(end))
-                .sum();
     }
 
     private long secondsSinceRunning(Instant now) {
@@ -251,10 +203,6 @@ public class TmsSession {
 
     public String getAgentCcgid() {
         return agentCcgid;
-    }
-
-    public String getAgentNameSnapshot() {
-        return agentNameSnapshot;
     }
 
     public Toolkit getToolkit() {
@@ -299,42 +247,6 @@ public class TmsSession {
 
     public long getNetDurationSeconds() {
         return netDurationSeconds;
-    }
-
-    public long getGrossDurationSeconds() {
-        return grossDurationSeconds;
-    }
-
-    public long getPauseDurationSeconds() {
-        return pauseDurationSeconds;
-    }
-
-    public String getToolkitNameSnapshot() {
-        return toolkitNameSnapshot;
-    }
-
-    public String getSubtaskNameSnapshot() {
-        return subtaskNameSnapshot;
-    }
-
-    public String getDomainSnapshot() {
-        return domainSnapshot;
-    }
-
-    public String getPl1Snapshot() {
-        return pl1Snapshot;
-    }
-
-    public String getPl2Snapshot() {
-        return pl2Snapshot;
-    }
-
-    public String getPl3CodeSnapshot() {
-        return pl3CodeSnapshot;
-    }
-
-    public String getPl3NameSnapshot() {
-        return pl3NameSnapshot;
     }
 
     public String getDiscardReason() {

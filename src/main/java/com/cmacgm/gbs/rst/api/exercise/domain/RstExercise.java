@@ -105,7 +105,9 @@ public class RstExercise {
     }
 
     /**
-     * Creates a new IN_PROGRESS Exercise header.
+     * Creates a new IN_PROGRESS Exercise header (lifecycle bucket).
+     * No workflow instance is started here; the display step is Supervisor Sizing
+     * until the first Submit.
      *
      * @param id Exercise id
      * @param exerciseCode unique business code
@@ -203,7 +205,7 @@ public class RstExercise {
     }
 
     /**
-     * Clears the current Official Scenario pointer (e.g. after Return).
+     * Clears the current Official Scenario pointer (e.g. after deleting that scenario).
      *
      * @param actorCcgid actor
      * @param now update timestamp
@@ -265,18 +267,6 @@ public class RstExercise {
     public void markApproved(String actorCcgid, Instant now) {
         this.workflowStatus = "APPROVED";
         this.validatedAt = now;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
-    }
-
-    /**
-     * Marks the Exercise REJECTED.
-     *
-     * @param actorCcgid actor
-     * @param now reject timestamp
-     */
-    public void markRejected(String actorCcgid, Instant now) {
-        this.workflowStatus = "REJECTED";
         this.updatedAt = now;
         this.updatedBy = actorCcgid;
     }

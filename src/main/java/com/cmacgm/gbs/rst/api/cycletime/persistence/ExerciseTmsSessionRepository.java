@@ -52,17 +52,20 @@ public interface ExerciseTmsSessionRepository extends JpaRepository<ExerciseTmsS
             select s.id as tmsSessionId,
                    s.sessionNo as sessionNo,
                    s.reference as reference,
-                   s.agentNameSnapshot as agentName,
-                   s.subtaskNameSnapshot as subtaskName,
+                   s.agentCcgid as agentCcgid,
+                   s.toolkit.name as toolkitName,
+                   coalesce(st.name, '—') as subtaskName,
                    s.processedVolume as processedVolume,
                    s.netDurationSeconds as netDurationSeconds,
+                   s.remarks as remarks,
                    e.included as included,
                    e.exclusionReason as exclusionReason,
                    s.startedAt as startedAt,
                    s.endedAt as endedAt
-            from ExerciseTmsSession e, TmsSession s
+            from ExerciseTmsSession e
+            join TmsSession s on s.id = e.tmsSessionId
+            left join s.toolkitSubtask st
             where e.exerciseId = :exerciseId
-              and s.id = e.tmsSessionId
             order by s.sessionNo
             """)
     List<ExerciseTmsSessionRow> findAllSessionRowsByExerciseId(@Param("exerciseId") UUID exerciseId);
@@ -78,17 +81,20 @@ public interface ExerciseTmsSessionRepository extends JpaRepository<ExerciseTmsS
                     select s.id as tmsSessionId,
                            s.sessionNo as sessionNo,
                            s.reference as reference,
-                           s.agentNameSnapshot as agentName,
-                           s.subtaskNameSnapshot as subtaskName,
+                           s.agentCcgid as agentCcgid,
+                           s.toolkit.name as toolkitName,
+                           coalesce(st.name, '—') as subtaskName,
                            s.processedVolume as processedVolume,
                            s.netDurationSeconds as netDurationSeconds,
+                           s.remarks as remarks,
                            e.included as included,
                            e.exclusionReason as exclusionReason,
                            s.startedAt as startedAt,
                            s.endedAt as endedAt
-                    from ExerciseTmsSession e, TmsSession s
+                    from ExerciseTmsSession e
+                    join TmsSession s on s.id = e.tmsSessionId
+                    left join s.toolkitSubtask st
                     where e.exerciseId = :exerciseId
-                      and s.id = e.tmsSessionId
                     order by s.sessionNo
                     """,
             countQuery = """
@@ -116,13 +122,17 @@ public interface ExerciseTmsSessionRepository extends JpaRepository<ExerciseTmsS
 
         String getReference();
 
-        String getAgentName();
+        String getAgentCcgid();
+
+        String getToolkitName();
 
         String getSubtaskName();
 
         BigDecimal getProcessedVolume();
 
         long getNetDurationSeconds();
+
+        String getRemarks();
 
         boolean getIncluded();
 

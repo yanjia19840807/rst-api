@@ -6,7 +6,8 @@ import java.util.Locale;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSession;
-import com.cmacgm.gbs.rst.api.tms.domain.TmsSessionStatus;
+import com.cmacgm.gbs.rst.api.toolkit.domain.Toolkit;
+import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitSubtask;
 
 public record TmsSessionResponse(
         String id,
@@ -16,11 +17,7 @@ public record TmsSessionResponse(
         String subtaskName,
         String agentName,
         String agentCcgid,
-        String domain,
-        String pl1,
-        String pl2,
         String pl3Code,
-        String pl3Name,
         BigDecimal processedVolume,
         String reference,
         String remarks,
@@ -29,29 +26,28 @@ public record TmsSessionResponse(
         Instant pausedAt,
         Instant endedAt,
         long netDurationSeconds,
-        long grossDurationSeconds,
-        long pauseDurationSeconds,
         String discardReason,
         long version) {
 
-    public static TmsSessionResponse from(TmsSession session, Instant now) {
+    public static TmsSessionResponse from(TmsSession session, Instant now, String agentName) {
         Instant wireStartedAt = session.getRunningSince() == null
                 ? session.getStartedAt()
                 : session.getRunningSince();
         long wireNetDuration = session.elapsedSeconds(now);
+        Toolkit toolkit = session.getToolkit();
+        ToolkitSubtask subtask = session.getToolkitSubtask();
+        String resolvedAgent = agentName == null || agentName.isBlank()
+                ? session.getAgentCcgid()
+                : agentName;
         return new TmsSessionResponse(
                 session.getSessionNo(),
-                session.getToolkit().getId(),
-                session.getToolkitSubtask() == null ? null : session.getToolkitSubtask().getId(),
-                session.getToolkitNameSnapshot(),
-                session.getSubtaskNameSnapshot(),
-                session.getAgentNameSnapshot(),
+                toolkit.getId(),
+                subtask == null ? null : subtask.getId(),
+                toolkit.getName(),
+                subtask == null ? "—" : subtask.getName(),
+                resolvedAgent,
                 session.getAgentCcgid(),
-                session.getDomainSnapshot(),
-                session.getPl1Snapshot(),
-                session.getPl2Snapshot(),
-                session.getPl3CodeSnapshot(),
-                session.getPl3NameSnapshot(),
+                toolkit.getPrimaryPl3Code(),
                 session.getProcessedVolume(),
                 session.getReference(),
                 session.getRemarks(),
@@ -60,8 +56,6 @@ public record TmsSessionResponse(
                 session.getPausedAt(),
                 session.getEndedAt(),
                 wireNetDuration,
-                session.getGrossDurationSeconds(),
-                session.getPauseDurationSeconds(),
                 session.getDiscardReason(),
                 session.getVersion());
     }

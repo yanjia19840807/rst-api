@@ -14,9 +14,7 @@ import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.scenario.domain.ScenarioShift;
-import com.cmacgm.gbs.rst.api.scenario.persistence.ForecastRunRepository;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
-import com.cmacgm.gbs.rst.api.scenario.persistence.SimulationRunRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,8 +33,6 @@ public class ScenarioService {
     private final ExerciseAccess exercises;
     private final RstExerciseRepository exerciseRepository;
     private final ScenarioRepository scenarios;
-    private final ForecastRunRepository forecastRuns;
-    private final SimulationRunRepository simulationRuns;
     private final CycleTimeBaselineRepository baselines;
     private final Clock clock;
 
@@ -47,15 +43,11 @@ public class ScenarioService {
             ExerciseAccess exercises,
             RstExerciseRepository exerciseRepository,
             ScenarioRepository scenarios,
-            ForecastRunRepository forecastRuns,
-            SimulationRunRepository simulationRuns,
             CycleTimeBaselineRepository baselines,
             Clock clock) {
         this.exercises = exercises;
         this.exerciseRepository = exerciseRepository;
         this.scenarios = scenarios;
-        this.forecastRuns = forecastRuns;
-        this.simulationRuns = simulationRuns;
         this.baselines = baselines;
         this.clock = clock;
     }
@@ -142,7 +134,7 @@ public class ScenarioService {
     }
 
     /**
-     * Updates a DRAFT scenario header and Right Sizing HC.
+     * Updates a live scenario header and Right Sizing HC.
      *
      * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
@@ -156,14 +148,14 @@ public class ScenarioService {
         RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
         Scenario scenario = requireScenario(exerciseId, scenarioId);
-        requireDraft(scenario);
+        requireWorking(scenario);
         Instant now = clock.instant();
         scenario.updateDraft(request.name(), request.description(), request.rightSizingHc(), ownerCcgid, now);
         return toView(scenarios.save(scenario));
     }
 
     /**
-     * Replaces Slot Simulation shift inputs for a DRAFT scenario.
+     * Replaces Slot Simulation shift inputs for a live scenario.
      */
     @Transactional
     public ScenarioView replaceShifts(
@@ -174,14 +166,14 @@ public class ScenarioService {
         RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
         Scenario scenario = requireScenario(exerciseId, scenarioId);
-        requireDraft(scenario);
+        requireWorking(scenario);
         Instant now = clock.instant();
         scenario.replaceShifts(toShifts(requests, ownerCcgid, now), ownerCcgid, now);
         return toView(scenarios.save(scenario));
     }
 
     /**
-     * Soft-deletes a DRAFT scenario.
+     * Soft-deletes a live scenario. Clearing Official also drops the Exercise pointer.
      *
      * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
@@ -192,64 +184,40 @@ public class ScenarioService {
         RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
         Scenario scenario = requireScenario(exerciseId, scenarioId);
-        requireDraft(scenario);
-        scenario.softDelete(ownerCcgid, clock.instant());
+        requireWorking(scenario);
+        Instant now = clock.instant();
+        if (scenario.getId().equals(exercise.getOfficialScenarioId())) {
+            exercise.clearOfficialScenario(ownerCcgid, now);
+            exerciseRepository.save(exercise);
+        }
+        scenario.softDelete(ownerCcgid, now);
         scenarios.save(scenario);
     }
 
     /**
-     * Marks a DRAFT scenario Official and points the Exercise at it (no package snapshot).
+     * Points the Exercise at a live scenario as Official. Does not create a scenario.
      *
-     * <p>Requires editable Exercise, DRAFT scenario, active CT baseline, and ACCEPTED
-     * forecast / monthly sizing / slot runs. Supersedes any previous Official scenario.
+     * <p>Official is only {@code rst_exercise.official_scenario_id}. The selected row stays
+     * Draft and can be switched again before Submit. Requires an active Cycle Time baseline.
      */
     @Transactional
     public ScenarioView markOfficial(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
         RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
         Scenario scenario = requireScenario(exerciseId, scenarioId);
-        requireDraft(scenario);
+        if (scenario.getId().equals(exercise.getOfficialScenarioId())) {
+            return toView(scenario);
+        }
+        requireWorking(scenario);
 
         baselines.findByExerciseIdAndActiveTrue(exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "cycle-time-required",
                         "An active Cycle Time baseline is required before Official."));
-        forecastRuns
-                .findFirstByScenarioIdAndStatusOrderByRunNoDesc(scenarioId, "ACCEPTED")
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.UNPROCESSABLE_ENTITY,
-                        "forecast-required",
-                        "An ACCEPTED forecast run is required before Official."));
-        simulationRuns
-                .findFirstByScenarioIdAndRunTypeAndStatusOrderByRunNoDesc(
-                        scenarioId, "MONTHLY_SIZING", "ACCEPTED")
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.UNPROCESSABLE_ENTITY,
-                        "monthly-sizing-required",
-                        "An ACCEPTED monthly sizing run is required before Official."));
-        simulationRuns
-                .findFirstByScenarioIdAndRunTypeAndStatusOrderByRunNoDesc(
-                        scenarioId, "SLOT", "ACCEPTED")
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.UNPROCESSABLE_ENTITY,
-                        "slot-simulation-required",
-                        "An ACCEPTED slot simulation run is required before Official."));
 
-        Instant now = clock.instant();
-        scenarios.findByExerciseIdAndStatusAndDeletedAtIsNull(exerciseId, "OFFICIAL")
-                .ifPresent(previous -> {
-                    if (!previous.getId().equals(scenarioId)) {
-                        previous.markSuperseded(ownerCcgid, now);
-                        scenarios.save(previous);
-                    }
-                });
-
-        scenario.markOfficial(ownerCcgid, now);
-        scenarios.save(scenario);
-        exercise.setOfficialScenario(scenario.getId(), ownerCcgid, now);
+        exercise.setOfficialScenario(scenario.getId(), ownerCcgid, clock.instant());
         exerciseRepository.save(exercise);
-
         return toView(scenario);
     }
 
@@ -276,12 +244,12 @@ public class ScenarioService {
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
     }
 
-    private static void requireDraft(Scenario scenario) {
-        if (!"DRAFT".equals(scenario.getStatus())) {
+    private static void requireWorking(Scenario scenario) {
+        if (!scenario.isWorking()) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
-                    "scenario-not-draft",
-                    "Only DRAFT scenarios can be modified.");
+                    "scenario-not-editable",
+                    "Only a live scenario can be modified.");
         }
     }
 
@@ -299,7 +267,6 @@ public class ScenarioService {
                 scenario.getDescription(),
                 scenario.getStatus(),
                 scenario.getRightSizingHc(),
-                scenario.getOfficialAt(),
                 scenario.getVersion(),
                 shifts);
     }

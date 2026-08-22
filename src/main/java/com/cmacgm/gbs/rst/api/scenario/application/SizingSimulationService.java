@@ -12,9 +12,11 @@ import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.forecast.ForecastOrchestrationService;
@@ -67,13 +69,16 @@ import com.cmacgm.gbs.rst.api.scenario.api.dto.PreviewSizingRequest;
 import com.cmacgm.gbs.rst.api.scenario.api.dto.SizingPreviewBundle;
 
 /**
- * Real monthly sizing + daily simulation using forecast points and §11.2 formulas.
- * Preview paths do not persist; commit persists a single snapshot.
+ * Real monthly sizing + daily simulation using §11.2 formulas.
+ * Monthly uses historical actual months (sizingMonth − 2 through sizingMonth) plus forecast
+ * points. Daily Full Period rolls from the first daily actual through the forecast month so
+ * backlog aging is continuous, matching Excel Input. Preview paths do not persist; commit
+ * persists a single snapshot.
  */
 @Service
 public class SizingSimulationService {
 
-    private static final String VERSION = "sizing-v1";
+    private static final String VERSION = "sizing-v2";
 
     private final ExerciseAccess exercises;
     private final ScenarioRepository scenarios;
@@ -256,106 +261,118 @@ public class SizingSimulationService {
                     "Monthly forecast has no points to size.");
         }
         Instant now = clock.instant();
+        List<YearMonth> history = SizingMath.monthlyHistoryMonths(ctx.sizingMonth());
         SimulationRun run = SimulationRun.accepted(
                 scenarioId,
                 forecast.id(),
                 "MONTHLY_SIZING",
                 0,
                 VERSION,
-                sha256Hex("monthly|" + forecast.id() + "|" + ctx.rightSizingHc()),
-                "{\"version\":\"" + VERSION + "\",\"rows\":" + points.size() + "}",
+                sha256Hex("monthly-hist|" + ctx.sizingMonth() + "|" + forecast.id() + "|" + ctx.rightSizingHc()),
+                "{\"version\":\"" + VERSION + "\",\"rows\":" + (history.size() + points.size()) + "}",
                 ownerCcgid,
                 now);
-        List<MonthlySizingResult> rows = new ArrayList<>(points.size());
+        Set<YearMonth> seen = new HashSet<>();
+        List<MonthlySizingResult> rows = new ArrayList<>(history.size() + points.size());
+        for (YearMonth month : history) {
+            rows.add(sizeMonthlyRow(run.getId(), ctx, month, ctx.monthlyActual(month)));
+            seen.add(month);
+        }
         for (ForecastPointView point : points) {
             YearMonth month = YearMonth.from(point.periodStart());
-            BigDecimal forecastVolume = acceptedVolume(point);
-            MonthDayCounts counts = workingDaysCalculator.countMonth(
-                    month, ctx.weekendCode(), ctx.restDates());
-            if (counts.workDays() <= 0) {
-                throw new ApiException(
-                        HttpStatus.UNPROCESSABLE_ENTITY,
-                        "sizing-workdays-zero",
-                        "WorkDays is zero for " + month + "; cannot compute Nominal HC.");
+            if (!seen.add(month)) {
+                continue;
             }
-            BigDecimal workDays = BigDecimal.valueOf(counts.workDays());
-            BigDecimal weekendDays = BigDecimal.valueOf(counts.weekendDays());
-            BigDecimal commercial = ctx.commercialRatio(point.periodStart());
-            BigDecimal manual = SizingMath.monthlyManualVolume(
-                    forecastVolume, ctx.automationRatio(), commercial);
-            BigDecimal nominalWo = SizingMath.nominalHcWithoutOt(
-                    manual,
-                    ctx.cycleTimeSeconds(),
-                    workDays,
-                    ctx.workingHoursPerDay(),
-                    ctx.availabilityRatio(),
-                    ctx.capacityRatio());
-            BigDecimal nominalWith = SizingMath.nominalHcWithOt(
-                    manual,
-                    ctx.cycleTimeSeconds(),
-                    workDays,
-                    weekendDays,
-                    ctx.workingHoursPerDay(),
-                    ctx.maxOvertimeMinutes(),
-                    ctx.availabilityRatio(),
-                    ctx.capacityRatio(),
-                    ctx.weekendShiftHc());
-            BigDecimal capacity = SizingMath.capacityCreation(
-                    ctx.deliveryHc(), ctx.rightSizingHc(), ctx.supportFte());
-            rows.add(MonthlySizingResult.create(
-                    run.getId(),
-                    MonthKeys.monthStart(month),
-                    scale(forecastVolume),
-                    manual,
-                    workDays,
-                    weekendDays,
-                    ctx.cycleTimeSeconds(),
-                    nominalWo,
-                    nominalWith,
-                    ctx.supportFte(),
-                    ctx.rightSizingHc(),
-                    capacity));
+            rows.add(sizeMonthlyRow(run.getId(), ctx, month, acceptedVolume(point)));
         }
         return toMonthlyView(run, rows);
     }
 
-    private DailySizingView computeDailyView(
-            String ownerCcgid, UUID scenarioId, Context ctx, ForecastView forecast) {
-        List<ForecastPointView> points = forecast.points() == null
-                ? List.of()
-                : forecast.points().stream()
-                        .sorted(Comparator.comparing(ForecastPointView::periodStart))
-                        .toList();
-        if (points.isEmpty()) {
+    private MonthlySizingResult sizeMonthlyRow(
+            UUID runId, Context ctx, YearMonth month, BigDecimal volume) {
+        MonthDayCounts counts = workingDaysCalculator.countMonth(
+                month, ctx.weekendCode(), ctx.restDates());
+        if (counts.workDays() <= 0) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
-                    "forecast-points-empty",
-                    "Daily forecast has no points to simulate.");
+                    "sizing-workdays-zero",
+                    "WorkDays is zero for " + month + "; cannot compute Nominal HC.");
         }
+        BigDecimal workDays = BigDecimal.valueOf(counts.workDays());
+        BigDecimal weekendDays = BigDecimal.valueOf(counts.weekendDays());
+        BigDecimal commercial = ctx.commercialRatio(month.atDay(1));
+        BigDecimal manual = SizingMath.monthlyManualVolume(
+                volume, ctx.automationRatio(), commercial);
+        BigDecimal nominalWo = SizingMath.nominalHcWithoutOt(
+                manual,
+                ctx.cycleTimeSeconds(),
+                workDays,
+                ctx.workingHoursPerDay(),
+                ctx.availabilityRatio(),
+                ctx.capacityRatio());
+        BigDecimal nominalWith = SizingMath.nominalHcWithOt(
+                manual,
+                ctx.cycleTimeSeconds(),
+                workDays,
+                weekendDays,
+                ctx.workingHoursPerDay(),
+                ctx.maxOvertimeMinutes(),
+                ctx.availabilityRatio(),
+                ctx.capacityRatio(),
+                ctx.weekendShiftHc());
+        BigDecimal capacity = SizingMath.capacityCreation(
+                ctx.actualHc(), ctx.rightSizingHc(), ctx.supportFte());
+        return MonthlySizingResult.create(
+                runId,
+                MonthKeys.monthStart(month),
+                scale(volume),
+                manual,
+                workDays,
+                weekendDays,
+                ctx.cycleTimeSeconds(),
+                nominalWo,
+                nominalWith,
+                ctx.supportFte(),
+                ctx.rightSizingHc(),
+                capacity);
+    }
+
+    private DailySizingView computeDailyView(
+            String ownerCcgid, UUID scenarioId, Context ctx, ForecastView forecast) {
+        Map<LocalDate, BigDecimal> forecastByDate = new HashMap<>();
+        if (forecast.points() != null) {
+            for (ForecastPointView point : forecast.points()) {
+                forecastByDate.put(point.periodStart(), acceptedVolume(point));
+            }
+        }
+        LocalDate from = SizingMath.dailyFullPeriodStart(ctx.sizingMonth(), ctx.earliestDailyActual());
+        LocalDate to = SizingMath.dailyFullPeriodEnd(ctx.sizingMonth());
         Instant now = clock.instant();
+        int expectedDays = (int) (to.toEpochDay() - from.toEpochDay() + 1);
         SimulationRun run = SimulationRun.accepted(
                 scenarioId,
                 forecast.id(),
                 "DAILY",
                 0,
                 VERSION,
-                sha256Hex("daily|" + forecast.id() + "|" + ctx.rightSizingHc()),
-                "{\"version\":\"" + VERSION + "\",\"rows\":" + points.size() + "}",
+                sha256Hex("daily-full|" + from + "|" + to + "|" + ctx.rightSizingHc()),
+                "{\"version\":\"" + VERSION + "\",\"rows\":" + expectedDays + "}",
                 ownerCcgid,
                 now);
         BigDecimal backlog = BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
-        List<DailySimulationResult> rows = new ArrayList<>(points.size());
-        for (ForecastPointView point : points) {
-            LocalDate day = point.periodStart();
+        List<DailySimulationResult> rows = new ArrayList<>(expectedDays);
+        for (LocalDate day = from; !day.isAfter(to); day = day.plusDays(1)) {
             VolumeDayFlags flags = workingDaysCalculator.volumeDay(
                     day, ctx.weekendCode(), ctx.kinds().get(day));
             boolean holiday = flags.publicHoliday();
             boolean workingDay = flags.workingDay();
-            BigDecimal forecastVolume = acceptedVolume(point);
+            BigDecimal volume = ctx.hasDailyActual(day)
+                    ? ctx.dailyActual(day)
+                    : forecastByDate.getOrDefault(day, BigDecimal.ZERO);
             BigDecimal commercial = ctx.commercialRatio(day);
             BigDecimal dailyAdj = ctx.dailyAdjustment(day);
             BigDecimal manual = SizingMath.dailyManualVolume(
-                    forecastVolume, ctx.automationRatio(), commercial, dailyAdj);
+                    volume, ctx.automationRatio(), commercial, dailyAdj);
             BigDecimal simHc = SizingMath.simulationHc(
                     holiday,
                     workingDay,
@@ -379,7 +396,7 @@ public class SizingSimulationService {
             rows.add(DailySimulationResult.create(
                     run.getId(),
                     day,
-                    scale(forecastVolume),
+                    scale(volume),
                     manual,
                     holiday,
                     workingDay,
@@ -563,11 +580,11 @@ public class SizingSimulationService {
         RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
         Scenario scenario = requireScenario(exerciseId, scenarioId);
-        if (!"DRAFT".equals(scenario.getStatus())) {
+        if (!scenario.isWorking()) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
-                    "scenario-not-draft",
-                    "Simulations can only run against DRAFT scenarios.");
+                    "scenario-not-editable",
+                    "Simulations can only run against a live scenario.");
         }
 
         ExerciseTeamSetup team = teamSetups.findById(exerciseId)
@@ -608,6 +625,7 @@ public class SizingSimulationService {
                 delivery = delivery.add(line.getDeliveryHc());
             }
         }
+        BigDecimal actualHc = SizingMath.actualHeadcount(team.totalAgents(), delivery);
         BigDecimal maxOt = team.getMaxOvertimeMinutes() != null
                 ? team.getMaxOvertimeMinutes() : BigDecimal.ZERO;
 
@@ -625,19 +643,29 @@ public class SizingSimulationService {
         supportFte = supportFte.setScale(6, RoundingMode.HALF_UP);
 
         Map<YearMonth, BigDecimal> commercialByMonth = new HashMap<>();
+        Map<YearMonth, BigDecimal> monthlyActualByMonth = new HashMap<>();
         for (ExerciseVolumeMonthlyInput row : monthlyVolumes.findByExerciseIdOrderByMonthAsc(exerciseId)) {
+            YearMonth month = YearMonth.from(row.getMonth());
             if (row.getCommercialRatio() != null) {
-                commercialByMonth.put(YearMonth.from(row.getMonth()), row.getCommercialRatio());
+                commercialByMonth.put(month, row.getCommercialRatio());
+            }
+            if (row.getActualVolume() != null) {
+                monthlyActualByMonth.put(month, row.getActualVolume());
             }
         }
         Map<LocalDate, BigDecimal> dailyAdjustmentByDate = new HashMap<>();
+        Map<LocalDate, BigDecimal> dailyActualByDate = new HashMap<>();
         for (ExerciseVolumeDailyInput row : dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(exerciseId)) {
             if (row.getDailyAdjustmentRatio() != null) {
                 dailyAdjustmentByDate.put(row.getVolumeDate(), row.getDailyAdjustmentRatio());
             }
+            if (row.getActualVolume() != null) {
+                dailyActualByDate.put(row.getVolumeDate(), row.getActualVolume());
+            }
         }
 
         return new Context(
+                YearMonth.from(exercise.getSizingMonth()),
                 weekendCode,
                 restDates,
                 kinds,
@@ -647,13 +675,15 @@ public class SizingSimulationService {
                 automation,
                 weekendShift,
                 skeleton,
-                delivery,
+                actualHc,
                 maxOt,
                 cycleTime.setScale(6, RoundingMode.HALF_UP),
                 rightSizingHc.setScale(6, RoundingMode.HALF_UP),
                 supportFte,
                 commercialByMonth,
-                dailyAdjustmentByDate);
+                monthlyActualByMonth,
+                dailyAdjustmentByDate,
+                dailyActualByDate);
     }
 
     private Scenario requireScenario(UUID exerciseId, UUID scenarioId) {
@@ -728,6 +758,7 @@ public class SizingSimulationService {
     }
 
     private record Context(
+            YearMonth sizingMonth,
             String weekendCode,
             List<LocalDate> restDates,
             Map<LocalDate, HolidayDayKind> kinds,
@@ -737,20 +768,40 @@ public class SizingSimulationService {
             BigDecimal automationRatio,
             BigDecimal weekendShiftHc,
             BigDecimal skeletonRatio,
-            BigDecimal deliveryHc,
+            BigDecimal actualHc,
             BigDecimal maxOvertimeMinutes,
             BigDecimal cycleTimeSeconds,
             BigDecimal rightSizingHc,
             BigDecimal supportFte,
             Map<YearMonth, BigDecimal> commercialByMonth,
-            Map<LocalDate, BigDecimal> dailyAdjustmentByDate) {
+            Map<YearMonth, BigDecimal> monthlyActualByMonth,
+            Map<LocalDate, BigDecimal> dailyAdjustmentByDate,
+            Map<LocalDate, BigDecimal> dailyActualByDate) {
         BigDecimal commercialRatio(LocalDate date) {
             BigDecimal value = commercialByMonth.get(YearMonth.from(date));
             return value == null ? BigDecimal.ZERO : value;
         }
 
+        BigDecimal monthlyActual(YearMonth month) {
+            BigDecimal value = monthlyActualByMonth.get(month);
+            return value == null ? BigDecimal.ZERO : value;
+        }
+
+        LocalDate earliestDailyActual() {
+            return dailyActualByDate.keySet().stream().min(LocalDate::compareTo).orElse(null);
+        }
+
+        boolean hasDailyActual(LocalDate date) {
+            return dailyActualByDate.containsKey(date);
+        }
+
         BigDecimal dailyAdjustment(LocalDate date) {
             BigDecimal value = dailyAdjustmentByDate.get(date);
+            return value == null ? BigDecimal.ZERO : value;
+        }
+
+        BigDecimal dailyActual(LocalDate date) {
+            BigDecimal value = dailyActualByDate.get(date);
             return value == null ? BigDecimal.ZERO : value;
         }
     }

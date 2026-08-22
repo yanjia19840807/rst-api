@@ -27,7 +27,6 @@ class TmsSessionTests {
 
         assertThat(session.getStatus()).isEqualTo(TmsSessionStatus.COMPLETED);
         assertThat(session.getNetDurationSeconds()).isEqualTo(15);
-        assertThat(session.getPauseDurationSeconds()).isEqualTo(10);
         assertThat(session.getEndedAt()).isEqualTo(START.plusSeconds(25));
     }
 
@@ -50,8 +49,6 @@ class TmsSessionTests {
         assertThat(session.getStatus()).isEqualTo(TmsSessionStatus.DISCARDED);
         assertThat(session.getDiscardReason()).isEqualTo("Invalid sample");
         assertThat(session.getNetDurationSeconds()).isEqualTo(10);
-        assertThat(session.getPauseDurationSeconds()).isEqualTo(10);
-        assertThat(session.getGrossDurationSeconds()).isEqualTo(20);
     }
 
     private static TmsSession newSession() {
@@ -63,7 +60,6 @@ class TmsSessionTests {
         return TmsSession.start(
                 "TMS-AGENT001-20260805-0001",
                 "AGENT001",
-                "Test Agent",
                 toolkit,
                 subtask,
                 BigDecimal.valueOf(25),

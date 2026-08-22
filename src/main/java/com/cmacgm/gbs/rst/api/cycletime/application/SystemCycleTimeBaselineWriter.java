@@ -54,27 +54,16 @@ public final class SystemCycleTimeBaselineWriter {
         if (active.isPresent() && "MANUAL".equalsIgnoreCase(active.get().getBaselineType())) {
             return;
         }
-        List<Double> includedValues = includedSampleValues(exerciseId);
-        if (includedValues.isEmpty()) {
+        Optional<SystemBaseline> computed = computeSystemBaseline(
+                exerciseTmsSessions.findAllSessionRowsByExerciseId(exerciseId),
+                combineSubtasksTime(exerciseId));
+        if (computed.isEmpty()) {
             if (active.isPresent() && "SYSTEM".equalsIgnoreCase(active.get().getBaselineType())) {
                 baselines.deactivateActiveByExerciseId(exerciseId);
             }
             return;
         }
-        replaceSystem(exerciseId, actorCcgid, includedValues);
-    }
-
-    /**
-     * Included median samples for the Exercise, applying Combined Subtasks Time when frozen on
-     * the Toolkit snapshot.
-     */
-    public List<Double> includedSampleValues(UUID exerciseId) {
-        return includedDatedSamples(
-                        exerciseTmsSessions.findAllSessionRowsByExerciseId(exerciseId),
-                        combineSubtasksTime(exerciseId))
-                .stream()
-                .map(DatedSample::seconds)
-                .toList();
+        replaceSystem(exerciseId, actorCcgid, computed.get());
     }
 
     boolean combineSubtasksTime(UUID exerciseId) {
@@ -85,90 +74,68 @@ public final class SystemCycleTimeBaselineWriter {
     }
 
     /**
-     * Replaces the active baseline with a new SYSTEM median (caller validates sample list).
+     * Replaces the active baseline with a new SYSTEM value (caller validates the computation).
      */
-    public void replaceSystem(UUID exerciseId, String actorCcgid, List<Double> includedValues) {
+    public void replaceSystem(UUID exerciseId, String actorCcgid, SystemBaseline baseline) {
         Instant now = clock.instant();
         baselines.deactivateActiveByExerciseId(exerciseId);
-        BigDecimal median = medianOf(includedValues);
         baselines.save(CycleTimeBaseline.createSystem(
-                exerciseId, median, includedValues.size(), actorCcgid, now));
+                exerciseId, baseline.seconds(), baseline.sampleCount(), actorCcgid, now));
     }
 
     /**
-     * Builds SYSTEM median samples from included TMS rows.
+     * SYSTEM Cycle Time from included TMS rows.
      *
-     * <p>When {@code combineByReference} is false, each included session is one sample
-     * (seconds per unit). When true, included sessions that share a non-blank Reference
-     * have their net durations summed first; that combined duration is then converted to
-     * seconds per unit and becomes one sample. Blank references stay independent.
+     * <p>Aligned with Demo Cycle Time {@code MEDIANX} of {@code INTERVAL_SECONDS}: each included
+     * session is one sample. Blank volume is treated as one unit (raw duration). Positive volume
+     * converts the sample to seconds per unit. When {@code combineSubtasksTime} is false, the
+     * result is the median of every included sample. When true, each subtask is medianed
+     * separately and those medians are summed. Sample count is the number of included sessions.
      */
-    public static List<Double> includedSecondsPerUnit(
-            List<ExerciseTmsSessionRow> rows, boolean combineByReference) {
-        return includedDatedSamples(rows, combineByReference).stream()
+    public static Optional<SystemBaseline> computeSystemBaseline(
+            List<ExerciseTmsSessionRow> rows, boolean combineSubtasksTime) {
+        List<Double> all = includedSecondsPerUnit(rows);
+        if (all.isEmpty()) {
+            return Optional.empty();
+        }
+        if (!combineSubtasksTime) {
+            return Optional.of(new SystemBaseline(medianOf(all), all.size()));
+        }
+        Map<String, List<Double>> bySubtask = new LinkedHashMap<>();
+        for (ExerciseTmsSessionRow row : rows) {
+            if (!row.getIncluded()) {
+                continue;
+            }
+            DatedSample sample = datedSample(row);
+            if (sample == null) {
+                continue;
+            }
+            bySubtask.computeIfAbsent(subtaskKey(row.getSubtaskName()), ignored -> new ArrayList<>())
+                    .add(sample.seconds());
+        }
+        if (bySubtask.isEmpty()) {
+            return Optional.empty();
+        }
+        BigDecimal sum = BigDecimal.ZERO;
+        for (List<Double> group : bySubtask.values()) {
+            sum = sum.add(medianOf(group));
+        }
+        return Optional.of(new SystemBaseline(sum, all.size()));
+    }
+
+    /**
+     * Included session samples (seconds per unit) for the control chart and Z-Score population.
+     */
+    public static List<Double> includedSecondsPerUnit(List<ExerciseTmsSessionRow> rows) {
+        return includedDatedSamples(rows).stream()
                 .map(DatedSample::seconds)
                 .toList();
     }
 
     /**
-     * Included samples with the timestamp used to bucket the control chart (session start,
-     * or the latest start in a Combined Subtasks Time reference group).
+     * Included samples with the timestamp used to bucket the control chart (session start).
      */
-    public static List<DatedSample> includedDatedSamples(
-            List<ExerciseTmsSessionRow> rows, boolean combineByReference) {
-        if (!combineByReference) {
-            return independentDatedSamples(rows);
-        }
-
-        Map<String, CombinedSample> groups = new LinkedHashMap<>();
-        List<DatedSample> values = new ArrayList<>();
-        for (ExerciseTmsSessionRow row : rows) {
-            if (!row.getIncluded()) {
-                continue;
-            }
-            String key = referenceKey(row.getReference());
-            if (key.isEmpty()) {
-                DatedSample sample = datedSample(row);
-                if (sample != null) {
-                    values.add(sample);
-                }
-                continue;
-            }
-            groups.computeIfAbsent(key, ignored -> new CombinedSample()).add(row);
-        }
-        for (CombinedSample group : groups.values()) {
-            DatedSample sample = group.toSample();
-            if (sample != null) {
-                values.add(sample);
-            }
-        }
-        return values;
-    }
-
-    public record DatedSample(Instant at, double seconds) {
-    }
-
-    public static Double secondsPerUnit(BigDecimal volume, long netDurationSeconds) {
-        if (volume == null || volume.signum() <= 0) {
-            return null;
-        }
-        return netDurationSeconds / volume.doubleValue();
-    }
-
-    public static BigDecimal medianOf(List<Double> values) {
-        List<Double> sorted = new ArrayList<>(values);
-        Collections.sort(sorted);
-        int n = sorted.size();
-        double median;
-        if (n % 2 == 1) {
-            median = sorted.get(n / 2);
-        } else {
-            median = (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2.0;
-        }
-        return BigDecimal.valueOf(median).setScale(6, RoundingMode.HALF_UP);
-    }
-
-    private static List<DatedSample> independentDatedSamples(List<ExerciseTmsSessionRow> rows) {
+    public static List<DatedSample> includedDatedSamples(List<ExerciseTmsSessionRow> rows) {
         List<DatedSample> values = new ArrayList<>();
         for (ExerciseTmsSessionRow row : rows) {
             if (!row.getIncluded()) {
@@ -182,6 +149,36 @@ public final class SystemCycleTimeBaselineWriter {
         return values;
     }
 
+    public record DatedSample(Instant at, double seconds) {
+    }
+
+    public record SystemBaseline(BigDecimal seconds, int sampleCount) {
+    }
+
+    public static Double secondsPerUnit(BigDecimal volume, long netDurationSeconds) {
+        if (volume == null || volume.signum() <= 0) {
+            return (double) netDurationSeconds;
+        }
+        return netDurationSeconds / volume.doubleValue();
+    }
+
+    /**
+     * Excel / DAX {@code MEDIAN}: sort ascending; odd {@code n} takes the middle value;
+     * even {@code n} averages the two central values ({@code PERCENTILE.INC} at 0.5).
+     */
+    public static BigDecimal medianOf(List<Double> values) {
+        List<Double> sorted = new ArrayList<>(values);
+        Collections.sort(sorted);
+        int n = sorted.size();
+        double median;
+        if (n % 2 == 1) {
+            median = sorted.get(n / 2);
+        } else {
+            median = (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2.0;
+        }
+        return BigDecimal.valueOf(median).setScale(6, RoundingMode.HALF_UP);
+    }
+
     private static DatedSample datedSample(ExerciseTmsSessionRow row) {
         Double seconds = secondsPerUnit(row.getProcessedVolume(), row.getNetDurationSeconds());
         Instant at = row.getStartedAt();
@@ -191,33 +188,7 @@ public final class SystemCycleTimeBaselineWriter {
         return new DatedSample(at, seconds);
     }
 
-    private static String referenceKey(String reference) {
-        return reference == null ? "" : reference.trim();
-    }
-
-    private static final class CombinedSample {
-        private long totalDurationSeconds;
-        private BigDecimal maxVolume = BigDecimal.ZERO;
-        private Instant at;
-
-        void add(ExerciseTmsSessionRow row) {
-            totalDurationSeconds += row.getNetDurationSeconds();
-            BigDecimal volume = row.getProcessedVolume();
-            if (volume != null && volume.signum() > 0 && volume.compareTo(maxVolume) > 0) {
-                maxVolume = volume;
-            }
-            Instant candidate = row.getStartedAt();
-            if (candidate != null && (at == null || candidate.isAfter(at))) {
-                at = candidate;
-            }
-        }
-
-        DatedSample toSample() {
-            Double seconds = SystemCycleTimeBaselineWriter.secondsPerUnit(maxVolume, totalDurationSeconds);
-            if (seconds == null || at == null) {
-                return null;
-            }
-            return new DatedSample(at, seconds);
-        }
+    private static String subtaskKey(String subtaskName) {
+        return subtaskName == null ? "" : subtaskName.trim();
     }
 }

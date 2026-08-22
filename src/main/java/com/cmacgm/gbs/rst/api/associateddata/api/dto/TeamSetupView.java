@@ -16,5 +16,5 @@ public record TeamSetupView(
         Boolean slaWeekendEnabled, BigDecimal weekendShiftHc, BigDecimal skeletonRatio,
         BigDecimal totalAgents, BigDecimal averageTenureYears, BigDecimal workingDaysPerYear,
         BigDecimal maxCapacityDays, BigDecimal dailyCapacityPerAgent,
-        String calculationVersion, long version) {
+        long version) {
 }

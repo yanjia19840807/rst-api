@@ -3,10 +3,46 @@ package com.cmacgm.gbs.rst.api.scenario.application.sizing;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.YearMonth;
 
 import org.junit.jupiter.api.Test;
 
 class SizingMathTests {
+
+    @Test
+    void actualHeadcountPrefersTeamSetupTotalAgent() {
+        assertThat(SizingMath.actualHeadcount(new BigDecimal("12.6"), new BigDecimal("11.12")))
+                .isEqualByComparingTo("12.6");
+        assertThat(SizingMath.actualHeadcount(null, new BigDecimal("11.12")))
+                .isEqualByComparingTo("11.12");
+    }
+
+    @Test
+    void capacityCreationUsesActualHeadcount() {
+        assertThat(SizingMath.capacityCreation(
+                new BigDecimal("12.6"), new BigDecimal("12.50"), new BigDecimal("2.055343")))
+                .isEqualByComparingTo("-1.955343");
+    }
+
+    @Test
+    void dailyHistoryWindowIsSizingMonthMinusTwoThroughSizingMonth() {
+        YearMonth sizing = YearMonth.of(2026, 6);
+        assertThat(SizingMath.dailyHistoryStart(sizing)).isEqualTo(LocalDate.of(2026, 4, 1));
+        assertThat(SizingMath.dailyHistoryEnd(sizing)).isEqualTo(LocalDate.of(2026, 6, 30));
+        assertThat(SizingMath.monthlyHistoryMonths(sizing)).containsExactly(
+                YearMonth.of(2026, 4), YearMonth.of(2026, 5), YearMonth.of(2026, 6));
+    }
+
+    @Test
+    void dailyFullPeriodRunsFromFirstActualThroughForecastMonth() {
+        YearMonth sizing = YearMonth.of(2026, 6);
+        assertThat(SizingMath.dailyFullPeriodStart(sizing, LocalDate.of(2026, 1, 1)))
+                .isEqualTo(LocalDate.of(2026, 1, 1));
+        assertThat(SizingMath.dailyFullPeriodStart(sizing, null))
+                .isEqualTo(LocalDate.of(2026, 1, 1));
+        assertThat(SizingMath.dailyFullPeriodEnd(sizing)).isEqualTo(LocalDate.of(2026, 7, 31));
+    }
 
     @Test
     void monthlyManualVolumeAppliesAutomation() {

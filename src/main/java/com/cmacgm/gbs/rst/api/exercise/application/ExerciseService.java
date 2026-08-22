@@ -28,6 +28,7 @@ import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupReposi
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.CommittedResultsStatus;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.CreateExerciseRequest;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.CreateExerciseResult;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseKpiView;
@@ -44,6 +45,7 @@ import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.WorkingDaysService;
+import com.cmacgm.gbs.rst.api.scenario.application.ScenarioCommitService;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
@@ -77,6 +79,7 @@ public class ExerciseService {
     private final ExerciseInitializationService initialization;
     private final WorkingDaysService workingDaysService;
     private final ScenarioRepository scenarios;
+    private final ScenarioCommitService scenarioCommits;
     private final ExerciseProductionSupportItemRepository supportItems;
     private final SubmissionRepository submissions;
     private final WorkflowInstanceRepository workflows;
@@ -96,6 +99,7 @@ public class ExerciseService {
             ExerciseInitializationService initialization,
             WorkingDaysService workingDaysService,
             ScenarioRepository scenarios,
+            ScenarioCommitService scenarioCommits,
             ExerciseProductionSupportItemRepository supportItems,
             SubmissionRepository submissions,
             WorkflowInstanceRepository workflows,
@@ -110,6 +114,7 @@ public class ExerciseService {
         this.initialization = initialization;
         this.workingDaysService = workingDaysService;
         this.scenarios = scenarios;
+        this.scenarioCommits = scenarioCommits;
         this.supportItems = supportItems;
         this.submissions = submissions;
         this.workflows = workflows;
@@ -120,6 +125,7 @@ public class ExerciseService {
     /**
      * Creates an Exercise, freezes Toolkit/KPI snapshots, and seeds Associated Data
      * (archive-first copy of Team Setup, Support, and holidays).
+     * Does not start a workflow instance; that happens on the first Submit.
      *
      * @param ownerCcgid Supervisor CCGID
      * @param request create payload
@@ -151,7 +157,9 @@ public class ExerciseService {
         exercise = exercises.saveAndFlush(exercise);
         teamSetups.save(ExerciseTeamSetup.emptyShell(exerciseId, ownerCcgid, now));
         List<String> notices = new ArrayList<>(initialization.initialize(exercise, ownerCcgid));
-        return new CreateExerciseResult(toResponse(exercise, null), notices);
+        // initialize() may clear the persistence context via bulk @Modifying ops.
+        RstExercise reloaded = access.requireOwned(ownerCcgid, exerciseId);
+        return new CreateExerciseResult(toResponse(reloaded, null), notices);
     }
 
     /**
@@ -240,10 +248,11 @@ public class ExerciseService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "exercise-not-editable",
-                    "Exercise periods can only be changed while In Progress or Returned.");
+                    "Exercise periods can only be changed during Supervisor Sizing.");
         }
         short previousYear = (short) YearMonth.from(exercise.getSizingMonth()).getYear();
         short nextYear = (short) YearMonth.parse(request.sizingMonth()).getYear();
+        boolean periodsChanged = periodsChanged(exercise, request);
         exercise.updatePeriods(
                 MonthKeys.parseMonthStart(request.sizingMonth()),
                 request.slotStartDate(),
@@ -266,7 +275,48 @@ public class ExerciseService {
         initialization.ensureTrainVolumeGrids(exercise, ownerCcgid);
         notices.add("Volume Input grids refreshed for the updated training windows.");
         notices.add(initialization.syncTmsPopulation(exercise, ownerCcgid));
-        return new UpdateExercisePeriodsResult(toResponse(exercise, null), notices);
+        if (periodsChanged) {
+            int cleared = scenarioCommits.clearResultsForExercise(exerciseId);
+            if (cleared > 0) {
+                notices.add(
+                        "Cleared saved Forecast and Simulation results for "
+                                + cleared
+                                + " scenario(s). Re-run Preview / Save sizing on each scenario.");
+            }
+        }
+        // Volume / TMS / Cycle-Time sync may run bulk @Modifying deletes that clear the
+        // persistence context; reload before mapping lazy Subtasks / Shared KPI lines.
+        RstExercise reloaded = access.requireOwned(ownerCcgid, exerciseId);
+        return new UpdateExercisePeriodsResult(toResponse(reloaded, null), notices);
+    }
+
+    /**
+     * Returns how many scenarios currently have saved Forecast / Simulation snapshots.
+     */
+    @Transactional(readOnly = true)
+    public CommittedResultsStatus committedResults(String ownerCcgid, UUID exerciseId) {
+        access.requireOwned(ownerCcgid, exerciseId);
+        return new CommittedResultsStatus(scenarioCommits.countScenariosWithResults(exerciseId));
+    }
+
+    /**
+     * Clears saved Forecast / Simulation snapshots for every scenario.
+     * Scenario inputs (name, Right Sizing HC, shifts, Official) are kept.
+     */
+    @Transactional
+    public CommittedResultsStatus clearCommittedResults(String ownerCcgid, UUID exerciseId) {
+        RstExercise exercise = access.requireOwned(ownerCcgid, exerciseId);
+        access.requireEditable(exercise);
+        return new CommittedResultsStatus(scenarioCommits.clearResultsForExercise(exerciseId));
+    }
+
+    private static boolean periodsChanged(RstExercise exercise, UpdateExercisePeriodsRequest request) {
+        LocalDate sizing = MonthKeys.parseMonthStart(request.sizingMonth());
+        return !sizing.equals(exercise.getSizingMonth())
+                || !request.slotStartDate().equals(exercise.getSlotStartDate())
+                || request.slotWeeks() != exercise.getSlotWeeks()
+                || !request.tmsFrom().equals(exercise.getTmsFrom())
+                || !request.tmsTo().equals(exercise.getTmsTo());
     }
 
     private static void validatePeriods(String sizingMonth, LocalDate tmsFrom, LocalDate tmsTo) {
@@ -291,6 +341,19 @@ public class ExerciseService {
         return Set.of("IN_PROGRESS", "RETURNED", "UNDER_REVIEW");
     }
 
+    /**
+     * Current-step filter. {@code SUPERVISOR} is display-only (no workflow instance yet,
+     * or after Return / Withdraw). Review roles only match an open Under Review step.
+     */
+    private static boolean matchesReviewStage(ExerciseResponse item, String reviewStage) {
+        if ("SUPERVISOR".equals(reviewStage)) {
+            return "IN_PROGRESS".equals(item.workflowStatus())
+                    || "RETURNED".equals(item.workflowStatus());
+        }
+        return "UNDER_REVIEW".equals(item.workflowStatus())
+                && reviewStage.equals(item.requiredRole());
+    }
+
     private static boolean matches(ExerciseResponse item, ExerciseListQuery query) {
         if (hasText(query.exerciseCode())) {
             String code = item.exerciseCode() == null ? "" : item.exerciseCode();
@@ -308,7 +371,7 @@ public class ExerciseService {
         if (hasText(query.workflowStatus()) && !query.workflowStatus().equals(item.workflowStatus())) {
             return false;
         }
-        if (hasText(query.reviewStage()) && !query.reviewStage().equals(item.requiredRole())) {
+        if (hasText(query.reviewStage()) && !matchesReviewStage(item, query.reviewStage())) {
             return false;
         }
         if (hasText(query.handler()) && !query.handler().equals(item.currentReviewer())) {
@@ -410,11 +473,12 @@ public class ExerciseService {
                         true))
                 .toList();
         BigDecimal deliveryHc = deliveryHc(exercise);
+        BigDecimal actualHc = actualHeadcount(exercise, deliveryHc);
         BigDecimal rightSizingHc = rightSizingHc(exercise.getOfficialScenarioId());
         BigDecimal productionSupport = productionSupport(exercise.getId());
         BigDecimal capacityCreation = rightSizingHc == null
                 ? null
-                : SizingMath.capacityCreation(deliveryHc, rightSizingHc, productionSupport);
+                : SizingMath.capacityCreation(actualHc, rightSizingHc, productionSupport);
         Integer agingDays = null;
         if ("UNDER_REVIEW".equals(exercise.getWorkflowStatus())
                 || "RETURNED".equals(exercise.getWorkflowStatus())) {
@@ -604,6 +668,11 @@ public class ExerciseService {
             }
         }
         return sum;
+    }
+
+    private BigDecimal actualHeadcount(RstExercise exercise, BigDecimal deliveryHc) {
+        ExerciseTeamSetup setup = teamSetups.findById(exercise.getId()).orElse(null);
+        return SizingMath.actualHeadcount(setup == null ? null : setup.totalAgents(), deliveryHc);
     }
 
     private BigDecimal rightSizingHc(UUID scenarioId) {

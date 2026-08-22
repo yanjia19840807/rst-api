@@ -3,6 +3,9 @@ package com.cmacgm.gbs.rst.api.scenario.application.sizing;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.List;
 
 /**
  * Workbook §11.2 sizing formulas (monthly + daily).
@@ -93,10 +96,50 @@ public final class SizingMath {
         return raw.setScale(0, RoundingMode.UP);
     }
 
-    /** Capacity creation: Delivery − RS HC − Support. */
+    /**
+     * Excel Input TotalAgent. Tenure buckets win; otherwise Shared KPI Delivery HC.
+     */
+    public static BigDecimal actualHeadcount(BigDecimal totalAgents, BigDecimal deliveryHc) {
+        if (totalAgents != null && totalAgents.signum() > 0) {
+            return totalAgents;
+        }
+        return nz(deliveryHc);
+    }
+
+    /** Inclusive daily-chart history: sizingMonth − 2 … sizingMonth. */
+    public static LocalDate dailyHistoryStart(YearMonth sizingMonth) {
+        return sizingMonth.minusMonths(2).atDay(1);
+    }
+
+    /** Inclusive daily-chart history end (last day of sizing month). */
+    public static LocalDate dailyHistoryEnd(YearMonth sizingMonth) {
+        return sizingMonth.atEndOfMonth();
+    }
+
+    /**
+     * Excel Input "Full Period" daily chart start: first actual day, else 1 Jan of sizing year.
+     */
+    public static LocalDate dailyFullPeriodStart(YearMonth sizingMonth, LocalDate firstActual) {
+        if (firstActual != null) {
+            return firstActual;
+        }
+        return YearMonth.of(sizingMonth.getYear(), 1).atDay(1);
+    }
+
+    /** Excel Input "Full Period" daily chart end: last day of the daily forecast month. */
+    public static LocalDate dailyFullPeriodEnd(YearMonth sizingMonth) {
+        return sizingMonth.plusMonths(1).atEndOfMonth();
+    }
+
+    /** Chart history months: sizingMonth − 2 … sizingMonth. */
+    public static List<YearMonth> monthlyHistoryMonths(YearMonth sizingMonth) {
+        return List.of(sizingMonth.minusMonths(2), sizingMonth.minusMonths(1), sizingMonth);
+    }
+
+    /** Capacity creation: Actual HC (TotalAgent) − RS HC − Support. */
     public static BigDecimal capacityCreation(
-            BigDecimal deliveryHc, BigDecimal rightSizingHc, BigDecimal productionSupportFte) {
-        return nz(deliveryHc)
+            BigDecimal actualHc, BigDecimal rightSizingHc, BigDecimal productionSupportFte) {
+        return nz(actualHc)
                 .subtract(nz(rightSizingHc), MC)
                 .subtract(nz(productionSupportFte), MC)
                 .setScale(6, RoundingMode.HALF_UP);

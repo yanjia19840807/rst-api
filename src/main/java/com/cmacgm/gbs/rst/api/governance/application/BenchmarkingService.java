@@ -27,6 +27,7 @@ import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkRow;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingView;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.WorkingDaysService;
+import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
 import org.springframework.stereotype.Service;
@@ -135,6 +136,8 @@ public class BenchmarkingService {
             BigDecimal cycleTimeSeconds,
             ExerciseTeamSetup setup) {
         BigDecimal totalDelivery = deliveryHc(exercise);
+        BigDecimal actualHc = SizingMath.actualHeadcount(
+                setup == null ? null : setup.totalAgents(), totalDelivery);
         BigDecimal dailyCapacity = setup == null ? null : setup.dailyCapacityPerAgent(cycleTimeSeconds);
         String submittedDate = exercise.getSubmittedAt() == null
                 ? ""
@@ -145,7 +148,7 @@ public class BenchmarkingService {
                 continue;
             }
             RepositoryLineMath.LineMetrics metrics = RepositoryLineMath.allocate(
-                    line.getDeliveryHc(), totalDelivery, rightSizingHc, productionSupport);
+                    line.getDeliveryHc(), totalDelivery, actualHc, rightSizingHc, productionSupport);
             rows.add(new BenchmarkRow(
                     blank(line.getCenter()),
                     blank(line.getCustomerCountry()),

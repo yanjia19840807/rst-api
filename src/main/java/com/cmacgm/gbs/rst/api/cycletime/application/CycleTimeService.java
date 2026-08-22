@@ -4,7 +4,9 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -22,6 +24,7 @@ import com.cmacgm.gbs.rst.api.cycletime.persistence.ExerciseTmsSessionRepository
 import com.cmacgm.gbs.rst.api.cycletime.persistence.ExerciseTmsSessionRepository.ExerciseTmsSessionRow;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -51,6 +54,7 @@ public class CycleTimeService {
     private final FileArtifactRepository fileArtifacts;
     private final ExerciseTmsSessionRepository exerciseTmsSessions;
     private final SystemCycleTimeBaselineWriter systemCycleTime;
+    private final TimesheetReadService timesheet;
     private final Clock clock;
 
     /**
@@ -63,6 +67,7 @@ public class CycleTimeService {
             FileArtifactRepository fileArtifacts,
             ExerciseTmsSessionRepository exerciseTmsSessions,
             SystemCycleTimeBaselineWriter systemCycleTime,
+            TimesheetReadService timesheet,
             Clock clock) {
         this.exercises = exercises;
         this.baselines = baselines;
@@ -70,6 +75,7 @@ public class CycleTimeService {
         this.fileArtifacts = fileArtifacts;
         this.exerciseTmsSessions = exerciseTmsSessions;
         this.systemCycleTime = systemCycleTime;
+        this.timesheet = timesheet;
         this.clock = clock;
     }
 
@@ -159,13 +165,19 @@ public class CycleTimeService {
     /**
      * Returns the active Cycle Time baseline for an Exercise.
      *
+     * <p>When none exists, rebuilds a SYSTEM median from included TMS sessions (Demo-aligned
+     * {@code INTERVAL_SECONDS} median, treating blank volume as one unit).
+     *
      * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
      * @return active baseline
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public BaselineView getActive(String ownerCcgid, UUID exerciseId) {
         exercises.requireReadable(ownerCcgid, exerciseId);
+        if (baselines.findByExerciseIdAndActiveTrue(exerciseId).isEmpty()) {
+            systemCycleTime.refreshIfSystemOrAbsent(exerciseId, ownerCcgid);
+        }
         CycleTimeBaseline baseline = baselines.findByExerciseIdAndActiveTrue(exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
@@ -183,12 +195,10 @@ public class CycleTimeService {
      */
     @Transactional(readOnly = true)
     public CycleTimeChartView controlChart(String ownerCcgid, UUID exerciseId) {
-        RstExercise exercise = exercises.requireReadable(ownerCcgid, exerciseId);
-        boolean combineByReference = exercise.getToolkitSnapshot() != null
-                && exercise.getToolkitSnapshot().isCombineSubtasksTime();
+        exercises.requireReadable(ownerCcgid, exerciseId);
         List<ExerciseTmsSessionRow> rows = exerciseTmsSessions.findAllSessionRowsByExerciseId(exerciseId);
         return CycleTimeControlChartMath.build(
-                SystemCycleTimeBaselineWriter.includedDatedSamples(rows, combineByReference));
+                SystemCycleTimeBaselineWriter.includedDatedSamples(rows));
     }
 
     /**
@@ -216,17 +226,18 @@ public class CycleTimeService {
 
         Page<ExerciseTmsSessionRow> pageRows =
                 exerciseTmsSessions.findSessionRowsByExerciseId(exerciseId, pageable);
-        return PageResponse.from(pageRows, row -> toSessionResponse(row, stats));
+        Map<String, String> names = new HashMap<>();
+        return PageResponse.from(pageRows, row -> toSessionResponse(row, stats, names));
     }
 
     /**
      * Updates whether a linked TMS session is included in the SYSTEM median population.
      *
      * <p>Exclusion does not require a reason. If the active baseline is SYSTEM (or missing),
-     * recalculates a new SYSTEM median from remaining included samples. When Combined Subtasks
-     * Time is frozen on the Toolkit, samples with the same Reference are summed first.
-     * MANUAL baselines keep their median; only the selection set changes. Leaving zero valid
-     * included samples is rejected.
+     * recalculates a new SYSTEM value from remaining included samples. When Combine subtask
+     * time is frozen on the Toolkit, each subtask median is summed; otherwise the median of
+     * all included sessions is used. MANUAL baselines keep their median; only the selection
+     * set changes. Leaving zero valid included samples is rejected.
      *
      * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
@@ -253,11 +264,11 @@ public class CycleTimeService {
 
             List<ExerciseTmsSessionRow> allRows =
                     exerciseTmsSessions.findAllSessionRowsByExerciseId(exerciseId);
-            boolean combineByReference = exercise.getToolkitSnapshot() != null
+            boolean combineSubtasksTime = exercise.getToolkitSnapshot() != null
                     && exercise.getToolkitSnapshot().isCombineSubtasksTime();
-            List<Double> includedValues =
-                    SystemCycleTimeBaselineWriter.includedSecondsPerUnit(allRows, combineByReference);
-            if (includedValues.isEmpty()) {
+            var computed = SystemCycleTimeBaselineWriter.computeSystemBaseline(
+                    allRows, combineSubtasksTime);
+            if (computed.isEmpty()) {
                 throw new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "cycle-time-no-included-samples",
@@ -267,7 +278,7 @@ public class CycleTimeService {
             Optional<CycleTimeBaseline> active = baselines.findByExerciseIdAndActiveTrue(exerciseId);
             boolean recalculateSystem = active.isEmpty() || "SYSTEM".equals(active.get().getBaselineType());
             if (recalculateSystem) {
-                systemCycleTime.replaceSystem(exerciseId, ownerCcgid, includedValues);
+                systemCycleTime.replaceSystem(exerciseId, ownerCcgid, computed.get());
             }
         }
 
@@ -284,7 +295,7 @@ public class CycleTimeService {
         BaselineView baseline = baselines.findByExerciseIdAndActiveTrue(exerciseId)
                 .map(this::toView)
                 .orElse(null);
-        return new PatchTmsSessionResult(toSessionResponse(row, stats), baseline);
+        return new PatchTmsSessionResult(toSessionResponse(row, stats, new HashMap<>()), baseline);
     }
 
     private void deactivateActiveBaseline(UUID exerciseId) {
@@ -320,8 +331,8 @@ public class CycleTimeService {
         return new ZScoreStats(mean, stdev);
     }
 
-    private static ExerciseTmsSessionResponse toSessionResponse(
-            ExerciseTmsSessionRow row, ZScoreStats stats) {
+    private ExerciseTmsSessionResponse toSessionResponse(
+            ExerciseTmsSessionRow row, ZScoreStats stats, Map<String, String> names) {
         Double seconds = SystemCycleTimeBaselineWriter.secondsPerUnit(
                 row.getProcessedVolume(), row.getNetDurationSeconds());
         Integer cycleTime = seconds == null ? null : (int) Math.round(seconds);
@@ -329,13 +340,16 @@ public class CycleTimeService {
         if (seconds != null && stats.available()) {
             zScore = Math.abs(seconds - stats.mean()) / stats.stdev();
         }
+        String agentName = names.computeIfAbsent(row.getAgentCcgid(), timesheet::displayNameByCcgid);
         return new ExerciseTmsSessionResponse(
                 row.getSessionNo(),
                 row.getReference(),
-                row.getAgentName(),
+                agentName,
+                row.getToolkitName(),
                 row.getSubtaskName(),
                 row.getProcessedVolume(),
                 row.getNetDurationSeconds(),
+                row.getRemarks(),
                 cycleTime,
                 zScore,
                 row.getIncluded(),

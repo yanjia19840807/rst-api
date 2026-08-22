@@ -88,7 +88,7 @@ public class TmsSessionController {
     public TmsSessionResponse start(
             @AuthenticationPrincipal RstPrincipal principal,
             @Valid @RequestBody StartTmsSessionRequest request) {
-        return commandService.start(principal.ccgid(), principal.displayName(), request);
+        return commandService.start(principal.ccgid(), request);
     }
 
     @PostMapping("/sessions/{id}/pause")

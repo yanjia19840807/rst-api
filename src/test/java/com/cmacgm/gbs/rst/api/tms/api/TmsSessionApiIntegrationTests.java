@@ -62,7 +62,6 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update("delete from file_artifact");
         jdbcTemplate.update("delete from exercise_holiday");
         jdbcTemplate.update("delete from exercise_production_support_item");
-        jdbcTemplate.update("delete from exercise_shift");
         jdbcTemplate.update("delete from exercise_team_setup");
         jdbcTemplate.update("delete from exercise_shared_kpi_line");
         jdbcTemplate.update("delete from exercise_subtask");

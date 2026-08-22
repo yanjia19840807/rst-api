@@ -20,7 +20,6 @@ import jakarta.validation.constraints.NotNull;
 
 import com.cmacgm.gbs.rst.api.associateddata.domain.DataImportBatch;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseHoliday;
-import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseShift;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup.TeamSetupInput;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseProductionSupportItem;
@@ -31,7 +30,6 @@ import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseVolumeSlotInput;
 import com.cmacgm.gbs.rst.api.associateddata.domain.FileArtifact;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.DataImportBatchRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseHolidayRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseShiftRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSupportItemRepository;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseVolumeDailyInputRepository;
@@ -61,8 +59,6 @@ import com.cmacgm.gbs.rst.api.associateddata.api.dto.HolidayRequest;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.HolidayView;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.MonthlyVolumeRequest;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.MonthlyVolumeView;
-import com.cmacgm.gbs.rst.api.associateddata.api.dto.ShiftRequest;
-import com.cmacgm.gbs.rst.api.associateddata.api.dto.ShiftView;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.SlotVolumeRequest;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.SlotVolumeView;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.SupportItemRequest;
@@ -73,14 +69,13 @@ import com.cmacgm.gbs.rst.api.associateddata.api.dto.ToolkitVolumePointsView;
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.ToolkitVolumeSummaryView;
 
 /**
- * Associated Data CRUD for Supervisor Exercise Team Setup, Shift, Support, Calendar and Volume.
+ * Associated Data CRUD for Supervisor Exercise Team Setup, Support, Calendar and Volume.
  */
 @Service
 public class AssociatedDataService {
 
     private final ExerciseAccess exercises;
     private final ExerciseTeamSetupRepository teamSetups;
-    private final ExerciseShiftRepository shifts;
     private final ExerciseProductionSupportItemRepository supportItems;
     private final ExerciseHolidayRepository holidays;
     private final ExerciseVolumeMonthlyInputRepository monthlyVolumes;
@@ -91,6 +86,7 @@ public class AssociatedDataService {
     private final CycleTimeBaselineRepository cycleTimeBaselines;
     private final VolumeInputValidator volumeValidator;
     private final VolumeExcelService volumeExcel;
+    private final HolidayExcelService holidayExcel;
     private final ToolkitVolumeService toolkitVolumes;
     private final FileArtifactRepository fileArtifacts;
     private final DataImportBatchRepository importBatches;
@@ -102,7 +98,6 @@ public class AssociatedDataService {
     public AssociatedDataService(
             ExerciseAccess exercises,
             ExerciseTeamSetupRepository teamSetups,
-            ExerciseShiftRepository shifts,
             ExerciseProductionSupportItemRepository supportItems,
             ExerciseHolidayRepository holidays,
             ExerciseVolumeMonthlyInputRepository monthlyVolumes,
@@ -113,13 +108,13 @@ public class AssociatedDataService {
             CycleTimeBaselineRepository cycleTimeBaselines,
             VolumeInputValidator volumeValidator,
             VolumeExcelService volumeExcel,
+            HolidayExcelService holidayExcel,
             ToolkitVolumeService toolkitVolumes,
             FileArtifactRepository fileArtifacts,
             DataImportBatchRepository importBatches,
             Clock clock) {
         this.exercises = exercises;
         this.teamSetups = teamSetups;
-        this.shifts = shifts;
         this.supportItems = supportItems;
         this.holidays = holidays;
         this.monthlyVolumes = monthlyVolumes;
@@ -130,6 +125,7 @@ public class AssociatedDataService {
         this.cycleTimeBaselines = cycleTimeBaselines;
         this.volumeValidator = volumeValidator;
         this.volumeExcel = volumeExcel;
+        this.holidayExcel = holidayExcel;
         this.toolkitVolumes = toolkitVolumes;
         this.fileArtifacts = fileArtifacts;
         this.importBatches = importBatches;
@@ -164,71 +160,6 @@ public class AssociatedDataService {
         Instant now = clock.instant();
         setup.replaceInputs(request.toInput(), ownerCcgid, now);
         return toTeamSetup(exercise, teamSetups.save(setup));
-    }
-
-    /**
-     * Lists active shifts.
-     *
-     * @param ownerCcgid Supervisor CCGID
-     * @param exerciseId Exercise id
-     * @return shifts
-     */
-    @Transactional(readOnly = true)
-    public List<ShiftView> getShifts(String ownerCcgid, UUID exerciseId) {
-        exercises.requireReadable(ownerCcgid, exerciseId);
-        return shifts.findByExerciseIdAndDeletedAtIsNullOrderByShiftNoAsc(exerciseId).stream()
-                .map(this::toShift)
-                .toList();
-    }
-
-    /**
-     * Replaces the full active shift list for an Exercise.
-     *
-     * @param ownerCcgid Supervisor CCGID
-     * @param exerciseId Exercise id
-     * @param request shift list
-     * @return new active shifts
-     */
-    @Transactional
-    public List<ShiftView> putShifts(String ownerCcgid, UUID exerciseId, List<ShiftRequest> request) {
-        RstExercise exercise = editable(ownerCcgid, exerciseId);
-        Instant now = clock.instant();
-        // Upsert by shift_no to avoid unique (exercise_id, shift_no) conflicts from
-        // soft-delete + insert in the same flush (partial index WHERE deleted_at IS NULL).
-        Map<Short, ExerciseShift> existingByNo = new LinkedHashMap<>();
-        for (ExerciseShift existing : shifts.findByExerciseIdAndDeletedAtIsNullOrderByShiftNoAsc(exerciseId)) {
-            existingByNo.put(existing.getShiftNo(), existing);
-        }
-        Set<Short> kept = new HashSet<>();
-        for (ShiftRequest item : request) {
-            kept.add(item.shiftNo());
-            ExerciseShift current = existingByNo.get(item.shiftNo());
-            if (current != null) {
-                current.replace(
-                        item.startTime(),
-                        item.durationMinutes(),
-                        item.headcount(),
-                        item.worksOnWeekend(),
-                        ownerCcgid,
-                        now);
-            } else {
-                shifts.save(ExerciseShift.create(
-                        exercise.getId(),
-                        item.shiftNo(),
-                        item.startTime(),
-                        item.durationMinutes(),
-                        item.headcount(),
-                        item.worksOnWeekend(),
-                        ownerCcgid,
-                        now));
-            }
-        }
-        for (Map.Entry<Short, ExerciseShift> entry : existingByNo.entrySet()) {
-            if (!kept.contains(entry.getKey())) {
-                entry.getValue().softDelete(ownerCcgid, now);
-            }
-        }
-        return getShifts(ownerCcgid, exerciseId);
     }
 
     /**
@@ -380,6 +311,52 @@ public class AssociatedDataService {
             }
         }
         return getCalendar(ownerCcgid, exerciseId);
+    }
+
+    /**
+     * Exports a blank holiday Excel template (date / type / description).
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportCalendarTemplate(String ownerCcgid, UUID exerciseId) {
+        exercises.requireOwned(ownerCcgid, exerciseId);
+        return holidayExcel.exportBlank();
+    }
+
+    /**
+     * Exports current holidays as Excel.
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportCalendarExcel(String ownerCcgid, UUID exerciseId) {
+        exercises.requireOwned(ownerCcgid, exerciseId);
+        List<HolidayRequest> rows = holidays
+                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)
+                .stream()
+                .map(h -> new HolidayRequest(h.getHolidayDate(), h.getHolidayName(), h.getHolidayType()))
+                .toList();
+        return holidayExcel.export(rows);
+    }
+
+    /**
+     * Imports holidays from Excel and replaces the current list.
+     */
+    @Transactional
+    public CalendarView importCalendarExcel(
+            String ownerCcgid, UUID exerciseId, InputStream input, String fileName) {
+        editable(ownerCcgid, exerciseId);
+        List<HolidayRequest> parsed = holidayExcel.parse(input);
+        if (parsed.isEmpty()) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-excel", "No holiday rows found.");
+        }
+        recordImportBatch(
+                ownerCcgid,
+                exerciseId,
+                "HOLIDAY",
+                fileName,
+                parsed.size(),
+                "HOLIDAY_IMPORT",
+                "holiday-import.xlsx");
+        return putCalendar(ownerCcgid, exerciseId, new CalendarRequest(parsed));
     }
 
     /**
@@ -794,12 +771,25 @@ public class AssociatedDataService {
 
     private UUID recordImportBatch(
             String ownerCcgid, UUID exerciseId, String importType, String fileName, int rowCount) {
+        return recordImportBatch(
+                ownerCcgid, exerciseId, importType, fileName, rowCount,
+                "VOLUME_IMPORT", "volume-import.xlsx");
+    }
+
+    private UUID recordImportBatch(
+            String ownerCcgid,
+            UUID exerciseId,
+            String importType,
+            String fileName,
+            int rowCount,
+            String artifactType,
+            String defaultFileName) {
         Instant now = clock.instant();
         FileArtifact artifact = fileArtifacts.save(FileArtifact.createStub(
-                "VOLUME_IMPORT",
+                artifactType,
                 "EXERCISE",
                 exerciseId,
-                fileName == null || fileName.isBlank() ? "volume-import.xlsx" : fileName,
+                fileName == null || fileName.isBlank() ? defaultFileName : fileName,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 ownerCcgid,
                 now));
@@ -849,7 +839,7 @@ public class AssociatedDataService {
                 setup.getSlaWeekendEnabled(), setup.getWeekendShiftHc(), setup.getSkeletonRatio(),
                 setup.totalAgents(), setup.averageTenureYears(), workingDays,
                 setup.maxCapacityDays(workingDays), setup.dailyCapacityPerAgent(cycleTime),
-                null, setup.getVersion());
+                setup.getVersion());
     }
 
     private BigDecimal deliveryHc(RstExercise exercise) {
@@ -872,12 +862,6 @@ public class AssociatedDataService {
         }
     }
 
-    private ShiftView toShift(ExerciseShift shift) {
-        return new ShiftView(
-                shift.getId(), shift.getShiftNo(), shift.getStartTime(), shift.getDurationMinutes(),
-                shift.getHeadcount(), shift.isWorksOnWeekend());
-    }
-
     private SupportItemView toSupport(ExerciseProductionSupportItem item, UUID exerciseId) {
         ExerciseTeamSetup setup = teamSetups.findById(exerciseId).orElse(null);
         BigDecimal workingDays = workingDaysService.workingDaysPerYear(exerciseId);
@@ -888,8 +872,7 @@ public class AssociatedDataService {
                 item.getActivity(),
                 item.getFrequencyCode(), item.getVolume(), item.getUnitOfMeasure(),
                 item.getWorkloadPerUnitMinutes(), derived.annualMultiplier(),
-                derived.workloadPerYearHours(), derived.supportFte(), item.getComments(),
-                null);
+                derived.workloadPerYearHours(), derived.supportFte(), item.getComments());
     }
 
     private HolidayView toHoliday(ExerciseHoliday holiday) {

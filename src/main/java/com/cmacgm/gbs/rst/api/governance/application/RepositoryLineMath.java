@@ -31,6 +31,25 @@ public final class RepositoryLineMath {
             BigDecimal totalDeliveryHc,
             BigDecimal rightSizingHc,
             BigDecimal productionSupportFte) {
+        return allocate(lineDeliveryHc, totalDeliveryHc, totalDeliveryHc, rightSizingHc, productionSupportFte);
+    }
+
+    /**
+     * Splits Exercise totals onto one KPI line. Capacity uses Actual HC (TotalAgent).
+     *
+     * @param lineDeliveryHc this line's frozen Delivery HC
+     * @param totalDeliveryHc sum of Delivery HC on the Exercise
+     * @param actualHc Team Setup TotalAgent, else Delivery HC
+     * @param rightSizingHc Official Scenario RIGHT_SIZING_HC; null leaves RS / Capacity empty
+     * @param productionSupportFte Exercise Support FTE total
+     * @return allocated line metrics
+     */
+    public static LineMetrics allocate(
+            BigDecimal lineDeliveryHc,
+            BigDecimal totalDeliveryHc,
+            BigDecimal actualHc,
+            BigDecimal rightSizingHc,
+            BigDecimal productionSupportFte) {
         BigDecimal lineHc = nz(lineDeliveryHc);
         BigDecimal totalHc = nz(totalDeliveryHc);
         BigDecimal supportTotal = nz(productionSupportFte);
@@ -42,11 +61,12 @@ public final class RepositoryLineMath {
         if (rightSizingHc == null) {
             return new LineMetrics(lineHc, null, lineSupport, null, null);
         }
-        BigDecimal capacityTotal = SizingMath.capacityCreation(totalHc, rightSizingHc, supportTotal);
+        BigDecimal headcount = SizingMath.actualHeadcount(actualHc, totalHc);
+        BigDecimal capacityTotal = SizingMath.capacityCreation(headcount, rightSizingHc, supportTotal);
         BigDecimal lineRs = scale(rightSizingHc.multiply(weight, MC));
         BigDecimal lineCapacity = scale(capacityTotal.multiply(weight, MC));
         BigDecimal pct = capacityTotal.multiply(HUNDRED, MC)
-                .divide(totalHc, 1, RoundingMode.HALF_UP);
+                .divide(headcount, 1, RoundingMode.HALF_UP);
         return new LineMetrics(lineHc, lineRs, lineSupport, lineCapacity, pct);
     }
 

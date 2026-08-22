@@ -24,6 +24,7 @@ import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryListQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryListView;
 import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryRow;
 import com.cmacgm.gbs.rst.api.holidaytemplate.application.WorkingDaysService;
+import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
 import org.springframework.stereotype.Service;
@@ -78,9 +79,10 @@ public class RstRepositoryService {
         }
         Map<UUID, BigDecimal> rightSizingByExercise = rightSizingByExercise(approved);
         Map<UUID, BigDecimal> supportByExercise = supportByExercise(approved);
+        Map<UUID, ExerciseTeamSetup> setups = setupsByExercise(approved);
         List<RepositoryRow> source = new ArrayList<>();
         for (RstExercise exercise : approved) {
-            source.addAll(rowsFor(exercise, rightSizingByExercise, supportByExercise));
+            source.addAll(rowsFor(exercise, rightSizingByExercise, supportByExercise, setups.get(exercise.getId())));
         }
         source.sort(Comparator
                 .comparing(RepositoryRow::submittedDate, Comparator.nullsLast(Comparator.reverseOrder()))
@@ -125,10 +127,13 @@ public class RstRepositoryService {
     private List<RepositoryRow> rowsFor(
             RstExercise exercise,
             Map<UUID, BigDecimal> rightSizingByExercise,
-            Map<UUID, BigDecimal> supportByExercise) {
+            Map<UUID, BigDecimal> supportByExercise,
+            ExerciseTeamSetup setup) {
         ExerciseToolkitSnapshot snapshot = exercise.getToolkitSnapshot();
         String toolkitName = snapshot == null ? "" : snapshot.getToolkitName();
         BigDecimal totalDelivery = deliveryHc(exercise);
+        BigDecimal actualHc = SizingMath.actualHeadcount(
+                setup == null ? null : setup.totalAgents(), totalDelivery);
         BigDecimal rightSizingHc = rightSizingByExercise.get(exercise.getId());
         BigDecimal productionSupport = supportByExercise.getOrDefault(exercise.getId(), BigDecimal.ZERO);
         String submittedDate = exercise.getSubmittedAt() == null
@@ -137,7 +142,7 @@ public class RstRepositoryService {
         List<RepositoryRow> rows = new ArrayList<>();
         for (ExerciseSharedKpiLine line : exercise.getSharedKpiLines()) {
             RepositoryLineMath.LineMetrics metrics = RepositoryLineMath.allocate(
-                    line.getDeliveryHc(), totalDelivery, rightSizingHc, productionSupport);
+                    line.getDeliveryHc(), totalDelivery, actualHc, rightSizingHc, productionSupport);
             rows.add(new RepositoryRow(
                     exercise.getExerciseCode(),
                     line.getCarrier(),
@@ -187,6 +192,15 @@ public class RstRepositoryService {
             }
         }
         return result;
+    }
+
+    private Map<UUID, ExerciseTeamSetup> setupsByExercise(List<RstExercise> approved) {
+        List<UUID> exerciseIds = approved.stream().map(RstExercise::getId).toList();
+        Map<UUID, ExerciseTeamSetup> setups = new HashMap<>();
+        for (ExerciseTeamSetup setup : teamSetups.findAllById(exerciseIds)) {
+            setups.put(setup.getExerciseId(), setup);
+        }
+        return setups;
     }
 
     private Map<UUID, BigDecimal> supportByExercise(List<RstExercise> approved) {

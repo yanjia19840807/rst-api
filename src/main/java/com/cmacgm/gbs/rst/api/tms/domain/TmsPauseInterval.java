@@ -1,7 +1,6 @@
 package com.cmacgm.gbs.rst.api.tms.domain;
 
 import java.time.Instant;
-import java.time.Duration;
 import java.util.UUID;
 
 import jakarta.persistence.Column;
@@ -48,10 +47,6 @@ public class TmsPauseInterval {
             throw new TmsStateException("Resume time cannot be before pause time.");
         }
         this.resumedAt = resumedAt;
-    }
-
-    long durationSeconds(Instant now) {
-        return Duration.between(pausedAt, resumedAt == null ? now : resumedAt).toSeconds();
     }
 
     public Instant getPausedAt() {

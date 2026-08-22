@@ -19,6 +19,5 @@ public record SupportItemView(
         BigDecimal annualMultiplier,
         BigDecimal workloadPerYearHours,
         BigDecimal supportFte,
-        String comments,
-        String calculationVersion) {
+        String comments) {
 }

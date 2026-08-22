@@ -58,6 +58,10 @@ public class ExerciseToolkitSnapshot {
     @Column(name = "pl3_name", nullable = false, length = 200)
     private String pl3Name;
 
+    /**
+     * When true, SYSTEM Cycle Time is the sum of each subtask's median seconds per unit.
+     * When false, it is the median of all included sessions.
+     */
     @Column(name = "combine_subtasks_time", nullable = false)
     private boolean combineSubtasksTime;
 

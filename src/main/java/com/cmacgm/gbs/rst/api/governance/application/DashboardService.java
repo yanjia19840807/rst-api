@@ -133,6 +133,10 @@ public class DashboardService {
         }
         Map<UUID, BigDecimal> rightSizingByExercise = rightSizingByExercise(ytd);
         Map<UUID, BigDecimal> supportByExercise = supportByExercise(ytd);
+        Map<UUID, ExerciseTeamSetup> setups = new HashMap<>();
+        for (ExerciseTeamSetup setup : teamSetups.findAllById(ytd.stream().map(RstExercise::getId).toList())) {
+            setups.put(setup.getExerciseId(), setup);
+        }
         BigDecimal total = BigDecimal.ZERO;
         boolean any = false;
         for (RstExercise exercise : ytd) {
@@ -140,8 +144,10 @@ public class DashboardService {
             if (rightSizing == null) {
                 continue;
             }
+            ExerciseTeamSetup setup = setups.get(exercise.getId());
             total = total.add(SizingMath.capacityCreation(
-                    deliveryHc(exercise),
+                    SizingMath.actualHeadcount(
+                            setup == null ? null : setup.totalAgents(), deliveryHc(exercise)),
                     rightSizing,
                     supportByExercise.getOrDefault(exercise.getId(), BigDecimal.ZERO)));
             any = true;

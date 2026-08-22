@@ -1,6 +1,7 @@
 package com.cmacgm.gbs.rst.api.tms.application;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -43,8 +44,7 @@ public class TmsSessionCommandService {
     }
 
     @Transactional
-    public TmsSessionResponse start(
-            String agentCcgid, String agentDisplayName, StartTmsSessionRequest request) {
+    public TmsSessionResponse start(String agentCcgid, StartTmsSessionRequest request) {
         ensureNoActiveSession(agentCcgid);
         Toolkit toolkit = toolkitRepository.findActiveById(request.toolkitId())
                 .orElseThrow(() -> new ApiException(
@@ -70,20 +70,16 @@ public class TmsSessionCommandService {
                                 "The selected active Subtask does not belong to the Toolkit."));
 
         var now = clock.instant();
-        String nameSnapshot = agentDisplayName == null || agentDisplayName.isBlank()
-                ? agentCcgid
-                : agentDisplayName.trim();
         TmsSession session = TmsSession.start(
                 nextSessionNumber(agentCcgid),
                 agentCcgid,
-                nameSnapshot,
                 toolkit,
                 subtask,
                 request.processedVolume(),
                 normalize(request.reference()),
                 normalize(request.remarks()),
                 now);
-        return TmsSessionResponse.from(sessionRepository.saveAndFlush(session), now);
+        return toResponse(sessionRepository.saveAndFlush(session), now);
     }
 
     @Transactional
@@ -91,7 +87,7 @@ public class TmsSessionCommandService {
         TmsSession session = ownedSession(agentCcgid, sessionNo);
         var now = clock.instant();
         session.pause(now);
-        return TmsSessionResponse.from(session, now);
+        return toResponse(session, now);
     }
 
     @Transactional
@@ -101,7 +97,7 @@ public class TmsSessionCommandService {
         var now = clock.instant();
         session.resume(now);
         sessionRepository.flush();
-        return TmsSessionResponse.from(session, now);
+        return toResponse(session, now);
     }
 
     @Transactional
@@ -109,7 +105,7 @@ public class TmsSessionCommandService {
         TmsSession session = ownedSession(agentCcgid, sessionNo);
         var now = clock.instant();
         session.end(now);
-        return TmsSessionResponse.from(session, now);
+        return toResponse(session, now);
     }
 
     @Transactional
@@ -117,7 +113,7 @@ public class TmsSessionCommandService {
         TmsSession session = ownedSession(agentCcgid, sessionNo);
         var now = clock.instant();
         session.discard(reason == null ? "" : reason.trim(), now);
-        return TmsSessionResponse.from(session, now);
+        return toResponse(session, now);
     }
 
     private TmsSession ownedSession(String agentCcgid, String sessionNo) {
@@ -159,5 +155,10 @@ public class TmsSessionCommandService {
 
     private static String normalize(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private TmsSessionResponse toResponse(TmsSession session, Instant now) {
+        return TmsSessionResponse.from(
+                session, now, timesheet.displayNameByCcgid(session.getAgentCcgid()));
     }
 }

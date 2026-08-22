@@ -2,10 +2,13 @@ package com.cmacgm.gbs.rst.api.tms.application;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -53,7 +56,7 @@ public class TmsSessionQueryService {
         var now = clock.instant();
         return sessionRepository.findFirstByAgentCcgidAndStatusIn(
                         agentCcgid, Set.of(TmsSessionStatus.RUNNING))
-                .map(session -> TmsSessionResponse.from(session, now))
+                .map(session -> toResponse(session, now))
                 .orElse(null);
     }
 
@@ -61,7 +64,7 @@ public class TmsSessionQueryService {
     public TmsSessionResponse get(String agentCcgid, String sessionNo) {
         var now = clock.instant();
         return sessionRepository.findBySessionNoAndAgentCcgid(sessionNo, agentCcgid)
-                .map(session -> TmsSessionResponse.from(session, now))
+                .map(session -> toResponse(session, now))
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
                         "tms-session-not-found",
@@ -89,7 +92,7 @@ public class TmsSessionQueryService {
                     "tms-session-not-found",
                     "The TMS session was not found.");
         }
-        return TmsSessionResponse.from(session, clock.instant());
+        return toResponse(session, clock.instant());
     }
 
     @Transactional(readOnly = true)
@@ -218,7 +221,18 @@ public class TmsSessionQueryService {
                 Sort.by(Sort.Direction.DESC, "startedAt"));
         var result = sessionRepository.findAll(TmsSessionSpecification.filtered(filter), pageable);
         var now = clock.instant();
-        return PageResponse.from(result, session -> TmsSessionResponse.from(session, now));
+        Map<String, String> names = new HashMap<>();
+        return PageResponse.from(result, session -> toResponse(session, now, names));
+    }
+
+    private TmsSessionResponse toResponse(TmsSession session, Instant now) {
+        return toResponse(session, now, new HashMap<>());
+    }
+
+    private TmsSessionResponse toResponse(TmsSession session, Instant now, Map<String, String> names) {
+        String agentName = names.computeIfAbsent(
+                session.getAgentCcgid(), timesheet::displayNameByCcgid);
+        return TmsSessionResponse.from(session, now, agentName);
     }
 
     private Set<UUID> scopedToolkitIds(String supervisorCcgid) {
