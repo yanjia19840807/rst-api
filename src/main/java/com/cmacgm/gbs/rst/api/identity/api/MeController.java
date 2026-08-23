@@ -35,6 +35,7 @@ public class MeController {
                 principal.displayName(),
                 principal.email(),
                 new ArrayList<>(principal.roles()),
-                new ArrayList<>(principal.scopes()));
+                new ArrayList<>(principal.scopes()),
+                principal.center());
     }
 }

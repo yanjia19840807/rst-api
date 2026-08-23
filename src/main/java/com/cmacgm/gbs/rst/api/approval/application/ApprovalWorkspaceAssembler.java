@@ -57,7 +57,10 @@ public class ApprovalWorkspaceAssembler {
             Map<String, String> displayNames) {
         Waiting waiting = waiting(submission, workflow, exercise, displayNames);
         WorkflowRouter.NextHop next = workflowRouter.previewNext(
-                waiting.role(), supervisorPosition(exercise));
+                waiting.role(),
+                supervisorPosition(exercise),
+                toolkitCenter(exercise),
+                toolkitDomain(exercise));
         return new ApprovalWorkspaceView(
                 MODE_IN_PROGRESS,
                 new ApprovalStatusBar(
@@ -121,7 +124,8 @@ public class ApprovalWorkspaceAssembler {
         String step = submission.isOpen() ? reviewStageLabel(role) : null;
         String reviewer = null;
         if (ready != null) {
-            String positionId = resolveStepPosition(ready, supervisorPositionId);
+            String positionId = resolveStepPosition(
+                    ready, supervisorPositionId, toolkitCenter(exercise), toolkitDomain(exercise));
             reviewer = firstNonBlank(
                     workflowRouter.occupantName(ready.getRequiredRoleCode(), positionId),
                     ready.getAssigneeCcgid() == null
@@ -175,12 +179,11 @@ public class ApprovalWorkspaceAssembler {
         if (positions.isEmpty()) {
             return null;
         }
-        String supervisorPositionId = supervisorPosition(exercise);
         return workflow.getActions().stream()
                 .filter(action -> "APPROVE".equals(action.getActionType())
                         || "RETURN".equals(action.getActionType()))
                 .filter(action -> {
-                    String assigned = positionForAction(workflow, supervisorPositionId, action);
+                    String assigned = positionForAction(workflow, exercise, action);
                     return assigned != null && positions.contains(assigned);
                 })
                 .map(WorkflowAction::getStepNo)
@@ -189,23 +192,30 @@ public class ApprovalWorkspaceAssembler {
     }
 
     private String positionForAction(
-            WorkflowInstance workflow, String supervisorPositionId, WorkflowAction action) {
+            WorkflowInstance workflow, RstExercise exercise, WorkflowAction action) {
+        String supervisorPositionId = supervisorPosition(exercise);
+        String center = toolkitCenter(exercise);
+        String domain = toolkitDomain(exercise);
         return workflow.getSteps().stream()
                 .filter(step -> step.getStepNo() == action.getStepNo())
                 .findFirst()
-                .map(step -> resolveStepPosition(step, supervisorPositionId))
+                .map(step -> resolveStepPosition(step, supervisorPositionId, center, domain))
                 .orElseGet(() -> workflowRouter.positionIdOrNull(
-                        supervisorPositionId, action.getActorRoleCode()));
+                        supervisorPositionId,
+                        center,
+                        domain,
+                        action.getActorRoleCode()));
     }
 
-    private String resolveStepPosition(WorkflowStepAssignment step, String supervisorPositionId) {
+    private String resolveStepPosition(
+            WorkflowStepAssignment step, String supervisorPositionId, String center, String domain) {
         if (step == null) {
             return null;
         }
         if (hasText(step.getAssigneePositionId())) {
             return step.getAssigneePositionId();
         }
-        return workflowRouter.positionIdOrNull(supervisorPositionId, step.getRequiredRoleCode());
+        return workflowRouter.positionIdOrNull(supervisorPositionId, center, domain, step.getRequiredRoleCode());
     }
 
     private static String supervisorPosition(RstExercise exercise) {
@@ -213,6 +223,20 @@ public class ApprovalWorkspaceAssembler {
             return null;
         }
         return exercise.getToolkitSnapshot().getSupervisorPositionId();
+    }
+
+    private static String toolkitCenter(RstExercise exercise) {
+        if (exercise == null || exercise.getToolkitSnapshot() == null) {
+            return null;
+        }
+        return exercise.getToolkitSnapshot().getCenter();
+    }
+
+    private static String toolkitDomain(RstExercise exercise) {
+        if (exercise == null || exercise.getToolkitSnapshot() == null) {
+            return null;
+        }
+        return exercise.getToolkitSnapshot().getDomain();
     }
 
     /**

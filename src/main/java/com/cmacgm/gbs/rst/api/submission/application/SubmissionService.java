@@ -162,6 +162,7 @@ public class SubmissionService {
         attachScopes(exercise, submission);
         submissions.save(submission);
 
+        requireDomainHead(exercise);
         String supervisorPositionId = exercise.getToolkitSnapshot() == null
                 ? null
                 : exercise.getToolkitSnapshot().getSupervisorPositionId();
@@ -206,6 +207,7 @@ public class SubmissionService {
         submission.reopenOpen(remarks, ownerCcgid, now);
         submissions.save(submission);
 
+        requireDomainHead(exercise);
         String supervisorPositionId = exercise.getToolkitSnapshot() == null
                 ? null
                 : exercise.getToolkitSnapshot().getSupervisorPositionId();
@@ -306,7 +308,46 @@ public class SubmissionService {
         validations.save(kpiPresence);
         findings.add(toFinding(kpiPresence));
 
+        boolean domainHeadConfigured = domainHeadConfigured(exercise);
+        ValidationResult domainHead = ValidationResult.create(
+                exercise.getId(),
+                scenarioId,
+                "SUBMIT",
+                "DOMAIN_HEAD_CONFIGURED",
+                domainHeadConfigured ? "INFO" : "SEVERE",
+                domainHeadConfigured,
+                domainHeadConfigured ? "configured" : "missing",
+                "configured",
+                remarks,
+                actorCcgid,
+                now);
+        validations.save(domainHead);
+        findings.add(toFinding(domainHead));
+
         return findings;
+    }
+
+    private void requireDomainHead(RstExercise exercise) {
+        if (!domainHeadConfigured(exercise)) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "domain-head-not-configured",
+                    "Domain Head is not configured for this Toolkit Center and Domain.");
+        }
+    }
+
+    private boolean domainHeadConfigured(RstExercise exercise) {
+        if (exercise.getToolkitSnapshot() == null) {
+            return false;
+        }
+        try {
+            workflowRouter.resolveCdh(
+                    exercise.getToolkitSnapshot().getCenter(),
+                    exercise.getToolkitSnapshot().getDomain());
+            return true;
+        } catch (ApiException ex) {
+            return false;
+        }
     }
 
     private SubmittedDetailsView toDetails(
@@ -326,8 +367,14 @@ public class SubmissionService {
         String supervisorPositionId = exercise.getToolkitSnapshot() == null
                 ? null
                 : exercise.getToolkitSnapshot().getSupervisorPositionId();
+        String center = exercise.getToolkitSnapshot() == null
+                ? null
+                : exercise.getToolkitSnapshot().getCenter();
+        String domain = exercise.getToolkitSnapshot() == null
+                ? null
+                : exercise.getToolkitSnapshot().getDomain();
         List<StepView> steps = workflow.getSteps().stream()
-                .map(s -> toStepView(s, displayNames, supervisorPositionId))
+                .map(s -> toStepView(s, displayNames, supervisorPositionId, center, domain))
                 .toList();
         List<ActionView> actions = workflow.getActions().stream()
                 .map(a -> new ActionView(
@@ -369,10 +416,13 @@ public class SubmissionService {
     private StepView toStepView(
             WorkflowStepAssignment step,
             Map<String, String> displayNames,
-            String supervisorPositionId) {
+            String supervisorPositionId,
+            String center,
+            String domain) {
         String positionId = hasText(step.getAssigneePositionId())
                 ? step.getAssigneePositionId()
-                : workflowRouter.positionIdOrNull(supervisorPositionId, step.getRequiredRoleCode());
+                : workflowRouter.positionIdOrNull(
+                        supervisorPositionId, center, domain, step.getRequiredRoleCode());
         String liveName = workflowRouter.occupantName(step.getRequiredRoleCode(), positionId);
         String name = liveName != null
                 ? liveName

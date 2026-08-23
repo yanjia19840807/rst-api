@@ -21,6 +21,11 @@ public class DevIdentityProperties {
      */
     private String role = "SUPERVISOR";
 
+    /**
+     * Simulated GBS Center. SSO will later supply the same field from the Center claim.
+     */
+    private String center = "Kuala Lumpur";
+
     public String getCcgid() {
         return ccgid;
     }
@@ -35,5 +40,13 @@ public class DevIdentityProperties {
 
     public void setRole(String role) {
         this.role = role;
+    }
+
+    public String getCenter() {
+        return center;
+    }
+
+    public void setCenter(String center) {
+        this.center = center;
     }
 }

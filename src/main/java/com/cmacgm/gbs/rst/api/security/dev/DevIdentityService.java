@@ -1,6 +1,5 @@
 package com.cmacgm.gbs.rst.api.security.dev;
 
-import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,11 +13,11 @@ import org.springframework.stereotype.Service;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSnapshotRowRepository;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 
 /**
  * Resolves a configured CCGID into an {@link RstPrincipal} without persisting a local user row.
- * Display names are taken from the ACTIVE Timesheet snapshot when available.
+ * Display names are taken from the ACTIVE Daily Timesheet snapshot when available.
  */
 @Service
 @Profile({"dev", "test"})
@@ -26,11 +25,11 @@ public class DevIdentityService {
 
     private static final Logger log = LoggerFactory.getLogger(DevIdentityService.class);
 
-    private final TimesheetSnapshotRowRepository snapshotRows;
+    private final TimesheetReadService timesheet;
     private final ConcurrentHashMap<String, RstPrincipal> cache = new ConcurrentHashMap<>();
 
-    public DevIdentityService(TimesheetSnapshotRowRepository snapshotRows) {
-        this.snapshotRows = snapshotRows;
+    public DevIdentityService(TimesheetReadService timesheet) {
+        this.timesheet = timesheet;
     }
 
     /**
@@ -38,9 +37,10 @@ public class DevIdentityService {
      *
      * @param ccgid corporate identity from config or header
      * @param roles role codes attached to the principal
+     * @param center GBS Center from config or {@code X-Dev-Center}
      * @return resolved principal
      */
-    public RstPrincipal resolve(String ccgid, Set<String> roles) {
+    public RstPrincipal resolve(String ccgid, Set<String> roles, String center) {
         if (ccgid == null || ccgid.isBlank()) {
             throw new ApiException(
                     HttpStatus.BAD_REQUEST,
@@ -48,36 +48,22 @@ public class DevIdentityService {
                     "app.security.dev-identity.ccgid is not configured.");
         }
         String key = ccgid.trim().toUpperCase(Locale.ROOT);
-        String cacheKey = key + "|" + roles.stream().sorted().collect(Collectors.joining(","));
-        return cache.computeIfAbsent(cacheKey, ignored -> load(key, roles));
+        String resolvedCenter = center == null || center.isBlank() ? null : center.trim();
+        String cacheKey = key + "|" + roles.stream().sorted().collect(Collectors.joining(","))
+                + "|" + (resolvedCenter == null ? "" : resolvedCenter);
+        return cache.computeIfAbsent(cacheKey, ignored -> load(key, roles, resolvedCenter));
     }
 
-    private RstPrincipal load(String ccgid, Set<String> roles) {
-        String displayName = firstNonBlank(
-                snapshotRows.findEmployeeNamesByCcgid(ccgid),
-                snapshotRows.findSupervisorNamesByCcgid(ccgid),
-                snapshotRows.findSrManagerNamesByCcgid(ccgid),
-                snapshotRows.findDomainHeadNamesByCcgid(ccgid));
+    private RstPrincipal load(String ccgid, Set<String> roles, String center) {
+        String displayName = timesheet.findDisplayName(ccgid).orElse(null);
         if (displayName == null) {
             displayName = "Dev User " + ccgid;
             log.warn(
-                    "CCG ID {} not found in ACTIVE Timesheet; using synthetic display name for dev login",
+                    "CCG ID {} not found in ACTIVE Daily Timesheet; using synthetic display name for dev login",
                     ccgid);
         }
         String email = ccgid.toLowerCase(Locale.ROOT) + "@dev.local";
-        log.info("Dev identity ready: ccgid={} name={} roles={}", ccgid, displayName, roles);
-        return new RstPrincipal(ccgid, displayName, email, roles, Set.of("TIMESHEET", "SELF"));
-    }
-
-    @SafeVarargs
-    private static String firstNonBlank(List<String>... groups) {
-        for (List<String> group : groups) {
-            for (String value : group) {
-                if (value != null && !value.isBlank()) {
-                    return value.trim();
-                }
-            }
-        }
-        return null;
+        log.info("Dev identity ready: ccgid={} name={} roles={} center={}", ccgid, displayName, roles, center);
+        return new RstPrincipal(ccgid, displayName, email, roles, Set.of("TIMESHEET", "SELF"), center);
     }
 }

@@ -136,6 +136,16 @@ public final class SizingMath {
         return List.of(sizingMonth.minusMonths(2), sizingMonth.minusMonths(1), sizingMonth);
     }
 
+    /**
+     * Right Sizing HC that represents a completed sizing. Null or non-positive means no result.
+     */
+    public static BigDecimal measuredRightSizingHc(BigDecimal rightSizingHc) {
+        if (rightSizingHc == null || rightSizingHc.signum() <= 0) {
+            return null;
+        }
+        return rightSizingHc;
+    }
+
     /** Capacity creation: Actual HC (TotalAgent) − RS HC − Support. */
     public static BigDecimal capacityCreation(
             BigDecimal actualHc, BigDecimal rightSizingHc, BigDecimal productionSupportFte) {

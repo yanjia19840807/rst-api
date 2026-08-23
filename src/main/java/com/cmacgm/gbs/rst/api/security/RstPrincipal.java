@@ -8,7 +8,8 @@ public record RstPrincipal(
         String displayName,
         String email,
         Set<String> roles,
-        Set<String> scopes) implements Principal {
+        Set<String> scopes,
+        String center) implements Principal {
 
     @Override
     public String getName() {

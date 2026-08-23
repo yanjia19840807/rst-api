@@ -258,7 +258,7 @@ public class BenchmarkingService {
     }
 
     private static BigDecimal rightSizingHc(Scenario scenario) {
-        return scenario.getRightSizingHc();
+        return SizingMath.measuredRightSizingHc(scenario.getRightSizingHc());
     }
 
     private static BigDecimal productionSupport(

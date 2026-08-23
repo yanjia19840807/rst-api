@@ -51,6 +51,8 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   security:
     azure-tenant-id: ${AZURE_TENANT_ID:}
+    # SSO claim name for GBS Center. Dev uses app.security.dev-identity.center instead.
+    center-claim: Center
 
 rst:
   forecast:
@@ -62,6 +64,17 @@ rst:
   workflow:
     # Timesheet has no LTH column yet; LTH steps share this position until IAM provides one.
     lth-position-id: ${RST_WORKFLOW_LTH_POSITION_ID:LTH}
+
+timesheet:
+  sync:
+    enabled: false
+    kind: all
+    source: ${TIMESHEET_SYNC_SOURCE:file}
+    daily-file: ${TIMESHEET_DAILY_FILE:file:../rst-material/Timesheet/Daily Report of 20260727(GBS CHINA).xlsx}
+    monthly-file: ${TIMESHEET_MONTHLY_FILE:file:../rst-material/Timesheet/Monthly Report of 202606(GBS CHINA).xlsx}
+    daily-folder: ${TIMESHEET_DAILY_FOLDER:Data Input/Daily}
+    monthly-folder: ${TIMESHEET_MONTHLY_FOLDER:Data Input/Monthly}
+    schedule-enabled: ${TIMESHEET_SYNC_SCHEDULE_ENABLED:false}
 
 microsoft:
   graph:

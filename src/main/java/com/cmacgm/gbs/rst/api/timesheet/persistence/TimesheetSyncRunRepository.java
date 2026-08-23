@@ -15,19 +15,36 @@ import org.springframework.data.repository.query.Param;
 public interface TimesheetSyncRunRepository extends JpaRepository<TimesheetSyncRun, UUID> {
 
     /**
-     * Finds the current ACTIVE sync run, if any.
+     * Finds a run by kind and status.
      *
-     * @param status status value
-     * @return optional ACTIVE run
+     * @param kind DAILY or MONTHLY
+     * @param status status
+     * @return optional run
      */
-    Optional<TimesheetSyncRun> findByStatus(String status);
+    Optional<TimesheetSyncRun> findByKindAndStatus(String kind, String status);
 
     /**
-     * Returns the highest attempt number for a sync date.
+     * Highest attempt for a kind and business date.
      *
-     * @param syncDate business sync date
-     * @return max attempt or null when none exist
+     * @param kind DAILY or MONTHLY
+     * @param syncDate business date
+     * @return max attempt or null
      */
-    @Query("select max(r.attemptNo) from TimesheetSyncRun r where r.syncDate = :syncDate")
-    Short findMaxAttemptNo(@Param("syncDate") LocalDate syncDate);
+    @Query("""
+            select max(r.attemptNo)
+            from TimesheetSyncRun r
+            where r.kind = :kind and r.syncDate = :syncDate
+            """)
+    Short findMaxAttemptNo(@Param("kind") String kind, @Param("syncDate") LocalDate syncDate);
+
+    /**
+     * Latest ACTIVE run for a SharePoint file identity.
+     *
+     * @param kind DAILY or MONTHLY
+     * @param driveItemId Graph item id
+     * @param etag Graph etag
+     * @return optional ACTIVE run
+     */
+    Optional<TimesheetSyncRun> findByKindAndStatusAndSourceDriveItemIdAndSourceEtag(
+            String kind, String status, String driveItemId, String etag);
 }

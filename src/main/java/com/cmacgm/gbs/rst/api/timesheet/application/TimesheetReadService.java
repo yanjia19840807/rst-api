@@ -2,123 +2,210 @@ package com.cmacgm.gbs.rst.api.timesheet.application;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSnapshotRowRepository;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetAssignment;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPosition;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetAssignmentRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetOccupancyRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
+import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Read model over ACTIVE Daily org and Monthly KPI snapshots.
+ */
 @Service
 public class TimesheetReadService {
 
     private final TimesheetSyncRunRepository syncRuns;
-    private final TimesheetSnapshotRowRepository snapshotRows;
+    private final TimesheetPersonRepository people;
+    private final TimesheetPositionRepository positions;
+    private final TimesheetOccupancyRepository occupancies;
+    private final TimesheetScopeRepository scopes;
+    private final TimesheetAssignmentRepository assignments;
+    private final TimesheetKpiRepository kpis;
 
+    /**
+     * @param syncRuns run headers
+     * @param people Daily people
+     * @param positions Daily positions
+     * @param occupancies Daily occupancy
+     * @param scopes Daily scopes
+     * @param assignments Daily assignments
+     * @param kpis Monthly KPIs
+     */
     public TimesheetReadService(
             TimesheetSyncRunRepository syncRuns,
-            TimesheetSnapshotRowRepository snapshotRows) {
+            TimesheetPersonRepository people,
+            TimesheetPositionRepository positions,
+            TimesheetOccupancyRepository occupancies,
+            TimesheetScopeRepository scopes,
+            TimesheetAssignmentRepository assignments,
+            TimesheetKpiRepository kpis) {
         this.syncRuns = syncRuns;
-        this.snapshotRows = snapshotRows;
+        this.people = people;
+        this.positions = positions;
+        this.occupancies = occupancies;
+        this.scopes = scopes;
+        this.assignments = assignments;
+        this.kpis = kpis;
     }
 
+    /**
+     * @return ACTIVE Daily and Monthly headers
+     */
     @Transactional(readOnly = true)
-    public ActiveSnapshot activeSnapshot() {
-        var run = syncRuns.findByStatus("ACTIVE")
+    public ActiveSnapshots activeSnapshots() {
+        return new ActiveSnapshots(requireActive("DAILY"), requireActive("MONTHLY"));
+    }
+
+    /**
+     * @return ACTIVE Daily snapshot
+     */
+    @Transactional(readOnly = true)
+    public ActiveSnapshot activeDaily() {
+        return requireActive("DAILY");
+    }
+
+    /**
+     * @return ACTIVE Monthly snapshot
+     */
+    @Transactional(readOnly = true)
+    public ActiveSnapshot activeMonthly() {
+        return requireActive("MONTHLY");
+    }
+
+    private ActiveSnapshot requireActive(String kind) {
+        TimesheetSyncRun run = syncRuns.findByKindAndStatus(kind, "ACTIVE")
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.CONFLICT,
-                        "active-timesheet-missing",
-                        "No ACTIVE Timesheet snapshot is available."));
+                        "DAILY".equals(kind) ? "active-timesheet-org-missing" : "active-timesheet-kpi-missing",
+                        "No ACTIVE " + kind + " Timesheet snapshot is available."));
         return new ActiveSnapshot(
                 run.getId(),
+                run.getKind(),
                 run.getSyncDate(),
                 run.getRowCount() == null ? 0 : run.getRowCount());
     }
 
+    /**
+     * Toolkit hierarchy for a Supervisor occupant.
+     *
+     * @param supervisorCcgid supervisor
+     * @return scopes
+     */
     @Transactional(readOnly = true)
     public List<HierarchyCandidate> supervisorHierarchy(String supervisorCcgid) {
-        return snapshotRows.findDistinctHierarchyBySupervisorCcgid(supervisorCcgid).stream()
-                .map(row -> new HierarchyCandidate(
-                        row.getSupervisorPositionId(),
-                        row.getCenter(),
-                        row.getDomain(),
-                        row.getPl1(),
-                        row.getPl2(),
-                        row.getPl3Code(),
-                        row.getPl3Name()))
+        return scopes.findActiveBySupervisorCcgid(supervisorCcgid).stream()
+                .map(scope -> new HierarchyCandidate(
+                        scope.getSupervisorPositionId(),
+                        scope.getCenter(),
+                        scope.getDomain(),
+                        scope.getPl1(),
+                        scope.getPl2(),
+                        scope.getPl3Code(),
+                        scope.getPl3Name()))
                 .toList();
     }
 
+    /**
+     * Shared KPI countries from Monthly.
+     *
+     * @param supervisorPositionId supervisor position
+     * @param pl3Code PL3
+     * @return countries
+     */
     @Transactional(readOnly = true)
     public List<String> countries(String supervisorPositionId, String pl3Code) {
-        return snapshotRows.findDistinctCountries(supervisorPositionId, pl3Code);
+        return kpis.findActiveCountries(supervisorPositionId, pl3Code);
     }
 
+    /**
+     * Shared KPI rows from Monthly.
+     *
+     * @param supervisorPositionId supervisor position
+     * @param pl3Code PL3
+     * @param countries selected countries
+     * @return KPI candidates
+     */
     @Transactional(readOnly = true)
     public List<KpiCandidate> kpis(
             String supervisorPositionId, String pl3Code, List<String> countries) {
         if (countries == null || countries.isEmpty()) {
             return List.of();
         }
-        return snapshotRows.aggregateKpis(supervisorPositionId, pl3Code, countries).stream()
+        return kpis.findActiveKpis(supervisorPositionId, pl3Code, countries).stream()
                 .map(row -> new KpiCandidate(
-                        row.getCarrier(),
-                        row.getSite(),
-                        row.getCustomerCountry(),
-                        row.getDeliveryHc()))
+                        row.getCarrier(), row.getSite(), row.getCustomerCountry(), row.getHc()))
                 .toList();
     }
 
-    @Transactional(readOnly = true)
-    public BigDecimal headcount(
-            String supervisorPositionId,
-            String pl3Code,
-            String carrier,
-            String site,
-            String country) {
-        BigDecimal total = snapshotRows.sumHeadcount(
-                supervisorPositionId, pl3Code, carrier, site, country);
-        return total == null ? BigDecimal.ZERO : total;
-    }
-
+    /**
+     * @param ccgid supervisor
+     * @param supervisorPositionId position
+     * @param pl3Code PL3
+     * @return true when Daily scope is owned
+     */
     @Transactional(readOnly = true)
     public boolean supervisorOwnsScope(
             String ccgid, String supervisorPositionId, String pl3Code) {
-        return snapshotRows.existsActiveScopeForSupervisor(ccgid, supervisorPositionId, pl3Code);
+        return scopes.existsActiveForSupervisor(ccgid, supervisorPositionId, pl3Code);
     }
 
+    /**
+     * @param ccgid agent
+     * @param supervisorPositionId toolkit supervisor position
+     * @param pl3Code toolkit PL3
+     * @return true when Daily assignment exists
+     */
     @Transactional(readOnly = true)
     public boolean agentCanUse(
             String ccgid, String supervisorPositionId, String pl3Code) {
-        return snapshotRows.existsActiveScopeForAgent(ccgid, supervisorPositionId, pl3Code);
+        return assignments.existsActiveForAgent(ccgid, supervisorPositionId, pl3Code);
     }
 
     /**
-     * Lists distinct team agents under a supervisor from the ACTIVE Timesheet snapshot.
+     * Distinct team agents under a Supervisor.
      *
-     * @param supervisorCcgid supervisor CCGID
-     * @return agents ordered by display name
+     * @param supervisorCcgid supervisor
+     * @return agents
      */
     @Transactional(readOnly = true)
     public List<TeamAgent> teamAgents(String supervisorCcgid) {
-        return snapshotRows.findDistinctAgentsBySupervisorCcgid(supervisorCcgid).stream()
-                .map(row -> new TeamAgent(
-                        row.getEmpCcgid(),
-                        row.getEmpName() == null || row.getEmpName().isBlank()
-                                ? row.getEmpCcgid()
-                                : row.getEmpName()))
-                .toList();
+        LinkedHashMap<String, TeamAgent> unique = new LinkedHashMap<>();
+        for (TimesheetAssignment assignment : assignments.findActiveBySupervisorCcgid(supervisorCcgid)) {
+            unique.computeIfAbsent(
+                    assignment.getEmpCcgid(),
+                    ccgid -> new TeamAgent(
+                            ccgid,
+                            people.findActiveNameByCcgid(ccgid).orElse(ccgid)));
+        }
+        return List.copyOf(unique.values());
     }
 
     /**
-     * Resolves a display name for a CCGID from the ACTIVE Timesheet snapshot.
-     * Tries supervisor, employee, senior manager, then domain head; falls back to the ccgid.
+     * Display name from ACTIVE Daily person, else the ccgid.
      *
-     * @param ccgid actor / occupant CCGID
-     * @return display name or the ccgid itself when unknown
+     * @param ccgid identity
+     * @return name
      */
     @Transactional(readOnly = true)
     public String displayNameByCcgid(String ccgid) {
@@ -126,35 +213,203 @@ public class TimesheetReadService {
             return null;
         }
         String trimmed = ccgid.trim();
-        String name = firstName(snapshotRows.findSupervisorNamesByCcgid(trimmed));
-        if (name == null) {
-            name = firstName(snapshotRows.findEmployeeNamesByCcgid(trimmed));
-        }
-        if (name == null) {
-            name = firstName(snapshotRows.findSrManagerNamesByCcgid(trimmed));
-        }
-        if (name == null) {
-            name = firstName(snapshotRows.findDomainHeadNamesByCcgid(trimmed));
-        }
-        return name == null ? trimmed : name;
+        return findDisplayName(trimmed).orElse(trimmed);
     }
 
-    private static String firstName(List<String> names) {
-        if (names == null || names.isEmpty()) {
+    /**
+     * Display name from ACTIVE Daily person when the identity exists.
+     *
+     * @param ccgid identity
+     * @return name when present
+     */
+    @Transactional(readOnly = true)
+    public Optional<String> findDisplayName(String ccgid) {
+        if (ccgid == null || ccgid.isBlank()) {
+            return Optional.empty();
+        }
+        return people.findActiveNameByCcgid(ccgid.trim());
+    }
+
+    /**
+     * Positions occupied by a person for a role.
+     *
+     * @param ccgid occupant
+     * @param roleType SUPERVISOR / SR_MANAGER / DOMAIN_HEAD
+     * @return position ids
+     */
+    @Transactional(readOnly = true)
+    public List<String> positionsForRole(String ccgid, String roleType) {
+        return occupancies.findActivePositionIdsByCcgidAndRole(ccgid, roleType);
+    }
+
+    /**
+     * Occupant of a position, or the person whose bindable emp position matches.
+     *
+     * @param positionId position
+     * @return occupant when present
+     */
+    @Transactional(readOnly = true)
+    public Occupant occupant(String positionId) {
+        if (positionId == null || positionId.isBlank()) {
             return null;
         }
-        for (String name : names) {
-            if (name != null && !name.isBlank()) {
-                return name.trim();
-            }
+        Occupant occupied = occupancies.findActiveByPositionId(positionId)
+                .map(row -> new Occupant(
+                        row.getPositionId(),
+                        row.getEmpCcgid(),
+                        people.findActiveNameByCcgid(row.getEmpCcgid()).orElse(row.getEmpCcgid())))
+                .orElse(null);
+        if (occupied != null) {
+            return occupied;
         }
-        return null;
+        return people.findActiveByEmpPositionId(positionId)
+                .map(person -> new Occupant(person.getEmpPositionId(), person.getCcgid(), person.getName()))
+                .orElse(null);
     }
 
-    public record ActiveSnapshot(UUID id, LocalDate syncDate, int rowCount) {
+    /**
+     * Positions this person currently holds: occupancy seats plus their bindable emp position.
+     *
+     * @param ccgid identity
+     * @return position ids
+     */
+    @Transactional(readOnly = true)
+    public List<String> heldPositionIds(String ccgid) {
+        if (ccgid == null || ccgid.isBlank()) {
+            return List.of();
+        }
+        Set<String> ids = new LinkedHashSet<>(occupancies.findActivePositionIdsByCcgid(ccgid.trim()));
+        people.findActiveByCcgid(ccgid.trim())
+                .map(TimesheetPerson::getEmpPositionId)
+                .filter(position -> position != null && !position.isBlank())
+                .ifPresent(ids::add);
+        ids.removeIf(position -> position == null || position.isBlank());
+        return List.copyOf(ids);
     }
 
-    /** Team agent option for Supervisor TMS filters. */
+    /**
+     * People in a Center who have a bindable position.
+     *
+     * @param center GBS center
+     * @param name optional name fragment
+     * @param page 1-based page
+     * @param pageSize page size
+     * @return people
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<CenterPerson> peopleInCenter(String center, String name, int page, int pageSize) {
+        if (center == null || center.isBlank()) {
+            int safePage = Math.max(1, page);
+            int safePageSize = Math.min(100, Math.max(1, pageSize));
+            return new PageResponse<>(List.of(), safePage, safePageSize, 0, 1);
+        }
+        int safePage = Math.max(1, page);
+        int safePageSize = Math.min(100, Math.max(1, pageSize));
+        String needle = name == null ? "" : name.trim();
+        return PageResponse.from(
+                people.findActiveByCenter(center.trim(), needle, PageRequest.of(safePage - 1, safePageSize)),
+                person -> new CenterPerson(person.getCcgid(), person.getName(), person.getEmpPositionId()));
+    }
+
+    /**
+     * Whether this bindable position belongs to the Center.
+     *
+     * @param center GBS center
+     * @param positionId emp or occupied management position
+     * @return true when present
+     */
+    @Transactional(readOnly = true)
+    public boolean positionInCenter(String center, String positionId) {
+        if (center == null || center.isBlank() || positionId == null || positionId.isBlank()) {
+            return false;
+        }
+        return people.existsActivePositionInCenter(positionId.trim(), center.trim());
+    }
+
+    /**
+     * Distinct domains present for a Center in ACTIVE Daily scope.
+     *
+     * @param center GBS center
+     * @return domains
+     */
+    @Transactional(readOnly = true)
+    public List<String> domainsInCenter(String center) {
+        if (center == null || center.isBlank()) {
+            return List.of();
+        }
+        return scopes.findActiveDomainsByCenter(center.trim());
+    }
+
+    /**
+     * Whether this person still appears in the Center.
+     *
+     * @param ccgid identity
+     * @param center GBS center
+     * @return true when present
+     */
+    @Transactional(readOnly = true)
+    public boolean personInCenter(String ccgid, String center) {
+        if (ccgid == null || ccgid.isBlank() || center == null || center.isBlank()) {
+            return false;
+        }
+        return people.existsActiveInCenter(ccgid.trim(), center.trim());
+    }
+
+    /**
+     * ACTIVE Daily header when one exists.
+     *
+     * @return daily snapshot, or empty
+     */
+    @Transactional(readOnly = true)
+    public Optional<ActiveSnapshot> findActiveDaily() {
+        return syncRuns.findByKindAndStatus("DAILY", "ACTIVE")
+                .map(run -> new ActiveSnapshot(
+                        run.getId(),
+                        run.getKind(),
+                        run.getSyncDate(),
+                        run.getRowCount() == null ? 0 : run.getRowCount()));
+    }
+
+    /**
+     * Parent position of a position.
+     *
+     * @param positionId child
+     * @return parent id
+     */
+    @Transactional(readOnly = true)
+    public String parentPositionId(String positionId) {
+        return positions.findActiveByPositionId(positionId)
+                .map(TimesheetPosition::getParentPositionId)
+                .orElse(null);
+    }
+
+    /**
+     * Dashboard obligations from Daily scope.
+     *
+     * @return scopes
+     */
+    @Transactional(readOnly = true)
+    public List<TimesheetScope> dashboardObligations() {
+        return scopes.findActiveDashboardObligations();
+    }
+
+    /**
+     * Total Monthly HC.
+     *
+     * @return hc
+     */
+    @Transactional(readOnly = true)
+    public BigDecimal sumActiveHeadcount() {
+        BigDecimal total = kpis.sumActiveHeadcount();
+        return total == null ? BigDecimal.ZERO : total;
+    }
+
+    public record ActiveSnapshots(ActiveSnapshot org, ActiveSnapshot kpi) {
+    }
+
+    public record ActiveSnapshot(UUID id, String kind, LocalDate syncDate, int rowCount) {
+    }
+
     public record TeamAgent(String ccgid, String name) {
     }
 
@@ -170,5 +425,11 @@ public class TimesheetReadService {
 
     public record KpiCandidate(
             String carrier, String site, String customerCountry, BigDecimal deliveryHc) {
+    }
+
+    public record Occupant(String positionId, String ccgid, String name) {
+    }
+
+    public record CenterPerson(String ccgid, String name, String positionId) {
     }
 }

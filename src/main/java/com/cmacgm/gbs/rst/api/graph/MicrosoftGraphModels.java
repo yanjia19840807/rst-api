@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.graph;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -102,6 +103,8 @@ public final class MicrosoftGraphModels {
             Long size,
             GraphFolder folder,
             GraphFile file,
+            OffsetDateTime lastModifiedDateTime,
+            String eTag,
             @JsonProperty("@microsoft.graph.downloadUrl") String downloadUrl) {
 
         /**

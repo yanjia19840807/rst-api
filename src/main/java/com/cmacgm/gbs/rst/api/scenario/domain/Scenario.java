@@ -78,7 +78,7 @@ public class Scenario {
      * @param scenarioCode business code unique within Exercise
      * @param name display name
      * @param description optional description
-     * @param rightSizingHc Right Sizing HC; null stores 0
+     * @param rightSizingHc Right Sizing HC; null or non-positive stores null (no sizing result)
      * @param actorCcgid creating Supervisor
      * @param now creation timestamp
      * @return draft scenario
@@ -98,7 +98,8 @@ public class Scenario {
         scenario.name = name;
         scenario.description = description;
         scenario.status = "DRAFT";
-        scenario.rightSizingHc = rightSizingHc != null ? rightSizingHc : BigDecimal.ZERO;
+        scenario.rightSizingHc =
+                rightSizingHc != null && rightSizingHc.signum() > 0 ? rightSizingHc : null;
         scenario.createdAt = now;
         scenario.createdBy = actorCcgid;
         scenario.updatedAt = now;
@@ -119,7 +120,7 @@ public class Scenario {
      *
      * @param name display name
      * @param description optional description
-     * @param rightSizingHc Right Sizing HC; null keeps the stored value
+     * @param rightSizingHc Right Sizing HC; null keeps the stored value; non-positive clears it
      * @param actorCcgid updating Supervisor
      * @param now update timestamp
      */
@@ -132,7 +133,7 @@ public class Scenario {
         this.name = name;
         this.description = description;
         if (rightSizingHc != null) {
-            this.rightSizingHc = rightSizingHc;
+            this.rightSizingHc = rightSizingHc.signum() > 0 ? rightSizingHc : null;
         }
         this.updatedAt = now;
         this.updatedBy = actorCcgid;

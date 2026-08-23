@@ -579,11 +579,18 @@ public class ExerciseService {
             String supervisorPositionId = exercise.getToolkitSnapshot() == null
                     ? null
                     : exercise.getToolkitSnapshot().getSupervisorPositionId();
+            String center = exercise.getToolkitSnapshot() == null
+                    ? null
+                    : exercise.getToolkitSnapshot().getCenter();
+            String domain = exercise.getToolkitSnapshot() == null
+                    ? null
+                    : exercise.getToolkitSnapshot().getDomain();
             String positionId = ready == null
                     ? null
                     : (ready.getAssigneePositionId() != null && !ready.getAssigneePositionId().isBlank()
                             ? ready.getAssigneePositionId()
-                            : workflowRouter.positionIdOrNull(supervisorPositionId, ready.getRequiredRoleCode()));
+                            : workflowRouter.positionIdOrNull(
+                                    supervisorPositionId, center, domain, ready.getRequiredRoleCode()));
             String reviewer = ready == null
                     ? null
                     : firstNonBlank(
@@ -683,7 +690,7 @@ public class ExerciseService {
         if (scenario == null) {
             return null;
         }
-        return scenario.getRightSizingHc();
+        return SizingMath.measuredRightSizingHc(scenario.getRightSizingHc());
     }
 
     private BigDecimal productionSupport(UUID exerciseId) {

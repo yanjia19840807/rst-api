@@ -28,8 +28,10 @@ import org.springframework.test.web.servlet.MockMvc;
 class SupervisorApiIntegrationTests {
 
     private static final String SUPERVISOR_CCGID = "SUPERVISOR001";
-    private static final UUID ACTIVE_RUN_ID =
+    private static final UUID DAILY_RUN_ID =
             UUID.fromString("40000000-0000-0000-0000-000000000010");
+    private static final UUID MONTHLY_RUN_ID =
+            UUID.fromString("40000000-0000-0000-0000-000000000011");
     private static final String SUPERVISOR_POSITION_ID = "POS-SUP-001";
     private static final String PL3_CODE = "BANK_REC";
     private static final Instant NOW = Instant.parse("2026-08-05T01:00:00Z");
@@ -76,42 +78,31 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update("delete from toolkit_shared_kpi_selection");
         jdbcTemplate.update("delete from toolkit_subtask");
         jdbcTemplate.update("delete from toolkit");
-        jdbcTemplate.update("delete from timesheet_snapshot_row");
+        jdbcTemplate.update("delete from timesheet_sync_issue");
+        jdbcTemplate.update("delete from timesheet_kpi");
+        jdbcTemplate.update("delete from timesheet_assignment");
+        jdbcTemplate.update("delete from timesheet_scope");
+        jdbcTemplate.update("delete from timesheet_occupancy");
+        jdbcTemplate.update("delete from timesheet_position");
+        jdbcTemplate.update("delete from timesheet_person");
         jdbcTemplate.update("delete from timesheet_sync_run");
 
-        jdbcTemplate.update(
-                """
-                insert into timesheet_sync_run
-                    (id, sync_date, attempt_no, status, row_count, started_at, completed_at)
-                values (?, date '2026-08-05', 1, 'ACTIVE', 3, ?, ?)
-                """,
-                ACTIVE_RUN_ID,
-                NOW,
-                NOW);
-        insertTimesheetRow(
-                "50000000-0000-0000-0000-000000000010",
-                "AGENT010",
-                "POS-AGENT-010",
-                "Kuala Lumpur",
-                "Carrier A",
-                "Australia",
-                "1.250000");
-        insertTimesheetRow(
-                "50000000-0000-0000-0000-000000000011",
-                "AGENT011",
-                "POS-AGENT-011",
-                "Kuala Lumpur",
-                "Carrier A",
-                "Australia",
-                "0.750000");
-        insertTimesheetRow(
-                "50000000-0000-0000-0000-000000000012",
-                "AGENT012",
-                "POS-AGENT-012",
-                "Singapore",
-                "Carrier B",
-                "Germany",
-                "3.000000");
+        insertSyncRun(DAILY_RUN_ID, "DAILY", 3);
+        insertSyncRun(MONTHLY_RUN_ID, "MONTHLY", 2);
+        insertPerson(DAILY_RUN_ID, SUPERVISOR_CCGID, "Test Supervisor");
+        insertPerson(DAILY_RUN_ID, "AGENT010", "Test Agent AGENT010");
+        insertPerson(DAILY_RUN_ID, "AGENT011", "Test Agent AGENT011");
+        insertPerson(DAILY_RUN_ID, "AGENT012", "Test Agent AGENT012");
+        insertPosition(DAILY_RUN_ID, SUPERVISOR_POSITION_ID, "SUPERVISOR", "POS-SRM-001");
+        insertPosition(DAILY_RUN_ID, "POS-SRM-001", "SR_MANAGER", "POS-DH-001");
+        insertPosition(DAILY_RUN_ID, "POS-DH-001", "DOMAIN_HEAD", null);
+        insertOccupancy(DAILY_RUN_ID, SUPERVISOR_POSITION_ID, SUPERVISOR_CCGID);
+        insertScope(DAILY_RUN_ID);
+        insertAssignment(DAILY_RUN_ID, "AGENT010");
+        insertAssignment(DAILY_RUN_ID, "AGENT011");
+        insertAssignment(DAILY_RUN_ID, "AGENT012");
+        insertKpi(MONTHLY_RUN_ID, "Carrier A", "Kuala Lumpur", "Australia", "2.000000");
+        insertKpi(MONTHLY_RUN_ID, "Carrier B", "Singapore", "Germany", "3.000000");
     }
 
     @Test
@@ -136,8 +127,7 @@ class SupervisorApiIntegrationTests {
                 .andExpect(jsonPath("$.items[0].carrier").value("Carrier A"))
                 .andExpect(jsonPath("$.items[0].site").value("Kuala Lumpur"))
                 .andExpect(jsonPath("$.items[0].customerCountry").value("Australia"))
-                .andExpect(jsonPath("$.items[0].deliveryHc").value(2.0))
-                .andExpect(jsonPath("$.items[0].valid").value(true));
+                .andExpect(jsonPath("$.items[0].deliveryHc").value(2.0));
     }
 
     @Test
@@ -326,13 +316,13 @@ class SupervisorApiIntegrationTests {
         UUID createdExerciseId = UUID.fromString(exerciseId);
 
         org.junit.jupiter.api.Assertions.assertEquals(
-                3,
+                0,
                 jdbcTemplate.queryForObject(
                         "select count(*) from exercise_volume_monthly_input where exercise_id = ?",
                         Integer.class,
                         createdExerciseId));
         org.junit.jupiter.api.Assertions.assertEquals(
-                30,
+                0,
                 jdbcTemplate.queryForObject(
                         "select count(*) from exercise_volume_daily_input where exercise_id = ?",
                         Integer.class,
@@ -354,11 +344,11 @@ class SupervisorApiIntegrationTests {
                 UUID.fromString(toolkitId));
         jdbcTemplate.update(
                 """
-                update timesheet_snapshot_row set hc = 99
+                update timesheet_kpi set hc = 99
                 where sync_run_id = ? and carrier = 'Carrier A'
                   and site = 'Kuala Lumpur' and customer_country = 'Australia'
                 """,
-                ACTIVE_RUN_ID);
+                MONTHLY_RUN_ID);
 
         mockMvc.perform(get("/api/v1/supervisor/exercises/{id}", exerciseId)
                         .header("X-Dev-Role", "SUPERVISOR"))
@@ -724,39 +714,100 @@ class SupervisorApiIntegrationTests {
                 NOW);
     }
 
-    private void insertTimesheetRow(
-            String id,
-            String employeeCcgid,
-            String employeePositionId,
-            String site,
-            String carrier,
-            String country,
-            String hc) {
+    private void insertSyncRun(UUID id, String kind, int rowCount) {
         jdbcTemplate.update(
                 """
-                insert into timesheet_snapshot_row
-                    (id, sync_run_id, emp_ccgid, emp_name, emp_position_id,
-                     supervisor_ccgid, supervisor_name, supervisor_position_id,
-                     center, site, domain, pl1, pl2, pl3_code, pl3_name,
-                     carrier, customer_country, hc)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                insert into timesheet_sync_run
+                    (id, kind, sync_date, attempt_no, status, row_count, started_at, completed_at)
+                values (?, ?, date '2026-08-05', 1, 'ACTIVE', ?, ?, ?)
                 """,
-                UUID.fromString(id),
-                ACTIVE_RUN_ID,
-                employeeCcgid,
-                "Test Agent " + employeeCcgid,
-                employeePositionId,
-                "SUPERVISOR001",
-                "Test Supervisor",
+                id,
+                kind,
+                rowCount,
+                NOW,
+                NOW);
+    }
+
+    private void insertPerson(UUID runId, String ccgid, String name) {
+        jdbcTemplate.update(
+                "insert into timesheet_person (sync_run_id, ccgid, emp_id, name) values (?, ?, ?, ?)",
+                runId,
+                ccgid,
+                ccgid,
+                name);
+    }
+
+    private void insertPosition(UUID runId, String positionId, String roleType, String parentPositionId) {
+        jdbcTemplate.update(
+                """
+                insert into timesheet_position
+                    (sync_run_id, position_id, role_type, parent_position_id)
+                values (?, ?, ?, ?)
+                """,
+                runId,
+                positionId,
+                roleType,
+                parentPositionId);
+    }
+
+    private void insertOccupancy(UUID runId, String positionId, String ccgid) {
+        jdbcTemplate.update(
+                """
+                insert into timesheet_occupancy
+                    (sync_run_id, position_id, emp_ccgid, emp_id)
+                values (?, ?, ?, ?)
+                """,
+                runId,
+                positionId,
+                ccgid,
+                ccgid);
+    }
+
+    private void insertScope(UUID runId) {
+        jdbcTemplate.update(
+                """
+                insert into timesheet_scope
+                    (sync_run_id, supervisor_position_id, pl3_code, pl3_name,
+                     center, domain, pl1, pl2)
+                values (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                runId,
                 SUPERVISOR_POSITION_ID,
-                "Kuala Lumpur",
-                site,
-                "Finance",
-                "Accounting",
-                "Record to Report",
                 PL3_CODE,
                 "Bank Reconciliation",
+                "Kuala Lumpur",
+                "Finance",
+                "Accounting",
+                "Record to Report");
+    }
+
+    private void insertAssignment(UUID runId, String empCcgid) {
+        jdbcTemplate.update(
+                """
+                insert into timesheet_assignment
+                    (sync_run_id, emp_ccgid, emp_id, supervisor_position_id, pl3_code)
+                values (?, ?, ?, ?, ?)
+                """,
+                runId,
+                empCcgid,
+                empCcgid,
+                SUPERVISOR_POSITION_ID,
+                PL3_CODE);
+    }
+
+    private void insertKpi(UUID runId, String carrier, String site, String country, String hc) {
+        jdbcTemplate.update(
+                """
+                insert into timesheet_kpi
+                    (sync_run_id, supervisor_position_id, pl3_code,
+                     carrier, site, customer_country, hc)
+                values (?, ?, ?, ?, ?, ?, ?)
+                """,
+                runId,
+                SUPERVISOR_POSITION_ID,
+                PL3_CODE,
                 carrier,
+                site,
                 country,
                 new java.math.BigDecimal(hc));
     }

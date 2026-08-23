@@ -1,11 +1,9 @@
 package com.cmacgm.gbs.rst.api.timesheet.config;
 
-import java.time.LocalDate;
-
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * CLI / one-shot Timesheet sync settings.
+ * Timesheet sync settings for file and SharePoint sources.
  */
 @ConfigurationProperties(prefix = "timesheet.sync")
 public class TimesheetSyncProperties {
@@ -16,20 +14,41 @@ public class TimesheetSyncProperties {
     private boolean enabled;
 
     /**
-     * Spring resource location of the Monthly Report Excel file.
+     * Kind to sync from CLI: daily, monthly, or all.
      */
-    private String file =
-            "classpath:timesheet/Monthly Report of 202606(GBS CHINA Mock).xlsx";
+    private String kind = "all";
 
     /**
-     * Preferred worksheet name.
+     * file or graph.
      */
-    private String sheet = "Mock Data";
+    private String source = "file";
 
     /**
-     * Business sync date. Defaults to today when unset.
+     * Local Daily file location.
      */
-    private LocalDate date;
+    private String dailyFile =
+            "file:../rst-material/Timesheet/Daily Report of 20260727(GBS CHINA).xlsx";
+
+    /**
+     * Local Monthly file location.
+     */
+    private String monthlyFile =
+            "file:../rst-material/Timesheet/Monthly Report of 202606(GBS CHINA).xlsx";
+
+    /**
+     * SharePoint folder under env-prefix for Daily files.
+     */
+    private String dailyFolder = "Data Input/Daily";
+
+    /**
+     * SharePoint folder under env-prefix for Monthly files.
+     */
+    private String monthlyFolder = "Data Input/Monthly";
+
+    /**
+     * When true, a scheduled poller checks SharePoint folders.
+     */
+    private boolean scheduleEnabled;
 
     public boolean isEnabled() {
         return enabled;
@@ -39,27 +58,59 @@ public class TimesheetSyncProperties {
         this.enabled = enabled;
     }
 
-    public String getFile() {
-        return file;
+    public String getKind() {
+        return kind;
     }
 
-    public void setFile(String file) {
-        this.file = file;
+    public void setKind(String kind) {
+        this.kind = kind;
     }
 
-    public String getSheet() {
-        return sheet;
+    public String getSource() {
+        return source;
     }
 
-    public void setSheet(String sheet) {
-        this.sheet = sheet;
+    public void setSource(String source) {
+        this.source = source;
     }
 
-    public LocalDate getDate() {
-        return date;
+    public String getDailyFile() {
+        return dailyFile;
     }
 
-    public void setDate(LocalDate date) {
-        this.date = date;
+    public void setDailyFile(String dailyFile) {
+        this.dailyFile = dailyFile;
+    }
+
+    public String getMonthlyFile() {
+        return monthlyFile;
+    }
+
+    public void setMonthlyFile(String monthlyFile) {
+        this.monthlyFile = monthlyFile;
+    }
+
+    public String getDailyFolder() {
+        return dailyFolder;
+    }
+
+    public void setDailyFolder(String dailyFolder) {
+        this.dailyFolder = dailyFolder;
+    }
+
+    public String getMonthlyFolder() {
+        return monthlyFolder;
+    }
+
+    public void setMonthlyFolder(String monthlyFolder) {
+        this.monthlyFolder = monthlyFolder;
+    }
+
+    public boolean isScheduleEnabled() {
+        return scheduleEnabled;
+    }
+
+    public void setScheduleEnabled(boolean scheduleEnabled) {
+        this.scheduleEnabled = scheduleEnabled;
     }
 }

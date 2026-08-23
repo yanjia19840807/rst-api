@@ -48,7 +48,8 @@ public class ExerciseFreezeResolver {
                     HttpStatus.FORBIDDEN, "toolkit-out-of-scope",
                     "The current Supervisor does not own the Toolkit scope.");
         }
-        ActiveSnapshot active = timesheet.activeSnapshot();
+        ActiveSnapshot org = timesheet.activeDaily();
+        ActiveSnapshot kpi = timesheet.activeMonthly();
         List<ToolkitSharedKpiSelection> selections = toolkit.getSharedKpiSelections().stream()
                 .filter(selection -> selection.getDeletedAt() == null)
                 .toList();
@@ -88,6 +89,6 @@ public class ExerciseFreezeResolver {
             }
             resolved.add(new ResolvedKpi(selection, candidate.deliveryHc()));
         }
-        return new ExerciseFreeze(toolkit, active, resolved);
+        return new ExerciseFreeze(toolkit, org, kpi, resolved);
     }
 }

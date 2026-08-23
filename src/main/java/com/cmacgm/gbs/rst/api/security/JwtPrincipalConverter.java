@@ -25,12 +25,14 @@ public class JwtPrincipalConverter implements Converter<Jwt, AbstractAuthenticat
                 .toList();
         Set<String> scopes = scopeValues(jwt);
         String ccgid = firstNonBlank(jwt.getClaimAsString("CCGID"), jwt.getClaimAsString("ccgid"));
+        String center = firstNonBlank(jwt.getClaimAsString("Center"), jwt.getClaimAsString("center"));
         RstPrincipal principal = new RstPrincipal(
                 ccgid == null ? jwt.getSubject() : ccgid.trim().toUpperCase(Locale.ROOT),
                 firstNonBlank(jwt.getClaimAsString("name"), jwt.getClaimAsString("preferred_username")),
                 firstNonBlank(jwt.getClaimAsString("email"), jwt.getClaimAsString("preferred_username")),
                 roles,
-                scopes);
+                scopes,
+                center == null ? null : center.trim());
         return new RstAuthenticationToken(principal, jwt.getTokenValue(), authorities);
     }
 

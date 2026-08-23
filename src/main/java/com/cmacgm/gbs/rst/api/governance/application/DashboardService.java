@@ -25,7 +25,8 @@ import com.cmacgm.gbs.rst.api.holidaytemplate.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSnapshotRowRepository;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,7 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class DashboardService {
 
-    private final TimesheetSnapshotRowRepository timesheetRows;
+    private final TimesheetReadService timesheet;
     private final RstExerciseRepository exercises;
     private final ScenarioRepository scenarios;
     private final ExerciseProductionSupportItemRepository supportItems;
@@ -45,7 +46,7 @@ public class DashboardService {
     private final Clock clock;
 
     /**
-     * @param timesheetRows ACTIVE Timesheet obligations and Delivery HC
+     * @param timesheet ACTIVE Daily scopes and Monthly HC
      * @param exercises APPROVED / UNDER_REVIEW Exercises
      * @param scenarios Official Scenario + Right Sizing HC
      * @param supportItems production support inputs
@@ -54,14 +55,14 @@ public class DashboardService {
      * @param clock as-of clock for quarter and YTD
      */
     public DashboardService(
-            TimesheetSnapshotRowRepository timesheetRows,
+            TimesheetReadService timesheet,
             RstExerciseRepository exercises,
             ScenarioRepository scenarios,
             ExerciseProductionSupportItemRepository supportItems,
             ExerciseTeamSetupRepository teamSetups,
             WorkingDaysService workingDaysService,
             Clock clock) {
-        this.timesheetRows = timesheetRows;
+        this.timesheet = timesheet;
         this.exercises = exercises;
         this.scenarios = scenarios;
         this.supportItems = supportItems;
@@ -81,8 +82,7 @@ public class DashboardService {
         List<RstExercise> approved = exercises.findApprovedRepositoryExercises();
         Map<String, LocalDate> latestApproved = latestApprovedByKey(approved);
         List<DashboardMath.ObligationStatus> statuses = new ArrayList<>();
-        for (TimesheetSnapshotRowRepository.DashboardObligationRow row :
-                timesheetRows.findActiveDashboardObligations()) {
+        for (TimesheetScope row : timesheet.dashboardObligations()) {
             String key = DashboardMath.key(row.getCenter(), row.getSupervisorPositionId(), row.getPl3Code());
             if (key.isEmpty()) {
                 continue;
@@ -97,7 +97,7 @@ public class DashboardService {
                         statuses,
                         exercises.countByDeletedAtIsNullAndWorkflowStatus("UNDER_REVIEW"),
                         capacityYtd(approved, today.getYear()),
-                        nz(timesheetRows.sumActiveHeadcount())),
+                        nz(timesheet.sumActiveHeadcount())),
                 DashboardMath.centers(statuses),
                 DashboardMath.domainsByCenter(statuses));
     }
@@ -216,7 +216,7 @@ public class DashboardService {
     }
 
     private static BigDecimal rightSizingHc(Scenario scenario) {
-        return scenario.getRightSizingHc();
+        return SizingMath.measuredRightSizingHc(scenario.getRightSizingHc());
     }
 
     private static BigDecimal productionSupport(

@@ -5,6 +5,12 @@ app:
     dev-identity:
       ccgid: S00813982
       role: SUPERVISOR
+      # SSO Center claim is not wired yet; hardcode the Center for local LTH config.
+      center: GBS CHINA
+
+timesheet:
+  sync:
+    source: ${TIMESHEET_SYNC_SOURCE:file}
 
 microsoft:
   graph:

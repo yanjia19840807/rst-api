@@ -45,8 +45,8 @@ app:
       role: SUPERVISOR   # AGENT | SUPERVISOR | MANAGER | CDH | LTH | HO
 ```
 
-On first API call Dev identity resolves display name from the ACTIVE Timesheet
-(or a synthetic name). Identity is the CCGID only — no local `app_user` row.
+On first API call Dev identity resolves display name from the ACTIVE Daily
+Timesheet (or a synthetic name). Identity is the CCGID only — no local `app_user` row.
 Optional request overrides: `X-Dev-Ccgid`, `X-Dev-Role`. Restart the API after
 changing config.
 
@@ -90,7 +90,7 @@ api -> application -> domain/persistence
 - `config` / `security`: CORS, OAuth2 Resource Server, OpenAPI, clock and principals.
 - `identity`: application users.
 - `graph`: Microsoft Graph client-credentials client for the Timesheet SharePoint library.
-- `timesheet`: read-only ACTIVE snapshot, hierarchy, KPI and headcount queries.
+- `timesheet`: Daily org + Monthly KPI snapshots, Toolkit hierarchy, and Shared KPI candidates.
 - `toolkit`: Supervisor CRUD and Agent dynamic Toolkit access.
 - `exercise`: immutable Toolkit/Subtask/KPI/HC snapshots.
 - `tms`: timing session state machine, persistence and REST API.
@@ -103,12 +103,9 @@ Spring Data uses 0-based pages internally.
 - `GET /api/v1/toolkits`
 - `GET|POST /api/v1/supervisor/toolkits`
 - `GET|PUT|DELETE /api/v1/supervisor/toolkits/{id}`
-- `GET /api/v1/timesheet/active`
+- `GET /api/v1/timesheet/active` — `{ org, kpi }` Daily and Monthly ACTIVE headers
 - `GET /api/v1/timesheet/toolkit-hierarchy`
-- `GET /api/v1/timesheet/shared-kpi-candidates`
-- `GET /api/v1/timesheet/countries`
-- `GET /api/v1/timesheet/kpis`
-- `GET /api/v1/timesheet/headcount`
+- `GET /api/v1/timesheet/shared-kpi-candidates` — Monthly KPI rows; `syncDate` is the Monthly date
 - `GET|POST /api/v1/supervisor/exercises`
 - `GET /api/v1/supervisor/exercises/{id}`
 - `GET /api/v1/tms/summary`
@@ -122,33 +119,43 @@ Spring Data uses 0-based pages internally.
 
 The database and application enforce at most one `RUNNING` session per Agent. Multiple `PAUSED`
 sessions are allowed; start and resume are blocked only while another session is already running.
-Starting a session revalidates Agent access against the ACTIVE Timesheet snapshot. Existing sessions
-remain operable if the next Timesheet snapshot changes access; their display fields are historical
-snapshots. Discard is a state transition and never physically deletes TMS history.
+Starting a session revalidates Agent access against ACTIVE Daily assignment
+(`supervisor_position` + `pl3`). Existing sessions remain operable if the next
+Daily snapshot changes access; their display fields are historical snapshots.
+Discard is a state transition and never physically deletes TMS history.
 
 Flyway V3 is incremental: V1/V2 remain unchanged. It adds Timesheet snapshots, permanent
 Supervisor Position + PL3 Toolkit identity, Shared KPI selection, Exercise snapshots and the revised
 TMS history model. Legacy demo Toolkit rows receive deterministic placeholder business keys so
-existing V2 session foreign keys survive the upgrade.
+existing V2 session foreign keys survive the upgrade. V49 replaces the raw
+`timesheet_snapshot_row` with Daily org tables and a Monthly KPI table; each
+`kind` (`DAILY` / `MONTHLY`) has its own ACTIVE `timesheet_sync_run`.
 
 ## Timesheet sync (dev / ops)
 
-Load a Monthly Report Excel as a full snapshot and activate it:
+Daily and Monthly reports are two sources. Daily builds org (person, position,
+occupancy, scope, assignment). Monthly updates Delivery HC only. Each kind
+keeps one ACTIVE run; a failed run does not replace the previous ACTIVE.
 
 ```sh
 ./mvnw spring-boot:run \
-  -Dspring-boot.run.arguments="--timesheet.sync.enabled=true --timesheet.sync.date=2026-06-30 --server.port=0"
+  -Dspring-boot.run.arguments="--timesheet.sync.enabled=true --timesheet.sync.kind=all --timesheet.sync.source=file --server.port=0"
 ```
 
-Defaults:
+`kind` is `daily`, `monthly`, or `all` (default).
 
-| Property | Default |
-| --- | --- |
-| `timesheet.sync.file` | `classpath:timesheet/Monthly Report of 202606(GBS CHINA Mock).xlsx` |
-| `timesheet.sync.sheet` | `Mock Data` |
-| `timesheet.sync.date` | today (UTC) |
+| Property | Default | Purpose |
+| --- | --- | --- |
+| `timesheet.sync.source` | `file` (`TIMESHEET_SYNC_SOURCE`) | `file` or `graph` |
+| `timesheet.sync.daily-file` | `file:../rst-material/Timesheet/Daily Report of 20260727(GBS CHINA).xlsx` | Local Daily workbook |
+| `timesheet.sync.monthly-file` | `file:../rst-material/Timesheet/Monthly Report of 202606(GBS CHINA).xlsx` | Local Monthly workbook |
+| `timesheet.sync.daily-folder` | `Data Input/Daily` | SharePoint folder under `microsoft.graph.env-prefix` |
+| `timesheet.sync.monthly-folder` | `Data Input/Monthly` | SharePoint folder under `microsoft.graph.env-prefix` |
 
-Flow: parse/validate Excel → insert `timesheet_sync_run` (`LOADING`) + `timesheet_snapshot_row` → archive previous `ACTIVE` → mark new run `ACTIVE`. On failure the new run becomes `FAILED` and the previous `ACTIVE` snapshot is kept.
+SharePoint site, library and env prefix stay under `microsoft.graph.*`. Graph
+picks the latest `.xlsx` / `.csv` in the folder. Same `driveItemId` + `etag`,
+or the same content hash, skips cutover. ERROR rows fail the run; WARNING is
+not persisted. Old ACTIVE headers are archived, not deleted.
 
 ## Verification
 

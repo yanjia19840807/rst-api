@@ -3,7 +3,6 @@ package com.cmacgm.gbs.rst.api.exercise.application;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseKpiView;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseSnapshot;
@@ -16,17 +15,20 @@ import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitSharedKpiSelection;
 import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitSubtask;
 
 /**
- * Immutable Toolkit / ACTIVE Timesheet freeze snapshot for Exercise create.
+ * Immutable Toolkit / Timesheet freeze snapshot for Exercise create.
+ * Toolkit scope freezes the Daily run; KPI HC freezes the Monthly run.
  */
 public final class ExerciseFreeze {
 
     private final Toolkit toolkit;
-    private final ActiveSnapshot active;
+    private final ActiveSnapshot org;
+    private final ActiveSnapshot kpi;
     private final List<ResolvedKpi> kpis;
 
-    ExerciseFreeze(Toolkit toolkit, ActiveSnapshot active, List<ResolvedKpi> kpis) {
+    ExerciseFreeze(Toolkit toolkit, ActiveSnapshot org, ActiveSnapshot kpi, List<ResolvedKpi> kpis) {
         this.toolkit = toolkit;
-        this.active = active;
+        this.org = org;
+        this.kpi = kpi;
         this.kpis = List.copyOf(kpis);
     }
 
@@ -37,7 +39,7 @@ public final class ExerciseFreeze {
         exercise.freezeToolkitSnapshot(
                 toolkit.getId(),
                 toolkit.getVersion(),
-                active.id(),
+                org.id(),
                 toolkit.getName(),
                 toolkit.getSupervisorPositionId(),
                 toolkit.getCenter(),
@@ -57,11 +59,11 @@ public final class ExerciseFreeze {
                     subtask.getDisplayOrder(),
                     now);
         }
-        for (ResolvedKpi kpi : kpis) {
-            ToolkitSharedKpiSelection selection = kpi.selection();
+        for (ResolvedKpi resolved : kpis) {
+            ToolkitSharedKpiSelection selection = resolved.selection();
             exercise.addSharedKpiLine(
                     selection.getId(),
-                    active.id(),
+                    kpi.id(),
                     toolkit.getCenter(),
                     selection.getSite(),
                     toolkit.getDomain(),
@@ -71,7 +73,7 @@ public final class ExerciseFreeze {
                     toolkit.getPl3Name(),
                     selection.getCarrier(),
                     selection.getCustomerCountry(),
-                    kpi.deliveryHc(),
+                    resolved.deliveryHc(),
                     exercise.getOwnerCcgid(),
                     now);
         }
@@ -82,13 +84,13 @@ public final class ExerciseFreeze {
      */
     public ExerciseSnapshot toSnapshot() {
         List<ExerciseKpiView> kpiViews = kpis.stream()
-                .map(kpi -> new ExerciseKpiView(
-                        kpi.selection().getId(),
-                        kpi.selection().getId(),
-                        kpi.selection().getCarrier(),
-                        kpi.selection().getSite(),
-                        kpi.selection().getCustomerCountry(),
-                        kpi.deliveryHc(),
+                .map(resolved -> new ExerciseKpiView(
+                        resolved.selection().getId(),
+                        resolved.selection().getId(),
+                        resolved.selection().getCarrier(),
+                        resolved.selection().getSite(),
+                        resolved.selection().getCustomerCountry(),
+                        resolved.deliveryHc(),
                         true))
                 .toList();
         List<ExerciseSubtaskView> subtasks = toolkit.getSubtasks().stream()
@@ -103,15 +105,19 @@ public final class ExerciseFreeze {
                         toolkit.getPl3Name(), toolkit.isCombineSubtasksTime(), toolkit.getVersion()),
                 subtasks,
                 kpiViews,
-                active.syncDate());
+                kpi.syncDate());
     }
 
     public Toolkit toolkit() {
         return toolkit;
     }
 
-    public ActiveSnapshot active() {
-        return active;
+    public ActiveSnapshot org() {
+        return org;
+    }
+
+    public ActiveSnapshot kpi() {
+        return kpi;
     }
 
     record ResolvedKpi(ToolkitSharedKpiSelection selection, BigDecimal deliveryHc) {

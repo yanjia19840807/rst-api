@@ -8,180 +8,268 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
-import java.util.Optional;
+import java.util.Locale;
 import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.ResourceLoader;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSnapshotRow;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSourceResolver.Source;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSnapshotRowRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetAssignmentRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetOccupancyRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncIssueRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
 
 /**
- * Executes a full Timesheet snapshot sync from Monthly Report Excel into PostgreSQL.
+ * One pipeline for Daily and Monthly Timesheet sync.
  */
 @Service
 public class TimesheetSyncService {
 
     private static final Logger log = LoggerFactory.getLogger(TimesheetSyncService.class);
-    private static final int BATCH_SIZE = 500;
 
-    private final TimesheetExcelParser parser;
+    private final TimesheetReportParser parser;
+    private final TimesheetDailyCalculator dailyCalculator;
+    private final TimesheetMonthlyCalculator monthlyCalculator;
+    private final TimesheetSourceResolver sources;
     private final TimesheetSyncRunRepository syncRuns;
-    private final TimesheetSnapshotRowRepository snapshotRows;
-    private final ResourceLoader resourceLoader;
+    private final TimesheetPersonRepository people;
+    private final TimesheetPositionRepository positions;
+    private final TimesheetOccupancyRepository occupancies;
+    private final TimesheetScopeRepository scopes;
+    private final TimesheetAssignmentRepository assignments;
+    private final TimesheetKpiRepository kpis;
+    private final TimesheetSyncIssueRepository issues;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
     /**
-     * @param parser Excel parser
-     * @param syncRuns sync run repository
-     * @param snapshotRows snapshot row repository
-     * @param resourceLoader Spring resource loader
-     * @param transactionManager transaction manager for cutover
-     * @param clock clock for sync timestamps
+     * @param parser report parser
+     * @param dailyCalculator Daily compute
+     * @param monthlyCalculator Monthly compute
+     * @param sources file / Graph source
+     * @param syncRuns run repository
+     * @param people person repository
+     * @param positions position repository
+     * @param occupancies occupancy repository
+     * @param scopes scope repository
+     * @param assignments assignment repository
+     * @param kpis KPI repository
+     * @param issues issue repository
+     * @param transactionManager cutover transactions
+     * @param clock timestamps
      */
     public TimesheetSyncService(
-            TimesheetExcelParser parser,
+            TimesheetReportParser parser,
+            TimesheetDailyCalculator dailyCalculator,
+            TimesheetMonthlyCalculator monthlyCalculator,
+            TimesheetSourceResolver sources,
             TimesheetSyncRunRepository syncRuns,
-            TimesheetSnapshotRowRepository snapshotRows,
-            ResourceLoader resourceLoader,
+            TimesheetPersonRepository people,
+            TimesheetPositionRepository positions,
+            TimesheetOccupancyRepository occupancies,
+            TimesheetScopeRepository scopes,
+            TimesheetAssignmentRepository assignments,
+            TimesheetKpiRepository kpis,
+            TimesheetSyncIssueRepository issues,
             PlatformTransactionManager transactionManager,
             Clock clock) {
         this.parser = parser;
+        this.dailyCalculator = dailyCalculator;
+        this.monthlyCalculator = monthlyCalculator;
+        this.sources = sources;
         this.syncRuns = syncRuns;
-        this.snapshotRows = snapshotRows;
-        this.resourceLoader = resourceLoader;
+        this.people = people;
+        this.positions = positions;
+        this.occupancies = occupancies;
+        this.scopes = scopes;
+        this.assignments = assignments;
+        this.kpis = kpis;
+        this.issues = issues;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.clock = clock;
     }
 
     /**
-     * Loads an Excel resource as a full snapshot and activates it when validation passes.
+     * Syncs both kinds.
      *
-     * @param fileLocation Spring resource location (classpath: or file:)
-     * @param sheetName preferred sheet name
-     * @param syncDate business sync date written on the run header
-     * @return activated sync summary
+     * @return daily then monthly results
      */
-    public SyncResult sync(String fileLocation, String sheetName, LocalDate syncDate) {
-        Resource resource = resourceLoader.getResource(fileLocation);
-        if (!resource.exists()) {
-            throw new ApiException(
-                    HttpStatus.BAD_REQUEST,
-                    "INVALID_HEADER",
-                    "Timesheet file not found: " + fileLocation);
-        }
+    public List<SyncResult> syncAll() {
+        return List.of(sync("DAILY"), sync("MONTHLY"));
+    }
 
-        List<TimesheetExcelParser.DraftRow> drafts;
-        try (InputStream in = resource.getInputStream()) {
-            drafts = parser.parse(in, sheetName);
+    /**
+     * Syncs one kind from the configured source.
+     *
+     * @param kind DAILY or MONTHLY
+     * @return result
+     */
+    public SyncResult sync(String kind) {
+        String normalized = kind.trim().toUpperCase(Locale.ROOT);
+        if (!"DAILY".equals(normalized) && !"MONTHLY".equals(normalized)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_HEADER", "Unknown Timesheet kind: " + kind);
+        }
+        Source source = sources.open(normalized);
+        if (source.driveItemId() != null && source.etag() != null) {
+            var existing = syncRuns.findByKindAndStatusAndSourceDriveItemIdAndSourceEtag(
+                    normalized, "ACTIVE", source.driveItemId(), source.etag());
+            if (existing.isPresent()) {
+                TimesheetSyncRun active = existing.get();
+                log.info("Timesheet {} unchanged: id={}", normalized, active.getId());
+                return new SyncResult(
+                        active.getId(),
+                        normalized,
+                        active.getSyncDate(),
+                        active.getAttemptNo(),
+                        active.getStatus(),
+                        active.getRowCount(),
+                        active.getDataHash());
+            }
+        }
+        try (InputStream in = source.content()) {
+            List<ReportRow> rows = parser.parse(in, source.fileName());
+            return persist(normalized, source, rows);
+        } catch (ApiException ex) {
+            failWithoutRows(normalized, source, ex.code(), ex.getMessage());
+            throw ex;
         } catch (IOException ex) {
-            throw new ApiException(
-                    HttpStatus.BAD_REQUEST,
-                    "INVALID_HEADER",
-                    "Unable to open Timesheet file: " + ex.getMessage());
+            ApiException wrapped = new ApiException(
+                    HttpStatus.BAD_REQUEST, "SOURCE_UNAVAILABLE", "Unable to read Timesheet file: " + ex.getMessage());
+            failWithoutRows(normalized, source, wrapped.code(), wrapped.getMessage());
+            throw wrapped;
         }
+    }
 
-        String dataHash = hashDrafts(drafts);
-        Instant startedAt = clock.instant();
-        short attemptNo = nextAttemptNo(syncDate);
-
-        TimesheetSyncRun run = TimesheetSyncRun.startLoading(syncDate, attemptNo, startedAt);
-        syncRuns.saveAndFlush(run);
-
-        try {
-            persistRows(run, drafts);
-            activate(run.getId(), drafts.size(), dataHash);
-            TimesheetSyncRun active = syncRuns.findById(run.getId()).orElseThrow();
-            log.info(
-                    "Timesheet sync activated: id={}, syncDate={}, attempt={}, rows={}",
-                    active.getId(),
-                    active.getSyncDate(),
-                    active.getAttemptNo(),
-                    active.getRowCount());
+    private SyncResult persist(String kind, Source source, List<ReportRow> rows) {
+        Instant now = clock.instant();
+        String hash = hashRows(rows);
+        var unchanged = syncRuns.findByKindAndStatus(kind, "ACTIVE")
+                .filter(active -> hash.equals(active.getDataHash()));
+        if (unchanged.isPresent()) {
+            TimesheetSyncRun active = unchanged.get();
+            log.info("Timesheet {} hash unchanged: id={}", kind, active.getId());
             return new SyncResult(
                     active.getId(),
+                    kind,
                     active.getSyncDate(),
                     active.getAttemptNo(),
                     active.getStatus(),
                     active.getRowCount(),
                     active.getDataHash());
+        }
+        LocalDate previewDate = previewDate(kind, rows);
+        TimesheetSyncRun run = TimesheetSyncRun.startLoading(
+                kind, previewDate, nextAttemptNo(kind, previewDate), now);
+        run.setSource(source.driveItemId(), source.etag());
+        syncRuns.saveAndFlush(run);
+        try {
+            if ("DAILY".equals(kind)) {
+                TimesheetDailyCalculator.Result computed = dailyCalculator.compute(run.getId(), rows, now);
+                return activateOrFail(run, rows.size(), hash, computed.issues(), () -> {
+                    people.saveAll(computed.people());
+                    positions.saveAll(computed.positions());
+                    occupancies.saveAll(computed.occupancies());
+                    scopes.saveAll(computed.scopes());
+                    assignments.saveAll(computed.assignments());
+                });
+            }
+            TimesheetMonthlyCalculator.Result computed = monthlyCalculator.compute(run.getId(), rows, now);
+            return activateOrFail(run, rows.size(), hash, computed.issues(), () -> kpis.saveAll(computed.kpis()));
         } catch (RuntimeException ex) {
             markFailed(run.getId(), errorCodeOf(ex), sanitize(ex.getMessage()));
             throw ex;
         }
     }
 
-    private void persistRows(TimesheetSyncRun run, List<TimesheetExcelParser.DraftRow> drafts) {
-        List<TimesheetSnapshotRow> batch = new ArrayList<>(BATCH_SIZE);
-        for (TimesheetExcelParser.DraftRow draft : drafts) {
-            batch.add(TimesheetSnapshotRow.create(
-                    run,
-                    draft.empCcgid(),
-                    draft.empName(),
-                    draft.empPositionId(),
-                    draft.supervisorCcgid(),
-                    draft.supervisorName(),
-                    draft.supervisorPositionId(),
-                    draft.srManagerCcgid(),
-                    draft.srManagerName(),
-                    draft.srManagerPositionId(),
-                    draft.domainHeadCcgid(),
-                    draft.domainHeadName(),
-                    draft.domainHeadPositionId(),
-                    draft.center(),
-                    draft.site(),
-                    draft.domain(),
-                    draft.pl1(),
-                    draft.pl2(),
-                    draft.pl3Code(),
-                    draft.pl3Name(),
-                    draft.carrier(),
-                    draft.customerCountry(),
-                    draft.hc()));
-            if (batch.size() >= BATCH_SIZE) {
-                snapshotRows.saveAll(batch);
-                snapshotRows.flush();
-                batch.clear();
-            }
+    private LocalDate previewDate(String kind, List<ReportRow> rows) {
+        if ("DAILY".equals(kind)) {
+            return rows.stream()
+                    .map(ReportRow::date)
+                    .filter(date -> date != null)
+                    .findFirst()
+                    .orElseGet(() -> LocalDate.now(clock));
         }
-        if (!batch.isEmpty()) {
-            snapshotRows.saveAll(batch);
-            snapshotRows.flush();
-        }
+        return rows.stream()
+                .map(row -> row.date() != null
+                        ? row.date()
+                        : row.month() == null ? null : row.month().withDayOfMonth(row.month().lengthOfMonth()))
+                .filter(date -> date != null)
+                .findFirst()
+                .orElseGet(() -> LocalDate.now(clock));
     }
 
-    private void activate(UUID runId, int rowCount, String dataHash) {
+    private SyncResult activateOrFail(
+            TimesheetSyncRun run,
+            int rowCount,
+            String dataHash,
+            List<TimesheetSyncIssue> computedIssues,
+            Runnable persistRows) {
+        if (!computedIssues.isEmpty()) {
+            issues.saveAll(computedIssues);
+            markFailed(run.getId(), computedIssues.getFirst().getCode(), computedIssues.getFirst().getMessage());
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    computedIssues.getFirst().getCode(),
+                    computedIssues.getFirst().getMessage());
+        }
+        persistRows.run();
+        activate(run.getId(), run.getKind(), rowCount, dataHash);
+        TimesheetSyncRun active = syncRuns.findById(run.getId()).orElseThrow();
+        log.info(
+                "Timesheet {} activated: id={} syncDate={} rows={}",
+                active.getKind(),
+                active.getId(),
+                active.getSyncDate(),
+                active.getRowCount());
+        return new SyncResult(
+                active.getId(),
+                active.getKind(),
+                active.getSyncDate(),
+                active.getAttemptNo(),
+                active.getStatus(),
+                active.getRowCount(),
+                active.getDataHash());
+    }
+
+    private void activate(UUID runId, String kind, int rowCount, String dataHash) {
         transactionTemplate.executeWithoutResult(status -> {
             Instant now = clock.instant();
             TimesheetSyncRun run = syncRuns.findById(runId)
                     .orElseThrow(() -> new ApiException(
-                            HttpStatus.CONFLICT,
-                            "COUNT_MISMATCH",
-                            "Sync run disappeared before activation."));
-            syncRuns.findByStatus("ACTIVE").ifPresent(previous -> {
+                            HttpStatus.CONFLICT, "COUNT_MISMATCH", "Sync run disappeared before activation."));
+            syncRuns.findByKindAndStatus(kind, "ACTIVE").ifPresent(previous -> {
                 if (!previous.getId().equals(run.getId())) {
                     previous.markArchived(now);
-                    syncRuns.save(previous);
+                    syncRuns.saveAndFlush(previous);
                 }
             });
             run.markActive(rowCount, dataHash, now);
             syncRuns.save(run);
         });
+    }
+
+    private void failWithoutRows(String kind, Source source, String code, String message) {
+        Instant now = clock.instant();
+        LocalDate date = LocalDate.now(clock);
+        TimesheetSyncRun run = TimesheetSyncRun.startLoading(kind, date, nextAttemptNo(kind, date), now);
+        run.setSource(source.driveItemId(), source.etag());
+        run.markFailed(code, sanitize(message), now);
+        syncRuns.save(run);
     }
 
     private void markFailed(UUID runId, String errorCode, String message) {
@@ -193,57 +281,41 @@ public class TimesheetSyncService {
         });
     }
 
-    private short nextAttemptNo(LocalDate syncDate) {
-        Short max = syncRuns.findMaxAttemptNo(syncDate);
+    private short nextAttemptNo(String kind, LocalDate syncDate) {
+        Short max = syncRuns.findMaxAttemptNo(kind, syncDate);
         int next = (max == null ? 0 : max) + 1;
         if (next > Short.MAX_VALUE) {
             throw new ApiException(
-                    HttpStatus.CONFLICT,
-                    "COUNT_MISMATCH",
-                    "Too many sync attempts for date " + syncDate);
+                    HttpStatus.CONFLICT, "COUNT_MISMATCH", "Too many sync attempts for " + kind + " " + syncDate);
         }
         return (short) next;
     }
 
-    private static String hashDrafts(List<TimesheetExcelParser.DraftRow> drafts) {
-        List<TimesheetExcelParser.DraftRow> ordered = new ArrayList<>(drafts);
-        ordered.sort(Comparator
-                .comparing(TimesheetExcelParser.DraftRow::empCcgid)
-                .thenComparing(TimesheetExcelParser.DraftRow::pl3Code)
-                .thenComparing(r -> Optional.ofNullable(r.carrier()).orElse(""))
-                .thenComparing(r -> Optional.ofNullable(r.customerCountry()).orElse(""))
-                .thenComparing(TimesheetExcelParser.DraftRow::site)
-                .thenComparing(r -> r.hc().toPlainString()));
+    private static String hashRows(List<ReportRow> rows) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            for (TimesheetExcelParser.DraftRow row : ordered) {
-                String line = String.join("|",
-                        nullToEmpty(row.empCcgid()),
-                        nullToEmpty(row.empPositionId()),
-                        nullToEmpty(row.supervisorCcgid()),
-                        nullToEmpty(row.supervisorPositionId()),
-                        nullToEmpty(row.srManagerCcgid()),
-                        nullToEmpty(row.domainHeadCcgid()),
-                        nullToEmpty(row.center()),
-                        nullToEmpty(row.site()),
-                        nullToEmpty(row.domain()),
-                        nullToEmpty(row.pl1()),
-                        nullToEmpty(row.pl2()),
-                        nullToEmpty(row.pl3Code()),
-                        nullToEmpty(row.carrier()),
-                        nullToEmpty(row.customerCountry()),
-                        row.hc().toPlainString());
-                digest.update(line.getBytes(StandardCharsets.UTF_8));
+            for (ReportRow row : rows) {
+                digest.update(String.valueOf(row.sourceRow()).getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) '|');
+                digest.update(String.valueOf(row.date()).getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) '|');
+                digest.update(String.valueOf(row.month()).getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) '|');
+                digest.update(String.valueOf(row.empCcgid()).getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) '|');
+                digest.update(String.valueOf(row.empPositionId()).getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) '|');
+                digest.update(String.valueOf(row.supervisorPositionId()).getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) '|');
+                digest.update(String.valueOf(row.pl3Code()).getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) '|');
+                digest.update(String.valueOf(row.hc() == null ? "" : row.hc().value()).getBytes(StandardCharsets.UTF_8));
                 digest.update((byte) '\n');
             }
             return HexFormat.of().formatHex(digest.digest());
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException("SHA-256 unavailable", ex);
         }
-    }
-
-    private static String nullToEmpty(String value) {
-        return value == null ? "" : value;
     }
 
     private static String errorCodeOf(RuntimeException ex) {
@@ -261,10 +333,11 @@ public class TimesheetSyncService {
     }
 
     /**
-     * Result of a successful Timesheet activation.
+     * Successful or skipped sync.
      */
     public record SyncResult(
-            java.util.UUID id,
+            UUID id,
+            String kind,
             LocalDate syncDate,
             short attemptNo,
             String status,

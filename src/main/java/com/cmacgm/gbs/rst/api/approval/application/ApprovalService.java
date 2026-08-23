@@ -322,7 +322,8 @@ public class ApprovalService {
 
         if (stepNo == 1) {
             String scopeHash = current.getScopeSnapshotHash();
-            WorkflowRouter.RoutedStep cdh = workflowRouter.resolveCdh(supervisorPosition(loaded.exercise()));
+            WorkflowRouter.RoutedStep cdh = workflowRouter.resolveCdh(
+                    toolkitCenter(loaded.exercise()), toolkitDomain(loaded.exercise()));
             loaded.workflow().advanceAfterApprove(WorkflowStepAssignment.readyCdh(
                     cdh.assigneeCcgid(), cdh.positionId(), scopeHash, now));
             loaded.submission().advanceAfterApprove(stepNo, now);
@@ -487,14 +488,13 @@ public class ApprovalService {
                 ? null
                 : scenarios.findById(scenarioId).map(Scenario::getName).orElse(null);
         Map<String, String> displayNames = displayNames(loaded.workflow());
-        String supervisorPositionId = supervisorPosition(loaded.exercise());
         List<ScopeView> scopes = loaded.submission().getScopes().stream()
                 .map(s -> new ScopeView(
                         s.getScopeLevel(), s.getCenter(), s.getSite(), s.getDomain(),
                         s.getPl3Code(), s.getCarrier(), s.getCustomerCountry()))
                 .toList();
         List<StepView> steps = loaded.workflow().getSteps().stream()
-                .map(s -> toStepView(s, displayNames, supervisorPositionId))
+                .map(s -> toStepView(s, displayNames, loaded.exercise()))
                 .toList();
         List<ActionView> actions = loaded.workflow().getActions().stream()
                 .map(a -> new ActionView(
@@ -551,8 +551,8 @@ public class ApprovalService {
     private StepView toStepView(
             WorkflowStepAssignment step,
             Map<String, String> displayNames,
-            String supervisorPositionId) {
-        String positionId = resolveStepPosition(step, supervisorPositionId);
+            RstExercise exercise) {
+        String positionId = resolveStepPosition(step, exercise);
         String liveName = workflowRouter.occupantName(step.getRequiredRoleCode(), positionId);
         String name = liveName != null
                 ? liveName
@@ -657,7 +657,7 @@ public class ApprovalService {
         if (scenario == null) {
             return null;
         }
-        return scenario.getRightSizingHc();
+        return SizingMath.measuredRightSizingHc(scenario.getRightSizingHc());
     }
 
     private BigDecimal productionSupport(UUID exerciseId) {
@@ -791,7 +791,7 @@ public class ApprovalService {
             return false;
         }
         Set<String> myPositions = workflowRouter.positionsFor(principal);
-        String assigned = resolveStepPosition(current, supervisorPosition(exercise));
+        String assigned = resolveStepPosition(current, exercise);
         return assigned != null && myPositions.contains(assigned);
     }
 
@@ -825,18 +825,22 @@ public class ApprovalService {
 
     private String resolveAssigneePosition(WorkflowInstance workflow, RstExercise exercise) {
         return workflow.findCurrentReadyStep()
-                .map(step -> resolveStepPosition(step, supervisorPosition(exercise)))
+                .map(step -> resolveStepPosition(step, exercise))
                 .orElse(null);
     }
 
-    private String resolveStepPosition(WorkflowStepAssignment step, String supervisorPositionId) {
+    private String resolveStepPosition(WorkflowStepAssignment step, RstExercise exercise) {
         if (step == null) {
             return null;
         }
         if (hasText(step.getAssigneePositionId())) {
             return step.getAssigneePositionId();
         }
-        return workflowRouter.positionIdOrNull(supervisorPositionId, step.getRequiredRoleCode());
+        return workflowRouter.positionIdOrNull(
+                supervisorPosition(exercise),
+                toolkitCenter(exercise),
+                toolkitDomain(exercise),
+                step.getRequiredRoleCode());
     }
 
     private String positionForAction(
@@ -844,9 +848,12 @@ public class ApprovalService {
         return workflow.getSteps().stream()
                 .filter(step -> step.getStepNo() == action.getStepNo())
                 .findFirst()
-                .map(step -> resolveStepPosition(step, supervisorPosition(exercise)))
+                .map(step -> resolveStepPosition(step, exercise))
                 .orElseGet(() -> workflowRouter.positionIdOrNull(
-                        supervisorPosition(exercise), action.getActorRoleCode()));
+                        supervisorPosition(exercise),
+                        toolkitCenter(exercise),
+                        toolkitDomain(exercise),
+                        action.getActorRoleCode()));
     }
 
     private static String supervisorPosition(RstExercise exercise) {
@@ -854,6 +861,20 @@ public class ApprovalService {
             return null;
         }
         return exercise.getToolkitSnapshot().getSupervisorPositionId();
+    }
+
+    private static String toolkitCenter(RstExercise exercise) {
+        if (exercise == null || exercise.getToolkitSnapshot() == null) {
+            return null;
+        }
+        return exercise.getToolkitSnapshot().getCenter();
+    }
+
+    private static String toolkitDomain(RstExercise exercise) {
+        if (exercise == null || exercise.getToolkitSnapshot() == null) {
+            return null;
+        }
+        return exercise.getToolkitSnapshot().getDomain();
     }
 
     private static String decisionLabel(String actionType) {

@@ -1,14 +1,13 @@
 package com.cmacgm.gbs.rst.api.workflow.application;
 
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.domainhead.application.DomainHeadConfigService;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSnapshotRowRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSnapshotRowRepository.ApproverChainRow;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSnapshotRowRepository.OccupantRow;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.Occupant;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
@@ -19,20 +18,24 @@ import org.springframework.stereotype.Component;
 @Component
 public class WorkflowRouter {
 
-    private final TimesheetSnapshotRowRepository snapshotRows;
+    private final TimesheetReadService timesheet;
     private final WorkflowProperties properties;
+    private final DomainHeadConfigService domainHeads;
 
     /**
      * Creates the Timesheet workflow router.
      *
-     * @param snapshotRows ACTIVE timesheet rows
+     * @param timesheet ACTIVE Daily org
      * @param properties LTH position fallback
+     * @param domainHeads LTH Center × Domain CDH mapping
      */
     public WorkflowRouter(
-            TimesheetSnapshotRowRepository snapshotRows,
-            WorkflowProperties properties) {
-        this.snapshotRows = snapshotRows;
+            TimesheetReadService timesheet,
+            WorkflowProperties properties,
+            DomainHeadConfigService domainHeads) {
+        this.timesheet = timesheet;
         this.properties = properties;
+        this.domainHeads = domainHeads;
     }
 
     /**
@@ -58,10 +61,10 @@ public class WorkflowRouter {
         Set<String> roles = principal.roles() == null ? Set.of() : principal.roles();
         Set<String> positions = new LinkedHashSet<>();
         if (roles.contains("MANAGER")) {
-            positions.addAll(snapshotRows.findSrManagerPositionIdsByCcgid(principal.ccgid()));
+            positions.addAll(timesheet.positionsForRole(principal.ccgid(), "SR_MANAGER"));
         }
         if (roles.contains("CDH")) {
-            positions.addAll(snapshotRows.findDomainHeadPositionIdsByCcgid(principal.ccgid()));
+            positions.addAll(timesheet.heldPositionIds(principal.ccgid()));
         }
         if (roles.contains("LTH")) {
             positions.add(properties.lthPositionId());
@@ -77,33 +80,19 @@ public class WorkflowRouter {
      * @return Manager position and current occupant
      */
     public RoutedStep resolveManager(String supervisorPositionId) {
-        ApproverChainRow chain = requireChain(supervisorPositionId);
-        if (!hasText(chain.getSrManagerPositionId())) {
-            throw routingFailed("Manager position is not mapped for Supervisor position "
-                    + supervisorPositionId + ".");
-        }
-        return new RoutedStep(
-                chain.getSrManagerPositionId(),
-                blankToNull(chain.getSrManagerCcgid()),
-                chain.getSrManagerName());
+        String managerPositionId = requireParent(supervisorPositionId, "Manager");
+        return routed(managerPositionId);
     }
 
     /**
-     * Resolves the CDH / Domain Head position for a Supervisor toolkit position.
+     * Resolves the configured CDH for a Toolkit Center × Domain.
      *
-     * @param supervisorPositionId toolkit supervisor position
+     * @param center GBS center
+     * @param domain GBS domain
      * @return CDH position and current occupant
      */
-    public RoutedStep resolveCdh(String supervisorPositionId) {
-        ApproverChainRow chain = requireChain(supervisorPositionId);
-        if (!hasText(chain.getDomainHeadPositionId())) {
-            throw routingFailed("CDH position is not mapped for Supervisor position "
-                    + supervisorPositionId + ".");
-        }
-        return new RoutedStep(
-                chain.getDomainHeadPositionId(),
-                blankToNull(chain.getDomainHeadCcgid()),
-                chain.getDomainHeadName());
+    public RoutedStep resolveCdh(String center, String domain) {
+        return domainHeads.requireCdh(center, domain);
     }
 
     /**
@@ -121,16 +110,22 @@ public class WorkflowRouter {
      *
      * @param currentRole current READY role
      * @param supervisorPositionId toolkit supervisor position
+     * @param center toolkit center
+     * @param domain toolkit domain
      * @return next step label and current occupant name of that position
      */
-    public NextHop previewNext(String currentRole, String supervisorPositionId) {
+    public NextHop previewNext(String currentRole, String supervisorPositionId, String center, String domain) {
         if (currentRole == null || currentRole.isBlank()) {
             return new NextHop(null, null);
         }
         return switch (currentRole) {
             case "MANAGER" -> {
-                ApproverChainRow chain = chainOrNull(supervisorPositionId);
-                String name = chain == null ? null : chain.getDomainHeadName();
+                Occupant occupant = null;
+                String positionId = domainHeads.configuredPositionId(center, domain);
+                if (hasText(positionId)) {
+                    occupant = timesheet.occupant(positionId);
+                }
+                String name = occupant == null ? null : occupant.name();
                 yield new NextHop(
                         "Center Delivery Head Review",
                         hasText(name) ? name : null);
@@ -155,25 +150,23 @@ public class WorkflowRouter {
      * {@code assignee_position_id}).
      *
      * @param supervisorPositionId toolkit supervisor position
+     * @param center toolkit center
+     * @param domain toolkit domain
      * @param roleCode MANAGER, CDH, or LTH
      * @return position id, or null when it cannot be resolved
      */
-    public String positionIdOrNull(String supervisorPositionId, String roleCode) {
+    public String positionIdOrNull(String supervisorPositionId, String center, String domain, String roleCode) {
         if (!hasText(roleCode)) {
             return null;
         }
         if ("LTH".equals(roleCode)) {
             return properties.lthPositionId();
         }
-        ApproverChainRow chain = chainOrNull(supervisorPositionId);
-        if (chain == null) {
-            return null;
-        }
         if ("MANAGER".equals(roleCode)) {
-            return hasText(chain.getSrManagerPositionId()) ? chain.getSrManagerPositionId() : null;
+            return parentOrNull(supervisorPositionId);
         }
         if ("CDH".equals(roleCode)) {
-            return hasText(chain.getDomainHeadPositionId()) ? chain.getDomainHeadPositionId() : null;
+            return domainHeads.configuredPositionId(center, domain);
         }
         return null;
     }
@@ -194,16 +187,7 @@ public class WorkflowRouter {
                     ? new RoutedStep(positionId, null, null)
                     : null;
         }
-        List<OccupantRow> rows = "MANAGER".equals(roleCode)
-                ? snapshotRows.findSrManagerOccupantByPositionId(positionId)
-                : "CDH".equals(roleCode)
-                        ? snapshotRows.findDomainHeadOccupantByPositionId(positionId)
-                        : List.of();
-        if (rows.isEmpty()) {
-            return new RoutedStep(positionId, null, null);
-        }
-        OccupantRow row = rows.get(0);
-        return new RoutedStep(positionId, blankToNull(row.getCcgid()), row.getName());
+        return routed(positionId);
     }
 
     /**
@@ -221,22 +205,27 @@ public class WorkflowRouter {
         return live.occupantName();
     }
 
-    private ApproverChainRow requireChain(String supervisorPositionId) {
-        ApproverChainRow chain = chainOrNull(supervisorPositionId);
-        if (chain == null) {
-            throw routingFailed("No ACTIVE Timesheet hierarchy found for Supervisor position "
-                    + supervisorPositionId + ".");
+    private RoutedStep routed(String positionId) {
+        Occupant occupant = timesheet.occupant(positionId);
+        if (occupant == null) {
+            return new RoutedStep(positionId, null, null);
         }
-        return chain;
+        return new RoutedStep(positionId, blankToNull(occupant.ccgid()), occupant.name());
     }
 
-    private ApproverChainRow chainOrNull(String supervisorPositionId) {
-        if (!hasText(supervisorPositionId)) {
+    private String requireParent(String positionId, String roleLabel) {
+        String parent = parentOrNull(positionId);
+        if (!hasText(parent)) {
+            throw routingFailed(roleLabel + " position is not mapped for position " + positionId + ".");
+        }
+        return parent;
+    }
+
+    private String parentOrNull(String positionId) {
+        if (!hasText(positionId)) {
             return null;
         }
-        List<ApproverChainRow> rows =
-                snapshotRows.findApproverChainBySupervisorPositionId(supervisorPositionId);
-        return rows.isEmpty() ? null : rows.get(0);
+        return blankToNull(timesheet.parentPositionId(positionId));
     }
 
     private static String blankToNull(String value) {

@@ -10,7 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 /**
- * Batch header for one full Timesheet snapshot load.
+ * Batch header for one Daily or Monthly Timesheet sync.
  */
 @Entity
 @Table(name = "timesheet_sync_run")
@@ -18,6 +18,9 @@ public class TimesheetSyncRun {
 
     @Id
     private UUID id;
+
+    @Column(nullable = false, length = 16)
+    private String kind;
 
     @Column(name = "sync_date", nullable = false)
     private LocalDate syncDate;
@@ -33,6 +36,12 @@ public class TimesheetSyncRun {
 
     @Column(name = "data_hash", length = 64)
     private String dataHash;
+
+    @Column(name = "source_drive_item_id", length = 200)
+    private String sourceDriveItemId;
+
+    @Column(name = "source_etag", length = 200)
+    private String sourceEtag;
 
     @Column(name = "started_at", nullable = false)
     private Instant startedAt;
@@ -50,16 +59,19 @@ public class TimesheetSyncRun {
     }
 
     /**
-     * Starts a new LOADING run for the given business sync date.
+     * Starts a LOADING run.
      *
-     * @param syncDate business synchronization date
-     * @param attemptNo same-day retry sequence (1-based)
-     * @param startedAt load start timestamp
-     * @return new LOADING run
+     * @param kind DAILY or MONTHLY
+     * @param syncDate business date
+     * @param attemptNo same-day retry
+     * @param startedAt start time
+     * @return new run
      */
-    public static TimesheetSyncRun startLoading(LocalDate syncDate, short attemptNo, Instant startedAt) {
+    public static TimesheetSyncRun startLoading(
+            String kind, LocalDate syncDate, short attemptNo, Instant startedAt) {
         TimesheetSyncRun run = new TimesheetSyncRun();
         run.id = UUID.randomUUID();
+        run.kind = kind;
         run.syncDate = syncDate;
         run.attemptNo = attemptNo;
         run.status = "LOADING";
@@ -68,11 +80,22 @@ public class TimesheetSyncRun {
     }
 
     /**
-     * Promotes this run to the sole ACTIVE snapshot.
+     * Records the SharePoint file identity used for this run.
      *
-     * @param rowCount accepted row count
-     * @param dataHash SHA-256 of the normalized payload
-     * @param completedAt activation timestamp
+     * @param driveItemId Graph item id
+     * @param etag Graph etag
+     */
+    public void setSource(String driveItemId, String etag) {
+        this.sourceDriveItemId = driveItemId;
+        this.sourceEtag = etag;
+    }
+
+    /**
+     * Promotes this run to ACTIVE.
+     *
+     * @param rowCount source row count
+     * @param dataHash content hash
+     * @param completedAt activation time
      */
     public void markActive(int rowCount, String dataHash, Instant completedAt) {
         this.status = "ACTIVE";
@@ -84,9 +107,9 @@ public class TimesheetSyncRun {
     }
 
     /**
-     * Archives a previously ACTIVE run after a successful cutover.
+     * Archives a previously ACTIVE run.
      *
-     * @param completedAt archive timestamp
+     * @param completedAt archive time
      */
     public void markArchived(Instant completedAt) {
         this.status = "ARCHIVED";
@@ -96,11 +119,11 @@ public class TimesheetSyncRun {
     }
 
     /**
-     * Marks the run FAILED while keeping any previously ACTIVE snapshot unchanged.
+     * Marks the run FAILED.
      *
-     * @param errorCode stable failure category
-     * @param errorMessage sanitized summary
-     * @param completedAt failure timestamp
+     * @param errorCode stable code
+     * @param errorMessage summary
+     * @param completedAt failure time
      */
     public void markFailed(String errorCode, String errorMessage, Instant completedAt) {
         this.status = "FAILED";
@@ -111,6 +134,10 @@ public class TimesheetSyncRun {
 
     public UUID getId() {
         return id;
+    }
+
+    public String getKind() {
+        return kind;
     }
 
     public LocalDate getSyncDate() {
@@ -131,6 +158,14 @@ public class TimesheetSyncRun {
 
     public String getDataHash() {
         return dataHash;
+    }
+
+    public String getSourceDriveItemId() {
+        return sourceDriveItemId;
+    }
+
+    public String getSourceEtag() {
+        return sourceEtag;
     }
 
     public Instant getStartedAt() {

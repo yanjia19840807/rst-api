@@ -26,7 +26,7 @@ import com.cmacgm.gbs.rst.api.common.error.ApiException;
  * Injects a configurable demo principal in {@code dev}/{@code test}.
  *
  * <p>Configure {@code app.security.dev-identity.ccgid} and {@code role} to simulate one login.
- * Optional request overrides: {@code X-Dev-Ccgid}, {@code X-Dev-Role}.
+ * Optional request overrides: {@code X-Dev-Ccgid}, {@code X-Dev-Role}, {@code X-Dev-Center}.
  */
 @Component
 @Profile({"dev", "test"})
@@ -73,7 +73,10 @@ public class DevAuthenticationFilter extends OncePerRequestFilter {
             }
 
             Set<String> roles = Set.of(role);
-            RstPrincipal principal = identities.resolve(ccgid, roles);
+            String center = firstNonBlankPreserveCase(
+                    request.getHeader("X-Dev-Center"),
+                    properties.getCenter());
+            RstPrincipal principal = identities.resolve(ccgid, roles, center);
             var authentication = new RstAuthenticationToken(
                     principal,
                     "dev-profile",
@@ -91,5 +94,15 @@ public class DevAuthenticationFilter extends OncePerRequestFilter {
             return second.trim().toUpperCase(Locale.ROOT);
         }
         return fallback;
+    }
+
+    private static String firstNonBlankPreserveCase(String first, String second) {
+        if (first != null && !first.isBlank()) {
+            return first.trim();
+        }
+        if (second != null && !second.isBlank()) {
+            return second.trim();
+        }
+        return null;
     }
 }

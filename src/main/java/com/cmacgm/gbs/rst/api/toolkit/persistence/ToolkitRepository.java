@@ -16,11 +16,13 @@ public interface ToolkitRepository extends JpaRepository<Toolkit, UUID> {
     @Query("""
             select distinct toolkit
             from Toolkit toolkit
-            join TimesheetSnapshotRow row
-              on row.supervisorPositionId = toolkit.supervisorPositionId
-             and row.pl3Code = toolkit.primaryPl3Code
-            join row.syncRun run
-            where upper(row.empCcgid) = upper(:ccgid)
+            join TimesheetAssignment assignment
+              on assignment.id.supervisorPositionId = toolkit.supervisorPositionId
+             and assignment.id.pl3Code = toolkit.primaryPl3Code
+            join TimesheetSyncRun run
+              on assignment.id.syncRunId = run.id
+            where upper(assignment.id.empCcgid) = upper(:ccgid)
+              and run.kind = 'DAILY'
               and run.status = 'ACTIVE'
               and toolkit.deletedAt is null
             order by toolkit.name

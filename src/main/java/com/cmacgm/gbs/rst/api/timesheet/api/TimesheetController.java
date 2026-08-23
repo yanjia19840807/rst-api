@@ -5,14 +5,15 @@ import java.time.LocalDate;
 import java.util.List;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.ActiveSnapshot;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.ActiveSnapshots;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.CenterPerson;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.HierarchyCandidate;
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.KpiCandidate;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -30,15 +31,39 @@ public class TimesheetController {
     }
 
     @GetMapping("/active")
-    public ActiveSnapshot active() {
-        return service.activeSnapshot();
+    public ActiveSnapshots active() {
+        return service.activeSnapshots();
     }
 
-    @GetMapping("/supervisor/hierarchy")
-    @PreAuthorize("hasRole('SUPERVISOR')")
-    public List<HierarchyCandidate> hierarchy(
-            @AuthenticationPrincipal RstPrincipal principal) {
-        return service.supervisorHierarchy(principal.ccgid());
+    /**
+     * Pages people in a Center who have a bindable position.
+     *
+     * @param principal current user
+     * @param center optional Center; defaults to the identity Center
+     * @param q optional name fragment
+     * @param page 1-based page
+     * @param pageSize page size
+     * @return people
+     */
+    @GetMapping("/people")
+    @PreAuthorize("hasAnyRole('AGENT','SUPERVISOR','MANAGER','CDH','LTH','HO')")
+    public PageResponse<TimesheetPersonView> people(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        String resolved = resolveCenter(principal, center);
+        PageResponse<CenterPerson> people = service.peopleInCenter(resolved, q, page, pageSize);
+        return new PageResponse<>(
+                people.items().stream()
+                        .map(person -> new TimesheetPersonView(
+                                person.positionId(), person.ccgid(), person.name()))
+                        .toList(),
+                people.page(),
+                people.pageSize(),
+                people.total(),
+                people.totalPages());
     }
 
     @GetMapping("/toolkit-hierarchy")
@@ -81,62 +106,10 @@ public class TimesheetController {
         var selected = customerCountries == null ? List.<String>of() : customerCountries;
         var items = service.kpis(resolvedPosition, pl3Code, selected).stream()
                 .map(item -> new SharedKpiItem(
-                        item.carrier(), item.site(), item.customerCountry(),
-                        item.deliveryHc(), true))
+                        item.carrier(), item.site(), item.customerCountry(), item.deliveryHc()))
                 .toList();
         return new SharedKpiCandidates(
-                service.activeSnapshot().syncDate(), countries, items);
-    }
-
-    @GetMapping("/countries")
-    @PreAuthorize("hasRole('SUPERVISOR')")
-    public List<String> countries(
-            @AuthenticationPrincipal RstPrincipal principal,
-            @RequestParam String supervisorPositionId,
-            @RequestParam String pl3Code) {
-        requireSupervisorScope(principal, supervisorPositionId, pl3Code);
-        return service.countries(supervisorPositionId, pl3Code);
-    }
-
-    @GetMapping("/kpis")
-    @PreAuthorize("hasRole('SUPERVISOR')")
-    public List<KpiCandidate> kpis(
-            @AuthenticationPrincipal RstPrincipal principal,
-            @RequestParam String supervisorPositionId,
-            @RequestParam String pl3Code,
-            @RequestParam List<String> country) {
-        requireSupervisorScope(principal, supervisorPositionId, pl3Code);
-        return service.kpis(supervisorPositionId, pl3Code, country);
-    }
-
-    @GetMapping("/headcount")
-    public BigDecimal headcount(
-            @AuthenticationPrincipal RstPrincipal principal,
-            @RequestParam String supervisorPositionId,
-            @RequestParam String pl3Code,
-            @RequestParam String carrier,
-            @RequestParam String site,
-            @RequestParam String country) {
-        boolean allowed = principal.roles().contains("SUPERVISOR")
-                ? service.supervisorOwnsScope(principal.ccgid(), supervisorPositionId, pl3Code)
-                : service.agentCanUse(principal.ccgid(), supervisorPositionId, pl3Code);
-        if (!allowed) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    "timesheet-out-of-scope",
-                    "The requested Timesheet scope is not available to the current principal.");
-        }
-        return service.headcount(supervisorPositionId, pl3Code, carrier, site, country);
-    }
-
-    private void requireSupervisorScope(
-            RstPrincipal principal, String supervisorPositionId, String pl3Code) {
-        if (!service.supervisorOwnsScope(principal.ccgid(), supervisorPositionId, pl3Code)) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    "timesheet-out-of-scope",
-                    "The requested Timesheet scope is not owned by the current Supervisor.");
-        }
+                service.activeMonthly().syncDate(), countries, items);
     }
 
     public record SharedKpiCandidates(
@@ -144,7 +117,37 @@ public class TimesheetController {
     }
 
     public record SharedKpiItem(
-            String carrier, String site, String customerCountry,
-            BigDecimal deliveryHc, boolean valid) {
+            String carrier, String site, String customerCountry, BigDecimal deliveryHc) {
+    }
+
+    /**
+     * One bindable person in a Center.
+     *
+     * @param positionId emp or occupied management position
+     * @param ccgid identity
+     * @param name display name
+     */
+    public record TimesheetPersonView(String positionId, String ccgid, String name) {
+    }
+
+    private static String resolveCenter(RstPrincipal principal, String requested) {
+        String identity = principal == null || principal.center() == null || principal.center().isBlank()
+                ? null
+                : principal.center().trim();
+        String query = requested == null || requested.isBlank() ? null : requested.trim();
+        if (identity != null && query != null && !identity.equals(query)) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "timesheet-center-forbidden",
+                    "The requested Center is not the current identity Center.");
+        }
+        String center = query != null ? query : identity;
+        if (center == null) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "identity-center-missing",
+                    "Current identity has no Center.");
+        }
+        return center;
     }
 }

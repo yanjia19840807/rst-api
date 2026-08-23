@@ -10,5 +10,6 @@ public record CurrentUserResponse(
         String displayName,
         String email,
         List<String> roles,
-        List<String> scopes) {
+        List<String> scopes,
+        String center) {
 }

@@ -201,11 +201,18 @@ public class ValidationWorkflowService {
             String supervisorPositionId = exercise.getToolkitSnapshot() == null
                     ? null
                     : exercise.getToolkitSnapshot().getSupervisorPositionId();
+            String center = exercise.getToolkitSnapshot() == null
+                    ? null
+                    : exercise.getToolkitSnapshot().getCenter();
+            String domain = exercise.getToolkitSnapshot() == null
+                    ? null
+                    : exercise.getToolkitSnapshot().getDomain();
             String positionId = ready == null
                     ? null
                     : (hasText(ready.getAssigneePositionId())
                             ? ready.getAssigneePositionId()
-                            : workflowRouter.positionIdOrNull(supervisorPositionId, ready.getRequiredRoleCode()));
+                            : workflowRouter.positionIdOrNull(
+                                    supervisorPositionId, center, domain, ready.getRequiredRoleCode()));
             String owner = ready == null
                     ? null
                     : firstNonBlank(
@@ -330,7 +337,7 @@ public class ValidationWorkflowService {
     }
 
     private static BigDecimal rightSizingHc(Scenario scenario) {
-        return scenario.getRightSizingHc();
+        return SizingMath.measuredRightSizingHc(scenario.getRightSizingHc());
     }
 
     private static BigDecimal productionSupport(
