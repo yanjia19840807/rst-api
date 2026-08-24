@@ -21,7 +21,7 @@ import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSyncService;
  * <p>Example:
  * {@code ./mvnw spring-boot:run
  * -Dspring-boot.run.arguments=--timesheet.sync.enabled=true
- * --timesheet.sync.kind=all --timesheet.sync.source=file --server.port=0}
+ * --timesheet.sync.kind=all --server.port=0}
  */
 @Component
 @Order(0)

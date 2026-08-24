@@ -4,7 +4,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 
 /**
- * SharePoint / Graph URL helpers shared by the Graph client.
+ * SharePoint / Graph URL helpers shared by Graph access.
  */
 public final class MicrosoftGraphPaths {
 

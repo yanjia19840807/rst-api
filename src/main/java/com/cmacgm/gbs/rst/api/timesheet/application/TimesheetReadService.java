@@ -30,7 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Read model over ACTIVE Daily org and Monthly KPI snapshots.
+ * Read model over ACTIVE Daily org and Monthly assignment / scope / KPI snapshots.
  */
 @Service
 public class TimesheetReadService {
@@ -48,8 +48,8 @@ public class TimesheetReadService {
      * @param people Daily people
      * @param positions Daily positions
      * @param occupancies Daily occupancy
-     * @param scopes Daily scopes
-     * @param assignments Daily assignments
+     * @param scopes Monthly scopes
+     * @param assignments Monthly assignments
      * @param kpis Monthly KPIs
      */
     public TimesheetReadService(
@@ -162,7 +162,7 @@ public class TimesheetReadService {
      * @param ccgid supervisor
      * @param supervisorPositionId position
      * @param pl3Code PL3
-     * @return true when Daily scope is owned
+     * @return true when Monthly scope is owned
      */
     @Transactional(readOnly = true)
     public boolean supervisorOwnsScope(
@@ -174,7 +174,7 @@ public class TimesheetReadService {
      * @param ccgid agent
      * @param supervisorPositionId toolkit supervisor position
      * @param pl3Code toolkit PL3
-     * @return true when Daily assignment exists
+     * @return true when Monthly assignment exists
      */
     @Transactional(readOnly = true)
     public boolean agentCanUse(
@@ -327,7 +327,7 @@ public class TimesheetReadService {
     }
 
     /**
-     * Distinct domains present for a Center in ACTIVE Daily scope.
+     * Distinct domains present for a Center in ACTIVE Monthly scope.
      *
      * @param center GBS center
      * @return domains
@@ -384,7 +384,7 @@ public class TimesheetReadService {
     }
 
     /**
-     * Dashboard obligations from Daily scope.
+     * Dashboard obligations from Monthly scope.
      *
      * @return scopes
      */

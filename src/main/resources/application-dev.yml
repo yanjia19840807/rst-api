@@ -3,22 +3,16 @@ app:
     # Simulate one login: set ccgid + role (AGENT|SUPERVISOR|MANAGER|CDH|LTH|HO).
     # Restart API after changing. Optional per-request: X-Dev-Ccgid / X-Dev-Role.
     dev-identity:
-      ccgid: S00813982
-      role: SUPERVISOR
+      ccgid: LTH001
+      role: LTH
       # SSO Center claim is not wired yet; hardcode the Center for local LTH config.
       center: GBS CHINA
-
-timesheet:
-  sync:
-    source: ${TIMESHEET_SYNC_SOURCE:file}
 
 microsoft:
   graph:
     enabled: true
-    secret-name: timesheet-prd-microsoft-graph-credentials
     client-id: ${MS_GRAPH_CLIENT_ID:5282c4c7-7d9a-4ddc-b8bb-955921a0adf7}
     client-secret: ${MS_GRAPH_CLIENT_SECRET:}
-    env-prefix: ${MS_GRAPH_ENV_PREFIX:3.Production}
 
 # Log SQL with parameters substituted into '?' (dev only). p6spy does this natively.
 decorator:

@@ -97,10 +97,10 @@ class SupervisorApiIntegrationTests {
         insertPosition(DAILY_RUN_ID, "POS-SRM-001", "SR_MANAGER", "POS-DH-001");
         insertPosition(DAILY_RUN_ID, "POS-DH-001", "DOMAIN_HEAD", null);
         insertOccupancy(DAILY_RUN_ID, SUPERVISOR_POSITION_ID, SUPERVISOR_CCGID);
-        insertScope(DAILY_RUN_ID);
-        insertAssignment(DAILY_RUN_ID, "AGENT010");
-        insertAssignment(DAILY_RUN_ID, "AGENT011");
-        insertAssignment(DAILY_RUN_ID, "AGENT012");
+        insertScope(MONTHLY_RUN_ID);
+        insertAssignment(MONTHLY_RUN_ID, "AGENT010");
+        insertAssignment(MONTHLY_RUN_ID, "AGENT011");
+        insertAssignment(MONTHLY_RUN_ID, "AGENT012");
         insertKpi(MONTHLY_RUN_ID, "Carrier A", "Kuala Lumpur", "Australia", "2.000000");
         insertKpi(MONTHLY_RUN_ID, "Carrier B", "Singapore", "Germany", "3.000000");
     }

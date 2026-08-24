@@ -8,7 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 /**
- * Daily Toolkit / Dashboard scopes.
+ * Monthly Toolkit / Dashboard scopes.
  */
 public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, TimesheetScope.Id> {
 
@@ -20,12 +20,14 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
      */
     @Query("""
             select s
-            from TimesheetScope s, TimesheetOccupancy o, TimesheetSyncRun r
-            where s.id.syncRunId = r.id
-              and o.id.syncRunId = r.id
+            from TimesheetScope s, TimesheetOccupancy o, TimesheetSyncRun monthly, TimesheetSyncRun daily
+            where s.id.syncRunId = monthly.id
+              and monthly.kind = 'MONTHLY'
+              and monthly.status = 'ACTIVE'
+              and o.id.syncRunId = daily.id
+              and daily.kind = 'DAILY'
+              and daily.status = 'ACTIVE'
               and o.id.positionId = s.id.supervisorPositionId
-              and r.kind = 'DAILY'
-              and r.status = 'ACTIVE'
               and upper(o.empCcgid) = upper(:ccgid)
             order by s.id.supervisorPositionId, s.id.center, s.id.pl3Code
             """)
@@ -41,12 +43,14 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
      */
     @Query("""
             select count(s) > 0
-            from TimesheetScope s, TimesheetOccupancy o, TimesheetSyncRun r
-            where s.id.syncRunId = r.id
-              and o.id.syncRunId = r.id
+            from TimesheetScope s, TimesheetOccupancy o, TimesheetSyncRun monthly, TimesheetSyncRun daily
+            where s.id.syncRunId = monthly.id
+              and monthly.kind = 'MONTHLY'
+              and monthly.status = 'ACTIVE'
+              and o.id.syncRunId = daily.id
+              and daily.kind = 'DAILY'
+              and daily.status = 'ACTIVE'
               and o.id.positionId = s.id.supervisorPositionId
-              and r.kind = 'DAILY'
-              and r.status = 'ACTIVE'
               and upper(o.empCcgid) = upper(:ccgid)
               and s.id.supervisorPositionId = :positionId
               and s.id.pl3Code = :pl3Code
@@ -65,14 +69,14 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
             select s
             from TimesheetScope s, TimesheetSyncRun r
             where s.id.syncRunId = r.id
-              and r.kind = 'DAILY'
+              and r.kind = 'MONTHLY'
               and r.status = 'ACTIVE'
             order by s.id.center, s.id.supervisorPositionId, s.id.pl3Code
             """)
     List<TimesheetScope> findActiveDashboardObligations();
 
     /**
-     * Distinct GBS Domains present in this Center in the ACTIVE Daily snapshot.
+     * Distinct GBS Domains present in this Center in the ACTIVE Monthly snapshot.
      *
      * @param center GBS center
      * @return domain names
@@ -81,7 +85,7 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
             select distinct s.domain
             from TimesheetScope s, TimesheetSyncRun r
             where s.id.syncRunId = r.id
-              and r.kind = 'DAILY'
+              and r.kind = 'MONTHLY'
               and r.status = 'ACTIVE'
               and s.id.center = :center
             order by s.domain

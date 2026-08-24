@@ -8,7 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 /**
- * Daily employee assignments.
+ * Monthly employee assignments.
  */
 public interface TimesheetAssignmentRepository
         extends JpaRepository<TimesheetAssignment, TimesheetAssignment.Id> {
@@ -25,7 +25,7 @@ public interface TimesheetAssignmentRepository
             select count(a) > 0
             from TimesheetAssignment a, TimesheetSyncRun r
             where a.id.syncRunId = r.id
-              and r.kind = 'DAILY'
+              and r.kind = 'MONTHLY'
               and r.status = 'ACTIVE'
               and upper(a.id.empCcgid) = upper(:ccgid)
               and a.id.supervisorPositionId = :positionId
@@ -44,12 +44,14 @@ public interface TimesheetAssignmentRepository
      */
     @Query("""
             select a
-            from TimesheetAssignment a, TimesheetOccupancy o, TimesheetSyncRun r
-            where a.id.syncRunId = r.id
-              and o.id.syncRunId = r.id
+            from TimesheetAssignment a, TimesheetOccupancy o, TimesheetSyncRun monthly, TimesheetSyncRun daily
+            where a.id.syncRunId = monthly.id
+              and monthly.kind = 'MONTHLY'
+              and monthly.status = 'ACTIVE'
+              and o.id.syncRunId = daily.id
+              and daily.kind = 'DAILY'
+              and daily.status = 'ACTIVE'
               and o.id.positionId = a.id.supervisorPositionId
-              and r.kind = 'DAILY'
-              and r.status = 'ACTIVE'
               and upper(o.empCcgid) = upper(:supervisorCcgid)
             """)
     List<TimesheetAssignment> findActiveBySupervisorCcgid(

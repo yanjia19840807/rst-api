@@ -11,7 +11,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 
 /**
- * Current Supervisor position × PL3 × Center scope from Daily.
+ * Current Supervisor position × PL3 × Center scope from Monthly.
  */
 @Entity
 @Table(name = "timesheet_scope")
@@ -38,7 +38,7 @@ public class TimesheetScope {
     /**
      * Creates a scope row.
      *
-     * @param syncRunId Daily run
+     * @param syncRunId Monthly run
      * @param supervisorPositionId supervisor position
      * @param pl3Code process level 3
      * @param center GBS center

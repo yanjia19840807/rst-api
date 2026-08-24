@@ -184,14 +184,14 @@ class TmsSessionApiIntegrationTests {
                 values (?, 'POS-SUP-001', 'BANK_REC', 'Bank Reconciliation',
                         'Kuala Lumpur', 'Finance', 'Accounting', 'Record to Report')
                 """,
-                dailyRunId);
+                monthlyRunId);
         jdbcTemplate.update(
                 """
                 insert into timesheet_assignment
                     (sync_run_id, emp_ccgid, emp_id, supervisor_position_id, pl3_code)
                 values (?, 'AGENT001', 'AGENT001', 'POS-SUP-001', 'BANK_REC')
                 """,
-                dailyRunId);
+                monthlyRunId);
         jdbcTemplate.update(
                 """
                 insert into timesheet_kpi

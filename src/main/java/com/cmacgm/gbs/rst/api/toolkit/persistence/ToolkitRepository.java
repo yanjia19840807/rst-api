@@ -22,7 +22,7 @@ public interface ToolkitRepository extends JpaRepository<Toolkit, UUID> {
             join TimesheetSyncRun run
               on assignment.id.syncRunId = run.id
             where upper(assignment.id.empCcgid) = upper(:ccgid)
-              and run.kind = 'DAILY'
+              and run.kind = 'MONTHLY'
               and run.status = 'ACTIVE'
               and toolkit.deletedAt is null
             order by toolkit.name

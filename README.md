@@ -67,7 +67,6 @@ To connect `rst-web`, set `VITE_API_BASE_URL=http://localhost:8080` and
 | `DB_PASSWORD` | empty | Database password; local `.env`, never commit |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated SPA origins |
 | `AZURE_TENANT_ID` | empty | Azure AD tenant; local `.env`, required for Graph and prod JWT |
-| `MS_GRAPH_AUTH_URI` | `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token` | Microsoft identity token endpoint |
 | `MS_GRAPH_ENABLED` | `false` (`true` in dev) | Enable Microsoft Graph / SharePoint access |
 | `MS_GRAPH_CLIENT_ID` | empty (dev default set) | Graph application (client) id |
 | `MS_GRAPH_CLIENT_SECRET` | empty | Graph client secret; local `.env`, never commit |
@@ -139,23 +138,19 @@ keeps one ACTIVE run; a failed run does not replace the previous ACTIVE.
 
 ```sh
 ./mvnw spring-boot:run \
-  -Dspring-boot.run.arguments="--timesheet.sync.enabled=true --timesheet.sync.kind=all --timesheet.sync.source=file --server.port=0"
+  -Dspring-boot.run.arguments="--timesheet.sync.enabled=true --timesheet.sync.kind=all --server.port=0"
 ```
 
-`kind` is `daily`, `monthly`, or `all` (default).
+`kind` is `daily`, `monthly`, or `all` (default). Sync always reads SharePoint
+via Microsoft Graph. Graph credentials come from `.env` / `MS_GRAPH_*`.
 
 | Property | Default | Purpose |
 | --- | --- | --- |
-| `timesheet.sync.source` | `file` (`TIMESHEET_SYNC_SOURCE`) | `file` or `graph` |
-| `timesheet.sync.daily-file` | `file:../rst-material/Timesheet/Daily Report of 20260727(GBS CHINA).xlsx` | Local Daily workbook |
-| `timesheet.sync.monthly-file` | `file:../rst-material/Timesheet/Monthly Report of 202606(GBS CHINA).xlsx` | Local Monthly workbook |
-| `timesheet.sync.daily-folder` | `Data Input/Daily` | SharePoint folder under `microsoft.graph.env-prefix` |
-| `timesheet.sync.monthly-folder` | `Data Input/Monthly` | SharePoint folder under `microsoft.graph.env-prefix` |
+| `rst.sharepoint.root` | `2.UAT/Data Output/RST` | RST folder in the Timesheet library (`Daily`, `Monthly`, `Template`) |
 
-SharePoint site, library and env prefix stay under `microsoft.graph.*`. Graph
-picks the latest `.xlsx` / `.csv` in the folder. Same `driveItemId` + `etag`,
-or the same content hash, skips cutover. ERROR rows fail the run; WARNING is
-not persisted. Old ACTIVE headers are archived, not deleted.
+Graph picks the latest `.xlsx` / `.csv` in the folder. Same `driveItemId` +
+`etag`, or the same content hash, skips cutover. ERROR rows fail the run;
+WARNING is not persisted. Old ACTIVE headers are archived, not deleted.
 
 ## Verification
 

@@ -13,15 +13,13 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetAssignment;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetOccupancy;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPosition;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 
 /**
- * Builds Daily computed tables and hierarchy ERROR issues from one file scan.
+ * Builds Daily person, position and occupancy tables from one file scan.
  */
 @Component
 public class TimesheetDailyCalculator {
@@ -34,13 +32,11 @@ public class TimesheetDailyCalculator {
             List<TimesheetPerson> people,
             List<TimesheetPosition> positions,
             List<TimesheetOccupancy> occupancies,
-            List<TimesheetScope> scopes,
-            List<TimesheetAssignment> assignments,
             List<TimesheetSyncIssue> issues) {
     }
 
     /**
-     * Computes Daily tables for a run.
+     * Computes Daily org tables for a run.
      *
      * @param runId Daily run
      * @param rows parsed rows
@@ -51,14 +47,10 @@ public class TimesheetDailyCalculator {
         Map<String, PersonDraft> people = new LinkedHashMap<>();
         Map<String, PositionDraft> positions = new LinkedHashMap<>();
         Map<String, OccupancyDraft> occupancies = new LinkedHashMap<>();
-        Map<String, ScopeDraft> scopes = new LinkedHashMap<>();
-        Map<String, AssignmentDraft> assignments = new LinkedHashMap<>();
-        Map<String, Set<String>> empToSupervisor = new LinkedHashMap<>();
         Map<String, Set<String>> personToCenter = new LinkedHashMap<>();
         Map<String, Set<String>> supervisorToManager = new LinkedHashMap<>();
         Map<String, Set<String>> managerToDomainHead = new LinkedHashMap<>();
         Map<String, Set<String>> occupancyByPosition = new LinkedHashMap<>();
-        Map<String, Set<String>> assignmentSupervisors = new LinkedHashMap<>();
         List<TimesheetSyncIssue> issues = new ArrayList<>();
 
         LocalDate syncDate = null;
@@ -134,40 +126,10 @@ public class TimesheetDailyCalculator {
                     row.domainHeadCcgid(),
                     row.domainHeadId());
 
-            if (hasText(row.supervisorPositionId()) && hasText(row.pl3Code()) && hasText(row.center())
-                    && hasText(row.domain()) && hasText(row.pl1()) && hasText(row.pl2())
-                    && hasText(row.pl3Name())) {
-                scopes.putIfAbsent(
-                        key(row.supervisorPositionId(), row.pl3Code(), row.center()),
-                        new ScopeDraft(
-                                row.supervisorPositionId(),
-                                row.pl3Code(),
-                                row.center(),
-                                row.pl3Name(),
-                                row.domain(),
-                                row.pl1(),
-                                row.pl2()));
-            }
-
-            if (hasText(row.empCcgid()) && hasText(row.supervisorPositionId()) && hasText(row.pl3Code())) {
-                assignments.putIfAbsent(
-                        key(row.empCcgid(), row.supervisorPositionId(), row.pl3Code()),
-                        new AssignmentDraft(
-                                row.empCcgid(),
-                                row.empId(),
-                                row.supervisorPositionId(),
-                                row.pl3Code()));
-                assignmentSupervisors
-                        .computeIfAbsent(row.empCcgid(), ignored -> new LinkedHashSet<>())
-                        .add(row.supervisorPositionId());
-            }
-
-            putEdge(empToSupervisor, row.empCcgid(), row.supervisorPositionId());
             putEdge(supervisorToManager, row.supervisorPositionId(), row.srManagerPositionId());
             putEdge(managerToDomainHead, row.srManagerPositionId(), row.domainHeadPositionId());
         }
 
-        addConflicts(issues, runId, now, "emp_ccgid", "supervisor_position_id", empToSupervisor, true);
         addConflicts(issues, runId, now, "emp_ccgid", "center", personToCenter, true);
         addConflicts(
                 issues, runId, now, "supervisor_position_id", "sr_manager_position_id", supervisorToManager, false);
@@ -188,21 +150,6 @@ public class TimesheetDailyCalculator {
                         null,
                         null,
                         entry.getKey(),
-                        null,
-                        null,
-                        now));
-            }
-        }
-        for (Map.Entry<String, Set<String>> entry : assignmentSupervisors.entrySet()) {
-            if (entry.getValue().size() > 1) {
-                issues.add(TimesheetSyncIssue.error(
-                        runId,
-                        "ASSIGNMENT_CONFLICT",
-                        "emp_ccgid maps to multiple supervisor_position_id: "
-                                + String.join(", ", entry.getValue()),
-                        null,
-                        entry.getKey(),
-                        null,
                         null,
                         null,
                         now));
@@ -232,21 +179,6 @@ public class TimesheetDailyCalculator {
                 occupancies.values().stream()
                         .map(draft -> TimesheetOccupancy.create(
                                 runId, draft.positionId, draft.empCcgid, draft.empId))
-                        .toList(),
-                scopes.values().stream()
-                        .map(draft -> TimesheetScope.create(
-                                runId,
-                                draft.supervisorPositionId,
-                                draft.pl3Code,
-                                draft.center,
-                                draft.pl3Name,
-                                draft.domain,
-                                draft.pl1,
-                                draft.pl2))
-                        .toList(),
-                assignments.values().stream()
-                        .map(draft -> TimesheetAssignment.create(
-                                runId, draft.empCcgid, draft.empId, draft.supervisorPositionId, draft.pl3Code))
                         .toList(),
                 issues);
     }
@@ -333,10 +265,6 @@ public class TimesheetDailyCalculator {
         }
     }
 
-    private static String key(String... parts) {
-        return String.join("|", parts);
-    }
-
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
@@ -373,19 +301,5 @@ public class TimesheetDailyCalculator {
     }
 
     private record OccupancyDraft(String positionId, String empCcgid, String empId) {
-    }
-
-    private record ScopeDraft(
-            String supervisorPositionId,
-            String pl3Code,
-            String center,
-            String pl3Name,
-            String domain,
-            String pl1,
-            String pl2) {
-    }
-
-    private record AssignmentDraft(
-            String empCcgid, String empId, String supervisorPositionId, String pl3Code) {
     }
 }

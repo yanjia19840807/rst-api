@@ -2,6 +2,7 @@ package com.cmacgm.gbs.rst.api;
 
 import com.cmacgm.gbs.rst.api.forecast.ForecastProperties;
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphProperties;
+import com.cmacgm.gbs.rst.api.graph.RstSharePointProperties;
 import com.cmacgm.gbs.rst.api.timesheet.config.TimesheetSyncProperties;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowProperties;
 import org.springframework.boot.SpringApplication;
@@ -12,6 +13,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 @EnableConfigurationProperties({
 		ForecastProperties.class,
 		MicrosoftGraphProperties.class,
+		RstSharePointProperties.class,
 		TimesheetSyncProperties.class,
 		WorkflowProperties.class
 })

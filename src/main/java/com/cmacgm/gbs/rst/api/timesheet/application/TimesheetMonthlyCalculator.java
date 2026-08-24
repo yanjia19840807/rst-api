@@ -5,18 +5,22 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Component;
 
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetAssignment;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 
 /**
- * Aggregates Monthly KPI rows.
+ * Builds Monthly assignment, scope and KPI tables from one file scan.
  */
 @Component
 public class TimesheetMonthlyCalculator {
@@ -25,11 +29,15 @@ public class TimesheetMonthlyCalculator {
      * Monthly compute result.
      */
     public record Result(
-            LocalDate syncDate, List<TimesheetKpi> kpis, List<TimesheetSyncIssue> issues) {
+            LocalDate syncDate,
+            List<TimesheetScope> scopes,
+            List<TimesheetAssignment> assignments,
+            List<TimesheetKpi> kpis,
+            List<TimesheetSyncIssue> issues) {
     }
 
     /**
-     * Aggregates Delivery HC for a Monthly run.
+     * Aggregates assignment, scope and Delivery HC for a Monthly run.
      *
      * @param runId Monthly run
      * @param rows parsed rows
@@ -37,6 +45,9 @@ public class TimesheetMonthlyCalculator {
      * @return result
      */
     public Result compute(UUID runId, List<ReportRow> rows, Instant now) {
+        Map<String, ScopeDraft> scopes = new LinkedHashMap<>();
+        Map<String, AssignmentDraft> assignments = new LinkedHashMap<>();
+        Map<String, Set<String>> assignmentSupervisors = new LinkedHashMap<>();
         Map<String, KpiDraft> totals = new LinkedHashMap<>();
         List<TimesheetSyncIssue> issues = new ArrayList<>();
         LocalDate syncDate = null;
@@ -48,6 +59,32 @@ public class TimesheetMonthlyCalculator {
                     syncDate = row.month().withDayOfMonth(row.month().lengthOfMonth());
                 }
             }
+            if (hasText(row.supervisorPositionId()) && hasText(row.pl3Code()) && hasText(row.center())
+                    && hasText(row.domain()) && hasText(row.pl1()) && hasText(row.pl2())
+                    && hasText(row.pl3Name())) {
+                scopes.putIfAbsent(
+                        key(row.supervisorPositionId(), row.pl3Code(), row.center()),
+                        new ScopeDraft(
+                                row.supervisorPositionId(),
+                                row.pl3Code(),
+                                row.center(),
+                                row.pl3Name(),
+                                row.domain(),
+                                row.pl1(),
+                                row.pl2()));
+            }
+            if (hasText(row.empCcgid()) && hasText(row.supervisorPositionId()) && hasText(row.pl3Code())) {
+                assignments.putIfAbsent(
+                        key(row.empCcgid(), row.supervisorPositionId(), row.pl3Code()),
+                        new AssignmentDraft(
+                                row.empCcgid(),
+                                row.empId(),
+                                row.supervisorPositionId(),
+                                row.pl3Code()));
+                assignmentSupervisors
+                        .computeIfAbsent(row.empCcgid(), ignored -> new LinkedHashSet<>())
+                        .add(row.supervisorPositionId());
+            }
             if (!hasText(row.supervisorPositionId())
                     || !hasText(row.pl3Code())
                     || !hasText(row.carrier())
@@ -57,7 +94,7 @@ public class TimesheetMonthlyCalculator {
                     || row.hc().value() == null) {
                 continue;
             }
-            String key = String.join(
+            String kpiKey = String.join(
                     "|",
                     row.supervisorPositionId(),
                     row.pl3Code(),
@@ -65,7 +102,7 @@ public class TimesheetMonthlyCalculator {
                     row.site(),
                     row.customerCountry());
             totals.merge(
-                    key,
+                    kpiKey,
                     new KpiDraft(
                             row.supervisorPositionId(),
                             row.pl3Code(),
@@ -81,6 +118,21 @@ public class TimesheetMonthlyCalculator {
                             left.customerCountry,
                             left.hc.add(right.hc)));
         }
+        for (Map.Entry<String, Set<String>> entry : assignmentSupervisors.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                issues.add(TimesheetSyncIssue.error(
+                        runId,
+                        "ASSIGNMENT_CONFLICT",
+                        "emp_ccgid maps to multiple supervisor_position_id: "
+                                + String.join(", ", entry.getValue()),
+                        null,
+                        entry.getKey(),
+                        null,
+                        null,
+                        null,
+                        now));
+            }
+        }
         if (syncDate == null) {
             issues.add(TimesheetSyncIssue.error(
                     runId,
@@ -93,12 +145,35 @@ public class TimesheetMonthlyCalculator {
                     null,
                     now));
         }
-        if (totals.isEmpty() && issues.isEmpty()) {
+        if (scopes.isEmpty() && assignments.isEmpty() && totals.isEmpty() && issues.isEmpty()) {
             issues.add(TimesheetSyncIssue.error(
-                    runId, "EMPTY_FILE", "Monthly file produced no KPI rows.", null, null, null, null, null, now));
+                    runId,
+                    "EMPTY_FILE",
+                    "Monthly file produced no assignment, scope or KPI rows.",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    now));
         }
         return new Result(
                 syncDate,
+                scopes.values().stream()
+                        .map(draft -> TimesheetScope.create(
+                                runId,
+                                draft.supervisorPositionId,
+                                draft.pl3Code,
+                                draft.center,
+                                draft.pl3Name,
+                                draft.domain,
+                                draft.pl1,
+                                draft.pl2))
+                        .toList(),
+                assignments.values().stream()
+                        .map(draft -> TimesheetAssignment.create(
+                                runId, draft.empCcgid, draft.empId, draft.supervisorPositionId, draft.pl3Code))
+                        .toList(),
                 totals.values().stream()
                         .map(draft -> TimesheetKpi.create(
                                 runId,
@@ -112,8 +187,26 @@ public class TimesheetMonthlyCalculator {
                 issues);
     }
 
+    private static String key(String... parts) {
+        return String.join("|", parts);
+    }
+
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private record ScopeDraft(
+            String supervisorPositionId,
+            String pl3Code,
+            String center,
+            String pl3Name,
+            String domain,
+            String pl1,
+            String pl2) {
+    }
+
+    private record AssignmentDraft(
+            String empCcgid, String empId, String supervisorPositionId, String pl3Code) {
     }
 
     private record KpiDraft(

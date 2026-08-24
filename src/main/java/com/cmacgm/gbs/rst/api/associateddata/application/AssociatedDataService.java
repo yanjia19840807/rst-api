@@ -87,6 +87,7 @@ public class AssociatedDataService {
     private final VolumeInputValidator volumeValidator;
     private final VolumeExcelService volumeExcel;
     private final HolidayExcelService holidayExcel;
+    private final ImportTemplateService importTemplates;
     private final ToolkitVolumeService toolkitVolumes;
     private final FileArtifactRepository fileArtifacts;
     private final DataImportBatchRepository importBatches;
@@ -109,6 +110,7 @@ public class AssociatedDataService {
             VolumeInputValidator volumeValidator,
             VolumeExcelService volumeExcel,
             HolidayExcelService holidayExcel,
+            ImportTemplateService importTemplates,
             ToolkitVolumeService toolkitVolumes,
             FileArtifactRepository fileArtifacts,
             DataImportBatchRepository importBatches,
@@ -126,6 +128,7 @@ public class AssociatedDataService {
         this.volumeValidator = volumeValidator;
         this.volumeExcel = volumeExcel;
         this.holidayExcel = holidayExcel;
+        this.importTemplates = importTemplates;
         this.toolkitVolumes = toolkitVolumes;
         this.fileArtifacts = fileArtifacts;
         this.importBatches = importBatches;
@@ -314,12 +317,12 @@ public class AssociatedDataService {
     }
 
     /**
-     * Exports a blank holiday Excel template (date / type / description).
+     * Downloads the holiday Excel template from SharePoint.
      */
     @Transactional(readOnly = true)
     public byte[] exportCalendarTemplate(String ownerCcgid, UUID exerciseId) {
         exercises.requireOwned(ownerCcgid, exerciseId);
-        return holidayExcel.exportBlank();
+        return importTemplates.download(ImportTemplateService.Kind.CALENDAR);
     }
 
     /**
@@ -413,12 +416,12 @@ public class AssociatedDataService {
     }
 
     /**
-     * Exports a blank monthly volume Excel template.
+     * Downloads the monthly volume Excel template from SharePoint.
      */
     @Transactional(readOnly = true)
     public byte[] exportMonthlyTemplate(String ownerCcgid, UUID exerciseId) {
         exercises.requireOwned(ownerCcgid, exerciseId);
-        return volumeExcel.exportMonthlyBlank();
+        return importTemplates.download(ImportTemplateService.Kind.VOLUME_MONTHLY);
     }
 
     /**
@@ -487,12 +490,12 @@ public class AssociatedDataService {
     }
 
     /**
-     * Exports a blank daily volume Excel template.
+     * Downloads the daily volume Excel template from SharePoint.
      */
     @Transactional(readOnly = true)
     public byte[] exportDailyTemplate(String ownerCcgid, UUID exerciseId) {
         exercises.requireOwned(ownerCcgid, exerciseId);
-        return volumeExcel.exportDailyBlank();
+        return importTemplates.download(ImportTemplateService.Kind.VOLUME_DAILY);
     }
 
     /**
@@ -559,12 +562,12 @@ public class AssociatedDataService {
     }
 
     /**
-     * Exports a blank slot volume Excel template.
+     * Downloads the slot volume Excel template from SharePoint.
      */
     @Transactional(readOnly = true)
     public byte[] exportSlotTemplate(String ownerCcgid, UUID exerciseId) {
         exercises.requireOwned(ownerCcgid, exerciseId);
-        return volumeExcel.exportSlotBlank();
+        return importTemplates.download(ImportTemplateService.Kind.VOLUME_SLOT);
     }
 
     /**

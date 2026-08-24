@@ -11,7 +11,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 
 /**
- * Employee assigned to a Supervisor position and PL3 in a Daily sync.
+ * Employee assigned to a Supervisor position and PL3 in a Monthly sync.
  */
 @Entity
 @Table(name = "timesheet_assignment")
@@ -29,7 +29,7 @@ public class TimesheetAssignment {
     /**
      * Creates an assignment row.
      *
-     * @param syncRunId Daily run
+     * @param syncRunId Monthly run
      * @param empCcgid employee identity
      * @param empId employee Timesheet id
      * @param supervisorPositionId supervisor position

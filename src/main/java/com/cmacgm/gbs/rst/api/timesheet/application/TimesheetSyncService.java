@@ -61,7 +61,7 @@ public class TimesheetSyncService {
      * @param parser report parser
      * @param dailyCalculator Daily compute
      * @param monthlyCalculator Monthly compute
-     * @param sources file / Graph source
+     * @param sources SharePoint source
      * @param syncRuns run repository
      * @param people person repository
      * @param positions position repository
@@ -184,12 +184,14 @@ public class TimesheetSyncService {
                     people.saveAll(computed.people());
                     positions.saveAll(computed.positions());
                     occupancies.saveAll(computed.occupancies());
-                    scopes.saveAll(computed.scopes());
-                    assignments.saveAll(computed.assignments());
                 });
             }
             TimesheetMonthlyCalculator.Result computed = monthlyCalculator.compute(run.getId(), rows, now);
-            return activateOrFail(run, rows.size(), hash, computed.issues(), () -> kpis.saveAll(computed.kpis()));
+            return activateOrFail(run, rows.size(), hash, computed.issues(), () -> {
+                scopes.saveAll(computed.scopes());
+                assignments.saveAll(computed.assignments());
+                kpis.saveAll(computed.kpis());
+            });
         } catch (RuntimeException ex) {
             markFailed(run.getId(), errorCodeOf(ex), sanitize(ex.getMessage()));
             throw ex;
@@ -308,6 +310,22 @@ public class TimesheetSyncService {
                 digest.update(String.valueOf(row.supervisorPositionId()).getBytes(StandardCharsets.UTF_8));
                 digest.update((byte) '|');
                 digest.update(String.valueOf(row.pl3Code()).getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) '|');
+                digest.update(String.valueOf(row.center()).getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) '|');
+                digest.update(String.valueOf(row.domain()).getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) '|');
+                digest.update(String.valueOf(row.pl1()).getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) '|');
+                digest.update(String.valueOf(row.pl2()).getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) '|');
+                digest.update(String.valueOf(row.pl3Name()).getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) '|');
+                digest.update(String.valueOf(row.carrier()).getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) '|');
+                digest.update(String.valueOf(row.site()).getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) '|');
+                digest.update(String.valueOf(row.customerCountry()).getBytes(StandardCharsets.UTF_8));
                 digest.update((byte) '|');
                 digest.update(String.valueOf(row.hc() == null ? "" : row.hc().value()).getBytes(StandardCharsets.UTF_8));
                 digest.update((byte) '\n');

@@ -46,7 +46,7 @@ public class DashboardService {
     private final Clock clock;
 
     /**
-     * @param timesheet ACTIVE Daily scopes and Monthly HC
+     * @param timesheet ACTIVE Monthly scopes and HC
      * @param exercises APPROVED / UNDER_REVIEW Exercises
      * @param scenarios Official Scenario + Right Sizing HC
      * @param supportItems production support inputs
