@@ -1,4 +1,4 @@
-package com.cmacgm.gbs.rst.api.holidaytemplate.domain;
+package com.cmacgm.gbs.rst.api.workingdays.domain;
 
 import java.time.DayOfWeek;
 import java.util.EnumSet;
@@ -63,14 +63,15 @@ public enum WeekendCode {
 
     /**
      * Parses a stored weekend code. Accepts Excel numbers and legacy RST names.
-     * Unknown values default to Saturday + Sunday ({@code 1}).
+     * Unknown or blank values are rejected — they must not become Saturday + Sunday.
      *
      * @param raw stored code
      * @return weekend code
+     * @throws IllegalArgumentException when the code is missing or not recognized
      */
     public static WeekendCode parse(String raw) {
         if (raw == null || raw.isBlank()) {
-            return SATURDAY_SUNDAY;
+            throw new IllegalArgumentException("Weekend code is required.");
         }
         String trimmed = raw.trim();
         try {
@@ -87,7 +88,6 @@ public enum WeekendCode {
             case "SAT_SUN", "SATURDAY_SUNDAY" -> SATURDAY_SUNDAY;
             case "SUN_ONLY", "SUNDAY_ONLY" -> SUNDAY_ONLY;
             case "FRI_SAT", "FRIDAY_SATURDAY" -> FRIDAY_SATURDAY;
-            case "NONE" -> SATURDAY_SUNDAY;
             case "SUNDAY_MONDAY" -> SUNDAY_MONDAY;
             case "MONDAY_TUESDAY" -> MONDAY_TUESDAY;
             case "TUESDAY_WEDNESDAY" -> TUESDAY_WEDNESDAY;
@@ -99,7 +99,8 @@ public enum WeekendCode {
             case "THURSDAY_ONLY" -> THURSDAY_ONLY;
             case "FRIDAY_ONLY" -> FRIDAY_ONLY;
             case "SATURDAY_ONLY" -> SATURDAY_ONLY;
-            default -> SATURDAY_SUNDAY;
+            default -> throw new IllegalArgumentException(
+                    "Weekend code must be an Excel NETWORKDAYS.INTL code (1–7 or 11–17).");
         };
     }
 

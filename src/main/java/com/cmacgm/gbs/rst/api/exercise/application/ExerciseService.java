@@ -20,7 +20,6 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.associateddata.domain.SupportWorkloadMath;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSupportItemRepository;
@@ -44,21 +43,21 @@ import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.WorkingDaysService;
+import com.cmacgm.gbs.rst.api.workingdays.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.scenario.application.ScenarioCommitService;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
-import com.cmacgm.gbs.rst.api.submission.domain.Submission;
-import com.cmacgm.gbs.rst.api.submission.persistence.SubmissionRepository;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
-import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowAction;
+import com.cmacgm.gbs.rst.api.workflow.domain.ExerciseLifecycle;
+import com.cmacgm.gbs.rst.api.workflow.domain.ProcessInstance;
+import com.cmacgm.gbs.rst.api.workflow.domain.ProcessTask;
+import com.cmacgm.gbs.rst.api.workflow.domain.TaskActor;
+import com.cmacgm.gbs.rst.api.workflow.domain.TaskNode;
 import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowAging;
-import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowInstance;
-import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowStepAssignment;
-import com.cmacgm.gbs.rst.api.workflow.persistence.WorkflowInstanceRepository;
+import com.cmacgm.gbs.rst.api.workflow.persistence.ProcessInstanceRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -81,8 +80,7 @@ public class ExerciseService {
     private final ScenarioRepository scenarios;
     private final ScenarioCommitService scenarioCommits;
     private final ExerciseProductionSupportItemRepository supportItems;
-    private final SubmissionRepository submissions;
-    private final WorkflowInstanceRepository workflows;
+    private final ProcessInstanceRepository workflows;
     private final WorkflowRouter workflowRouter;
     private final Clock clock;
 
@@ -101,8 +99,7 @@ public class ExerciseService {
             ScenarioRepository scenarios,
             ScenarioCommitService scenarioCommits,
             ExerciseProductionSupportItemRepository supportItems,
-            SubmissionRepository submissions,
-            WorkflowInstanceRepository workflows,
+            ProcessInstanceRepository workflows,
             WorkflowRouter workflowRouter,
             Clock clock) {
         this.exercises = exercises;
@@ -116,7 +113,6 @@ public class ExerciseService {
         this.scenarios = scenarios;
         this.scenarioCommits = scenarioCommits;
         this.supportItems = supportItems;
-        this.submissions = submissions;
         this.workflows = workflows;
         this.workflowRouter = workflowRouter;
         this.clock = clock;
@@ -159,7 +155,7 @@ public class ExerciseService {
         List<String> notices = new ArrayList<>(initialization.initialize(exercise, ownerCcgid));
         // initialize() may clear the persistence context via bulk @Modifying ops.
         RstExercise reloaded = access.requireOwned(ownerCcgid, exerciseId);
-        return new CreateExerciseResult(toResponse(reloaded, null), notices);
+        return new CreateExerciseResult(toResponse(reloaded, null, null), notices);
     }
 
     /**
@@ -175,13 +171,16 @@ public class ExerciseService {
     public ExerciseListView list(String ownerCcgid, ExerciseListQuery query, int page, int pageSize) {
         List<RstExercise> owned =
                 exercises.findByOwnerCcgidAndDeletedAtIsNullOrderByUpdatedAtDescIdAsc(ownerCcgid);
+        Map<UUID, ProcessInstance> processes = processesOf(owned);
         Set<String> tabStatuses = tabStatuses(query.tab());
         List<RstExercise> inTab = owned.stream()
-                .filter(item -> tabStatuses.contains(item.getWorkflowStatus()))
+                .filter(item -> tabStatuses.contains(
+                        ExerciseLifecycle.workflowStatus(processes.get(item.getId()))))
                 .toList();
-        Map<UUID, ReviewProgress> progress = reviewProgressFor(inTab);
+        Map<UUID, ReviewProgress> progress = reviewProgressFor(inTab, processes);
         List<ExerciseResponse> source = inTab.stream()
-                .map(item -> toResponse(item, progress.get(item.getId())))
+                .map(item -> toResponse(
+                        item, progress.get(item.getId()), processes.get(item.getId())))
                 .toList();
         List<ExerciseResponse> items = source.stream()
                 .filter(item -> matches(item, query))
@@ -208,7 +207,15 @@ public class ExerciseService {
     @Transactional(readOnly = true)
     public ExerciseResponse detail(String ownerCcgid, UUID exerciseId) {
         RstExercise exercise = access.requireReadable(ownerCcgid, exerciseId);
-        return toResponse(exercise, reviewProgressFor(List.of(exercise)).get(exercise.getId()));
+        ProcessInstance process = processOf(exercise.getId());
+        Map<UUID, ProcessInstance> processes = new HashMap<>();
+        if (process != null) {
+            processes.put(exercise.getId(), process);
+        }
+        return toResponse(
+                exercise,
+                reviewProgressFor(List.of(exercise), processes).get(exercise.getId()),
+                process);
     }
 
     /**
@@ -220,7 +227,7 @@ public class ExerciseService {
     @Transactional
     public void softDelete(String ownerCcgid, UUID exerciseId) {
         RstExercise exercise = access.requireOwned(ownerCcgid, exerciseId);
-        if (!exercise.canDelete()) {
+        if (!ExerciseLifecycle.canDelete(processOf(exercise.getId()))) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
                     "exercise-not-deletable",
@@ -244,7 +251,7 @@ public class ExerciseService {
             String ownerCcgid, UUID exerciseId, UpdateExercisePeriodsRequest request) {
         validatePeriods(request.sizingMonth(), request.tmsFrom(), request.tmsTo());
         RstExercise exercise = access.requireOwned(ownerCcgid, exerciseId);
-        if (!exercise.canEdit()) {
+        if (!ExerciseLifecycle.canEdit(processOf(exercise.getId()))) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "exercise-not-editable",
@@ -287,7 +294,8 @@ public class ExerciseService {
         // Volume / TMS / Cycle-Time sync may run bulk @Modifying deletes that clear the
         // persistence context; reload before mapping lazy Subtasks / Shared KPI lines.
         RstExercise reloaded = access.requireOwned(ownerCcgid, exerciseId);
-        return new UpdateExercisePeriodsResult(toResponse(reloaded, null), notices);
+        return new UpdateExercisePeriodsResult(
+                toResponse(reloaded, null, processOf(reloaded.getId())), notices);
     }
 
     /**
@@ -338,7 +346,7 @@ public class ExerciseService {
         if ("ARCHIVED".equalsIgnoreCase(tab)) {
             return Set.of("APPROVED", "REJECTED");
         }
-        return Set.of("IN_PROGRESS", "RETURNED", "UNDER_REVIEW");
+        return Set.of("IN_PROGRESS", "UNDER_REVIEW");
     }
 
     /**
@@ -347,8 +355,7 @@ public class ExerciseService {
      */
     private static boolean matchesReviewStage(ExerciseResponse item, String reviewStage) {
         if ("SUPERVISOR".equals(reviewStage)) {
-            return "IN_PROGRESS".equals(item.workflowStatus())
-                    || "RETURNED".equals(item.workflowStatus());
+            return "IN_PROGRESS".equals(item.workflowStatus());
         }
         return "UNDER_REVIEW".equals(item.workflowStatus())
                 && reviewStage.equals(item.requiredRole());
@@ -434,7 +441,8 @@ public class ExerciseService {
         return instant.atZone(ZoneOffset.UTC).toLocalDate();
     }
 
-    private ExerciseResponse toResponse(RstExercise exercise, ReviewProgress progress) {
+    private ExerciseResponse toResponse(
+            RstExercise exercise, ReviewProgress progress, ProcessInstance process) {
         ExerciseToolkitSnapshot snapshot = exercise.getToolkitSnapshot();
         if (snapshot == null) {
             throw notFound("exercise-not-found", "The Exercise was not found.");
@@ -480,15 +488,13 @@ public class ExerciseService {
                 ? null
                 : SizingMath.capacityCreation(actualHc, rightSizingHc, productionSupport);
         Integer agingDays = null;
-        if ("UNDER_REVIEW".equals(exercise.getWorkflowStatus())
-                || "RETURNED".equals(exercise.getWorkflowStatus())) {
-            // UNDER_REVIEW: wait on the current READY step. RETURNED: wait since the return.
+        if (ExerciseLifecycle.isUnderReview(process)) {
             Instant agingFrom = progress != null && progress.agingFrom() != null
                     ? progress.agingFrom()
                     : exercise.getSubmittedAt();
             agingDays = agingFrom == null ? null : daysBetween(agingFrom, clock.instant());
         }
-        Instant archivedAt = archivedAt(exercise);
+        Instant archivedAt = archivedAt(exercise, process);
         return new ExerciseResponse(
                 exercise.getId(),
                 exercise.getExerciseCode(),
@@ -498,12 +504,13 @@ public class ExerciseService {
                 exercise.getSlotWeeks(),
                 exercise.getTmsFrom(),
                 exercise.getTmsTo(),
-                exercise.getWorkflowStatus(),
+                ExerciseLifecycle.workflowStatus(process),
+                ExerciseLifecycle.submissionStatus(process),
                 exercise.getOfficialScenarioId(),
                 exercise.getSubmittedAt(),
-                exercise.canDelete(),
-                exercise.canSubmit(),
-                exercise.canEdit(),
+                ExerciseLifecycle.canDelete(process),
+                ExerciseLifecycle.canSubmit(exercise.hasOfficialScenario(), process),
+                ExerciseLifecycle.canEdit(process),
                 exercise.getVersion(),
                 exercise.getCreatedAt(),
                 progress == null ? null : progress.currentStep(),
@@ -519,104 +526,92 @@ public class ExerciseService {
                 new ExerciseSnapshot(toolkitView, subtasks, kpis, syncDate));
     }
 
-    private Map<UUID, ReviewProgress> reviewProgressFor(List<RstExercise> items) {
+    private ProcessInstance processOf(UUID exerciseId) {
+        return workflows.findByExerciseId(exerciseId).orElse(null);
+    }
+
+    private Map<UUID, ProcessInstance> processesOf(List<RstExercise> items) {
+        if (items.isEmpty()) {
+            return Map.of();
+        }
+        return workflows.findByExerciseIdIn(items.stream().map(RstExercise::getId).toList())
+                .stream()
+                .collect(Collectors.toMap(ProcessInstance::getExerciseId, Function.identity()));
+    }
+
+    private Map<UUID, ReviewProgress> reviewProgressFor(
+            List<RstExercise> items, Map<UUID, ProcessInstance> processes) {
         List<RstExercise> tracked = items.stream()
-                .filter(item -> "UNDER_REVIEW".equals(item.getWorkflowStatus())
-                        || "RETURNED".equals(item.getWorkflowStatus()))
+                .filter(item -> processes.get(item.getId()) != null || item.getSubmittedAt() != null)
                 .toList();
         if (tracked.isEmpty()) {
             return Map.of();
         }
-        List<UUID> trackedIds = tracked.stream().map(RstExercise::getId).toList();
-        List<Submission> submissionRows = submissions.findByExerciseIdIn(trackedIds);
-        if (submissionRows.isEmpty()) {
+        Map<UUID, ProcessInstance> workflowByExercise = new HashMap<>();
+        for (RstExercise exercise : tracked) {
+            ProcessInstance workflow = processes.get(exercise.getId());
+            if (workflow != null) {
+                workflowByExercise.put(exercise.getId(), workflow);
+            }
+        }
+        if (workflowByExercise.isEmpty()) {
             return Map.of();
         }
-        Map<UUID, Submission> submissionByExercise = submissionRows.stream()
-                .collect(Collectors.toMap(Submission::getExerciseId, Function.identity()));
-        Map<UUID, WorkflowInstance> workflowBySubmission = workflows
-                .findBySubmissionIdIn(submissionRows.stream().map(Submission::getId).toList())
-                .stream()
-                .collect(Collectors.toMap(WorkflowInstance::getSubmissionId, Function.identity()));
         Set<String> ccgids = new HashSet<>();
-        workflowBySubmission.values().forEach(workflow -> {
-            workflow.findCurrentReadyStep()
-                    .map(WorkflowStepAssignment::getAssigneeCcgid)
+        workflowByExercise.values().forEach(workflow -> {
+            workflow.findCurrentPendingTask()
+                    .flatMap(ProcessTask::findAnyPendingActor)
+                    .map(TaskActor::getCcgid)
                     .ifPresent(ccgids::add);
-            workflow.getActions().forEach(action -> {
-                if (action.getActorCcgid() != null) {
-                    ccgids.add(action.getActorCcgid());
+            workflow.getTasks().forEach(task -> task.getActors().forEach(actor -> {
+                if (actor.getCcgid() != null) {
+                    ccgids.add(actor.getCcgid());
                 }
-            });
+            }));
         });
         Map<String, String> names = resolveDisplayNames(ccgids);
         Map<UUID, ReviewProgress> result = new HashMap<>();
         for (RstExercise exercise : tracked) {
-            Submission submission = submissionByExercise.get(exercise.getId());
-            if (submission == null) {
+            ProcessInstance workflow = workflowByExercise.get(exercise.getId());
+            if (workflow == null) {
                 continue;
             }
-            WorkflowInstance workflow = workflowBySubmission.get(submission.getId());
-            if ("RETURNED".equals(exercise.getWorkflowStatus())) {
-                WorkflowAction returned = lastReturn(workflow);
+            if ("RETURNED".equals(workflow.submissionStatus())) {
+                TaskActor returned = WorkflowAging.lastReturn(workflow);
                 if (returned == null) {
                     continue;
                 }
                 result.put(exercise.getId(), new ReviewProgress(
-                        returned.getStepNo(),
-                        returned.getActorRoleCode(),
-                        displayName(names, returned.getActorCcgid()),
+                        null,
+                        null,
+                        null,
                         returned.getComments(),
-                        returned.getActionAt()));
+                        null));
                 continue;
             }
-            WorkflowStepAssignment ready = workflow == null
-                    ? null
-                    : workflow.findCurrentReadyStep().orElse(null);
+            if (!workflow.isOpen()) {
+                continue;
+            }
+            ProcessTask ready = workflow.findCurrentPendingTask().orElse(null);
+            TaskActor pending = ready == null ? null : ready.findAnyPendingActor().orElse(null);
             String role = ready != null
-                    ? ready.getRequiredRoleCode()
-                    : roleForStep(submission.getCurrentStep());
-            String supervisorPositionId = exercise.getToolkitSnapshot() == null
-                    ? null
-                    : exercise.getToolkitSnapshot().getSupervisorPositionId();
-            String center = exercise.getToolkitSnapshot() == null
-                    ? null
-                    : exercise.getToolkitSnapshot().getCenter();
-            String domain = exercise.getToolkitSnapshot() == null
-                    ? null
-                    : exercise.getToolkitSnapshot().getDomain();
-            String positionId = ready == null
-                    ? null
-                    : (ready.getAssigneePositionId() != null && !ready.getAssigneePositionId().isBlank()
-                            ? ready.getAssigneePositionId()
-                            : workflowRouter.positionIdOrNull(
-                                    supervisorPositionId, center, domain, ready.getRequiredRoleCode()));
-            String reviewer = ready == null
+                    ? ready.getNode().roleCode()
+                    : roleForStep(workflow.getCurrentStep());
+            String positionId = pending == null ? null : pending.getPositionId();
+            String reviewer = ready == null || pending == null
                     ? null
                     : firstNonBlank(
-                            workflowRouter.occupantName(ready.getRequiredRoleCode(), positionId),
-                            displayName(names, ready.getAssigneeCcgid()));
+                            workflowRouter.occupantName(ready.getNode().roleCode(), positionId),
+                            displayName(names, pending.getCcgid()));
             Instant agingFrom = WorkflowAging.currentStepStartedAt(workflow, exercise.getSubmittedAt());
             result.put(exercise.getId(), new ReviewProgress(
-                    submission.getCurrentStep(),
+                    workflow.getCurrentStep(),
                     role,
                     reviewer,
                     null,
                     agingFrom));
         }
         return result;
-    }
-
-    private static WorkflowAction lastReturn(WorkflowInstance workflow) {
-        if (workflow == null) {
-            return null;
-        }
-        return workflow.getActions().stream()
-                .filter(action -> "RETURN".equals(action.getActionType()))
-                .max(Comparator
-                        .comparing(WorkflowAction::getActionAt)
-                        .thenComparingInt(WorkflowAction::getActionSeq))
-                .orElse(null);
     }
 
     private Map<String, String> resolveDisplayNames(Set<String> ccgids) {
@@ -648,15 +643,8 @@ public class ExerciseService {
     }
 
     private static String roleForStep(Short step) {
-        if (step == null) {
-            return null;
-        }
-        return switch (step) {
-            case 1 -> "MANAGER";
-            case 2 -> "CDH";
-            case 3 -> "LTH";
-            default -> null;
-        };
+        TaskNode node = TaskNode.reviewOf(step);
+        return node == null ? null : node.roleCode();
     }
 
     private record ReviewProgress(
@@ -694,30 +682,17 @@ public class ExerciseService {
     }
 
     private BigDecimal productionSupport(UUID exerciseId) {
-        List<ExerciseProductionSupportItem> items =
-                supportItems.findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(exerciseId);
-        if (items.isEmpty()) {
-            return BigDecimal.ZERO;
-        }
-        ExerciseTeamSetup setup = teamSetups.findById(exerciseId).orElse(null);
-        BigDecimal workingDays = workingDaysService.workingDaysPerYear(exerciseId);
-        BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup, workingDays);
-        BigDecimal total = BigDecimal.ZERO;
-        for (ExerciseProductionSupportItem item : items) {
-            try {
-                total = total.add(SupportWorkloadMath.derive(item, workingDays, fteHours).supportFte());
-            } catch (IllegalArgumentException ignored) {
-                // skip incomplete support rows
-            }
-        }
-        return total;
+        return SupportWorkloadMath.totalSupportFte(
+                supportItems.findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(exerciseId),
+                teamSetups.findById(exerciseId).orElse(null),
+                workingDaysService.workingDaysPerYear(exerciseId));
     }
 
-    private static Instant archivedAt(RstExercise exercise) {
-        if ("APPROVED".equals(exercise.getWorkflowStatus())) {
+    private static Instant archivedAt(RstExercise exercise, ProcessInstance process) {
+        if (ExerciseLifecycle.isApproved(process)) {
             return exercise.getValidatedAt();
         }
-        if ("REJECTED".equals(exercise.getWorkflowStatus())) {
+        if (ExerciseLifecycle.isRejected(process)) {
             return exercise.getUpdatedAt();
         }
         return null;

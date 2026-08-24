@@ -1,4 +1,4 @@
-package com.cmacgm.gbs.rst.api.holidaytemplate.domain;
+package com.cmacgm.gbs.rst.api.workingdays.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -6,7 +6,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
 
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator.MonthDayCounts;
+import com.cmacgm.gbs.rst.api.workingdays.domain.WorkingDaysCalculator.MonthDayCounts;
 import org.junit.jupiter.api.Test;
 
 class WorkingDaysCalculatorMonthCountsTests {

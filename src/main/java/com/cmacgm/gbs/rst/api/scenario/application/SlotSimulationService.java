@@ -28,7 +28,7 @@ import com.cmacgm.gbs.rst.api.cycletime.domain.CycleTimeBaseline;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WeekendCode;
+import com.cmacgm.gbs.rst.api.workingdays.domain.WeekendCode;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SlotMath;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SlotMath.SlaQueue;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
@@ -260,7 +260,13 @@ public class SlotSimulationService {
 
         List<SlotShift> shiftRows = toSlotShifts(scenario);
         ExerciseTeamSetup team = teamSetups.findById(exerciseId).orElse(null);
-        String weekendCode = WeekendCode.storedValue(team != null ? team.getWeekendCode() : null);
+        String weekendCode;
+        try {
+            weekendCode = WeekendCode.storedValue(team != null ? team.getWeekendCode() : null);
+        } catch (IllegalArgumentException ex) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-weekend-code", ex.getMessage());
+        }
         Map<String, List<BigDecimal>> shiftSeries = rebuildShiftSeries(rows, shiftRows, weekendCode);
         boolean applicability = team != null
                 && SlotMath.applicabilityOn(team.getSlaType(), team.getSlaTurnaroundMinutes());
@@ -472,7 +478,13 @@ public class SlotSimulationService {
         BigDecimal automation = team.getAutomationRatio() != null
                 ? team.getAutomationRatio() : BigDecimal.ZERO;
         BigDecimal cycleTime = requirePositive(baseline.getMedianSeconds(), "Cycle time");
-        String weekendCode = WeekendCode.storedValue(team.getWeekendCode());
+        String weekendCode;
+        try {
+            weekendCode = WeekendCode.storedValue(team.getWeekendCode());
+        } catch (IllegalArgumentException ex) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-weekend-code", ex.getMessage());
+        }
         BigDecimal slaMinutes = team.getSlaTurnaroundMinutes() != null
                 ? team.getSlaTurnaroundMinutes() : BigDecimal.ZERO;
 

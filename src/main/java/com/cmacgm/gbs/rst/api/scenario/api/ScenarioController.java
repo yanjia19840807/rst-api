@@ -42,7 +42,7 @@ import org.springframework.web.bind.annotation.RestController;
  * Supervisor Scenario CRUD, Official, forecast, and simulation endpoints.
  */
 @RestController
-@RequestMapping("/api/v1/supervisor/exercises/{exerciseId}/scenarios")
+@RequestMapping("/api/v1/exercises/{exerciseId}/scenarios")
 @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
 public class ScenarioController {
 

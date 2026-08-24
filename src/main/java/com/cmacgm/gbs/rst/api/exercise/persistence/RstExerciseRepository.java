@@ -1,6 +1,5 @@
 package com.cmacgm.gbs.rst.api.exercise.persistence;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -56,20 +55,24 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
     boolean existsByToolkitId(UUID toolkitId);
 
     /**
-     * Archived/validated Exercises for a Toolkit, newest first (use Pageable for top-N).
+     * Latest LTH-approved Exercise for a Toolkit (archive seed).
      */
     @EntityGraph(attributePaths = {"toolkitSnapshot"})
     @Query("""
             select e from RstExercise e
             where e.toolkitId = :toolkitId
               and e.deletedAt is null
-              and e.workflowStatus in :statuses
+              and exists (
+                  select 1 from ProcessInstance w
+                  join w.tasks t
+                  where w.exerciseId = e.id
+                    and w.status = com.cmacgm.gbs.rst.api.workflow.domain.ProcessStatus.FINISHED
+                    and t.node = com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LTH
+                    and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.APPROVED
+              )
             order by coalesce(e.validatedAt, e.updatedAt) desc, e.updatedAt desc, e.id desc
             """)
-    List<RstExercise> findArchivedByToolkit(
-            @Param("toolkitId") UUID toolkitId,
-            @Param("statuses") Collection<String> statuses,
-            Pageable pageable);
+    List<RstExercise> findApprovedByToolkit(@Param("toolkitId") UUID toolkitId, Pageable pageable);
 
     /**
      * APPROVED Exercises for RST Repository, with Toolkit snapshot and Shared KPI lines.
@@ -80,7 +83,14 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
     @Query("""
             select e from RstExercise e
             where e.deletedAt is null
-              and e.workflowStatus = 'APPROVED'
+              and exists (
+                  select 1 from ProcessInstance w
+                  join w.tasks t
+                  where w.exerciseId = e.id
+                    and w.status = com.cmacgm.gbs.rst.api.workflow.domain.ProcessStatus.FINISHED
+                    and t.node = com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LTH
+                    and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.APPROVED
+              )
             order by e.submittedAt desc, e.exerciseCode asc, e.id asc
             """)
     List<RstExercise> findApprovedRepositoryExercises();
@@ -94,13 +104,20 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
     @Query("""
             select e from RstExercise e
             where e.deletedAt is null
-              and e.workflowStatus = 'APPROVED'
+              and exists (
+                  select 1 from ProcessInstance w
+                  join w.tasks t
+                  where w.exerciseId = e.id
+                    and w.status = com.cmacgm.gbs.rst.api.workflow.domain.ProcessStatus.FINISHED
+                    and t.node = com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LTH
+                    and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.APPROVED
+              )
             order by e.submittedAt desc, e.exerciseCode asc, e.id asc
             """)
     List<RstExercise> findApprovedSupportRepositoryExercises();
 
     /**
-     * UNDER_REVIEW Exercises for Validation Workflow, with Toolkit snapshot and Shared KPI lines.
+     * OPEN processes for Validation Workflow, with Toolkit snapshot and Shared KPI lines.
      *
      * @return in-review exercises
      */
@@ -108,16 +125,28 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
     @Query("""
             select e from RstExercise e
             where e.deletedAt is null
-              and e.workflowStatus = 'UNDER_REVIEW'
+              and exists (
+                  select 1 from ProcessInstance w
+                  where w.exerciseId = e.id
+                    and w.status = com.cmacgm.gbs.rst.api.workflow.domain.ProcessStatus.OPEN
+              )
             order by e.submittedAt desc, e.exerciseCode asc, e.id asc
             """)
     List<RstExercise> findUnderReviewValidationExercises();
 
     /**
-     * Counts non-deleted Exercises in one workflow status.
+     * Counts Exercises whose process is currently OPEN.
      *
-     * @param workflowStatus workflow status
-     * @return count
+     * @return under-review count
      */
-    long countByDeletedAtIsNullAndWorkflowStatus(String workflowStatus);
+    @Query("""
+            select count(e) from RstExercise e
+            where e.deletedAt is null
+              and exists (
+                  select 1 from ProcessInstance w
+                  where w.exerciseId = e.id
+                    and w.status = com.cmacgm.gbs.rst.api.workflow.domain.ProcessStatus.OPEN
+              )
+            """)
+    long countUnderReview();
 }

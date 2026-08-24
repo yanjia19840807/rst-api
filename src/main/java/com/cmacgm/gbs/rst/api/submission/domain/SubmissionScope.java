@@ -10,6 +10,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
+import com.cmacgm.gbs.rst.api.workflow.domain.ProcessInstance;
+
 /** Immutable authorization scope frozen at submit time. */
 @Entity
 @Table(name = "submission_scope")
@@ -19,8 +21,8 @@ public class SubmissionScope {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "submission_id", nullable = false)
-    private Submission submission;
+    @JoinColumn(name = "process_instance_id", nullable = false)
+    private ProcessInstance workflowInstance;
 
     @Column(name = "scope_key", nullable = false, length = 64)
     private String scopeKey;
@@ -102,8 +104,13 @@ public class SubmissionScope {
         return scope;
     }
 
-    void attach(Submission submission) {
-        this.submission = submission;
+    /**
+     * Binds this scope row to its workflow instance.
+     *
+     * @param workflowInstance parent process
+     */
+    public void attach(ProcessInstance workflowInstance) {
+        this.workflowInstance = workflowInstance;
     }
 
     public UUID getId() { return id; }

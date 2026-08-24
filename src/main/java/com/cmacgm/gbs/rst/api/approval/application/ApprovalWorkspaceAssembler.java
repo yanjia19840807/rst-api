@@ -1,11 +1,9 @@
 package com.cmacgm.gbs.rst.api.approval.application;
 
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.approval.api.dto.ApprovalWorkspaceView;
 import com.cmacgm.gbs.rst.api.approval.api.dto.ApprovalWorkspaceView.ApprovalCurrentHop;
@@ -13,16 +11,17 @@ import com.cmacgm.gbs.rst.api.approval.api.dto.ApprovalWorkspaceView.ApprovalHis
 import com.cmacgm.gbs.rst.api.approval.api.dto.ApprovalWorkspaceView.ApprovalStatusBar;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
-import com.cmacgm.gbs.rst.api.submission.domain.Submission;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
-import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowAction;
-import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowInstance;
-import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowStepAssignment;
+import com.cmacgm.gbs.rst.api.workflow.domain.ActorStatus;
+import com.cmacgm.gbs.rst.api.workflow.domain.ActorType;
+import com.cmacgm.gbs.rst.api.workflow.domain.ProcessInstance;
+import com.cmacgm.gbs.rst.api.workflow.domain.ProcessTask;
+import com.cmacgm.gbs.rst.api.workflow.domain.TaskActor;
+import com.cmacgm.gbs.rst.api.workflow.domain.TaskNode;
 import org.springframework.stereotype.Component;
 
 /**
- * Builds the Approval tab workspace. In-progress and completed layouts are assembled
- * on separate paths so Current / Next never mix with a finished-task highlight.
+ * Builds the Approval tab workspace from process tasks and actors.
  */
 @Component
 public class ApprovalWorkspaceAssembler {
@@ -42,20 +41,18 @@ public class ApprovalWorkspaceAssembler {
     }
 
     /**
-     * Assembles the in-progress workspace (current hop card, Next, past history only).
+     * Assembles the in-progress workspace.
      *
-     * @param submission submission
-     * @param workflow workflow instance
-     * @param exercise exercise (Timesheet supervisor position)
+     * @param workflow process instance
+     * @param exercise exercise
      * @param displayNames actor ccgid → display name
      * @return in-progress workspace
      */
     public ApprovalWorkspaceView inProgress(
-            Submission submission,
-            WorkflowInstance workflow,
+            ProcessInstance workflow,
             RstExercise exercise,
             Map<String, String> displayNames) {
-        Waiting waiting = waiting(submission, workflow, exercise, displayNames);
+        Waiting waiting = waiting(workflow, exercise, displayNames);
         WorkflowRouter.NextHop next = workflowRouter.previewNext(
                 waiting.role(),
                 supervisorPosition(exercise),
@@ -72,106 +69,106 @@ public class ApprovalWorkspaceAssembler {
     }
 
     /**
-     * Assembles the completed-task workspace (status strip + full history, highlight mine).
+     * Assembles the completed-task workspace.
      *
-     * @param submission submission
-     * @param workflow workflow instance
+     * @param workflow process instance
      * @param exercise exercise
      * @param principal viewer; used only to highlight their acted hop
      * @param displayNames actor ccgid → display name
      * @return completed workspace
      */
     public ApprovalWorkspaceView completed(
-            Submission submission,
-            WorkflowInstance workflow,
+            ProcessInstance workflow,
             RstExercise exercise,
             RstPrincipal principal,
             Map<String, String> displayNames) {
-        Waiting waiting = waiting(submission, workflow, exercise, displayNames);
-        Short mineStep = actedStepNo(workflow, exercise, principal);
+        Waiting waiting = waiting(workflow, exercise, displayNames);
+        Short mineStep = actedStepNo(workflow, principal);
         return new ApprovalWorkspaceView(
                 MODE_COMPLETED,
-                completedStatusBar(submission, waiting),
+                completedStatusBar(workflow, waiting),
                 null,
                 null,
                 null,
                 history(workflow, displayNames, mineStep));
     }
 
-    private ApprovalStatusBar completedStatusBar(Submission submission, Waiting waiting) {
-        if (submission.isOpen()) {
+    private ApprovalStatusBar completedStatusBar(ProcessInstance workflow, Waiting waiting) {
+        if (workflow.isOpen()) {
             return new ApprovalStatusBar("NOW", "Now", waiting.step(), waiting.reviewer());
         }
-        return switch (submission.getStatus()) {
+        return switch (workflow.submissionStatus()) {
             case "APPROVED" -> new ApprovalStatusBar("APPROVED", "Approved", null, null);
             case "RETURNED" -> new ApprovalStatusBar("RETURNED", "Returned", null, null);
+            case "REJECTED" -> new ApprovalStatusBar("REJECTED", "Rejected", null, null);
             case "WITHDRAWN" -> new ApprovalStatusBar("WITHDRAWN", "Withdrawn", null, null);
             default -> new ApprovalStatusBar(
-                    "NOW", submission.getStatus(), waiting.step(), waiting.reviewer());
+                    "NOW", workflow.submissionStatus(), waiting.step(), waiting.reviewer());
         };
     }
 
     private Waiting waiting(
-            Submission submission,
-            WorkflowInstance workflow,
+            ProcessInstance workflow,
             RstExercise exercise,
             Map<String, String> displayNames) {
-        String supervisorPositionId = supervisorPosition(exercise);
-        WorkflowStepAssignment ready = workflow.findCurrentReadyStep().orElse(null);
+        ProcessTask ready = workflow.findCurrentPendingTask().orElse(null);
         String role = ready != null
-                ? ready.getRequiredRoleCode()
+                ? ready.getNode().roleCode()
                 : roleForStep(workflow.getCurrentStep());
-        String step = submission.isOpen() ? reviewStageLabel(role) : null;
+        String step = workflow.isOpen() ? reviewStageLabel(role) : null;
         String reviewer = null;
         if (ready != null) {
-            String positionId = resolveStepPosition(
-                    ready, supervisorPositionId, toolkitCenter(exercise), toolkitDomain(exercise));
-            reviewer = firstNonBlank(
-                    workflowRouter.occupantName(ready.getRequiredRoleCode(), positionId),
-                    ready.getAssigneeCcgid() == null
-                            ? null
-                            : displayNames.get(ready.getAssigneeCcgid()));
+            TaskActor actor = ready.findAnyPendingActor().orElse(null);
+            if (actor != null) {
+                reviewer = firstNonBlank(
+                        workflowRouter.occupantName(ready.getNode().roleCode(), actor.getPositionId()),
+                        actor.getCcgid() == null ? null : displayNames.get(actor.getCcgid()));
+            }
         }
         return new Waiting(role, step, reviewer);
     }
 
     private List<ApprovalHistoryRow> history(
-            WorkflowInstance workflow,
+            ProcessInstance workflow,
             Map<String, String> displayNames,
             Short mineStep) {
-        List<WorkflowAction> actions = new ArrayList<>(workflow.getActions());
-        actions.sort(Comparator
-                .comparing(WorkflowAction::getActionAt)
-                .thenComparingInt(WorkflowAction::getActionSeq));
-        List<ApprovalHistoryRow> rows = new ArrayList<>();
-        for (WorkflowAction action : actions) {
-            String decision = historyDecision(action.getActionType());
-            if (decision == null) {
-                continue;
-            }
-            boolean mine = mineStep != null
-                    && action.getStepNo() == mineStep
-                    && ("APPROVE".equals(action.getActionType())
-                            || "RETURN".equals(action.getActionType()));
-            String actor = action.getActorCcgid() == null
-                    ? null
-                    : displayNames.get(action.getActorCcgid());
-            rows.add(new ApprovalHistoryRow(
-                    action.getId(),
-                    action.getStepNo(),
-                    historyStep(workflow, action),
-                    roleLabel(action.getActorRoleCode()),
-                    actor,
-                    decision,
-                    action.getComments(),
-                    action.getActionAt(),
-                    mine));
-        }
-        return List.copyOf(rows);
+        return workflow.getTasks().stream()
+                .flatMap(task -> task.getActors().stream().map(actor -> historyRow(
+                        task, actor, displayNames, mineStep)))
+                .filter(row -> row != null)
+                .sorted(Comparator.comparing(
+                        ApprovalHistoryRow::completedAt, Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
     }
 
-    private Short actedStepNo(
-            WorkflowInstance workflow, RstExercise exercise, RstPrincipal principal) {
+    private ApprovalHistoryRow historyRow(
+            ProcessTask task,
+            TaskActor actor,
+            Map<String, String> displayNames,
+            Short mineStep) {
+        String decision = historyDecision(actor);
+        if (decision == null) {
+            return null;
+        }
+        boolean mine = mineStep != null
+                && task.getNodeOrder() == mineStep
+                && (actor.getStatus() == ActorStatus.APPROVED
+                        || actor.getStatus() == ActorStatus.RETURNED
+                        || actor.getStatus() == ActorStatus.REJECTED)
+                && actor.getActorType() != ActorType.INITIATOR;
+        return new ApprovalHistoryRow(
+                actor.getId(),
+                task.getNodeOrder(),
+                historyStep(task, actor),
+                roleLabel(task.getNode().roleCode()),
+                actor.getCcgid() == null ? null : displayNames.get(actor.getCcgid()),
+                decision,
+                actor.getComments(),
+                actor.getActedAt(),
+                mine);
+    }
+
+    private Short actedStepNo(ProcessInstance workflow, RstPrincipal principal) {
         if (principal == null || workflow == null) {
             return null;
         }
@@ -179,94 +176,40 @@ public class ApprovalWorkspaceAssembler {
         if (positions.isEmpty()) {
             return null;
         }
-        return workflow.getActions().stream()
-                .filter(action -> "APPROVE".equals(action.getActionType())
-                        || "RETURN".equals(action.getActionType()))
-                .filter(action -> {
-                    String assigned = positionForAction(workflow, exercise, action);
-                    return assigned != null && positions.contains(assigned);
-                })
-                .map(WorkflowAction::getStepNo)
+        return workflow.getTasks().stream()
+                .flatMap(task -> task.getActors().stream()
+                        .filter(actor -> actor.getStatus() == ActorStatus.APPROVED
+                                || actor.getStatus() == ActorStatus.RETURNED
+                                || actor.getStatus() == ActorStatus.REJECTED)
+                        .filter(actor -> actor.getActorType() != ActorType.INITIATOR)
+                        .filter(actor -> actor.getPositionId() != null
+                                && positions.contains(actor.getPositionId()))
+                        .map(actor -> task.getNodeOrder()))
                 .max(Short::compare)
                 .orElse(null);
     }
 
-    private String positionForAction(
-            WorkflowInstance workflow, RstExercise exercise, WorkflowAction action) {
-        String supervisorPositionId = supervisorPosition(exercise);
-        String center = toolkitCenter(exercise);
-        String domain = toolkitDomain(exercise);
-        return workflow.getSteps().stream()
-                .filter(step -> step.getStepNo() == action.getStepNo())
-                .findFirst()
-                .map(step -> resolveStepPosition(step, supervisorPositionId, center, domain))
-                .orElseGet(() -> workflowRouter.positionIdOrNull(
-                        supervisorPositionId,
-                        center,
-                        domain,
-                        action.getActorRoleCode()));
-    }
-
-    private String resolveStepPosition(
-            WorkflowStepAssignment step, String supervisorPositionId, String center, String domain) {
-        if (step == null) {
-            return null;
-        }
-        if (hasText(step.getAssigneePositionId())) {
-            return step.getAssigneePositionId();
-        }
-        return workflowRouter.positionIdOrNull(supervisorPositionId, center, domain, step.getRequiredRoleCode());
-    }
-
-    private static String supervisorPosition(RstExercise exercise) {
-        if (exercise == null || exercise.getToolkitSnapshot() == null) {
-            return null;
-        }
-        return exercise.getToolkitSnapshot().getSupervisorPositionId();
-    }
-
-    private static String toolkitCenter(RstExercise exercise) {
-        if (exercise == null || exercise.getToolkitSnapshot() == null) {
-            return null;
-        }
-        return exercise.getToolkitSnapshot().getCenter();
-    }
-
-    private static String toolkitDomain(RstExercise exercise) {
-        if (exercise == null || exercise.getToolkitSnapshot() == null) {
-            return null;
-        }
-        return exercise.getToolkitSnapshot().getDomain();
-    }
-
-    /**
-     * History Step column: stage where the action was taken.
-     * Submit / Withdraw happen on the Supervisor workbench; Approve / Return on a review hop.
-     */
-    private static String historyStep(WorkflowInstance workflow, WorkflowAction action) {
-        if ("SUBMIT".equals(action.getActionType()) || "WITHDRAW".equals(action.getActionType())) {
+    private static String historyStep(ProcessTask task, TaskActor actor) {
+        if (actor.getActorType() == ActorType.INITIATOR
+                || actor.getStatus() == ActorStatus.WITHDRAWN
+                || !task.getNode().isReview()) {
             return "Supervisor Workbench";
         }
-        short stepNo = action.getStepNo();
-        return workflow.getSteps().stream()
-                .filter(step -> step.getStepNo() == stepNo)
-                .findFirst()
-                .map(step -> reviewStageLabel(step.getRequiredRoleCode()))
-                .orElseGet(() -> {
-                    String role = roleForStep(stepNo);
-                    return reviewStageLabel(role != null ? role : action.getActorRoleCode());
-                });
+        return reviewStageLabel(task.getNode().roleCode());
     }
 
-    private static String historyDecision(String actionType) {
-        if (actionType == null) {
+    private static String historyDecision(TaskActor actor) {
+        if (!actor.getStatus().isHistory()) {
             return null;
         }
-        return switch (actionType) {
-            case "SUBMIT" -> "Submitted";
-            case "APPROVE" -> "Approved";
-            case "RETURN" -> "Returned";
-            case "WITHDRAW" -> "Withdrawn";
+        if (actor.getStatus() == ActorStatus.APPROVED && actor.getActorType() == ActorType.INITIATOR) {
+            return "Submitted";
+        }
+        return switch (actor.getStatus()) {
+            case APPROVED -> "Approved";
+            case RETURNED -> "Returned";
+            case REJECTED -> "Rejected";
+            case WITHDRAWN -> "Withdrawn";
             default -> null;
         };
     }
@@ -297,15 +240,29 @@ public class ApprovalWorkspaceAssembler {
     }
 
     private static String roleForStep(Short step) {
-        if (step == null) {
+        TaskNode node = TaskNode.reviewOf(step);
+        return node == null ? null : node.roleCode();
+    }
+
+    private static String supervisorPosition(RstExercise exercise) {
+        if (exercise == null || exercise.getToolkitSnapshot() == null) {
             return null;
         }
-        return switch (step) {
-            case 1 -> "MANAGER";
-            case 2 -> "CDH";
-            case 3 -> "LTH";
-            default -> null;
-        };
+        return exercise.getToolkitSnapshot().getSupervisorPositionId();
+    }
+
+    private static String toolkitCenter(RstExercise exercise) {
+        if (exercise == null || exercise.getToolkitSnapshot() == null) {
+            return null;
+        }
+        return exercise.getToolkitSnapshot().getCenter();
+    }
+
+    private static String toolkitDomain(RstExercise exercise) {
+        if (exercise == null || exercise.getToolkitSnapshot() == null) {
+            return null;
+        }
+        return exercise.getToolkitSnapshot().getDomain();
     }
 
     private static String firstNonBlank(String first, String second) {
@@ -313,10 +270,6 @@ public class ApprovalWorkspaceAssembler {
             return first;
         }
         return second;
-    }
-
-    private static boolean hasText(String value) {
-        return value != null && !value.isBlank();
     }
 
     private record Waiting(String role, String step, String reviewer) {

@@ -50,23 +50,23 @@ public class ToolkitService {
     }
 
     @Transactional(readOnly = true)
-    public List<ToolkitResponse> agentToolkits(String ccgid) {
+    public List<ToolkitResponse> listAvailable(String ccgid) {
         return toolkits.findAvailableToAgent(ccgid).stream()
                 .map(ToolkitResponse::from)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public List<ToolkitResponse> supervisorToolkits(String ccgid) {
-        return scopedSupervisorToolkits(ccgid).stream()
+    public List<ToolkitResponse> listManaged(String ccgid) {
+        return scopedManagedToolkits(ccgid).stream()
                 .map(ToolkitResponse::from)
                 .toList();
     }
 
     /**
-     * Lists Supervisor-managed Toolkits, filtered on the server.
+     * Lists Toolkits the principal can manage, filtered on the server.
      *
-     * @param ccgid Supervisor CCGID
+     * @param ccgid manager CCGID
      * @param name optional toolkit name contains
      * @param pl3Name optional exact PL3 name
      * @param page 1-based page
@@ -74,9 +74,9 @@ public class ToolkitService {
      * @return one page of rows and unfiltered PL3 options
      */
     @Transactional(readOnly = true)
-    public ToolkitListView supervisorToolkitList(
+    public ToolkitListView listManaged(
             String ccgid, String name, String pl3Name, int page, int pageSize) {
-        List<Toolkit> scoped = scopedSupervisorToolkits(ccgid);
+        List<Toolkit> scoped = scopedManagedToolkits(ccgid);
         List<String> pl3Names = scoped.stream()
                 .map(Toolkit::getPl3Name)
                 .filter(value -> value != null && !value.isBlank())
@@ -168,7 +168,7 @@ public class ToolkitService {
         toolkit.softDelete(clock.instant());
     }
 
-    private List<Toolkit> scopedSupervisorToolkits(String ccgid) {
+    private List<Toolkit> scopedManagedToolkits(String ccgid) {
         var positions = timesheet.supervisorHierarchy(ccgid).stream()
                 .map(candidate -> candidate.supervisorPositionId())
                 .distinct()

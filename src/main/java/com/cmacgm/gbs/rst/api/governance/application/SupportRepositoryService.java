@@ -21,7 +21,7 @@ import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryRow;
 import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryView;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.WorkingDaysService;
+import com.cmacgm.gbs.rst.api.workingdays.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.supporttaxonomy.api.dto.SupportTaxonomyOption;
 import com.cmacgm.gbs.rst.api.supporttaxonomy.application.SupportTaxonomyService;
 import org.springframework.stereotype.Service;

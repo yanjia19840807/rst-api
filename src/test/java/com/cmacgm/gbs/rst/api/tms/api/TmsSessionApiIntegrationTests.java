@@ -38,11 +38,10 @@ class TmsSessionApiIntegrationTests {
     void seedAgentAndToolkit() {
         jdbcTemplate.update("delete from tms_pause_interval");
         jdbcTemplate.update("delete from tms_session");
-        jdbcTemplate.update("delete from workflow_action");
-        jdbcTemplate.update("delete from workflow_step_assignment");
-        jdbcTemplate.update("delete from workflow_instance");
+        jdbcTemplate.update("delete from task_actor");
+        jdbcTemplate.update("delete from process_task");
         jdbcTemplate.update("delete from submission_scope");
-        jdbcTemplate.update("delete from submission");
+        jdbcTemplate.update("delete from process_instance");
         jdbcTemplate.update("delete from validation_result");
         jdbcTemplate.update("delete from slot_simulation_result");
         jdbcTemplate.update("delete from daily_simulation_result");
@@ -331,7 +330,7 @@ class TmsSessionApiIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].supervisorPositionId").value("POS-SUP-001"));
 
-        String response = mockMvc.perform(post("/api/v1/supervisor/exercises")
+        String response = mockMvc.perform(post("/api/v1/exercises")
                         .header("X-Dev-Ccgid", "SUPERVISOR001")
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -351,7 +350,7 @@ class TmsSessionApiIntegrationTests {
                 .andReturn().getResponse().getContentAsString();
         String exerciseId = JsonPath.read(response, "$.exercise.id");
 
-        mockMvc.perform(get("/api/v1/supervisor/exercises/{id}", exerciseId)
+        mockMvc.perform(get("/api/v1/exercises/{id}", exerciseId)
                         .header("X-Dev-Ccgid", "SUPERVISOR001")
                         .header("X-Dev-Role", "SUPERVISOR"))
                 .andExpect(status().isOk())

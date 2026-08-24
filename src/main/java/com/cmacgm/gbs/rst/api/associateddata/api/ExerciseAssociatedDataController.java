@@ -43,7 +43,7 @@ import org.springframework.web.multipart.MultipartFile;
  * Supervisor Associated Data endpoints under an Exercise.
  */
 @RestController
-@RequestMapping("/api/v1/supervisor/exercises/{exerciseId}")
+@RequestMapping("/api/v1/exercises/{exerciseId}")
 @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
 public class ExerciseAssociatedDataController {
 

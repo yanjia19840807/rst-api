@@ -13,8 +13,7 @@ class WorkflowAgingTests {
     @Test
     void firstStepUsesSubmittedAt() {
         Instant submitted = Instant.parse("2026-01-01T00:00:00Z");
-        assertThat(WorkflowAging.currentStepStartedAt(List.of(), submitted)).isEqualTo(submitted);
-        assertThat(WorkflowAging.currentStepStartedAt((WorkflowInstance) null, submitted)).isEqualTo(submitted);
+        assertThat(WorkflowAging.currentStepStartedAt((ProcessInstance) null, submitted)).isEqualTo(submitted);
     }
 
     @Test
@@ -22,10 +21,15 @@ class WorkflowAgingTests {
         Instant submitted = Instant.parse("2026-01-01T00:00:00Z");
         Instant managerApproved = Instant.parse("2026-01-10T00:00:00Z");
         Instant cdhApproved = Instant.parse("2026-01-12T00:00:00Z");
-        List<WorkflowAction> actions = List.of(
-                WorkflowAction.approve((short) 1, "m1", "MANAGER", null, UUID.randomUUID(), managerApproved),
-                WorkflowAction.approve((short) 2, "c1", "CDH", null, UUID.randomUUID(), cdhApproved));
-        assertThat(WorkflowAging.currentStepStartedAt(actions, submitted)).isEqualTo(cdhApproved);
+        ProcessInstance instance = ProcessInstance.start(
+                UUID.randomUUID(), null, "s1", UUID.randomUUID(), submitted);
+        instance.openReview(TaskNode.MANAGER, List.of(new ProcessInstance.Assignee("P1", "m1")), submitted);
+        TaskActor manager = instance.findCurrentPendingTask().orElseThrow().findAnyPendingActor().orElseThrow();
+        instance.approve(manager, null, UUID.randomUUID(), managerApproved);
+        instance.openReview(TaskNode.CDH, List.of(new ProcessInstance.Assignee("P2", "c1")), managerApproved);
+        TaskActor cdh = instance.findCurrentPendingTask().orElseThrow().findAnyPendingActor().orElseThrow();
+        instance.approve(cdh, null, UUID.randomUUID(), cdhApproved);
+        assertThat(WorkflowAging.currentStepStartedAt(instance, submitted)).isEqualTo(cdhApproved);
     }
 
     @Test

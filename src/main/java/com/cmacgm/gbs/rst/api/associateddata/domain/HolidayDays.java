@@ -7,7 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.HolidayDayKind;
+import com.cmacgm.gbs.rst.api.workingdays.domain.HolidayDayKind;
 
 /**
  * Indexes Exercise holiday rows by date using Excel PH Dates types.

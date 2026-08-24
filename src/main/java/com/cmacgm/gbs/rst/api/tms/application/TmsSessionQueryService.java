@@ -72,15 +72,15 @@ public class TmsSessionQueryService {
     }
 
     /**
-     * Returns a session visible to a Supervisor within their toolkit scope.
+     * Returns a session visible within the principal's managed toolkit scope.
      *
-     * @param supervisorCcgid supervisor CCGID
+     * @param ccgid manager CCGID
      * @param sessionNo session number
      * @return session detail
      */
     @Transactional(readOnly = true)
-    public TmsSessionResponse getForSupervisor(String supervisorCcgid, String sessionNo) {
-        Set<UUID> scopedToolkitIds = scopedToolkitIds(supervisorCcgid);
+    public TmsSessionResponse getForTeam(String ccgid, String sessionNo) {
+        Set<UUID> scopedToolkitIds = scopedToolkitIds(ccgid);
         TmsSession session = sessionRepository.findBySessionNo(sessionNo)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
@@ -123,11 +123,11 @@ public class TmsSessionQueryService {
     }
 
     /**
-     * Lists completed/filtered TMS sessions for toolkits owned by the Supervisor.
+     * Lists completed/filtered TMS sessions for toolkits in the managed scope.
      */
     @Transactional(readOnly = true)
-    public PageResponse<TmsSessionResponse> sessionsForSupervisor(
-            String supervisorCcgid,
+    public PageResponse<TmsSessionResponse> sessionsForTeam(
+            String ccgid,
             String agentCcgid,
             UUID toolkitId,
             String pl3Code,
@@ -139,7 +139,7 @@ public class TmsSessionQueryService {
             LocalDate dateTo,
             int page,
             int pageSize) {
-        Set<UUID> scopedToolkitIds = scopedToolkitIds(supervisorCcgid);
+        Set<UUID> scopedToolkitIds = scopedToolkitIds(ccgid);
         if (toolkitId != null && !scopedToolkitIds.contains(toolkitId)) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
@@ -150,7 +150,7 @@ public class TmsSessionQueryService {
         String filterAgentCcgid = null;
         if (agentCcgid != null && !agentCcgid.isBlank()) {
             String trimmed = agentCcgid.trim();
-            boolean onTeam = timesheet.teamAgents(supervisorCcgid).stream()
+            boolean onTeam = timesheet.teamAgents(ccgid).stream()
                     .anyMatch(agent -> agent.ccgid().equalsIgnoreCase(trimmed));
             if (!onTeam) {
                 throw new ApiException(
@@ -178,11 +178,11 @@ public class TmsSessionQueryService {
     }
 
     /**
-     * Lists team agents under the Supervisor for TMS filters.
+     * Lists team agents under the current principal for TMS filters.
      */
     @Transactional(readOnly = true)
-    public List<TeamAgent> teamAgents(String supervisorCcgid) {
-        return timesheet.teamAgents(supervisorCcgid);
+    public List<TeamAgent> teamAgents(String ccgid) {
+        return timesheet.teamAgents(ccgid);
     }
 
     @Transactional(readOnly = true)
@@ -235,8 +235,8 @@ public class TmsSessionQueryService {
         return TmsSessionResponse.from(session, now, agentName);
     }
 
-    private Set<UUID> scopedToolkitIds(String supervisorCcgid) {
-        return toolkits.supervisorToolkits(supervisorCcgid).stream()
+    private Set<UUID> scopedToolkitIds(String ccgid) {
+        return toolkits.listManaged(ccgid).stream()
                 .map(ToolkitResponse::id)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }

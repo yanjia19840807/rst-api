@@ -46,11 +46,10 @@ class SupervisorApiIntegrationTests {
     void seedSupervisorAndActiveTimesheet() {
         jdbcTemplate.update("delete from tms_pause_interval");
         jdbcTemplate.update("delete from tms_session");
-        jdbcTemplate.update("delete from workflow_action");
-        jdbcTemplate.update("delete from workflow_step_assignment");
-        jdbcTemplate.update("delete from workflow_instance");
+        jdbcTemplate.update("delete from task_actor");
+        jdbcTemplate.update("delete from process_task");
         jdbcTemplate.update("delete from submission_scope");
-        jdbcTemplate.update("delete from submission");
+        jdbcTemplate.update("delete from process_instance");
         jdbcTemplate.update("delete from validation_result");
         jdbcTemplate.update("delete from slot_simulation_result");
         jdbcTemplate.update("delete from daily_simulation_result");
@@ -135,7 +134,7 @@ class SupervisorApiIntegrationTests {
         String created = createToolkit("Bank Reconciliation Toolkit");
         String toolkitId = JsonPath.read(created, "$.id");
 
-        mockMvc.perform(get("/api/v1/supervisor/toolkits/{id}", toolkitId)
+        mockMvc.perform(get("/api/v1/toolkits/{id}", toolkitId)
                         .header("X-Dev-Role", "SUPERVISOR"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Bank Reconciliation Toolkit"))
@@ -145,7 +144,7 @@ class SupervisorApiIntegrationTests {
                 .andExpect(jsonPath("$.sharedKpiSelections.length()").value(1))
                 .andExpect(jsonPath("$.sharedKpiSelections[0].carrier").value("Carrier A"));
 
-        mockMvc.perform(post("/api/v1/supervisor/toolkits")
+        mockMvc.perform(post("/api/v1/toolkits")
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(createToolkitRequest("Duplicate Toolkit", true)))
@@ -158,33 +157,33 @@ class SupervisorApiIntegrationTests {
     void filtersSupervisorToolkitListByNameAndPl3() throws Exception {
         createToolkit("Bank Reconciliation Toolkit");
 
-        mockMvc.perform(get("/api/v1/supervisor/toolkits")
+        mockMvc.perform(get("/api/v1/toolkits/managed")
                         .header("X-Dev-Role", "SUPERVISOR"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].name").value("Bank Reconciliation Toolkit"))
                 .andExpect(jsonPath("$.pl3Names[0]").value("Bank Reconciliation"));
 
-        mockMvc.perform(get("/api/v1/supervisor/toolkits")
+        mockMvc.perform(get("/api/v1/toolkits/managed")
                         .header("X-Dev-Role", "SUPERVISOR")
                         .queryParam("name", "reconcil"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(1));
 
-        mockMvc.perform(get("/api/v1/supervisor/toolkits")
+        mockMvc.perform(get("/api/v1/toolkits/managed")
                         .header("X-Dev-Role", "SUPERVISOR")
                         .queryParam("name", "invoice"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(0))
                 .andExpect(jsonPath("$.pl3Names[0]").value("Bank Reconciliation"));
 
-        mockMvc.perform(get("/api/v1/supervisor/toolkits")
+        mockMvc.perform(get("/api/v1/toolkits/managed")
                         .header("X-Dev-Role", "SUPERVISOR")
                         .queryParam("pl3Name", "Bank Reconciliation"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(1));
 
-        mockMvc.perform(get("/api/v1/supervisor/toolkits")
+        mockMvc.perform(get("/api/v1/toolkits/managed")
                         .header("X-Dev-Role", "SUPERVISOR")
                         .queryParam("pl3Name", "Invoice Processing"))
                 .andExpect(status().isOk())
@@ -196,16 +195,16 @@ class SupervisorApiIntegrationTests {
         String created = createToolkit("Reusable Toolkit");
         String toolkitId = JsonPath.read(created, "$.id");
 
-        mockMvc.perform(delete("/api/v1/supervisor/toolkits/{id}", toolkitId)
+        mockMvc.perform(delete("/api/v1/toolkits/{id}", toolkitId)
                         .header("X-Dev-Role", "SUPERVISOR"))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/api/v1/supervisor/toolkits")
+        mockMvc.perform(get("/api/v1/toolkits/managed")
                         .header("X-Dev-Role", "SUPERVISOR"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(0));
 
-        mockMvc.perform(post("/api/v1/supervisor/toolkits")
+        mockMvc.perform(post("/api/v1/toolkits")
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(createToolkitRequest("Reusable Toolkit", true)))
@@ -243,7 +242,7 @@ class SupervisorApiIntegrationTests {
                 }
                 """.formatted(oldVersion.longValue());
 
-        mockMvc.perform(put("/api/v1/supervisor/toolkits/{id}", toolkitId)
+        mockMvc.perform(put("/api/v1/toolkits/{id}", toolkitId)
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(updateRequest))
@@ -277,7 +276,7 @@ class SupervisorApiIntegrationTests {
         org.junit.jupiter.api.Assertions.assertEquals(1, activeSubtasks);
         org.junit.jupiter.api.Assertions.assertEquals(1, activeKpis);
 
-        mockMvc.perform(put("/api/v1/supervisor/toolkits/{id}", toolkitId)
+        mockMvc.perform(put("/api/v1/toolkits/{id}", toolkitId)
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(updateRequest.replace("Updated Toolkit", "Stale overwrite")))
@@ -285,7 +284,7 @@ class SupervisorApiIntegrationTests {
                 .andExpect(jsonPath("$.type")
                         .value("https://rst.cmacgm.com/problems/optimistic-lock-conflict"));
 
-        mockMvc.perform(get("/api/v1/supervisor/toolkits/{id}", toolkitId)
+        mockMvc.perform(get("/api/v1/toolkits/{id}", toolkitId)
                         .header("X-Dev-Role", "SUPERVISOR"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Updated Toolkit"))
@@ -301,7 +300,7 @@ class SupervisorApiIntegrationTests {
         String toolkitId = JsonPath.read(createdToolkit, "$.id");
         String exerciseRequest = exerciseRequest(toolkitId);
 
-        String createdExercise = mockMvc.perform(post("/api/v1/supervisor/exercises")
+        String createdExercise = mockMvc.perform(post("/api/v1/exercises")
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(exerciseRequest))
@@ -350,7 +349,7 @@ class SupervisorApiIntegrationTests {
                 """,
                 MONTHLY_RUN_ID);
 
-        mockMvc.perform(get("/api/v1/supervisor/exercises/{id}", exerciseId)
+        mockMvc.perform(get("/api/v1/exercises/{id}", exerciseId)
                         .header("X-Dev-Role", "SUPERVISOR"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.snapshot.toolkit.name").value("Frozen Toolkit Name"))
@@ -487,7 +486,7 @@ class SupervisorApiIntegrationTests {
                 NOW,
                 SUPERVISOR_CCGID);
 
-        mockMvc.perform(post("/api/v1/supervisor/exercises")
+        mockMvc.perform(post("/api/v1/exercises")
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(exerciseRequest(toolkitId)))
@@ -508,7 +507,7 @@ class SupervisorApiIntegrationTests {
     @Test
     void rejectsSlotPeriodLongerThanTwelveWeeks() throws Exception {
         String toolkitId = JsonPath.read(createToolkit("Slot Limit Toolkit"), "$.id");
-        mockMvc.perform(post("/api/v1/supervisor/exercises")
+        mockMvc.perform(post("/api/v1/exercises")
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(exerciseRequest(toolkitId).replace(
@@ -518,7 +517,7 @@ class SupervisorApiIntegrationTests {
 
     @Test
     void rejectsToolkitAndExerciseWithoutSharedKpiSelection() throws Exception {
-        mockMvc.perform(post("/api/v1/supervisor/toolkits")
+        mockMvc.perform(post("/api/v1/toolkits")
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(createToolkitRequest("Missing KPI Toolkit", false)))
@@ -564,7 +563,7 @@ class SupervisorApiIntegrationTests {
                 NOW,
                 0);
 
-        mockMvc.perform(post("/api/v1/supervisor/exercises")
+        mockMvc.perform(post("/api/v1/exercises")
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(exerciseRequest(toolkitWithoutKpi.toString())))
@@ -574,7 +573,7 @@ class SupervisorApiIntegrationTests {
     }
 
     private String createToolkit(String name) throws Exception {
-        return mockMvc.perform(post("/api/v1/supervisor/toolkits")
+        return mockMvc.perform(post("/api/v1/toolkits")
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(createToolkitRequest(name, true)))
@@ -585,7 +584,7 @@ class SupervisorApiIntegrationTests {
     }
 
     private String createExercise(String toolkitId) throws Exception {
-        return mockMvc.perform(post("/api/v1/supervisor/exercises")
+        return mockMvc.perform(post("/api/v1/exercises")
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(exerciseRequest(toolkitId)))
@@ -597,10 +596,32 @@ class SupervisorApiIntegrationTests {
 
     private void seedArchivedAssociatedData(UUID exerciseId) {
         UUID supportItemId = UUID.randomUUID();
+        UUID processId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
         jdbcTemplate.update(
-                "update rst_exercise set workflow_status = 'APPROVED', validated_at = ? where id = ?",
+                "update rst_exercise set validated_at = ? where id = ?",
                 NOW,
                 exerciseId);
+        jdbcTemplate.update(
+                """
+                insert into process_instance
+                    (id, exercise_id, submitted_by_ccgid, submitted_at, status, current_step, version)
+                values (?, ?, ?, ?, 'FINISHED', 3, 0)
+                """,
+                processId,
+                exerciseId,
+                SUPERVISOR_CCGID,
+                NOW);
+        jdbcTemplate.update(
+                """
+                insert into process_task
+                    (id, instance_id, node_code, node_order, completion_strategy, status, created_at, completed_at)
+                values (?, ?, 'LTH', 3, 'OR', 'APPROVED', ?, ?)
+                """,
+                taskId,
+                processId,
+                NOW,
+                NOW);
         jdbcTemplate.update(
                 """
                 insert into exercise_production_support_item

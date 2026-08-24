@@ -38,11 +38,11 @@ import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.HolidayDayKind;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WeekendCode;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator.MonthDayCounts;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator.VolumeDayFlags;
+import com.cmacgm.gbs.rst.api.workingdays.domain.HolidayDayKind;
+import com.cmacgm.gbs.rst.api.workingdays.domain.WeekendCode;
+import com.cmacgm.gbs.rst.api.workingdays.domain.WorkingDaysCalculator;
+import com.cmacgm.gbs.rst.api.workingdays.domain.WorkingDaysCalculator.MonthDayCounts;
+import com.cmacgm.gbs.rst.api.workingdays.domain.WorkingDaysCalculator.VolumeDayFlags;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.scenario.domain.DailySimulationResult;
 import com.cmacgm.gbs.rst.api.scenario.domain.ForecastPoint;
@@ -598,7 +598,13 @@ public class SizingSimulationService {
                         "cycle-time-required",
                         "An active Cycle Time baseline is required before sizing."));
 
-        String weekendCode = WeekendCode.storedValue(team.getWeekendCode());
+        String weekendCode;
+        try {
+            weekendCode = WeekendCode.storedValue(team.getWeekendCode());
+        } catch (IllegalArgumentException ex) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-weekend-code", ex.getMessage());
+        }
         Map<LocalDate, HolidayDayKind> kinds = HolidayDays.kinds(holidays
                 .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId));
         List<LocalDate> restDates = HolidayDays.restDates(kinds);
@@ -629,16 +635,15 @@ public class SizingSimulationService {
         BigDecimal maxOt = team.getMaxOvertimeMinutes() != null
                 ? team.getMaxOvertimeMinutes() : BigDecimal.ZERO;
 
-        BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(team, workingDaysYear);
-        BigDecimal supportFte = BigDecimal.ZERO;
-        for (ExerciseProductionSupportItem item : supportItems
-                .findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(exerciseId)) {
-            try {
-                supportFte = supportFte.add(
-                        SupportWorkloadMath.derive(item, workingDaysYear, fteHours).supportFte());
-            } catch (IllegalArgumentException ignored) {
-                // Skip historical rows whose frequency codes are no longer recognized.
-            }
+        BigDecimal supportFte = SupportWorkloadMath.totalSupportFte(
+                supportItems.findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(exerciseId),
+                team,
+                workingDaysYear);
+        if (supportFte == null) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "team-setup-required",
+                    "Team Setup is incomplete; Support FTE cannot be computed.");
         }
         supportFte = supportFte.setScale(6, RoundingMode.HALF_UP);
 

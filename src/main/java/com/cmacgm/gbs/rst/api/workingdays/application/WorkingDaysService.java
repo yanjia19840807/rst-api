@@ -1,4 +1,4 @@
-package com.cmacgm.gbs.rst.api.holidaytemplate.application;
+package com.cmacgm.gbs.rst.api.workingdays.application;
 
 import java.math.BigDecimal;
 import java.time.YearMonth;
@@ -9,8 +9,7 @@ import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WeekendCode;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator;
+import com.cmacgm.gbs.rst.api.workingdays.domain.WorkingDaysCalculator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,8 +59,15 @@ public class WorkingDaysService {
         }
         String weekend = teamSetups.findById(exercise.getId())
                 .map(ExerciseTeamSetup::getWeekendCode)
-                .orElse(WeekendCode.DEFAULT_STORED);
+                .orElse(null);
+        if (weekend == null || weekend.isBlank()) {
+            return null;
+        }
         int year = YearMonth.from(exercise.getSizingMonth()).getYear();
-        return BigDecimal.valueOf(workingDaysCalculator.networkDays(year, weekend, List.of()));
+        try {
+            return BigDecimal.valueOf(workingDaysCalculator.networkDays(year, weekend, List.of()));
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 }

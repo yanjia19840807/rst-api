@@ -36,11 +36,11 @@ import com.cmacgm.gbs.rst.api.forecast.ForecastApiModels.MonthlyActual;
 import com.cmacgm.gbs.rst.api.forecast.ForecastApiModels.MonthlyForecastRequest;
 import com.cmacgm.gbs.rst.api.forecast.ForecastApiModels.MonthlyForecastResponse;
 import com.cmacgm.gbs.rst.api.forecast.ForecastApiModels.MonthlyFuture;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.HolidayDayKind;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WeekendCode;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator.MonthDayCounts;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator.VolumeDayFlags;
+import com.cmacgm.gbs.rst.api.workingdays.domain.HolidayDayKind;
+import com.cmacgm.gbs.rst.api.workingdays.domain.WeekendCode;
+import com.cmacgm.gbs.rst.api.workingdays.domain.WorkingDaysCalculator;
+import com.cmacgm.gbs.rst.api.workingdays.domain.WorkingDaysCalculator.MonthDayCounts;
+import com.cmacgm.gbs.rst.api.workingdays.domain.WorkingDaysCalculator.VolumeDayFlags;
 import com.cmacgm.gbs.rst.api.scenario.domain.ForecastPoint;
 import com.cmacgm.gbs.rst.api.scenario.domain.ForecastRun;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
@@ -499,10 +499,18 @@ public class ForecastOrchestrationService {
     }
 
     private CalendarContext loadCalendar(UUID exerciseId) {
-        String weekendCode = WeekendCode.storedValue(
-                teamSetups.findById(exerciseId)
-                        .map(ExerciseTeamSetup::getWeekendCode)
-                        .orElse(WeekendCode.DEFAULT_STORED));
+        ExerciseTeamSetup setup = teamSetups.findById(exerciseId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "team-setup-required",
+                        "Team Setup is required before forecast."));
+        String weekendCode;
+        try {
+            weekendCode = WeekendCode.storedValue(setup.getWeekendCode());
+        } catch (IllegalArgumentException ex) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-weekend-code", ex.getMessage());
+        }
         Map<LocalDate, HolidayDayKind> kinds = HolidayDays.kinds(holidays
                 .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId));
         List<LocalDate> rest = HolidayDays.restDates(kinds);

@@ -6,7 +6,7 @@ import java.time.Instant;
 import java.time.LocalTime;
 import java.util.UUID;
 
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WeekendCode;
+import com.cmacgm.gbs.rst.api.workingdays.domain.WeekendCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;

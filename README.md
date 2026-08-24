@@ -99,17 +99,20 @@ Spring Data uses 0-based pages internally.
 
 ## Key endpoints
 
-- `GET /api/v1/toolkits`
-- `GET|POST /api/v1/supervisor/toolkits`
-- `GET|PUT|DELETE /api/v1/supervisor/toolkits/{id}`
+- `GET /api/v1/toolkits` — Toolkits available to the current principal
+- `GET /api/v1/toolkits/managed` — Toolkits the current principal can manage
+- `POST /api/v1/toolkits` and `GET|PUT|DELETE /api/v1/toolkits/{id}`
 - `GET /api/v1/timesheet/active` — `{ org, kpi }` Daily and Monthly ACTIVE headers
 - `GET /api/v1/timesheet/toolkit-hierarchy`
 - `GET /api/v1/timesheet/shared-kpi-candidates` — Monthly KPI rows; `syncDate` is the Monthly date
-- `GET|POST /api/v1/supervisor/exercises`
-- `GET /api/v1/supervisor/exercises/{id}`
+- `GET|POST /api/v1/exercises`
+- `GET /api/v1/exercises/{id}`
 - `GET /api/v1/tms/summary`
 - `GET /api/v1/tms/sessions/current`
 - `GET /api/v1/tms/sessions`
+- `GET /api/v1/tms/team/agents`
+- `GET /api/v1/tms/team/sessions`
+- `GET /api/v1/tms/team/sessions/{id}`
 - `POST /api/v1/tms/sessions`
 - `POST /api/v1/tms/sessions/{id}/pause`
 - `POST /api/v1/tms/sessions/{id}/resume`

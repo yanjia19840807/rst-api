@@ -54,9 +54,6 @@ public class RstExercise {
     @Column(name = "tms_to", nullable = false)
     private LocalDate tmsTo;
 
-    @Column(name = "workflow_status", nullable = false, length = 30)
-    private String workflowStatus;
-
     @Column(name = "official_scenario_id")
     private UUID officialScenarioId;
 
@@ -105,9 +102,8 @@ public class RstExercise {
     }
 
     /**
-     * Creates a new IN_PROGRESS Exercise header (lifecycle bucket).
-     * No workflow instance is started here; the display step is Supervisor Sizing
-     * until the first Submit.
+     * Creates a new Exercise header. Document status is derived from the process
+     * (none yet → Supervisor Sizing).
      *
      * @param id Exercise id
      * @param exerciseCode unique business code
@@ -142,7 +138,6 @@ public class RstExercise {
         exercise.slotWeeks = slotWeeks;
         exercise.tmsFrom = tmsFrom;
         exercise.tmsTo = tmsTo;
-        exercise.workflowStatus = "IN_PROGRESS";
         exercise.createdAt = now;
         exercise.createdBy = ownerCcgid;
         exercise.updatedAt = now;
@@ -217,56 +212,62 @@ public class RstExercise {
     }
 
     /**
-     * Marks the Exercise UNDER_REVIEW after a successful Submit.
+     * Records the submit timestamp. Document status comes from the process.
      *
      * @param actorCcgid submitting Supervisor
      * @param now submit timestamp
      */
     public void markSubmitted(String actorCcgid, Instant now) {
-        this.workflowStatus = "UNDER_REVIEW";
         this.submittedAt = now;
         this.updatedAt = now;
         this.updatedBy = actorCcgid;
     }
 
     /**
-     * Reopens the Exercise after Return: sets {@code RETURNED} for Supervisor editing
-     * while keeping the Official Scenario pointer.
+     * Clears validation after Return so Supervisor can edit again.
      *
      * @param actorCcgid actor
      * @param now update timestamp
      */
     public void markReturned(String actorCcgid, Instant now) {
-        reopenForEditing(actorCcgid, now, "RETURNED");
+        reopenForEditing(actorCcgid, now);
     }
 
     /**
-     * Reopens the Exercise after Withdraw: returns to {@code IN_PROGRESS}
-     * while keeping the Official Scenario pointer.
+     * Clears validation after Withdraw while keeping the Official Scenario pointer.
      *
      * @param actorCcgid actor
      * @param now update timestamp
      */
     public void markWithdrawn(String actorCcgid, Instant now) {
-        reopenForEditing(actorCcgid, now, "IN_PROGRESS");
+        reopenForEditing(actorCcgid, now);
     }
 
-    private void reopenForEditing(String actorCcgid, Instant now, String status) {
+    private void reopenForEditing(String actorCcgid, Instant now) {
         this.validatedAt = null;
-        this.workflowStatus = status;
         this.updatedAt = now;
         this.updatedBy = actorCcgid;
     }
 
     /**
-     * Marks the Exercise APPROVED after final LTH Approve.
+     * Records LTH approval time. Document status comes from the process.
      *
      * @param actorCcgid approving actor
      * @param now approval timestamp
      */
     public void markApproved(String actorCcgid, Instant now) {
-        this.workflowStatus = "APPROVED";
         this.validatedAt = now;
+        this.updatedAt = now;
+        this.updatedBy = actorCcgid;
+    }
+
+    /**
+     * Records a terminal Reject. Document status comes from the process.
+     *
+     * @param actorCcgid acting approver
+     * @param now reject time
+     */
+    public void markRejected(String actorCcgid, Instant now) {
         this.updatedAt = now;
         this.updatedBy = actorCcgid;
     }
@@ -280,41 +281,8 @@ public class RstExercise {
         this.updatedBy = actorCcgid;
     }
 
-    /**
-     * Returns whether soft-delete is allowed for the current workflow status.
-     *
-     * @return true when status is IN_PROGRESS or RETURNED
-     */
-    public boolean canDelete() {
-        return "IN_PROGRESS".equals(workflowStatus) || "RETURNED".equals(workflowStatus);
-    }
-
-    /**
-     * Returns whether Submit is allowed (has Official Scenario and is editable).
-     *
-     * @return true when Official exists and status is still editable
-     */
-    public boolean canSubmit() {
-        return officialScenarioId != null
-                && ("IN_PROGRESS".equals(workflowStatus) || "RETURNED".equals(workflowStatus));
-    }
-
-    /**
-     * Returns whether Associated Data / Scenario edits are allowed.
-     *
-     * @return true for IN_PROGRESS or RETURNED
-     */
-    public boolean canEdit() {
-        return "IN_PROGRESS".equals(workflowStatus) || "RETURNED".equals(workflowStatus);
-    }
-
-    /**
-     * Returns whether Supervisor Withdraw is allowed.
-     *
-     * @return true when UNDER_REVIEW
-     */
-    public boolean canWithdraw() {
-        return "UNDER_REVIEW".equals(workflowStatus);
+    public boolean hasOfficialScenario() {
+        return officialScenarioId != null;
     }
 
     void attachToolkitSnapshot(ExerciseToolkitSnapshot snapshot) {
@@ -431,10 +399,6 @@ public class RstExercise {
 
     public LocalDate getTmsTo() {
         return tmsTo;
-    }
-
-    public String getWorkflowStatus() {
-        return workflowStatus;
     }
 
     public UUID getOfficialScenarioId() {

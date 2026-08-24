@@ -146,12 +146,18 @@ public final class SizingMath {
         return rightSizingHc;
     }
 
-    /** Capacity creation: Actual HC (TotalAgent) − RS HC − Support. */
+    /**
+     * Capacity creation: Actual HC (TotalAgent) − RS HC − Support.
+     * Null Support FTE means it could not be computed — do not treat it as zero.
+     */
     public static BigDecimal capacityCreation(
             BigDecimal actualHc, BigDecimal rightSizingHc, BigDecimal productionSupportFte) {
+        if (productionSupportFte == null) {
+            return null;
+        }
         return nz(actualHc)
                 .subtract(nz(rightSizingHc), MC)
-                .subtract(nz(productionSupportFte), MC)
+                .subtract(productionSupportFte, MC)
                 .setScale(6, RoundingMode.HALF_UP);
     }
 

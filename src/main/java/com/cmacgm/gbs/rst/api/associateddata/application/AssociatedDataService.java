@@ -43,9 +43,9 @@ import com.cmacgm.gbs.rst.api.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.WorkingDaysService;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.HolidayDayKind;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WeekendCode;
+import com.cmacgm.gbs.rst.api.workingdays.application.WorkingDaysService;
+import com.cmacgm.gbs.rst.api.workingdays.domain.HolidayDayKind;
+import com.cmacgm.gbs.rst.api.workingdays.domain.WeekendCode;
 import com.cmacgm.gbs.rst.api.supporttaxonomy.application.SupportTaxonomyService;
 import com.cmacgm.gbs.rst.api.supporttaxonomy.application.SupportTaxonomyService.ResolvedCategory;
 import org.springframework.http.HttpStatus;
@@ -161,7 +161,12 @@ public class AssociatedDataService {
         RstExercise exercise = editable(ownerCcgid, exerciseId);
         ExerciseTeamSetup setup = requireTeamSetup(exercise.getId());
         Instant now = clock.instant();
-        setup.replaceInputs(request.toInput(), ownerCcgid, now);
+        try {
+            setup.replaceInputs(request.toInput(), ownerCcgid, now);
+        } catch (IllegalArgumentException ex) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-weekend-code", ex.getMessage());
+        }
         return toTeamSetup(exercise, teamSetups.save(setup));
     }
 
@@ -193,7 +198,7 @@ public class AssociatedDataService {
     public SupportItemView createSupport(String ownerCcgid, UUID exerciseId, SupportItemRequest request) {
         editable(ownerCcgid, exerciseId);
         Instant now = clock.instant();
-        requireValidFrequency(request.frequencyCode(), exerciseId);
+        requireValidFrequency(request.frequencyCode());
         ResolvedCategory taxonomy = supportTaxonomy.resolveForWrite(request.categoryId(), null);
         ExerciseProductionSupportItem item = ExerciseProductionSupportItem.create(
                 exerciseId,
@@ -224,7 +229,7 @@ public class AssociatedDataService {
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "support-item-not-found", "The support item was not found."));
         Instant now = clock.instant();
-        requireValidFrequency(request.frequencyCode(), exerciseId);
+        requireValidFrequency(request.frequencyCode());
         ResolvedCategory taxonomy = supportTaxonomy.resolveForWrite(
                 request.categoryId(), item.getCategoryId());
         item.update(
@@ -831,7 +836,12 @@ public class AssociatedDataService {
     private TeamSetupView toTeamSetup(RstExercise exercise, ExerciseTeamSetup setup) {
         BigDecimal workingDays = workingDaysService.workingDaysPerYear(exercise);
         BigDecimal cycleTime = activeCycleTimeSeconds(exercise.getId());
-        String weekend = WeekendCode.storedValue(setup.getWeekendCode());
+        String weekend;
+        try {
+            weekend = WeekendCode.storedValue(setup.getWeekendCode());
+        } catch (IllegalArgumentException ex) {
+            weekend = setup.getWeekendCode();
+        }
         return new TeamSetupView(
                 setup.getAgentsLt6m(), setup.getAgents6To24m(), setup.getAgents24To48m(),
                 setup.getAgentsGt48m(), deliveryHc(exercise), setup.workingHoursPerDay(),
@@ -855,10 +865,9 @@ public class AssociatedDataService {
         return sum;
     }
 
-    private void requireValidFrequency(String frequencyCode, UUID exerciseId) {
+    private void requireValidFrequency(String frequencyCode) {
         try {
-            SupportWorkloadMath.annualMultiplier(
-                    frequencyCode, workingDaysService.workingDaysPerYear(exerciseId));
+            SupportWorkloadMath.requireFrequency(frequencyCode);
         } catch (IllegalArgumentException ex) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY, "invalid-frequency", ex.getMessage());
@@ -869,7 +878,12 @@ public class AssociatedDataService {
         ExerciseTeamSetup setup = teamSetups.findById(exerciseId).orElse(null);
         BigDecimal workingDays = workingDaysService.workingDaysPerYear(exerciseId);
         BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup, workingDays);
-        SupportWorkloadMath.Derived derived = SupportWorkloadMath.derive(item, workingDays, fteHours);
+        SupportWorkloadMath.Derived derived;
+        try {
+            derived = SupportWorkloadMath.derive(item, workingDays, fteHours);
+        } catch (IllegalArgumentException ex) {
+            derived = new SupportWorkloadMath.Derived(null, null, null);
+        }
         return new SupportItemView(
                 item.getId(), item.getLineageId(), item.getCategoryId(), item.getCategory(),
                 item.getActivity(),

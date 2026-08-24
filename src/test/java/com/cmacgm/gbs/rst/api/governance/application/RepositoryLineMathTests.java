@@ -46,6 +46,19 @@ class RepositoryLineMathTests {
     }
 
     @Test
+    void leavesSupportAndCapacityEmptyWhenSupportFteUnknown() {
+        RepositoryLineMath.LineMetrics metrics = RepositoryLineMath.allocate(
+                new BigDecimal("10"),
+                new BigDecimal("10"),
+                new BigDecimal("12"),
+                null);
+        assertThat(metrics.rightSizingHc()).isEqualByComparingTo("12");
+        assertThat(metrics.productionSupport()).isNull();
+        assertThat(metrics.capacityCreation()).isNull();
+        assertThat(metrics.capacityPct()).isNull();
+    }
+
+    @Test
     void skipsAllocationWhenTotalDeliveryIsZero() {
         RepositoryLineMath.LineMetrics metrics = RepositoryLineMath.allocate(
                 BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("4"), new BigDecimal("1"));

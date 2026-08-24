@@ -151,6 +151,25 @@ public class ApprovalController {
                 new ReturnRequest(request.comments(), request.requestId()));
     }
 
+    /**
+     * Rejects the submission and ends the process.
+     *
+     * @param principal acting principal
+     * @param submissionId submission id
+     * @param request reject payload with required comments
+     * @return updated review detail
+     */
+    @PostMapping("/{submissionId}/reject")
+    public ApprovalDetailView reject(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID submissionId,
+            @Valid @RequestBody ReturnBody request) {
+        return approvals.reject(
+                principal,
+                submissionId,
+                new ReturnRequest(request.comments(), request.requestId()));
+    }
+
     /** Approve request body. */
     public record ApproveBody(String comments, UUID requestId) {
     }

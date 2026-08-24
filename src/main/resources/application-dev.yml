@@ -3,8 +3,8 @@ app:
     # Simulate one login: set ccgid + role (AGENT|SUPERVISOR|MANAGER|CDH|LTH|HO).
     # Restart API after changing. Optional per-request: X-Dev-Ccgid / X-Dev-Role.
     dev-identity:
-      ccgid: LTH001
-      role: LTH
+      ccgid: S00813982
+      role: SUPERVISOR
       # SSO Center claim is not wired yet; hardcode the Center for local LTH config.
       center: GBS CHINA
 

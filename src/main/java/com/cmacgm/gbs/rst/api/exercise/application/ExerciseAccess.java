@@ -5,7 +5,8 @@ import java.util.UUID;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
-import com.cmacgm.gbs.rst.api.submission.persistence.SubmissionRepository;
+import com.cmacgm.gbs.rst.api.workflow.domain.ExerciseLifecycle;
+import com.cmacgm.gbs.rst.api.workflow.persistence.ProcessInstanceRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,17 +18,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class ExerciseAccess {
 
     private final RstExerciseRepository exercises;
-    private final SubmissionRepository submissions;
+    private final ProcessInstanceRepository workflows;
 
     /**
      * Creates the Exercise access helper.
      *
      * @param exercises Exercise repository
-     * @param submissions submission repository
+     * @param workflows workflow instance repository
      */
-    public ExerciseAccess(RstExerciseRepository exercises, SubmissionRepository submissions) {
+    public ExerciseAccess(RstExerciseRepository exercises, ProcessInstanceRepository workflows) {
         this.exercises = exercises;
-        this.submissions = submissions;
+        this.workflows = workflows;
     }
 
     /**
@@ -58,19 +59,19 @@ public class ExerciseAccess {
         if (actorCcgid.equals(exercise.getOwnerCcgid())) {
             return exercise;
         }
-        if (submissions.findByExerciseId(exerciseId).isEmpty()) {
+        if (workflows.findByExerciseId(exerciseId).isEmpty()) {
             throw notFound("exercise-not-found", "The Exercise was not found.");
         }
         return exercise;
     }
 
     /**
-     * Ensures the Exercise is editable (IN_PROGRESS / RETURNED).
+     * Ensures the Exercise is editable (IN_PROGRESS).
      *
      * @param exercise Exercise aggregate
      */
     public void requireEditable(RstExercise exercise) {
-        if (!exercise.canEdit()) {
+        if (!ExerciseLifecycle.canEdit(workflows.findByExerciseId(exercise.getId()).orElse(null))) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
                     "exercise-not-editable",

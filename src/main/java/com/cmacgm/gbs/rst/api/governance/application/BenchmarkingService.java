@@ -26,7 +26,7 @@ import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkPl3Option;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkRow;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingView;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.WorkingDaysService;
+import com.cmacgm.gbs.rst.api.workingdays.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
@@ -95,7 +95,7 @@ public class BenchmarkingService {
             source.addAll(rowsFor(
                     exercise,
                     rightSizingByExercise.get(exercise.getId()),
-                    supportByExercise.getOrDefault(exercise.getId(), BigDecimal.ZERO),
+                    supportByExercise.get(exercise.getId()),
                     cycleTimeByExercise.get(exercise.getId()),
                     setups.get(exercise.getId())));
         }
@@ -265,30 +265,14 @@ public class BenchmarkingService {
             List<ExerciseProductionSupportItem> items,
             ExerciseTeamSetup setup,
             BigDecimal workingDays) {
-        if (items.isEmpty()) {
-            return BigDecimal.ZERO;
-        }
-        BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup, workingDays);
-        BigDecimal total = BigDecimal.ZERO;
-        for (ExerciseProductionSupportItem item : items) {
-            try {
-                total = total.add(SupportWorkloadMath.derive(item, workingDays, fteHours).supportFte());
-            } catch (IllegalArgumentException ignored) {
-                // skip incomplete support rows
-            }
-        }
-        return total;
+        return SupportWorkloadMath.totalSupportFte(items, setup, workingDays);
     }
 
     private static BigDecimal ratioPct(BigDecimal support, BigDecimal delivery) {
-        if (delivery == null || delivery.signum() <= 0) {
+        if (support == null || delivery == null || delivery.signum() <= 0) {
             return null;
         }
-        return nz(support).multiply(HUNDRED).divide(delivery, 1, RoundingMode.HALF_UP);
-    }
-
-    private static BigDecimal nz(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO : value;
+        return support.multiply(HUNDRED).divide(delivery, 1, RoundingMode.HALF_UP);
     }
 
     private static String blank(String value) {

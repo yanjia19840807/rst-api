@@ -27,7 +27,7 @@ import org.springframework.stereotype.Component;
 
 import com.cmacgm.gbs.rst.api.associateddata.api.dto.HolidayRequest;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.HolidayDayKind;
+import com.cmacgm.gbs.rst.api.workingdays.domain.HolidayDayKind;
 
 /**
  * Excel import/export for Exercise holidays and makeup days (PH Dates).

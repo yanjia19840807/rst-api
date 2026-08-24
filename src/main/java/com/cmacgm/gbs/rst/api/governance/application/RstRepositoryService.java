@@ -23,7 +23,7 @@ import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryListQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryListView;
 import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryRow;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.WorkingDaysService;
+import com.cmacgm.gbs.rst.api.workingdays.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
@@ -135,7 +135,7 @@ public class RstRepositoryService {
         BigDecimal actualHc = SizingMath.actualHeadcount(
                 setup == null ? null : setup.totalAgents(), totalDelivery);
         BigDecimal rightSizingHc = rightSizingByExercise.get(exercise.getId());
-        BigDecimal productionSupport = supportByExercise.getOrDefault(exercise.getId(), BigDecimal.ZERO);
+        BigDecimal productionSupport = supportByExercise.get(exercise.getId());
         String submittedDate = exercise.getSubmittedAt() == null
                 ? ""
                 : exercise.getSubmittedAt().atZone(ZoneOffset.UTC).toLocalDate().toString();
@@ -242,18 +242,6 @@ public class RstRepositoryService {
             List<ExerciseProductionSupportItem> items,
             ExerciseTeamSetup setup,
             BigDecimal workingDays) {
-        if (items.isEmpty()) {
-            return BigDecimal.ZERO;
-        }
-        BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup, workingDays);
-        BigDecimal total = BigDecimal.ZERO;
-        for (ExerciseProductionSupportItem item : items) {
-            try {
-                total = total.add(SupportWorkloadMath.derive(item, workingDays, fteHours).supportFte());
-            } catch (IllegalArgumentException ignored) {
-                // skip incomplete support rows
-            }
-        }
-        return total;
+        return SupportWorkloadMath.totalSupportFte(items, setup, workingDays);
     }
 }

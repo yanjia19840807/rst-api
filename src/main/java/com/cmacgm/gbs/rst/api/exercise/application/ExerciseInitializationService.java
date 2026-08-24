@@ -38,7 +38,7 @@ import com.cmacgm.gbs.rst.api.cycletime.domain.ExerciseTmsSession;
 import com.cmacgm.gbs.rst.api.cycletime.persistence.ExerciseTmsSessionRepository;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.HolidayDayKind;
+import com.cmacgm.gbs.rst.api.workingdays.domain.HolidayDayKind;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSession;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSessionStatus;
 import com.cmacgm.gbs.rst.api.tms.persistence.TmsSessionRepository;
@@ -56,7 +56,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ExerciseInitializationService {
 
-    private static final List<String> ARCHIVE_STATUSES = List.of("APPROVED");
 
     private final RstExerciseRepository exercises;
     private final ExerciseTeamSetupRepository teamSetups;
@@ -206,8 +205,7 @@ public class ExerciseInitializationService {
     }
 
     private Optional<RstExercise> findLatestArchive(UUID toolkitId) {
-        return exercises.findArchivedByToolkit(
-                        toolkitId, ARCHIVE_STATUSES, PageRequest.of(0, 1))
+        return exercises.findApprovedByToolkit(toolkitId, PageRequest.of(0, 1))
                 .stream()
                 .findFirst();
     }

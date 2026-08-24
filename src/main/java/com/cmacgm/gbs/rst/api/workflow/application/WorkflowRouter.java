@@ -96,6 +96,17 @@ public class WorkflowRouter {
     }
 
     /**
+     * Whether Center × Domain has a live CDH mapping. Does not throw.
+     *
+     * @param center GBS center
+     * @param domain GBS domain
+     * @return true when configured
+     */
+    public boolean isCdhConfigured(String center, String domain) {
+        return domainHeads.isConfigured(center, domain);
+    }
+
+    /**
      * Resolves the shared LTH position (Timesheet has no LTH column yet).
      *
      * @return LTH position; occupant is unknown until IAM provides one

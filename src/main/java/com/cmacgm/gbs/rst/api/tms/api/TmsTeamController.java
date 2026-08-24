@@ -19,28 +19,28 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Supervisor read-only TMS session browse within Timesheet / Toolkit scope.
+ * Team-scoped TMS session browse within Timesheet / Toolkit scope.
  */
 @RestController
-@RequestMapping("/api/v1/supervisor/tms")
+@RequestMapping("/api/v1/tms/team")
 @PreAuthorize("hasRole('SUPERVISOR')")
-public class SupervisorTmsController {
+public class TmsTeamController {
 
     private final TmsSessionQueryService queryService;
 
     /**
-     * Creates the Supervisor TMS controller.
+     * Creates the team TMS controller.
      *
      * @param queryService TMS query service
      */
-    public SupervisorTmsController(TmsSessionQueryService queryService) {
+    public TmsTeamController(TmsSessionQueryService queryService) {
         this.queryService = queryService;
     }
 
     /**
      * Lists team agents available for TMS filters.
      *
-     * @param principal authenticated Supervisor
+     * @param principal authenticated manager
      * @return team agents
      */
     @GetMapping("/agents")
@@ -49,9 +49,9 @@ public class SupervisorTmsController {
     }
 
     /**
-     * Lists TMS sessions for toolkits in the Supervisor scope.
+     * Lists TMS sessions for toolkits in the current principal's managed scope.
      *
-     * @param principal authenticated Supervisor
+     * @param principal authenticated manager
      * @param agentCcgid optional agent filter
      * @param toolkitId optional toolkit filter
      * @param pl3Code optional PL3 code filter
@@ -83,7 +83,7 @@ public class SupervisorTmsController {
                     LocalDate dateTo,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        return queryService.sessionsForSupervisor(
+        return queryService.sessionsForTeam(
                 principal.ccgid(),
                 agentCcgid,
                 toolkitId,
@@ -99,15 +99,15 @@ public class SupervisorTmsController {
     }
 
     /**
-     * Returns a TMS session detail when it belongs to a scoped toolkit.
+     * Returns a TMS session detail when it belongs to a managed toolkit.
      *
-     * @param principal authenticated Supervisor
+     * @param principal authenticated manager
      * @param id session number
      * @return session detail
      */
     @GetMapping("/sessions/{id}")
     public TmsSessionResponse get(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable String id) {
-        return queryService.getForSupervisor(principal.ccgid(), id);
+        return queryService.getForTeam(principal.ccgid(), id);
     }
 }

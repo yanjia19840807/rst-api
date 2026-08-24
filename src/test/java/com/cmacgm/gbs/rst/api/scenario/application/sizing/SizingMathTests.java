@@ -35,6 +35,12 @@ class SizingMathTests {
     }
 
     @Test
+    void capacityCreationStaysEmptyWhenSupportFteUnknown() {
+        assertThat(SizingMath.capacityCreation(
+                new BigDecimal("12.6"), new BigDecimal("12.50"), null)).isNull();
+    }
+
+    @Test
     void dailyHistoryWindowIsSizingMonthMinusTwoThroughSizingMonth() {
         YearMonth sizing = YearMonth.of(2026, 6);
         assertThat(SizingMath.dailyHistoryStart(sizing)).isEqualTo(LocalDate.of(2026, 4, 1));

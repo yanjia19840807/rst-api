@@ -37,11 +37,11 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Supervisor Exercise list/create/detail/delete and Submit endpoints.
+ * Exercise list/create/detail/delete and Submit endpoints.
  */
 @RestController
-@RequestMapping("/api/v1/supervisor/exercises")
-public class SupervisorExerciseController {
+@RequestMapping("/api/v1/exercises")
+public class ExerciseController {
 
     private final ExerciseService service;
     private final SubmissionService submissions;
@@ -54,7 +54,7 @@ public class SupervisorExerciseController {
      * @param submissions Submission service
      * @param approvals Approval service (Withdraw)
      */
-    public SupervisorExerciseController(
+    public ExerciseController(
             ExerciseService service, SubmissionService submissions, ApprovalService approvals) {
         this.service = service;
         this.submissions = submissions;
@@ -62,7 +62,7 @@ public class SupervisorExerciseController {
     }
 
     /**
-     * Lists Exercises for the current Supervisor, applying tab and field filters on the server.
+     * Lists Exercises owned by the current principal, applying tab and field filters on the server.
      *
      * @param tab {@code IN_PROGRESS} or {@code ARCHIVED}
      * @param exerciseCode optional exercise code contains
@@ -80,7 +80,7 @@ public class SupervisorExerciseController {
      * @param archivedTo optional archived date to
      * @param page 1-based page
      * @param pageSize page size
-     * @param principal authenticated Supervisor
+     * @param principal authenticated owner
      * @return one page of filtered exercises and filter options
      */
     @GetMapping
@@ -135,7 +135,7 @@ public class SupervisorExerciseController {
     /**
      * Creates an Exercise and seeds Associated Data (archive-first copy).
      *
-     * @param principal authenticated Supervisor
+     * @param principal authenticated owner
      * @param request create payload
      * @return created Exercise and initialization notices
      */
@@ -151,7 +151,7 @@ public class SupervisorExerciseController {
     /**
      * Returns Exercise detail including Official/submit flags.
      *
-     * @param principal authenticated Supervisor
+     * @param principal authenticated reader
      * @param id Exercise id
      * @return Exercise detail
      */
@@ -166,7 +166,7 @@ public class SupervisorExerciseController {
     /**
      * Soft-deletes an unsubmitted Exercise.
      *
-     * @param principal authenticated Supervisor
+     * @param principal authenticated owner
      * @param id Exercise id
      */
     @DeleteMapping("/{id}")
@@ -181,7 +181,7 @@ public class SupervisorExerciseController {
     /**
      * Updates sizing / slot / TMS periods on an editable Exercise.
      *
-     * @param principal authenticated Supervisor
+     * @param principal authenticated owner
      * @param id Exercise id
      * @param request period payload
      * @return updated Exercise and notices
@@ -220,7 +220,7 @@ public class SupervisorExerciseController {
     /**
      * Previews Submit validations for the current Official Package.
      *
-     * @param principal authenticated Supervisor
+     * @param principal authenticated owner
      * @param id Exercise id
      * @return submit preview
      */
@@ -235,7 +235,7 @@ public class SupervisorExerciseController {
     /**
      * Submits the current Official Package for Manager validation.
      *
-     * @param principal authenticated Supervisor
+     * @param principal authenticated owner
      * @param id Exercise id
      * @param request submit payload
      * @return submitted details
@@ -254,7 +254,7 @@ public class SupervisorExerciseController {
     /**
      * Returns Submitted Details for a submitted Exercise.
      *
-     * @param principal authenticated Supervisor
+     * @param principal authenticated owner
      * @param id Exercise id
      * @return submitted details
      */
@@ -269,7 +269,7 @@ public class SupervisorExerciseController {
     /**
      * Withdraws an UNDER_REVIEW submission, cancelling the workflow and reopening the Exercise.
      *
-     * @param principal authenticated Supervisor
+     * @param principal authenticated owner
      * @param id Exercise id
      * @return review detail after withdraw
      */

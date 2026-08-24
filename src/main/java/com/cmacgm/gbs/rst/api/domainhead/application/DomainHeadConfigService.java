@@ -18,9 +18,11 @@ import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.Occupant;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
-import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowInstance;
-import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowStepAssignment;
-import com.cmacgm.gbs.rst.api.workflow.persistence.WorkflowInstanceRepository;
+import com.cmacgm.gbs.rst.api.workflow.domain.ProcessInstance;
+import com.cmacgm.gbs.rst.api.workflow.domain.ProcessTask;
+import com.cmacgm.gbs.rst.api.workflow.domain.TaskActor;
+import com.cmacgm.gbs.rst.api.workflow.domain.TaskNode;
+import com.cmacgm.gbs.rst.api.workflow.persistence.ProcessInstanceRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,7 +39,7 @@ public class DomainHeadConfigService {
 
     private final CenterDomainHeadRepository mappings;
     private final TimesheetReadService timesheet;
-    private final WorkflowInstanceRepository workflows;
+    private final ProcessInstanceRepository workflows;
     private final Clock clock;
 
     /**
@@ -51,7 +53,7 @@ public class DomainHeadConfigService {
     public DomainHeadConfigService(
             CenterDomainHeadRepository mappings,
             TimesheetReadService timesheet,
-            WorkflowInstanceRepository workflows,
+            ProcessInstanceRepository workflows,
             Clock clock) {
         this.mappings = mappings;
         this.timesheet = timesheet;
@@ -198,15 +200,14 @@ public class DomainHeadConfigService {
         Occupant occupant = positionId == null ? null : timesheet.occupant(positionId);
         String ccgid = occupant == null ? null : occupant.ccgid();
         int count = 0;
-        for (WorkflowInstance workflow : workflows.findActiveCdhByCenterAndDomain(center, domain)) {
-            WorkflowStepAssignment ready = workflow.findCurrentReadyStep().orElse(null);
-            if (ready == null || ready.getStepNo() != 2 || !"CDH".equals(ready.getRequiredRoleCode())) {
+        for (ProcessInstance workflow : workflows.findOpenCdhByCenterAndDomain(center, domain)) {
+            ProcessTask ready = workflow.findCurrentPendingTask().orElse(null);
+            if (ready == null || ready.getNode() != TaskNode.CDH || positionId == null) {
                 continue;
             }
-            if (positionId == null) {
-                continue;
+            for (TaskActor actor : ready.getActors()) {
+                actor.remount(positionId, ccgid);
             }
-            ready.reopenReady(ccgid, positionId, ready.getScopeSnapshotHash(), now);
             workflows.save(workflow);
             count++;
         }

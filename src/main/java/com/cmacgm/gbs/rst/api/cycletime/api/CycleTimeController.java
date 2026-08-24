@@ -33,7 +33,7 @@ import org.springframework.web.multipart.MultipartFile;
  * Supervisor Cycle Time endpoints (manual baseline, active read, Embedded TMS browse / exclusion).
  */
 @RestController
-@RequestMapping("/api/v1/supervisor/exercises/{exerciseId}/cycle-time")
+@RequestMapping("/api/v1/exercises/{exerciseId}/cycle-time")
 @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
 public class CycleTimeController {
 

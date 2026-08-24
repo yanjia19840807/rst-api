@@ -21,7 +21,7 @@ import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.governance.api.dto.DashboardView;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.WorkingDaysService;
+import com.cmacgm.gbs.rst.api.workingdays.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
@@ -95,7 +95,7 @@ public class DashboardService {
         return new DashboardView(
                 DashboardMath.metrics(
                         statuses,
-                        exercises.countByDeletedAtIsNullAndWorkflowStatus("UNDER_REVIEW"),
+                        exercises.countUnderReview(),
                         capacityYtd(approved, today.getYear()),
                         nz(timesheet.sumActiveHeadcount())),
                 DashboardMath.centers(statuses),
@@ -145,11 +145,15 @@ public class DashboardService {
                 continue;
             }
             ExerciseTeamSetup setup = setups.get(exercise.getId());
-            total = total.add(SizingMath.capacityCreation(
+            BigDecimal capacity = SizingMath.capacityCreation(
                     SizingMath.actualHeadcount(
                             setup == null ? null : setup.totalAgents(), deliveryHc(exercise)),
                     rightSizing,
-                    supportByExercise.getOrDefault(exercise.getId(), BigDecimal.ZERO)));
+                    supportByExercise.get(exercise.getId()));
+            if (capacity == null) {
+                continue;
+            }
+            total = total.add(capacity);
             any = true;
         }
         return any ? total : null;
@@ -223,19 +227,7 @@ public class DashboardService {
             List<ExerciseProductionSupportItem> items,
             ExerciseTeamSetup setup,
             BigDecimal workingDays) {
-        if (items.isEmpty()) {
-            return BigDecimal.ZERO;
-        }
-        BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup, workingDays);
-        BigDecimal total = BigDecimal.ZERO;
-        for (ExerciseProductionSupportItem item : items) {
-            try {
-                total = total.add(SupportWorkloadMath.derive(item, workingDays, fteHours).supportFte());
-            } catch (IllegalArgumentException ignored) {
-                // skip incomplete support rows
-            }
-        }
-        return total;
+        return SupportWorkloadMath.totalSupportFte(items, setup, workingDays);
     }
 
     private static BigDecimal nz(BigDecimal value) {

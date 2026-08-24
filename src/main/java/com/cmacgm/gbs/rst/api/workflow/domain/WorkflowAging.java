@@ -4,10 +4,9 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
-import java.util.List;
 
 /**
- * Shared aging clock: days waiting on the current review step, not since original submit.
+ * Shared aging clock: days waiting on the current review node, not since original submit.
  */
 public final class WorkflowAging {
 
@@ -15,58 +14,52 @@ public final class WorkflowAging {
     }
 
     /**
-     * Instant the current READY step started waiting: last APPROVE, otherwise submit.
+     * Instant the current review node started waiting: last approver APPROVED, otherwise submit.
      *
-     * @param workflow current workflow; null treated as no actions
-     * @param submittedAt submission time; used on the first step
+     * @param instance current process; null treated as no history
+     * @param submittedAt submit time; used on the first hop
      * @return aging start instant
      */
-    public static Instant currentStepStartedAt(WorkflowInstance workflow, Instant submittedAt) {
-        return currentStepStartedAt(
-                workflow == null ? List.of() : workflow.getActions(),
-                submittedAt);
-    }
-
-    /**
-     * Instant the current READY step started waiting: last APPROVE, otherwise submit.
-     *
-     * @param actions workflow actions
-     * @param submittedAt submission time; used on the first step
-     * @return aging start instant
-     */
-    public static Instant currentStepStartedAt(List<WorkflowAction> actions, Instant submittedAt) {
-        WorkflowAction previous = lastApprove(actions);
-        if (previous != null && previous.getActionAt() != null) {
-            return previous.getActionAt();
+    public static Instant currentStepStartedAt(ProcessInstance instance, Instant submittedAt) {
+        TaskActor previous = lastApprove(instance);
+        if (previous != null && previous.getActedAt() != null) {
+            return previous.getActedAt();
         }
         return submittedAt;
     }
 
     /**
-     * Latest APPROVE action, if any.
+     * Latest approver APPROVED actor, if any.
      *
-     * @param workflow current workflow
+     * @param instance current process
      * @return last approve, or null
      */
-    public static WorkflowAction lastApprove(WorkflowInstance workflow) {
-        return lastApprove(workflow == null ? List.of() : workflow.getActions());
+    public static TaskActor lastApprove(ProcessInstance instance) {
+        if (instance == null) {
+            return null;
+        }
+        return instance.getTasks().stream()
+                .flatMap(task -> task.getActors().stream())
+                .filter(actor -> actor.getStatus() == ActorStatus.APPROVED
+                        && actor.getActorType() != ActorType.INITIATOR)
+                .max(Comparator.comparing(TaskActor::getActedAt, Comparator.nullsLast(Comparator.naturalOrder())))
+                .orElse(null);
     }
 
     /**
-     * Latest APPROVE action from a list, if any.
+     * Latest Return actor, if any.
      *
-     * @param actions workflow actions
-     * @return last approve, or null
+     * @param instance current process
+     * @return last reject, or null
      */
-    public static WorkflowAction lastApprove(List<WorkflowAction> actions) {
-        if (actions == null || actions.isEmpty()) {
+    public static TaskActor lastReturn(ProcessInstance instance) {
+        if (instance == null) {
             return null;
         }
-        return actions.stream()
-                .filter(action -> "APPROVE".equals(action.getActionType()))
-                .max(Comparator
-                        .comparing(WorkflowAction::getActionAt)
-                        .thenComparingInt(WorkflowAction::getActionSeq))
+        return instance.getTasks().stream()
+                .flatMap(task -> task.getActors().stream())
+                .filter(actor -> actor.getStatus() == ActorStatus.RETURNED)
+                .max(Comparator.comparing(TaskActor::getActedAt, Comparator.nullsLast(Comparator.naturalOrder())))
                 .orElse(null);
     }
 

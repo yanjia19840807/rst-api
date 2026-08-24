@@ -27,18 +27,18 @@ import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationWorkflowQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationWorkflowRow;
 import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationWorkflowView;
-import com.cmacgm.gbs.rst.api.holidaytemplate.application.WorkingDaysService;
+import com.cmacgm.gbs.rst.api.workingdays.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
-import com.cmacgm.gbs.rst.api.submission.domain.Submission;
-import com.cmacgm.gbs.rst.api.submission.persistence.SubmissionRepository;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
+import com.cmacgm.gbs.rst.api.workflow.domain.ProcessInstance;
+import com.cmacgm.gbs.rst.api.workflow.domain.ProcessTask;
+import com.cmacgm.gbs.rst.api.workflow.domain.TaskActor;
+import com.cmacgm.gbs.rst.api.workflow.domain.TaskNode;
 import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowAging;
-import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowInstance;
-import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowStepAssignment;
-import com.cmacgm.gbs.rst.api.workflow.persistence.WorkflowInstanceRepository;
+import com.cmacgm.gbs.rst.api.workflow.persistence.ProcessInstanceRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,8 +49,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ValidationWorkflowService {
 
     private final RstExerciseRepository exercises;
-    private final SubmissionRepository submissions;
-    private final WorkflowInstanceRepository workflows;
+    private final ProcessInstanceRepository workflows;
     private final ScenarioRepository scenarios;
     private final ExerciseProductionSupportItemRepository supportItems;
     private final ExerciseTeamSetupRepository teamSetups;
@@ -61,7 +60,6 @@ public class ValidationWorkflowService {
 
     /**
      * @param exercises Exercise aggregate
-     * @param submissions latest submission per Exercise
      * @param workflows workflow instance for the current review step
      * @param scenarios Official Scenario + Right Sizing HC
      * @param supportItems production support inputs
@@ -73,8 +71,7 @@ public class ValidationWorkflowService {
      */
     public ValidationWorkflowService(
             RstExerciseRepository exercises,
-            SubmissionRepository submissions,
-            WorkflowInstanceRepository workflows,
+            ProcessInstanceRepository workflows,
             ScenarioRepository scenarios,
             ExerciseProductionSupportItemRepository supportItems,
             ExerciseTeamSetupRepository teamSetups,
@@ -83,7 +80,6 @@ public class ValidationWorkflowService {
             TimesheetReadService timesheet,
             Clock clock) {
         this.exercises = exercises;
-        this.submissions = submissions;
         this.workflows = workflows;
         this.scenarios = scenarios;
         this.supportItems = supportItems;
@@ -119,7 +115,7 @@ public class ValidationWorkflowService {
                     exercise,
                     reviewByExercise.get(exercise.getId()),
                     rightSizingByExercise.get(exercise.getId()),
-                    supportByExercise.getOrDefault(exercise.getId(), BigDecimal.ZERO),
+                    supportByExercise.get(exercise.getId()),
                     setups.get(exercise.getId())));
         }
         source.sort(Comparator
@@ -173,62 +169,39 @@ public class ValidationWorkflowService {
 
     private Map<UUID, ReviewState> reviewStateFor(List<RstExercise> items) {
         List<UUID> exerciseIds = items.stream().map(RstExercise::getId).toList();
-        List<Submission> submissionRows = submissions.findByExerciseIdIn(exerciseIds);
-        Map<UUID, Submission> submissionByExercise = new HashMap<>();
-        for (Submission submission : submissionRows) {
-            submissionByExercise.put(submission.getExerciseId(), submission);
+        Map<UUID, ProcessInstance> workflowByExercise = new HashMap<>();
+        for (ProcessInstance workflow : workflows.findByExerciseIdIn(exerciseIds)) {
+            workflowByExercise.put(workflow.getExerciseId(), workflow);
         }
-        Map<UUID, WorkflowInstance> workflowBySubmission = new HashMap<>();
-        if (!submissionRows.isEmpty()) {
-            for (WorkflowInstance workflow : workflows.findBySubmissionIdIn(
-                    submissionRows.stream().map(Submission::getId).toList())) {
-                workflowBySubmission.put(workflow.getSubmissionId(), workflow);
-            }
-        }
-        Map<String, String> names = resolveDisplayNames(workflowBySubmission);
+        Map<String, String> names = resolveDisplayNames(workflowByExercise);
         Map<UUID, ReviewState> result = new HashMap<>();
         for (RstExercise exercise : items) {
-            Submission submission = submissionByExercise.get(exercise.getId());
-            WorkflowInstance workflow = submission == null
+            ProcessInstance workflow = workflowByExercise.get(exercise.getId());
+            ProcessTask ready = workflow == null
                     ? null
-                    : workflowBySubmission.get(submission.getId());
-            WorkflowStepAssignment ready = workflow == null
-                    ? null
-                    : workflow.findCurrentReadyStep().orElse(null);
+                    : workflow.findCurrentPendingTask().orElse(null);
+            TaskActor pending = ready == null ? null : ready.findAnyPendingActor().orElse(null);
             String role = ready != null
-                    ? ready.getRequiredRoleCode()
-                    : (submission == null ? null : roleForStep(submission.getCurrentStep()));
-            String supervisorPositionId = exercise.getToolkitSnapshot() == null
-                    ? null
-                    : exercise.getToolkitSnapshot().getSupervisorPositionId();
-            String center = exercise.getToolkitSnapshot() == null
-                    ? null
-                    : exercise.getToolkitSnapshot().getCenter();
-            String domain = exercise.getToolkitSnapshot() == null
-                    ? null
-                    : exercise.getToolkitSnapshot().getDomain();
-            String positionId = ready == null
-                    ? null
-                    : (hasText(ready.getAssigneePositionId())
-                            ? ready.getAssigneePositionId()
-                            : workflowRouter.positionIdOrNull(
-                                    supervisorPositionId, center, domain, ready.getRequiredRoleCode()));
-            String owner = ready == null
+                    ? ready.getNode().roleCode()
+                    : (workflow == null ? null : roleForStep(workflow.getCurrentStep()));
+            String positionId = pending == null ? null : pending.getPositionId();
+            String owner = ready == null || pending == null
                     ? null
                     : firstNonBlank(
-                            workflowRouter.occupantName(ready.getRequiredRoleCode(), positionId),
-                            displayName(names, ready.getAssigneeCcgid()));
+                            workflowRouter.occupantName(ready.getNode().roleCode(), positionId),
+                            displayName(names, pending.getCcgid()));
             Instant agingFrom = WorkflowAging.currentStepStartedAt(workflow, exercise.getSubmittedAt());
             result.put(exercise.getId(), new ReviewState(role, owner, agingFrom));
         }
         return result;
     }
 
-    private Map<String, String> resolveDisplayNames(Map<UUID, WorkflowInstance> workflowBySubmission) {
+    private Map<String, String> resolveDisplayNames(Map<UUID, ProcessInstance> workflowBySubmission) {
         Set<String> ccgids = new HashSet<>();
         workflowBySubmission.values().forEach(workflow ->
-                workflow.findCurrentReadyStep()
-                        .map(WorkflowStepAssignment::getAssigneeCcgid)
+                workflow.findCurrentPendingTask()
+                        .flatMap(ProcessTask::findAnyPendingActor)
+                        .map(TaskActor::getCcgid)
                         .ifPresent(ccgids::add));
         if (ccgids.isEmpty()) {
             return Map.of();
@@ -344,19 +317,7 @@ public class ValidationWorkflowService {
             List<ExerciseProductionSupportItem> items,
             ExerciseTeamSetup setup,
             BigDecimal workingDays) {
-        if (items.isEmpty()) {
-            return BigDecimal.ZERO;
-        }
-        BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup, workingDays);
-        BigDecimal total = BigDecimal.ZERO;
-        for (ExerciseProductionSupportItem item : items) {
-            try {
-                total = total.add(SupportWorkloadMath.derive(item, workingDays, fteHours).supportFte());
-            } catch (IllegalArgumentException ignored) {
-                // skip incomplete support rows
-            }
-        }
-        return total;
+        return SupportWorkloadMath.totalSupportFte(items, setup, workingDays);
     }
 
     private static String reviewStageLabel(String role) {
@@ -372,15 +333,8 @@ public class ValidationWorkflowService {
     }
 
     private static String roleForStep(Short step) {
-        if (step == null) {
-            return null;
-        }
-        return switch (step) {
-            case 1 -> "MANAGER";
-            case 2 -> "CDH";
-            case 3 -> "LTH";
-            default -> null;
-        };
+        TaskNode node = TaskNode.reviewOf(step);
+        return node == null ? null : node.roleCode();
     }
 
     private static String displayName(Map<String, String> names, String ccgid) {

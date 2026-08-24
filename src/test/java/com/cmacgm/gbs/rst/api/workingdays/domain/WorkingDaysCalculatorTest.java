@@ -1,4 +1,4 @@
-package com.cmacgm.gbs.rst.api.holidaytemplate.domain;
+package com.cmacgm.gbs.rst.api.workingdays.domain;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -9,8 +9,8 @@ import java.time.YearMonth;
 import java.util.List;
 import java.util.Set;
 
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator.MonthDayCounts;
-import com.cmacgm.gbs.rst.api.holidaytemplate.domain.WorkingDaysCalculator.VolumeDayFlags;
+import com.cmacgm.gbs.rst.api.workingdays.domain.WorkingDaysCalculator.MonthDayCounts;
+import com.cmacgm.gbs.rst.api.workingdays.domain.WorkingDaysCalculator.VolumeDayFlags;
 import org.junit.jupiter.api.Test;
 
 class WorkingDaysCalculatorTest {

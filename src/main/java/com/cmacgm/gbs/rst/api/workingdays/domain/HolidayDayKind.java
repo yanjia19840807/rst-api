@@ -1,4 +1,4 @@
-package com.cmacgm.gbs.rst.api.holidaytemplate.domain;
+package com.cmacgm.gbs.rst.api.workingdays.domain;
 
 import java.util.Locale;
 

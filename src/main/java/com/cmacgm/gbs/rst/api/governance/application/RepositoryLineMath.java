@@ -52,15 +52,21 @@ public final class RepositoryLineMath {
             BigDecimal productionSupportFte) {
         BigDecimal lineHc = nz(lineDeliveryHc);
         BigDecimal totalHc = nz(totalDeliveryHc);
-        BigDecimal supportTotal = nz(productionSupportFte);
         if (totalHc.signum() <= 0) {
             return new LineMetrics(lineHc, null, null, null, null);
         }
         BigDecimal weight = lineHc.divide(totalHc, MC);
-        BigDecimal lineSupport = scale(supportTotal.multiply(weight, MC));
+        BigDecimal lineSupport = productionSupportFte == null
+                ? null
+                : scale(productionSupportFte.multiply(weight, MC));
         if (rightSizingHc == null) {
             return new LineMetrics(lineHc, null, lineSupport, null, null);
         }
+        if (productionSupportFte == null) {
+            return new LineMetrics(
+                    lineHc, scale(rightSizingHc.multiply(weight, MC)), null, null, null);
+        }
+        BigDecimal supportTotal = productionSupportFte;
         BigDecimal headcount = SizingMath.actualHeadcount(actualHc, totalHc);
         BigDecimal capacityTotal = SizingMath.capacityCreation(headcount, rightSizingHc, supportTotal);
         BigDecimal lineRs = scale(rightSizingHc.multiply(weight, MC));
