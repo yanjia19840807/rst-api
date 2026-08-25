@@ -7,7 +7,7 @@ import java.time.LocalDate;
 import java.util.Set;
 import java.util.UUID;
 
-import com.cmacgm.gbs.rst.api.associateddata.application.VolumeTrainWindows;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.application.VolumeTrainWindows;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import org.junit.jupiter.api.Test;
 

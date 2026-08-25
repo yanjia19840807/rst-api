@@ -20,10 +20,10 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
-import com.cmacgm.gbs.rst.api.associateddata.domain.SupportWorkloadMath;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSupportItemRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseProductionSupportItemRepository;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
@@ -43,11 +43,11 @@ import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
-import com.cmacgm.gbs.rst.api.workingdays.application.WorkingDaysService;
-import com.cmacgm.gbs.rst.api.scenario.application.ScenarioCommitService;
-import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
-import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
-import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.application.WorkingDaysService;
+import com.cmacgm.gbs.rst.api.exercise.scenario.application.ScenarioCommitService;
+import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
+import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
+import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
@@ -589,7 +589,7 @@ public class ExerciseService {
                         null));
                 continue;
             }
-            if (!workflow.isOpen()) {
+            if (!workflow.isAwaitingReview()) {
                 continue;
             }
             ProcessTask ready = workflow.findCurrentPendingTask().orElse(null);

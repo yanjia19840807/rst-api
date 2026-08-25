@@ -20,8 +20,6 @@ import jakarta.persistence.Version;
 
 import org.hibernate.annotations.BatchSize;
 
-import com.cmacgm.gbs.rst.api.submission.domain.SubmissionScope;
-
 /**
  * One approval process for an Exercise. Nodes are opened as new {@link ProcessTask} rows.
  */
@@ -147,7 +145,7 @@ public class ProcessInstance {
     }
 
     /**
-     * Returns the process to the Supervisor. Process finishes; Exercise becomes editable.
+     * Returns the process to the Supervisor. The case stays OPEN for revision.
      *
      * @param actor deciding actor
      * @param comments required comments
@@ -157,7 +155,7 @@ public class ProcessInstance {
     public void returnToSupervisor(TaskActor actor, String comments, UUID requestId, Instant now) {
         actor.returnToSupervisor(comments, requestId, now);
         actor.getTask().applyDecision(actor, now);
-        this.status = ProcessStatus.FINISHED;
+        this.currentStep = null;
     }
 
     /**
@@ -190,7 +188,7 @@ public class ProcessInstance {
         current.addActor(initiator);
         initiator.withdraw(ownerCcgid, requestId, now);
         current.complete(TaskStatus.WITHDRAWN, now);
-        this.status = ProcessStatus.FINISHED;
+        this.currentStep = null;
     }
 
     /**
@@ -199,7 +197,7 @@ public class ProcessInstance {
      * @return UNDER_REVIEW / APPROVED / REJECTED / IN_PROGRESS
      */
     public String documentStatus() {
-        if (status == ProcessStatus.OPEN) {
+        if (isAwaitingReview()) {
             return ExerciseLifecycle.UNDER_REVIEW;
         }
         return lastReviewOutcome()
@@ -212,12 +210,12 @@ public class ProcessInstance {
     }
 
     /**
-     * Public submissionStatus: OPEN while running, otherwise the last review outcome.
+     * Public submissionStatus: OPEN while a reviewer is waiting, otherwise the last outcome.
      *
      * @return OPEN / APPROVED / RETURNED / REJECTED / WITHDRAWN
      */
     public String submissionStatus() {
-        if (status == ProcessStatus.OPEN) {
+        if (isAwaitingReview()) {
             return "OPEN";
         }
         return lastReviewOutcome().map(Enum::name).orElse(ProcessStatus.FINISHED.name());
@@ -229,7 +227,7 @@ public class ProcessInstance {
      * @return true after Return or Withdraw
      */
     public boolean isResubmittable() {
-        return status == ProcessStatus.FINISHED
+        return !isAwaitingReview()
                 && lastReviewOutcome().map(TaskStatus::allowsResubmit).orElse(false);
     }
 
@@ -297,6 +295,15 @@ public class ProcessInstance {
 
     public boolean isOpen() {
         return status.isOpen();
+    }
+
+    /**
+     * Whether a review node is waiting on an approver.
+     *
+     * @return true when Manager / CDH / LTH has a pending task
+     */
+    public boolean isAwaitingReview() {
+        return findCurrentPendingTask().isPresent();
     }
 
     public UUID getId() { return id; }

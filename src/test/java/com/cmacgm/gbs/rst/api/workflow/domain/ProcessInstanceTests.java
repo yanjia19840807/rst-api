@@ -56,10 +56,13 @@ class ProcessInstanceTests {
 
         instance.returnToSupervisor(actor, "fix kpi", UUID.randomUUID(), T1);
 
-        assertThat(instance.getStatus()).isEqualTo(ProcessStatus.FINISHED);
+        assertThat(instance.getStatus()).isEqualTo(ProcessStatus.OPEN);
+        assertThat(instance.isAwaitingReview()).isFalse();
         assertThat(instance.documentStatus()).isEqualTo(ExerciseLifecycle.IN_PROGRESS);
         assertThat(instance.submissionStatus()).isEqualTo("RETURNED");
         assertThat(instance.isResubmittable()).isTrue();
+        assertThat(ExerciseLifecycle.canEdit(instance)).isTrue();
+        assertThat(ExerciseLifecycle.canWithdraw(instance)).isFalse();
         assertThat(actor.getStatus()).isEqualTo(ActorStatus.RETURNED);
         assertThat(instance.findCurrentPendingTask()).isEmpty();
     }
@@ -85,10 +88,13 @@ class ProcessInstanceTests {
 
         instance.withdraw("sup1", UUID.randomUUID(), T1);
 
-        assertThat(instance.getStatus()).isEqualTo(ProcessStatus.FINISHED);
+        assertThat(instance.getStatus()).isEqualTo(ProcessStatus.OPEN);
+        assertThat(instance.isAwaitingReview()).isFalse();
         assertThat(instance.documentStatus()).isEqualTo(ExerciseLifecycle.IN_PROGRESS);
         assertThat(instance.submissionStatus()).isEqualTo("WITHDRAWN");
         assertThat(instance.isResubmittable()).isTrue();
+        assertThat(ExerciseLifecycle.canEdit(instance)).isTrue();
+        assertThat(ExerciseLifecycle.canWithdraw(instance)).isFalse();
         ProcessTask manager = instance.getTasks().stream()
                 .filter(task -> task.getNode() == TaskNode.MANAGER)
                 .reduce((a, b) -> b)

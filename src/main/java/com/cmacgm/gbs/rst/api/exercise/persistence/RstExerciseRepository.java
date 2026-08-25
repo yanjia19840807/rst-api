@@ -117,7 +117,7 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
     List<RstExercise> findApprovedSupportRepositoryExercises();
 
     /**
-     * OPEN processes for Validation Workflow, with Toolkit snapshot and Shared KPI lines.
+     * Processes waiting on a reviewer, with Toolkit snapshot and Shared KPI lines.
      *
      * @return in-review exercises
      */
@@ -127,15 +127,21 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
             where e.deletedAt is null
               and exists (
                   select 1 from ProcessInstance w
+                  join w.tasks t
                   where w.exerciseId = e.id
-                    and w.status = com.cmacgm.gbs.rst.api.workflow.domain.ProcessStatus.OPEN
+                    and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.PENDING
+                    and t.node in (
+                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.MANAGER,
+                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.CDH,
+                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LTH
+                    )
               )
             order by e.submittedAt desc, e.exerciseCode asc, e.id asc
             """)
     List<RstExercise> findUnderReviewValidationExercises();
 
     /**
-     * Counts Exercises whose process is currently OPEN.
+     * Counts Exercises whose process is waiting on a reviewer.
      *
      * @return under-review count
      */
@@ -144,8 +150,14 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
             where e.deletedAt is null
               and exists (
                   select 1 from ProcessInstance w
+                  join w.tasks t
                   where w.exerciseId = e.id
-                    and w.status = com.cmacgm.gbs.rst.api.workflow.domain.ProcessStatus.OPEN
+                    and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.PENDING
+                    and t.node in (
+                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.MANAGER,
+                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.CDH,
+                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LTH
+                    )
               )
             """)
     long countUnderReview();

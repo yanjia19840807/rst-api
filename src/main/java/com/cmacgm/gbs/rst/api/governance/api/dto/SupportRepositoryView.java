@@ -3,7 +3,7 @@ package com.cmacgm.gbs.rst.api.governance.api.dto;
 import java.math.BigDecimal;
 import java.util.List;
 
-import com.cmacgm.gbs.rst.api.supporttaxonomy.api.dto.SupportTaxonomyOption;
+import com.cmacgm.gbs.rst.api.supportcategory.api.dto.SupportCategoryOption;
 
 /**
  * Support Repository: one page of activity rows, summaries from all filtered rows, and unfiltered options.
@@ -19,6 +19,6 @@ public record SupportRepositoryView(
         long total,
         int totalPages,
         List<String> centers,
-        List<SupportTaxonomyOption> categories,
+        List<SupportCategoryOption> categories,
         List<String> toolkitNames) {
 }

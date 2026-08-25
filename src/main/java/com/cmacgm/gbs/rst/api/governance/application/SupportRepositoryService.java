@@ -9,11 +9,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseProductionSupportItem;
-import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
-import com.cmacgm.gbs.rst.api.associateddata.domain.SupportWorkloadMath;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseProductionSupportItemRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseProductionSupportItem;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseProductionSupportItemRepository;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
@@ -21,9 +21,9 @@ import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryRow;
 import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryView;
-import com.cmacgm.gbs.rst.api.workingdays.application.WorkingDaysService;
-import com.cmacgm.gbs.rst.api.supporttaxonomy.api.dto.SupportTaxonomyOption;
-import com.cmacgm.gbs.rst.api.supporttaxonomy.application.SupportTaxonomyService;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.application.WorkingDaysService;
+import com.cmacgm.gbs.rst.api.supportcategory.api.dto.SupportCategoryOption;
+import com.cmacgm.gbs.rst.api.supportcategory.application.SupportCategoryService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,26 +37,26 @@ public class SupportRepositoryService {
     private final ExerciseProductionSupportItemRepository supportItems;
     private final ExerciseTeamSetupRepository teamSetups;
     private final WorkingDaysService workingDaysService;
-    private final SupportTaxonomyService supportTaxonomy;
+    private final SupportCategoryService supportCategories;
 
     /**
      * @param exercises Exercise aggregate
      * @param supportItems production support inputs
      * @param teamSetups Team Setup used for Support FTE
      * @param workingDaysService working days for Support FTE
-     * @param supportTaxonomy Category lookup for dropdowns
+     * @param supportCategories Category lookup for dropdowns
      */
     public SupportRepositoryService(
             RstExerciseRepository exercises,
             ExerciseProductionSupportItemRepository supportItems,
             ExerciseTeamSetupRepository teamSetups,
             WorkingDaysService workingDaysService,
-            SupportTaxonomyService supportTaxonomy) {
+            SupportCategoryService supportCategories) {
         this.exercises = exercises;
         this.supportItems = supportItems;
         this.teamSetups = teamSetups;
         this.workingDaysService = workingDaysService;
-        this.supportTaxonomy = supportTaxonomy;
+        this.supportCategories = supportCategories;
     }
 
     /**
@@ -94,7 +94,7 @@ public class SupportRepositoryService {
                 .toList();
         SupportRepositoryMath.Summary summary = SupportRepositoryMath.summarize(items);
         PageResponse<SupportRepositoryRow> paged = PageResponse.ofList(items, page, pageSize);
-        List<SupportTaxonomyOption> categoryOptions = supportTaxonomy.listActive();
+        List<SupportCategoryOption> categoryOptions = supportCategories.listActive();
         return new SupportRepositoryView(
                 summary.totalSupportFte(),
                 summary.topCategory(),
@@ -187,7 +187,7 @@ public class SupportRepositoryService {
                 paged.total(),
                 paged.totalPages(),
                 List.of(),
-                supportTaxonomy.listActive(),
+                supportCategories.listActive(),
                 List.of());
     }
 }

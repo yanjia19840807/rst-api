@@ -17,12 +17,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import com.cmacgm.gbs.rst.api.associateddata.application.ToolkitVolumeService;
-import com.cmacgm.gbs.rst.api.associateddata.application.ToolkitVolumeService.TrainingPoint;
-import com.cmacgm.gbs.rst.api.associateddata.domain.ExerciseTeamSetup;
-import com.cmacgm.gbs.rst.api.associateddata.domain.HolidayDays;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseHolidayRepository;
-import com.cmacgm.gbs.rst.api.associateddata.persistence.ExerciseTeamSetupRepository;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.application.ExerciseVolumeTrainingService;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.HolidayDays;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseHolidayRepository;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
@@ -36,25 +35,27 @@ import com.cmacgm.gbs.rst.api.forecast.ForecastApiModels.MonthlyActual;
 import com.cmacgm.gbs.rst.api.forecast.ForecastApiModels.MonthlyForecastRequest;
 import com.cmacgm.gbs.rst.api.forecast.ForecastApiModels.MonthlyForecastResponse;
 import com.cmacgm.gbs.rst.api.forecast.ForecastApiModels.MonthlyFuture;
-import com.cmacgm.gbs.rst.api.workingdays.domain.HolidayDayKind;
-import com.cmacgm.gbs.rst.api.workingdays.domain.WeekendCode;
-import com.cmacgm.gbs.rst.api.workingdays.domain.WorkingDaysCalculator;
-import com.cmacgm.gbs.rst.api.workingdays.domain.WorkingDaysCalculator.MonthDayCounts;
-import com.cmacgm.gbs.rst.api.workingdays.domain.WorkingDaysCalculator.VolumeDayFlags;
-import com.cmacgm.gbs.rst.api.scenario.domain.ForecastPoint;
-import com.cmacgm.gbs.rst.api.scenario.domain.ForecastRun;
-import com.cmacgm.gbs.rst.api.scenario.domain.Scenario;
-import com.cmacgm.gbs.rst.api.scenario.persistence.ForecastRunRepository;
-import com.cmacgm.gbs.rst.api.scenario.persistence.ScenarioRepository;
+import com.cmacgm.gbs.rst.api.common.workingdays.HolidayDayKind;
+import com.cmacgm.gbs.rst.api.common.workingdays.WeekendCode;
+import com.cmacgm.gbs.rst.api.common.workingdays.WorkingDaysCalculator;
+import com.cmacgm.gbs.rst.api.common.workingdays.WorkingDaysCalculator.MonthDayCounts;
+import com.cmacgm.gbs.rst.api.common.workingdays.WorkingDaysCalculator.VolumeDayFlags;
+import com.cmacgm.gbs.rst.api.exercise.scenario.domain.ForecastPoint;
+import com.cmacgm.gbs.rst.api.exercise.scenario.domain.ForecastRun;
+import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
+import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ForecastRunRepository;
+import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.cmacgm.gbs.rst.api.scenario.api.dto.ForecastBundleView;
-import com.cmacgm.gbs.rst.api.scenario.api.dto.ForecastPointView;
-import com.cmacgm.gbs.rst.api.scenario.api.dto.ForecastTrainingBundleView;
-import com.cmacgm.gbs.rst.api.scenario.api.dto.ForecastTrainingBundleView.ForecastTrainingObservationView;
-import com.cmacgm.gbs.rst.api.scenario.api.dto.ForecastView;
-import com.cmacgm.gbs.rst.api.scenario.api.dto.PersistedForecastIds;
+import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ForecastBundleView;
+import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ForecastPointView;
+import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ForecastTrainingBundleView;
+import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ForecastTrainingBundleView.ForecastTrainingObservationView;
+import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ForecastView;
+import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.PersistedForecastIds;
+import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitVolumeService;
+import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitVolumeService.TrainingPoint;
 
 /**
  * Orchestrates Forecast: Calendar + Volume → Python SARIMAX.
@@ -70,7 +71,7 @@ public class ForecastOrchestrationService {
     private final ExerciseAccess exercises;
     private final ScenarioRepository scenarios;
     private final ForecastRunRepository forecastRuns;
-    private final ToolkitVolumeService toolkitVolumes;
+    private final ExerciseVolumeTrainingService volumeTraining;
     private final ExerciseHolidayRepository holidays;
     private final ExerciseTeamSetupRepository teamSetups;
     private final WorkingDaysCalculator workingDaysCalculator;
@@ -85,7 +86,7 @@ public class ForecastOrchestrationService {
             ExerciseAccess exercises,
             ScenarioRepository scenarios,
             ForecastRunRepository forecastRuns,
-            ToolkitVolumeService toolkitVolumes,
+            ExerciseVolumeTrainingService volumeTraining,
             ExerciseHolidayRepository holidays,
             ExerciseTeamSetupRepository teamSetups,
             WorkingDaysCalculator workingDaysCalculator,
@@ -95,7 +96,7 @@ public class ForecastOrchestrationService {
         this.exercises = exercises;
         this.scenarios = scenarios;
         this.forecastRuns = forecastRuns;
-        this.toolkitVolumes = toolkitVolumes;
+        this.volumeTraining = volumeTraining;
         this.holidays = holidays;
         this.teamSetups = teamSetups;
         this.workingDaysCalculator = workingDaysCalculator;
@@ -132,8 +133,8 @@ public class ForecastOrchestrationService {
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
         RstExercise exercise = exercises.requireOwned(ownerCcgid, scenario.getExerciseId());
-        String monthlyHash = ToolkitVolumeService.hashPoints(toolkitVolumes.assembleMonthly(exercise));
-        String dailyHash = ToolkitVolumeService.hashPoints(toolkitVolumes.assembleDaily(exercise));
+        String monthlyHash = ToolkitVolumeService.hashPoints(volumeTraining.assembleMonthly(exercise));
+        String dailyHash = ToolkitVolumeService.hashPoints(volumeTraining.assembleDaily(exercise));
         ForecastRun monthly = forecastRuns.save(toEntity(scenarioId, ownerCcgid, bundle.monthly(), 1, monthlyHash));
         ForecastRun daily = forecastRuns.save(toEntity(scenarioId, ownerCcgid, bundle.daily(), 2, dailyHash));
         return new PersistedForecastIds(monthly.getId(), daily.getId());
@@ -147,7 +148,7 @@ public class ForecastOrchestrationService {
         YearMonth sizingMonth = YearMonth.from(exercise.getSizingMonth());
         CalendarContext calendar = loadCalendar(exerciseId);
 
-        List<TrainingPoint> assembled = toolkitVolumes.assembleMonthly(exercise);
+        List<TrainingPoint> assembled = volumeTraining.assembleMonthly(exercise);
         List<MonthlyActual> history = buildMonthlyHistory(
                 sizingMonth, assembled, calendar.weekendCode(), calendar.nonWorkingHolidays());
         List<MonthlyFuture> future = buildMonthlyFuture(
@@ -197,7 +198,7 @@ public class ForecastOrchestrationService {
         YearMonth forecastMonth = sizingMonth.plusMonths(1);
         CalendarContext calendar = loadCalendar(exerciseId);
 
-        List<TrainingPoint> assembled = toolkitVolumes.assembleDaily(exercise);
+        List<TrainingPoint> assembled = volumeTraining.assembleDaily(exercise);
         List<DailyActual> history = buildDailyHistory(
                 exercise.getSizingMonth(),
                 assembled,

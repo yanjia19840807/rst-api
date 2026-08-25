@@ -4,8 +4,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
-import com.cmacgm.gbs.rst.api.approval.api.dto.ActionView;
-import com.cmacgm.gbs.rst.api.approval.api.dto.StepView;
+import com.cmacgm.gbs.rst.api.workflow.api.dto.ActionView;
+import com.cmacgm.gbs.rst.api.workflow.api.dto.StepView;
 import com.cmacgm.gbs.rst.api.workflow.domain.ActorStatus;
 import com.cmacgm.gbs.rst.api.workflow.domain.ProcessInstance;
 import com.cmacgm.gbs.rst.api.workflow.domain.ProcessTask;

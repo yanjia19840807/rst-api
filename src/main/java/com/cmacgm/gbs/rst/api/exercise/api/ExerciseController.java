@@ -5,8 +5,8 @@ import java.util.UUID;
 
 import jakarta.validation.Valid;
 
-import com.cmacgm.gbs.rst.api.approval.application.ApprovalService;
-import com.cmacgm.gbs.rst.api.approval.api.dto.ApprovalDetailView;
+import com.cmacgm.gbs.rst.api.workflow.approval.application.ApprovalService;
+import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.ApprovalDetailView;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.CommittedResultsStatus;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.CreateExerciseRequest;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.CreateExerciseResult;
@@ -17,10 +17,10 @@ import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateExercisePeriodsRequest;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateExercisePeriodsResult;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
-import com.cmacgm.gbs.rst.api.submission.application.SubmissionService;
-import com.cmacgm.gbs.rst.api.submission.api.dto.SubmitPreviewView;
-import com.cmacgm.gbs.rst.api.submission.api.dto.SubmitRequest;
-import com.cmacgm.gbs.rst.api.submission.api.dto.SubmittedDetailsView;
+import com.cmacgm.gbs.rst.api.exercise.submission.application.SubmissionService;
+import com.cmacgm.gbs.rst.api.exercise.submission.api.dto.SubmitPreviewView;
+import com.cmacgm.gbs.rst.api.exercise.submission.api.dto.SubmitRequest;
+import com.cmacgm.gbs.rst.api.exercise.submission.api.dto.SubmittedDetailsView;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -267,7 +267,7 @@ public class ExerciseController {
     }
 
     /**
-     * Withdraws an UNDER_REVIEW submission, cancelling the workflow and reopening the Exercise.
+     * Withdraws an UNDER_REVIEW submission. The process stays OPEN for revision.
      *
      * @param principal authenticated owner
      * @param id Exercise id

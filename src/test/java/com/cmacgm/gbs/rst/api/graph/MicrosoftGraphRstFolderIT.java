@@ -14,9 +14,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 
-import com.cmacgm.gbs.rst.api.associateddata.application.HolidayExcelService;
-import com.cmacgm.gbs.rst.api.associateddata.application.ImportTemplateService;
-import com.cmacgm.gbs.rst.api.associateddata.application.VolumeExcelService;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.application.HolidayExcelService;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.application.ImportTemplateService;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.application.VolumeExcelService;
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphModels.GraphDriveItem;
 
 /**

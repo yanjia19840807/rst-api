@@ -52,7 +52,7 @@ public final class ExerciseLifecycle {
     }
 
     public static boolean canWithdraw(ProcessInstance process) {
-        return process != null && process.isOpen();
+        return process != null && process.isAwaitingReview();
     }
 
     public static boolean isUnderReview(ProcessInstance process) {

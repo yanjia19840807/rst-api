@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
 
-import com.cmacgm.gbs.rst.api.scenario.application.sizing.SizingMath;
+import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
 
 /**
  * Allocates Exercise-level RS / Support / Capacity onto a Shared KPI line by Delivery HC share.
