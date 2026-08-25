@@ -44,15 +44,15 @@ public interface TimesheetAssignmentRepository
      */
     @Query("""
             select a
-            from TimesheetAssignment a, TimesheetOccupancy o, TimesheetSyncRun monthly, TimesheetSyncRun daily
+            from TimesheetAssignment a, TimesheetPerson p, TimesheetSyncRun monthly, TimesheetSyncRun daily
             where a.id.syncRunId = monthly.id
               and monthly.kind = 'MONTHLY'
               and monthly.status = 'ACTIVE'
-              and o.id.syncRunId = daily.id
+              and p.id.syncRunId = daily.id
               and daily.kind = 'DAILY'
               and daily.status = 'ACTIVE'
-              and o.id.positionId = a.id.supervisorPositionId
-              and upper(o.empCcgid) = upper(:supervisorCcgid)
+              and p.positionId = a.id.supervisorPositionId
+              and upper(p.id.ccgid) = upper(:supervisorCcgid)
             """)
     List<TimesheetAssignment> findActiveBySupervisorCcgid(
             @Param("supervisorCcgid") String supervisorCcgid);

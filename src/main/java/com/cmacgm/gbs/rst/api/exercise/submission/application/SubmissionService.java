@@ -5,7 +5,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.HexFormat;
@@ -14,25 +13,25 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath;
-import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.ScenarioService;
-import com.cmacgm.gbs.rst.api.exercise.scenario.domain.ValidationResult;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.DailyMonthlyVolumeMath;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseVolumeDailyInputRepository;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseVolumeMonthlyInputRepository;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
-import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.SimulationRunRepository;
-import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ValidationResultRepository;
+import com.cmacgm.gbs.rst.api.exercise.submission.domain.ValidationResult;
+import com.cmacgm.gbs.rst.api.exercise.submission.domain.ValidationRule;
+import com.cmacgm.gbs.rst.api.exercise.submission.persistence.ValidationResultRepository;
 import com.cmacgm.gbs.rst.api.exercise.submission.api.dto.SubmitPreviewView;
 import com.cmacgm.gbs.rst.api.exercise.submission.api.dto.SubmitRequest;
 import com.cmacgm.gbs.rst.api.exercise.submission.api.dto.SubmittedDetailsView;
 import com.cmacgm.gbs.rst.api.exercise.submission.api.dto.ValidationFinding;
 import com.cmacgm.gbs.rst.api.workflow.domain.SubmissionScope;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
-import com.cmacgm.gbs.rst.api.exercise.associateddata.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.ActionView;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.ScopeView;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.StepView;
@@ -59,14 +58,13 @@ public class SubmissionService {
     private final ScenarioService scenarioService;
     private final ValidationResultRepository validations;
     private final ScenarioRepository scenarios;
-    private final SimulationRunRepository simulationRuns;
+    private final ExerciseVolumeMonthlyInputRepository monthlyVolumes;
+    private final ExerciseVolumeDailyInputRepository dailyVolumes;
     private final ProcessInstanceRepository workflows;
     private final WorkflowRouter workflowRouter;
     private final WorkflowViews workflowViews;
     private final ApprovalWorkspaceAssembler workspaceAssembler;
     private final TimesheetReadService timesheet;
-    private final ExerciseTeamSetupRepository teamSetups;
-    private final WorkingDaysService workingDaysService;
     private final Clock clock;
 
     /**
@@ -78,35 +76,33 @@ public class SubmissionService {
             ScenarioService scenarioService,
             ValidationResultRepository validations,
             ScenarioRepository scenarios,
-            SimulationRunRepository simulationRuns,
+            ExerciseVolumeMonthlyInputRepository monthlyVolumes,
+            ExerciseVolumeDailyInputRepository dailyVolumes,
             ProcessInstanceRepository workflows,
             WorkflowRouter workflowRouter,
             WorkflowViews workflowViews,
             ApprovalWorkspaceAssembler workspaceAssembler,
             TimesheetReadService timesheet,
-            ExerciseTeamSetupRepository teamSetups,
-            WorkingDaysService workingDaysService,
             Clock clock) {
         this.exercises = exercises;
         this.exerciseRepository = exerciseRepository;
         this.scenarioService = scenarioService;
         this.validations = validations;
         this.scenarios = scenarios;
-        this.simulationRuns = simulationRuns;
+        this.monthlyVolumes = monthlyVolumes;
+        this.dailyVolumes = dailyVolumes;
         this.workflows = workflows;
         this.workflowRouter = workflowRouter;
         this.workflowViews = workflowViews;
         this.workspaceAssembler = workspaceAssembler;
         this.timesheet = timesheet;
-        this.teamSetups = teamSetups;
-        this.workingDaysService = workingDaysService;
         this.clock = clock;
     }
 
     /**
-     * Runs submit-stage validations without mutating workflow state.
+     * Runs submit-stage validations without writing findings or mutating workflow state.
      */
-    @Transactional
+    @Transactional(readOnly = true)
     public SubmitPreviewView submitPreview(String ownerCcgid, UUID exerciseId) {
         RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         if (!ExerciseLifecycle.canSubmit(
@@ -117,11 +113,9 @@ public class SubmissionService {
                     "Exercise must have an Official Scenario and be editable to submit.");
         }
         UUID scenarioId = scenarioService.requireOfficialScenarioId(exercise);
-        List<ValidationFinding> findings =
-                evaluateSubmitValidations(exercise, scenarioId, ownerCcgid, null);
-        boolean remarksRequired = findings.stream()
-                .anyMatch(f -> "SEVERE".equals(f.severity()) && !f.passed());
-        return new SubmitPreviewView(scenarioId, findings, remarksRequired);
+        List<ValidationFinding> findings = List.of(toFinding(evaluateDailyVsMonthly(exercise, ownerCcgid)));
+        return new SubmitPreviewView(
+                scenarioId, findings, remarksRequired(findings), submitBlocked(findings));
     }
 
     /**
@@ -140,18 +134,22 @@ public class SubmissionService {
                     "exercise-not-submittable",
                     "Exercise must have an Official Scenario and be editable to submit.");
         }
-        UUID scenarioId = scenarioService.requireOfficialScenarioId(exercise);
+        scenarioService.requireOfficialScenarioId(exercise);
         Instant now = clock.instant();
         UUID requestId = request.requestId() == null ? UUID.randomUUID() : request.requestId();
-        List<ValidationFinding> findings =
-                evaluateSubmitValidations(exercise, scenarioId, ownerCcgid, request.remarks());
-        boolean remarksRequired = findings.stream()
-                .anyMatch(f -> "SEVERE".equals(f.severity()) && !f.passed());
-        if (remarksRequired && (request.remarks() == null || request.remarks().isBlank())) {
+        ValidationResult finding = evaluateDailyVsMonthly(exercise, ownerCcgid);
+        List<ValidationFinding> findings = List.of(toFinding(finding));
+        if (submitBlocked(findings)) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "validation-blocks-submit",
+                    "SEVERE validation failures must be resolved before Submit.");
+        }
+        if (remarksRequired(findings) && (request.remarks() == null || request.remarks().isBlank())) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "remarks-required",
-                    "SEVERE validation failures require remarks before Submit.");
+                    "WARNING validation failures require remarks before Submit.");
         }
 
         ProcessInstance existing = workflows.findByExerciseId(exerciseId).orElse(null);
@@ -159,14 +157,14 @@ public class SubmissionService {
             return submittedDetails(ownerCcgid, exerciseId);
         }
         if (existing != null && existing.isResubmittable()) {
-            return reopenWorkflow(ownerCcgid, exercise, existing, request.remarks(), requestId, now);
+            return reopenWorkflow(ownerCcgid, exercise, existing, request.remarks(), requestId, now, finding);
         }
         if (existing != null) {
             return submittedDetails(ownerCcgid, exerciseId);
         }
 
-        requireTeamSetupComplete(exercise);
         requireDomainHead(exercise);
+        validations.save(finding);
         ProcessInstance workflow = ProcessInstance.start(
                 exerciseId, request.remarks(), ownerCcgid, requestId, now);
         attachScopes(exercise, workflow);
@@ -185,7 +183,8 @@ public class SubmissionService {
             ProcessInstance workflow,
             String remarks,
             UUID requestId,
-            Instant now) {
+            Instant now,
+            ValidationResult finding) {
         if (workflow.findActorByRequestId(requestId).isPresent()) {
             return toDetails(exercise, workflow);
         }
@@ -194,8 +193,8 @@ public class SubmissionService {
         workflows.saveAndFlush(workflow);
         attachScopes(exercise, workflow);
 
-        requireTeamSetupComplete(exercise);
         requireDomainHead(exercise);
+        validations.save(finding);
         workflow.recordSubmit(ownerCcgid, remarks, requestId, now);
         openManager(workflow, exercise, now);
         workflows.save(workflow);
@@ -251,78 +250,23 @@ public class SubmissionService {
         return toDetails(exercise, workflow);
     }
 
-    private List<ValidationFinding> evaluateSubmitValidations(
-            RstExercise exercise, UUID scenarioId, String actorCcgid, String remarks) {
-        Instant now = clock.instant();
-        List<ValidationFinding> findings = new ArrayList<>();
-
-        boolean hasDaily = simulationRuns
-                .findFirstByScenarioIdAndRunTypeAndStatusOrderByRunNoDesc(
-                        scenarioId, "DAILY", "ACCEPTED")
-                .isPresent();
-        ValidationResult dailyVsMonthly = ValidationResult.create(
+    private ValidationResult evaluateDailyVsMonthly(RstExercise exercise, String actorCcgid) {
+        DailyMonthlyVolumeMath.Result volumes = DailyMonthlyVolumeMath.compare(
+                monthlyVolumes.findByExerciseIdOrderByMonthAsc(exercise.getId()),
+                dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(exercise.getId()));
+        return ValidationResult.create(
                 exercise.getId(),
-                scenarioId,
-                "SUBMIT",
-                "DAILY_VS_MONTHLY",
-                hasDaily ? "WARNING" : "INFO",
-                true,
-                hasDaily ? "daily-present" : "daily-empty",
-                "monthly-accepted",
-                remarks,
+                ValidationRule.DAILY_VS_MONTHLY,
+                volumes.passed(),
+                new ValidationResult.Detail(
+                        volumes.reason(),
+                        volumes.comparedMonths(),
+                        volumes.mismatches().stream()
+                                .map(m -> new ValidationResult.MonthMismatch(
+                                        m.month(), m.daily(), m.monthly()))
+                                .toList()),
                 actorCcgid,
-                now);
-        validations.save(dailyVsMonthly);
-        findings.add(toFinding(dailyVsMonthly));
-
-        boolean hasKpis = !exercise.getSharedKpiLines().isEmpty();
-        ValidationResult kpiPresence = ValidationResult.create(
-                exercise.getId(),
-                scenarioId,
-                "SUBMIT",
-                "SHARED_KPI_PRESENT",
-                hasKpis ? "INFO" : "SEVERE",
-                hasKpis,
-                String.valueOf(exercise.getSharedKpiLines().size()),
-                ">0",
-                remarks,
-                actorCcgid,
-                now);
-        validations.save(kpiPresence);
-        findings.add(toFinding(kpiPresence));
-
-        boolean teamSetupComplete = teamSetupComplete(exercise);
-        ValidationResult teamSetup = ValidationResult.create(
-                exercise.getId(),
-                scenarioId,
-                "SUBMIT",
-                "TEAM_SETUP_COMPLETE",
-                teamSetupComplete ? "INFO" : "SEVERE",
-                teamSetupComplete,
-                teamSetupComplete ? "complete" : "incomplete",
-                "complete",
-                remarks,
-                actorCcgid,
-                now);
-        validations.save(teamSetup);
-        findings.add(toFinding(teamSetup));
-
-        return findings;
-    }
-
-    private void requireTeamSetupComplete(RstExercise exercise) {
-        if (!teamSetupComplete(exercise)) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY,
-                    "team-setup-incomplete",
-                    "Team Setup must include SLA clock hours and Availability before Submit.");
-        }
-    }
-
-    private boolean teamSetupComplete(RstExercise exercise) {
-        return SupportWorkloadMath.teamSetupComplete(
-                teamSetups.findById(exercise.getId()).orElse(null),
-                workingDaysService.workingDaysPerYear(exercise));
+                clock.instant());
     }
 
     private void requireDomainHead(RstExercise exercise) {
@@ -402,9 +346,28 @@ public class SubmissionService {
         return workflows.findByExerciseId(exerciseId).orElse(null);
     }
 
+    private static boolean remarksRequired(List<ValidationFinding> findings) {
+        return findings.stream().anyMatch(f -> f.severity().requiresRemarksWhenFailed());
+    }
+
+    private static boolean submitBlocked(List<ValidationFinding> findings) {
+        return findings.stream().anyMatch(f -> f.severity().blocksSubmitWhenFailed());
+    }
+
     private static ValidationFinding toFinding(ValidationResult result) {
+        ValidationResult.Detail detail = result.getDetail();
         return new ValidationFinding(
-                result.getRuleCode(), result.getSeverity(), result.isPassed(), result.getRemarks());
+                result.getRuleCode(),
+                result.getSeverity(),
+                detail == null
+                        ? null
+                        : new ValidationFinding.Detail(
+                                detail.reason(),
+                                detail.comparedMonths(),
+                                detail.mismatches().stream()
+                                        .map(m -> new ValidationFinding.MonthMismatch(
+                                                m.month(), m.daily(), m.monthly()))
+                                        .toList()));
     }
 
     private static String sha256(String value) {

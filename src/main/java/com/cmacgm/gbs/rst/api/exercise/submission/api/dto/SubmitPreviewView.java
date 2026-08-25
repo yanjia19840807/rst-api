@@ -7,5 +7,8 @@ import java.util.UUID;
  * Submit preview response.
  */
 public record SubmitPreviewView(
-        UUID scenarioId, List<ValidationFinding> findings, boolean remarksRequired) {
+        UUID scenarioId,
+        List<ValidationFinding> findings,
+        boolean remarksRequired,
+        boolean submitBlocked) {
 }

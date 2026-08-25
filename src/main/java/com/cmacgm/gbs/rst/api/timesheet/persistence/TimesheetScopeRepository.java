@@ -20,15 +20,15 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
      */
     @Query("""
             select s
-            from TimesheetScope s, TimesheetOccupancy o, TimesheetSyncRun monthly, TimesheetSyncRun daily
+            from TimesheetScope s, TimesheetPerson p, TimesheetSyncRun monthly, TimesheetSyncRun daily
             where s.id.syncRunId = monthly.id
               and monthly.kind = 'MONTHLY'
               and monthly.status = 'ACTIVE'
-              and o.id.syncRunId = daily.id
+              and p.id.syncRunId = daily.id
               and daily.kind = 'DAILY'
               and daily.status = 'ACTIVE'
-              and o.id.positionId = s.id.supervisorPositionId
-              and upper(o.empCcgid) = upper(:ccgid)
+              and p.positionId = s.id.supervisorPositionId
+              and upper(p.id.ccgid) = upper(:ccgid)
             order by s.id.supervisorPositionId, s.id.center, s.id.pl3Code
             """)
     List<TimesheetScope> findActiveBySupervisorCcgid(@Param("ccgid") String ccgid);
@@ -43,15 +43,15 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
      */
     @Query("""
             select count(s) > 0
-            from TimesheetScope s, TimesheetOccupancy o, TimesheetSyncRun monthly, TimesheetSyncRun daily
+            from TimesheetScope s, TimesheetPerson p, TimesheetSyncRun monthly, TimesheetSyncRun daily
             where s.id.syncRunId = monthly.id
               and monthly.kind = 'MONTHLY'
               and monthly.status = 'ACTIVE'
-              and o.id.syncRunId = daily.id
+              and p.id.syncRunId = daily.id
               and daily.kind = 'DAILY'
               and daily.status = 'ACTIVE'
-              and o.id.positionId = s.id.supervisorPositionId
-              and upper(o.empCcgid) = upper(:ccgid)
+              and p.positionId = s.id.supervisorPositionId
+              and upper(p.id.ccgid) = upper(:ccgid)
               and s.id.supervisorPositionId = :positionId
               and s.id.pl3Code = :pl3Code
             """)

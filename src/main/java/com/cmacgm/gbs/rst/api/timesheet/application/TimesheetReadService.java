@@ -3,22 +3,18 @@ package com.cmacgm.gbs.rst.api.timesheet.application;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetAssignment;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPosition;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetAssignmentRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetOccupancyRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
@@ -38,7 +34,6 @@ public class TimesheetReadService {
     private final TimesheetSyncRunRepository syncRuns;
     private final TimesheetPersonRepository people;
     private final TimesheetPositionRepository positions;
-    private final TimesheetOccupancyRepository occupancies;
     private final TimesheetScopeRepository scopes;
     private final TimesheetAssignmentRepository assignments;
     private final TimesheetKpiRepository kpis;
@@ -47,7 +42,6 @@ public class TimesheetReadService {
      * @param syncRuns run headers
      * @param people Daily people
      * @param positions Daily positions
-     * @param occupancies Daily occupancy
      * @param scopes Monthly scopes
      * @param assignments Monthly assignments
      * @param kpis Monthly KPIs
@@ -56,14 +50,12 @@ public class TimesheetReadService {
             TimesheetSyncRunRepository syncRuns,
             TimesheetPersonRepository people,
             TimesheetPositionRepository positions,
-            TimesheetOccupancyRepository occupancies,
             TimesheetScopeRepository scopes,
             TimesheetAssignmentRepository assignments,
             TimesheetKpiRepository kpis) {
         this.syncRuns = syncRuns;
         this.people = people;
         this.positions = positions;
-        this.occupancies = occupancies;
         this.scopes = scopes;
         this.assignments = assignments;
         this.kpis = kpis;
@@ -231,7 +223,7 @@ public class TimesheetReadService {
     }
 
     /**
-     * Positions occupied by a person for a role.
+     * Position occupied by a person for a role.
      *
      * @param ccgid occupant
      * @param roleType SUPERVISOR / SR_MANAGER / DOMAIN_HEAD
@@ -239,11 +231,13 @@ public class TimesheetReadService {
      */
     @Transactional(readOnly = true)
     public List<String> positionsForRole(String ccgid, String roleType) {
-        return occupancies.findActivePositionIdsByCcgidAndRole(ccgid, roleType);
+        return people.findActivePositionIdByCcgidAndRole(ccgid, roleType)
+                .map(List::of)
+                .orElse(List.of());
     }
 
     /**
-     * Occupant of a position, or the person whose bindable emp position matches.
+     * Occupant of a bindable position.
      *
      * @param positionId position
      * @return occupant when present
@@ -253,22 +247,13 @@ public class TimesheetReadService {
         if (positionId == null || positionId.isBlank()) {
             return null;
         }
-        Occupant occupied = occupancies.findActiveByPositionId(positionId)
-                .map(row -> new Occupant(
-                        row.getPositionId(),
-                        row.getEmpCcgid(),
-                        people.findActiveNameByCcgid(row.getEmpCcgid()).orElse(row.getEmpCcgid())))
-                .orElse(null);
-        if (occupied != null) {
-            return occupied;
-        }
-        return people.findActiveByEmpPositionId(positionId)
-                .map(person -> new Occupant(person.getEmpPositionId(), person.getCcgid(), person.getName()))
+        return people.findActiveByPositionId(positionId)
+                .map(row -> new Occupant(row.getPositionId(), row.getCcgid(), row.getName()))
                 .orElse(null);
     }
 
     /**
-     * Positions this person currently holds: occupancy seats plus their bindable emp position.
+     * Position this person currently occupies.
      *
      * @param ccgid identity
      * @return position ids
@@ -278,13 +263,11 @@ public class TimesheetReadService {
         if (ccgid == null || ccgid.isBlank()) {
             return List.of();
         }
-        Set<String> ids = new LinkedHashSet<>(occupancies.findActivePositionIdsByCcgid(ccgid.trim()));
-        people.findActiveByCcgid(ccgid.trim())
-                .map(TimesheetPerson::getEmpPositionId)
-                .filter(position -> position != null && !position.isBlank())
-                .ifPresent(ids::add);
-        ids.removeIf(position -> position == null || position.isBlank());
-        return List.copyOf(ids);
+        return people.findActiveByCcgid(ccgid.trim())
+                .map(TimesheetPerson::getPositionId)
+                .filter(id -> id != null && !id.isBlank())
+                .map(List::of)
+                .orElse(List.of());
     }
 
     /**
@@ -308,7 +291,7 @@ public class TimesheetReadService {
         String needle = name == null ? "" : name.trim();
         return PageResponse.from(
                 people.findActiveByCenter(center.trim(), needle, PageRequest.of(safePage - 1, safePageSize)),
-                person -> new CenterPerson(person.getCcgid(), person.getName(), person.getEmpPositionId()));
+                person -> new CenterPerson(person.getCcgid(), person.getName(), person.getPositionId()));
     }
 
     /**

@@ -47,9 +47,9 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
     Optional<TimesheetPerson> findActiveByCcgid(@Param("ccgid") String ccgid);
 
     /**
-     * Resolves a person by bindable position in the ACTIVE Daily snapshot.
+     * Occupant of a bindable position in the ACTIVE Daily snapshot.
      *
-     * @param positionId emp or occupied management position
+     * @param positionId occupied position
      * @return person if present
      */
     @Query("""
@@ -58,12 +58,52 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
             where p.id.syncRunId = r.id
               and r.kind = 'DAILY'
               and r.status = 'ACTIVE'
-              and p.empPositionId = :positionId
+              and p.positionId = :positionId
             """)
-    Optional<TimesheetPerson> findActiveByEmpPositionId(@Param("positionId") String positionId);
+    Optional<TimesheetPerson> findActiveByPositionId(@Param("positionId") String positionId);
 
     /**
-     * People who appear in this Center in the ACTIVE Daily snapshot.
+     * Position occupied by this person when it has the given role.
+     *
+     * @param ccgid occupant
+     * @param roleType SUPERVISOR / SR_MANAGER / DOMAIN_HEAD
+     * @return position id when present
+     */
+    @Query("""
+            select p.positionId
+            from TimesheetPerson p, TimesheetPosition pos, TimesheetSyncRun r
+            where p.id.syncRunId = r.id
+              and pos.id.syncRunId = r.id
+              and pos.id.positionId = p.positionId
+              and r.kind = 'DAILY'
+              and r.status = 'ACTIVE'
+              and upper(p.id.ccgid) = upper(:ccgid)
+              and pos.roleType = :roleType
+            """)
+    Optional<String> findActivePositionIdByCcgidAndRole(
+            @Param("ccgid") String ccgid, @Param("roleType") String roleType);
+
+    /**
+     * Whether this bindable position belongs to the Center.
+     *
+     * @param positionId occupied position
+     * @param center GBS center
+     * @return true when present
+     */
+    @Query("""
+            select count(p) > 0
+            from TimesheetPerson p, TimesheetSyncRun r
+            where p.id.syncRunId = r.id
+              and r.kind = 'DAILY'
+              and r.status = 'ACTIVE'
+              and p.positionId = :positionId
+              and p.center = :center
+            """)
+    boolean existsActivePositionInCenter(
+            @Param("positionId") String positionId, @Param("center") String center);
+
+    /**
+     * People in this Center who occupy a bindable position.
      *
      * @param center GBS center
      * @param name optional name fragment; blank matches all
@@ -78,8 +118,8 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                       and r.kind = 'DAILY'
                       and r.status = 'ACTIVE'
                       and p.center = :center
-                      and p.empPositionId is not null
-                      and p.empPositionId <> ''
+                      and p.positionId is not null
+                      and p.positionId <> ''
                       and (:name = '' or lower(p.name) like lower(concat('%', :name, '%')))
                     order by p.name, p.id.ccgid
                     """,
@@ -90,8 +130,8 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                       and r.kind = 'DAILY'
                       and r.status = 'ACTIVE'
                       and p.center = :center
-                      and p.empPositionId is not null
-                      and p.empPositionId <> ''
+                      and p.positionId is not null
+                      and p.positionId <> ''
                       and (:name = '' or lower(p.name) like lower(concat('%', :name, '%')))
                     """)
     Page<TimesheetPerson> findActiveByCenter(
@@ -114,23 +154,4 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
               and p.center = :center
             """)
     boolean existsActiveInCenter(@Param("ccgid") String ccgid, @Param("center") String center);
-
-    /**
-     * Whether this bindable position belongs to the Center in the ACTIVE Daily snapshot.
-     *
-     * @param positionId emp or occupied management position
-     * @param center GBS center
-     * @return true when present
-     */
-    @Query("""
-            select count(p) > 0
-            from TimesheetPerson p, TimesheetSyncRun r
-            where p.id.syncRunId = r.id
-              and r.kind = 'DAILY'
-              and r.status = 'ACTIVE'
-              and p.empPositionId = :positionId
-              and p.center = :center
-            """)
-    boolean existsActivePositionInCenter(
-            @Param("positionId") String positionId, @Param("center") String center);
 }

@@ -27,7 +27,6 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetAssignmentRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetOccupancyRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
@@ -49,7 +48,6 @@ public class TimesheetSyncService {
     private final TimesheetSyncRunRepository syncRuns;
     private final TimesheetPersonRepository people;
     private final TimesheetPositionRepository positions;
-    private final TimesheetOccupancyRepository occupancies;
     private final TimesheetScopeRepository scopes;
     private final TimesheetAssignmentRepository assignments;
     private final TimesheetKpiRepository kpis;
@@ -65,7 +63,6 @@ public class TimesheetSyncService {
      * @param syncRuns run repository
      * @param people person repository
      * @param positions position repository
-     * @param occupancies occupancy repository
      * @param scopes scope repository
      * @param assignments assignment repository
      * @param kpis KPI repository
@@ -81,7 +78,6 @@ public class TimesheetSyncService {
             TimesheetSyncRunRepository syncRuns,
             TimesheetPersonRepository people,
             TimesheetPositionRepository positions,
-            TimesheetOccupancyRepository occupancies,
             TimesheetScopeRepository scopes,
             TimesheetAssignmentRepository assignments,
             TimesheetKpiRepository kpis,
@@ -95,7 +91,6 @@ public class TimesheetSyncService {
         this.syncRuns = syncRuns;
         this.people = people;
         this.positions = positions;
-        this.occupancies = occupancies;
         this.scopes = scopes;
         this.assignments = assignments;
         this.kpis = kpis;
@@ -183,7 +178,6 @@ public class TimesheetSyncService {
                 return activateOrFail(run, rows.size(), hash, computed.issues(), () -> {
                     people.saveAll(computed.people());
                     positions.saveAll(computed.positions());
-                    occupancies.saveAll(computed.occupancies());
                 });
             }
             TimesheetMonthlyCalculator.Result computed = monthlyCalculator.compute(run.getId(), rows, now);

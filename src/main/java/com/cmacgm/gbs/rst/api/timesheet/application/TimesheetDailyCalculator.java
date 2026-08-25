@@ -13,16 +13,21 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetOccupancy;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPosition;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 
 /**
- * Builds Daily person, position and occupancy tables from one file scan.
+ * Builds Daily person and position tables from one file scan.
+ * One person occupies exactly one bindable position.
  */
 @Component
 public class TimesheetDailyCalculator {
+
+    private static final int RANK_EMPLOYEE = 0;
+    private static final int RANK_SUPERVISOR = 1;
+    private static final int RANK_SR_MANAGER = 2;
+    private static final int RANK_DOMAIN_HEAD = 3;
 
     /**
      * Daily compute result.
@@ -31,7 +36,6 @@ public class TimesheetDailyCalculator {
             LocalDate syncDate,
             List<TimesheetPerson> people,
             List<TimesheetPosition> positions,
-            List<TimesheetOccupancy> occupancies,
             List<TimesheetSyncIssue> issues) {
     }
 
@@ -46,11 +50,11 @@ public class TimesheetDailyCalculator {
     public Result compute(UUID runId, List<ReportRow> rows, Instant now) {
         Map<String, PersonDraft> people = new LinkedHashMap<>();
         Map<String, PositionDraft> positions = new LinkedHashMap<>();
-        Map<String, OccupancyDraft> occupancies = new LinkedHashMap<>();
         Map<String, Set<String>> personToCenter = new LinkedHashMap<>();
+        Map<String, Set<String>> personToPositions = new LinkedHashMap<>();
+        Map<String, Set<String>> positionToPeople = new LinkedHashMap<>();
         Map<String, Set<String>> supervisorToManager = new LinkedHashMap<>();
         Map<String, Set<String>> managerToDomainHead = new LinkedHashMap<>();
-        Map<String, Set<String>> occupancyByPosition = new LinkedHashMap<>();
         List<TimesheetSyncIssue> issues = new ArrayList<>();
 
         LocalDate syncDate = null;
@@ -58,37 +62,24 @@ public class TimesheetDailyCalculator {
             if (syncDate == null && row.date() != null) {
                 syncDate = row.date();
             }
-            addPerson(
-                    people,
-                    row.empCcgid(),
-                    row.empId(),
-                    row.empName(),
-                    firstText(row.empPositionId(), row.empId()),
-                    1,
-                    row.center());
+            addPerson(people, row.empCcgid(), row.empId(), row.empName(), row.center());
             addPerson(
                     people,
                     row.supervisorCcgid(),
                     row.supervisorId(),
                     row.supervisorName(),
-                    row.supervisorPositionId(),
-                    2,
                     row.center());
             addPerson(
                     people,
                     row.srManagerCcgid(),
                     row.srManagerId(),
                     row.srManagerName(),
-                    row.srManagerPositionId(),
-                    3,
                     row.center());
             addPerson(
                     people,
                     row.domainHeadCcgid(),
                     row.domainHeadId(),
                     row.domainHeadName(),
-                    row.domainHeadPositionId(),
-                    4,
                     row.center());
             putEdge(personToCenter, row.empCcgid(), row.center());
             putEdge(personToCenter, row.supervisorCcgid(), row.center());
@@ -107,24 +98,34 @@ public class TimesheetDailyCalculator {
                     row.domainHeadPositionId());
             addPosition(positions, "DOMAIN_HEAD", row.domainHeadPositionId(), null);
 
-            addOccupancy(
-                    occupancies,
-                    occupancyByPosition,
-                    row.supervisorPositionId(),
+            bindSeat(
+                    people,
+                    personToPositions,
+                    positionToPeople,
+                    row.empCcgid(),
+                    firstText(row.empPositionId(), row.empId()),
+                    RANK_EMPLOYEE);
+            bindSeat(
+                    people,
+                    personToPositions,
+                    positionToPeople,
                     row.supervisorCcgid(),
-                    row.supervisorId());
-            addOccupancy(
-                    occupancies,
-                    occupancyByPosition,
-                    row.srManagerPositionId(),
+                    row.supervisorPositionId(),
+                    RANK_SUPERVISOR);
+            bindSeat(
+                    people,
+                    personToPositions,
+                    positionToPeople,
                     row.srManagerCcgid(),
-                    row.srManagerId());
-            addOccupancy(
-                    occupancies,
-                    occupancyByPosition,
-                    row.domainHeadPositionId(),
+                    row.srManagerPositionId(),
+                    RANK_SR_MANAGER);
+            bindSeat(
+                    people,
+                    personToPositions,
+                    positionToPeople,
                     row.domainHeadCcgid(),
-                    row.domainHeadId());
+                    row.domainHeadPositionId(),
+                    RANK_DOMAIN_HEAD);
 
             putEdge(supervisorToManager, row.supervisorPositionId(), row.srManagerPositionId());
             putEdge(managerToDomainHead, row.srManagerPositionId(), row.domainHeadPositionId());
@@ -141,7 +142,21 @@ public class TimesheetDailyCalculator {
                 "domain_head_position_id",
                 managerToDomainHead,
                 false);
-        for (Map.Entry<String, Set<String>> entry : occupancyByPosition.entrySet()) {
+        for (Map.Entry<String, Set<String>> entry : personToPositions.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                issues.add(TimesheetSyncIssue.error(
+                        runId,
+                        "PERSON_POSITION_CONFLICT",
+                        "emp_ccgid maps to multiple position_id: " + String.join(", ", entry.getValue()),
+                        null,
+                        entry.getKey(),
+                        null,
+                        null,
+                        null,
+                        now));
+            }
+        }
+        for (Map.Entry<String, Set<String>> entry : positionToPeople.entrySet()) {
             if (entry.getValue().size() > 1) {
                 issues.add(TimesheetSyncIssue.error(
                         runId,
@@ -165,20 +180,11 @@ public class TimesheetDailyCalculator {
                 syncDate,
                 people.values().stream()
                         .map(draft -> TimesheetPerson.create(
-                                runId,
-                                draft.ccgid,
-                                draft.empId,
-                                draft.empPositionId,
-                                draft.center,
-                                draft.name))
+                                runId, draft.ccgid, draft.empId, draft.center, draft.name, draft.positionId))
                         .toList(),
                 positions.values().stream()
                         .map(draft -> TimesheetPosition.create(
                                 runId, draft.positionId, draft.roleType, draft.parentPositionId))
-                        .toList(),
-                occupancies.values().stream()
-                        .map(draft -> TimesheetOccupancy.create(
-                                runId, draft.positionId, draft.empCcgid, draft.empId))
                         .toList(),
                 issues);
     }
@@ -188,23 +194,17 @@ public class TimesheetDailyCalculator {
             String ccgid,
             String empId,
             String name,
-            String empPositionId,
-            int positionRank,
             String center) {
         if (!hasText(ccgid) || !hasText(name)) {
             return;
         }
         PersonDraft existing = people.get(ccgid);
         if (existing == null) {
-            people.put(ccgid, new PersonDraft(ccgid, empId, name, empPositionId, positionRank, center));
+            people.put(ccgid, new PersonDraft(ccgid, empId, name, center));
             return;
         }
         if (!hasText(existing.empId) && hasText(empId)) {
             existing.empId = empId;
-        }
-        if (hasText(empPositionId) && positionRank >= existing.positionRank) {
-            existing.empPositionId = empPositionId;
-            existing.positionRank = positionRank;
         }
         if (!hasText(existing.center) && hasText(center)) {
             existing.center = center;
@@ -219,17 +219,26 @@ public class TimesheetDailyCalculator {
         positions.putIfAbsent(positionId, new PositionDraft(positionId, roleType, parent));
     }
 
-    private static void addOccupancy(
-            Map<String, OccupancyDraft> occupancies,
-            Map<String, Set<String>> occupancyByPosition,
-            String positionId,
+    private static void bindSeat(
+            Map<String, PersonDraft> people,
+            Map<String, Set<String>> personToPositions,
+            Map<String, Set<String>> positionToPeople,
             String ccgid,
-            String empId) {
-        if (!hasText(positionId) || !hasText(ccgid)) {
+            String positionId,
+            int rank) {
+        if (!hasText(ccgid) || !hasText(positionId)) {
             return;
         }
-        occupancies.putIfAbsent(positionId, new OccupancyDraft(positionId, ccgid, empId));
-        occupancyByPosition.computeIfAbsent(positionId, ignored -> new LinkedHashSet<>()).add(ccgid);
+        putEdge(personToPositions, ccgid, positionId);
+        putEdge(positionToPeople, positionId, ccgid);
+        PersonDraft draft = people.get(ccgid);
+        if (draft == null) {
+            return;
+        }
+        if (!hasText(draft.positionId) || rank >= draft.positionRank) {
+            draft.positionId = positionId;
+            draft.positionRank = rank;
+        }
     }
 
     private static void putEdge(Map<String, Set<String>> edges, String child, String parent) {
@@ -277,29 +286,18 @@ public class TimesheetDailyCalculator {
         private final String ccgid;
         private String empId;
         private final String name;
-        private String empPositionId;
-        private int positionRank;
         private String center;
+        private String positionId;
+        private int positionRank = Integer.MIN_VALUE;
 
-        private PersonDraft(
-                String ccgid,
-                String empId,
-                String name,
-                String empPositionId,
-                int positionRank,
-                String center) {
+        private PersonDraft(String ccgid, String empId, String name, String center) {
             this.ccgid = ccgid;
             this.empId = empId;
             this.name = name;
-            this.empPositionId = empPositionId;
-            this.positionRank = hasText(empPositionId) ? positionRank : 0;
             this.center = center;
         }
     }
 
     private record PositionDraft(String positionId, String roleType, String parentPositionId) {
-    }
-
-    private record OccupancyDraft(String positionId, String empCcgid, String empId) {
     }
 }

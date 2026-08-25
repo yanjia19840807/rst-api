@@ -11,6 +11,7 @@ import java.util.UUID;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.HcValue;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 import org.junit.jupiter.api.Test;
 
 class TimesheetDailyCalculatorTests {
@@ -18,7 +19,7 @@ class TimesheetDailyCalculatorTests {
     private final TimesheetDailyCalculator calculator = new TimesheetDailyCalculator();
 
     @Test
-    void personKeepsManagementPositionAndCenters() {
+    void personKeepsOnePosition() {
         UUID runId = UUID.randomUUID();
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId,
@@ -44,12 +45,46 @@ class TimesheetDailyCalculatorTests {
 
         assertThat(result.issues()).isEmpty();
         assertThat(result.people())
-                .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getEmpPositionId, TimesheetPerson::getCenter)
+                .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getCenter, TimesheetPerson::getPositionId)
                 .contains(
-                        org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-1", "Kuala Lumpur"),
-                        org.assertj.core.groups.Tuple.tuple("S00000002", "POS-SUP-1", "Kuala Lumpur"),
-                        org.assertj.core.groups.Tuple.tuple("S00000003", "POS-SRM-1", "Kuala Lumpur"),
-                        org.assertj.core.groups.Tuple.tuple("S00000004", "POS-DH-1", "Kuala Lumpur"));
+                        org.assertj.core.groups.Tuple.tuple("S00000001", "Kuala Lumpur", "EMP-POS-1"),
+                        org.assertj.core.groups.Tuple.tuple("S00000002", "Kuala Lumpur", "POS-SUP-1"),
+                        org.assertj.core.groups.Tuple.tuple("S00000003", "Kuala Lumpur", "POS-SRM-1"),
+                        org.assertj.core.groups.Tuple.tuple("S00000004", "Kuala Lumpur", "POS-DH-1"));
+    }
+
+    @Test
+    void samePersonOnTwoPositionsIsAConflict() {
+        UUID runId = UUID.randomUUID();
+        TimesheetDailyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(row(
+                        "S00000001",
+                        "EMP-1",
+                        "Same Person",
+                        "EMP-POS-1",
+                        "S00000001",
+                        "EMP-1",
+                        "Same Person",
+                        "POS-SUP-1",
+                        "S00000003",
+                        "SRM-1",
+                        "Manager One",
+                        "POS-SRM-1",
+                        "S00000004",
+                        "DH-1",
+                        "Head One",
+                        "POS-DH-1",
+                        "Kuala Lumpur")),
+                Instant.parse("2026-08-23T00:00:00Z"));
+
+        assertThat(result.issues())
+                .extracting(TimesheetSyncIssue::getCode)
+                .contains("PERSON_POSITION_CONFLICT");
+        assertThat(result.people())
+                .filteredOn(person -> "S00000001".equals(person.getCcgid()))
+                .extracting(TimesheetPerson::getPositionId)
+                .containsExactly("POS-SUP-1");
     }
 
     private static ReportRow row(

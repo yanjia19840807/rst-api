@@ -11,7 +11,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 
 /**
- * One person identity in a Daily sync.
+ * One person identity in a Daily sync. One person occupies at most one position.
  */
 @Entity
 @Table(name = "timesheet_person")
@@ -23,14 +23,14 @@ public class TimesheetPerson {
     @Column(name = "emp_id", length = 80)
     private String empId;
 
-    @Column(name = "emp_position_id", length = 80)
-    private String empPositionId;
-
     @Column(length = 120)
     private String center;
 
     @Column(nullable = false, length = 200)
     private String name;
+
+    @Column(name = "position_id", length = 80)
+    private String positionId;
 
     protected TimesheetPerson() {
     }
@@ -41,24 +41,24 @@ public class TimesheetPerson {
      * @param syncRunId Daily run
      * @param ccgid identity
      * @param empId Timesheet person id
-     * @param empPositionId bindable position (emp or occupied management seat)
      * @param center GBS center the person belongs to
      * @param name display name
+     * @param positionId occupied bindable position; one person, one seat
      * @return row
      */
     public static TimesheetPerson create(
             UUID syncRunId,
             String ccgid,
             String empId,
-            String empPositionId,
             String center,
-            String name) {
+            String name,
+            String positionId) {
         TimesheetPerson row = new TimesheetPerson();
         row.id = new Id(syncRunId, ccgid);
         row.empId = empId;
-        row.empPositionId = empPositionId;
         row.center = center;
         row.name = name;
+        row.positionId = positionId;
         return row;
     }
 
@@ -78,16 +78,16 @@ public class TimesheetPerson {
         return empId;
     }
 
-    public String getEmpPositionId() {
-        return empPositionId;
-    }
-
     public String getCenter() {
         return center;
     }
 
     public String getName() {
         return name;
+    }
+
+    public String getPositionId() {
+        return positionId;
     }
 
     /**

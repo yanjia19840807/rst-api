@@ -81,21 +81,19 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update("delete from timesheet_kpi");
         jdbcTemplate.update("delete from timesheet_assignment");
         jdbcTemplate.update("delete from timesheet_scope");
-        jdbcTemplate.update("delete from timesheet_occupancy");
         jdbcTemplate.update("delete from timesheet_position");
         jdbcTemplate.update("delete from timesheet_person");
         jdbcTemplate.update("delete from timesheet_sync_run");
 
         insertSyncRun(DAILY_RUN_ID, "DAILY", 3);
         insertSyncRun(MONTHLY_RUN_ID, "MONTHLY", 2);
-        insertPerson(DAILY_RUN_ID, SUPERVISOR_CCGID, "Test Supervisor");
-        insertPerson(DAILY_RUN_ID, "AGENT010", "Test Agent AGENT010");
-        insertPerson(DAILY_RUN_ID, "AGENT011", "Test Agent AGENT011");
-        insertPerson(DAILY_RUN_ID, "AGENT012", "Test Agent AGENT012");
+        insertPerson(DAILY_RUN_ID, SUPERVISOR_CCGID, "Test Supervisor", SUPERVISOR_POSITION_ID);
+        insertPerson(DAILY_RUN_ID, "AGENT010", "Test Agent AGENT010", null);
+        insertPerson(DAILY_RUN_ID, "AGENT011", "Test Agent AGENT011", null);
+        insertPerson(DAILY_RUN_ID, "AGENT012", "Test Agent AGENT012", null);
         insertPosition(DAILY_RUN_ID, SUPERVISOR_POSITION_ID, "SUPERVISOR", "POS-SRM-001");
         insertPosition(DAILY_RUN_ID, "POS-SRM-001", "SR_MANAGER", "POS-DH-001");
         insertPosition(DAILY_RUN_ID, "POS-DH-001", "DOMAIN_HEAD", null);
-        insertOccupancy(DAILY_RUN_ID, SUPERVISOR_POSITION_ID, SUPERVISOR_CCGID);
         insertScope(MONTHLY_RUN_ID);
         insertAssignment(MONTHLY_RUN_ID, "AGENT010");
         insertAssignment(MONTHLY_RUN_ID, "AGENT011");
@@ -749,13 +747,14 @@ class SupervisorApiIntegrationTests {
                 NOW);
     }
 
-    private void insertPerson(UUID runId, String ccgid, String name) {
+    private void insertPerson(UUID runId, String ccgid, String name, String positionId) {
         jdbcTemplate.update(
-                "insert into timesheet_person (sync_run_id, ccgid, emp_id, name) values (?, ?, ?, ?)",
+                "insert into timesheet_person (sync_run_id, ccgid, emp_id, name, position_id) values (?, ?, ?, ?, ?)",
                 runId,
                 ccgid,
                 ccgid,
-                name);
+                name,
+                positionId);
     }
 
     private void insertPosition(UUID runId, String positionId, String roleType, String parentPositionId) {
@@ -769,19 +768,6 @@ class SupervisorApiIntegrationTests {
                 positionId,
                 roleType,
                 parentPositionId);
-    }
-
-    private void insertOccupancy(UUID runId, String positionId, String ccgid) {
-        jdbcTemplate.update(
-                """
-                insert into timesheet_occupancy
-                    (sync_run_id, position_id, emp_ccgid, emp_id)
-                values (?, ?, ?, ?)
-                """,
-                runId,
-                positionId,
-                ccgid,
-                ccgid);
     }
 
     private void insertScope(UUID runId) {

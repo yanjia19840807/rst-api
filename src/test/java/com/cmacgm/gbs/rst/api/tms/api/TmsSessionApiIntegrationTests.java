@@ -70,7 +70,6 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update("delete from timesheet_kpi");
         jdbcTemplate.update("delete from timesheet_assignment");
         jdbcTemplate.update("delete from timesheet_scope");
-        jdbcTemplate.update("delete from timesheet_occupancy");
         jdbcTemplate.update("delete from timesheet_position");
         jdbcTemplate.update("delete from timesheet_person");
         jdbcTemplate.update("delete from timesheet_sync_run");
@@ -150,11 +149,15 @@ class TmsSessionApiIntegrationTests {
                 now,
                 now);
         jdbcTemplate.update(
-                "insert into timesheet_person (sync_run_id, ccgid, emp_id, name) values (?, ?, ?, ?)",
+                """
+                insert into timesheet_person (sync_run_id, ccgid, emp_id, name, position_id)
+                values (?, ?, ?, ?, ?)
+                """,
                 dailyRunId,
                 "SUPERVISOR001",
                 "SUPERVISOR001",
-                "Test Supervisor");
+                "Test Supervisor",
+                "POS-SUP-001");
         jdbcTemplate.update(
                 "insert into timesheet_person (sync_run_id, ccgid, emp_id, name) values (?, ?, ?, ?)",
                 dailyRunId,
@@ -166,13 +169,6 @@ class TmsSessionApiIntegrationTests {
                 insert into timesheet_position
                     (sync_run_id, position_id, role_type, parent_position_id)
                 values (?, 'POS-SUP-001', 'SUPERVISOR', 'POS-SRM-001')
-                """,
-                dailyRunId);
-        jdbcTemplate.update(
-                """
-                insert into timesheet_occupancy
-                    (sync_run_id, position_id, emp_ccgid, emp_id)
-                values (?, 'POS-SUP-001', 'SUPERVISOR001', 'SUPERVISOR001')
                 """,
                 dailyRunId);
         jdbcTemplate.update(
