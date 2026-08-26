@@ -66,7 +66,7 @@ public class ExerciseVolumeDailyInput implements Persistable<UUID> {
      * @param volumeDate calendar date
      * @param actualVolume optional actual volume
      * @param dailyAdjustmentRatio Excel Daily Volume Adjustment Ratio; null treated as 0 in sizing
-     * @param sourceType MANUAL / ARCHIVE / IMPORT
+     * @param sourceType MANUAL / TOOLKIT / IMPORT
      * @param importBatchId optional import batch
      * @param actorCcgid creating Supervisor
      * @param now creation timestamp

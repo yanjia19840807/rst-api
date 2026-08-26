@@ -2,13 +2,9 @@ package com.cmacgm.gbs.rst.api.exercise.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import java.time.Instant;
 import java.time.LocalDate;
-import java.util.Set;
-import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.VolumeTrainWindows;
-import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import org.junit.jupiter.api.Test;
 
 class ExerciseInitializationRulesTests {
@@ -28,46 +24,6 @@ class ExerciseInitializationRulesTests {
                 2 * 7 * 26,
                 VolumeTrainWindows.slotTrainBounds(LocalDate.of(2025, 12, 29), (short) 2)
                         .size());
-    }
-
-    @Test
-    void resolvesSizingTmsAndSlotHolidayYears() {
-        UUID id = UUID.randomUUID();
-        RstExercise exercise = RstExercise.create(
-                id,
-                "EX-TEST",
-                UUID.randomUUID(),
-                "SUPERVISOR001",
-                LocalDate.of(2026, 1, 1),
-                LocalDate.of(2026, 12, 28),
-                (short) 2,
-                LocalDate.of(2025, 12, 1),
-                LocalDate.of(2026, 1, 31),
-                Instant.parse("2026-01-01T00:00:00Z"));
-
-        assertEquals(
-                Set.of((short) 2025, (short) 2026, (short) 2027),
-                ExerciseInitializationService.resolveHolidayYears(exercise));
-    }
-
-    @Test
-    void resolveHolidayYearsSkipsSlotWhenPeriodUnset() {
-        UUID id = UUID.randomUUID();
-        RstExercise exercise = RstExercise.create(
-                id,
-                "EX-TEST-NO-SLOT",
-                UUID.randomUUID(),
-                "SUPERVISOR001",
-                LocalDate.of(2026, 1, 1),
-                null,
-                null,
-                LocalDate.of(2025, 12, 1),
-                LocalDate.of(2026, 1, 31),
-                Instant.parse("2026-01-01T00:00:00Z"));
-
-        assertEquals(
-                Set.of((short) 2025, (short) 2026),
-                ExerciseInitializationService.resolveHolidayYears(exercise));
     }
 
     @Test

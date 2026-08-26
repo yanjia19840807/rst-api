@@ -5,11 +5,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 
 /**
  * Persistence for Exercise aggregates with snapshot graphs.
@@ -53,26 +51,6 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
      * @return true when referenced
      */
     boolean existsByToolkitId(UUID toolkitId);
-
-    /**
-     * Latest LTH-approved Exercise for a Toolkit (archive seed).
-     */
-    @EntityGraph(attributePaths = {"toolkitSnapshot"})
-    @Query("""
-            select e from RstExercise e
-            where e.toolkitId = :toolkitId
-              and e.deletedAt is null
-              and exists (
-                  select 1 from ProcessInstance w
-                  join w.tasks t
-                  where w.exerciseId = e.id
-                    and w.status = com.cmacgm.gbs.rst.api.workflow.domain.ProcessStatus.FINISHED
-                    and t.node = com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LTH
-                    and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.APPROVED
-              )
-            order by coalesce(e.validatedAt, e.updatedAt) desc, e.updatedAt desc, e.id desc
-            """)
-    List<RstExercise> findApprovedByToolkit(@Param("toolkitId") UUID toolkitId, Pageable pageable);
 
     /**
      * APPROVED Exercises for RST Repository, with Toolkit snapshot and Shared KPI lines.

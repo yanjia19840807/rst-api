@@ -3,6 +3,7 @@ package com.cmacgm.gbs.rst.api.tms.persistence;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -23,6 +24,10 @@ public interface TmsSessionRepository
     boolean existsByAgentCcgidAndStatusIn(String agentCcgid, Collection<TmsSessionStatus> statuses);
 
     boolean existsByToolkit_Id(UUID toolkitId);
+
+    @EntityGraph(attributePaths = {"toolkit", "toolkitSubtask"})
+    List<TmsSession> findByToolkit_IdAndStatusOrderByStartedAtAsc(
+            UUID toolkitId, TmsSessionStatus status);
 
     @EntityGraph(attributePaths = {"toolkit", "toolkitSubtask"})
     Page<TmsSession> findAll(Specification<TmsSession> spec, Pageable pageable);

@@ -21,8 +21,10 @@ import com.cmacgm.gbs.rst.api.toolkit.api.dto.ToolkitVolumePointsView.ToolkitMon
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.ToolkitVolumeSummaryView;
 import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitVolumeDaily;
 import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitVolumeMonthly;
+import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitVolumeSlot;
 import com.cmacgm.gbs.rst.api.toolkit.persistence.ToolkitVolumeDailyRepository;
 import com.cmacgm.gbs.rst.api.toolkit.persistence.ToolkitVolumeMonthlyRepository;
+import com.cmacgm.gbs.rst.api.toolkit.persistence.ToolkitVolumeSlotRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,12 +42,15 @@ public class ToolkitVolumeService {
 
     private final ToolkitVolumeMonthlyRepository toolkitMonthly;
     private final ToolkitVolumeDailyRepository toolkitDaily;
+    private final ToolkitVolumeSlotRepository toolkitSlot;
 
     public ToolkitVolumeService(
             ToolkitVolumeMonthlyRepository toolkitMonthly,
-            ToolkitVolumeDailyRepository toolkitDaily) {
+            ToolkitVolumeDailyRepository toolkitDaily,
+            ToolkitVolumeSlotRepository toolkitSlot) {
         this.toolkitMonthly = toolkitMonthly;
         this.toolkitDaily = toolkitDaily;
+        this.toolkitSlot = toolkitSlot;
     }
 
     /**
@@ -65,14 +70,22 @@ public class ToolkitVolumeService {
     }
 
     /**
+     * Canonical slot rows for a Toolkit, oldest first.
+     */
+    @Transactional(readOnly = true)
+    public List<ToolkitVolumeSlot> listSlot(UUID toolkitId) {
+        return toolkitSlot.findByToolkitIdOrderBySlotStartAtAsc(toolkitId);
+    }
+
+    /**
      * Lookup map for pre-filling Volume Input from the canonical series.
      */
     @Transactional(readOnly = true)
-    public Map<LocalDate, BigDecimal> monthlySeedByMonth(UUID toolkitId) {
-        Map<LocalDate, BigDecimal> out = new LinkedHashMap<>();
+    public Map<LocalDate, VolumeSeed> monthlySeedByMonth(UUID toolkitId) {
+        Map<LocalDate, VolumeSeed> out = new LinkedHashMap<>();
         for (ToolkitVolumeMonthly row : listMonthly(toolkitId)) {
             if (row.getActualVolume() != null) {
-                out.put(row.getMonth(), row.getActualVolume());
+                out.put(row.getMonth(), new VolumeSeed(row.getActualVolume(), row.getCommercialRatio()));
             }
         }
         return out;
@@ -82,11 +95,25 @@ public class ToolkitVolumeService {
      * Lookup map for pre-filling daily Volume Input from the canonical series.
      */
     @Transactional(readOnly = true)
-    public Map<LocalDate, BigDecimal> dailySeedByDate(UUID toolkitId) {
-        Map<LocalDate, BigDecimal> out = new LinkedHashMap<>();
+    public Map<LocalDate, VolumeSeed> dailySeedByDate(UUID toolkitId) {
+        Map<LocalDate, VolumeSeed> out = new LinkedHashMap<>();
         for (ToolkitVolumeDaily row : listDaily(toolkitId)) {
             if (row.getActualVolume() != null) {
-                out.put(row.getVolumeDate(), row.getActualVolume());
+                out.put(row.getVolumeDate(), new VolumeSeed(row.getActualVolume(), row.getDailyAdjustmentRatio()));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Lookup map for overlapping slot actuals from the canonical series.
+     */
+    @Transactional(readOnly = true)
+    public Map<Instant, BigDecimal> slotSeedByStart(UUID toolkitId) {
+        Map<Instant, BigDecimal> out = new LinkedHashMap<>();
+        for (ToolkitVolumeSlot row : listSlot(toolkitId)) {
+            if (row.getActualVolume() != null) {
+                out.put(row.getSlotStartAt(), row.getActualVolume());
             }
         }
         return out;
@@ -138,14 +165,17 @@ public class ToolkitVolumeService {
             UUID toolkitId,
             LocalDate month,
             BigDecimal actualVolume,
+            BigDecimal commercialRatio,
             UUID sourceExerciseId,
             String actorCcgid,
             Instant now) {
         toolkitMonthly.findByToolkitIdAndMonth(toolkitId, month)
                 .ifPresentOrElse(
-                        existing -> existing.replaceFrom(actualVolume, sourceExerciseId, actorCcgid, now),
+                        existing -> existing.replaceFrom(
+                                actualVolume, commercialRatio, sourceExerciseId, actorCcgid, now),
                         () -> toolkitMonthly.save(ToolkitVolumeMonthly.create(
-                                toolkitId, month, actualVolume, sourceExerciseId, actorCcgid, now)));
+                                toolkitId, month, actualVolume, commercialRatio,
+                                sourceExerciseId, actorCcgid, now)));
     }
 
     /**
@@ -156,14 +186,47 @@ public class ToolkitVolumeService {
             UUID toolkitId,
             LocalDate volumeDate,
             BigDecimal actualVolume,
+            BigDecimal dailyAdjustmentRatio,
             UUID sourceExerciseId,
             String actorCcgid,
             Instant now) {
         toolkitDaily.findByToolkitIdAndVolumeDate(toolkitId, volumeDate)
                 .ifPresentOrElse(
-                        existing -> existing.replaceFrom(actualVolume, sourceExerciseId, actorCcgid, now),
+                        existing -> existing.replaceFrom(
+                                actualVolume, dailyAdjustmentRatio, sourceExerciseId, actorCcgid, now),
                         () -> toolkitDaily.save(ToolkitVolumeDaily.create(
-                                toolkitId, volumeDate, actualVolume, sourceExerciseId, actorCcgid, now)));
+                                toolkitId, volumeDate, actualVolume, dailyAdjustmentRatio,
+                                sourceExerciseId, actorCcgid, now)));
+    }
+
+    /**
+     * Upserts one canonical slot actual from an approved Exercise. Null actuals are skipped.
+     */
+    @Transactional
+    public void upsertSlot(
+            UUID toolkitId,
+            Instant slotStartAt,
+            Instant slotEndAt,
+            BigDecimal actualVolume,
+            UUID sourceExerciseId,
+            String actorCcgid,
+            Instant now) {
+        if (actualVolume == null) {
+            return;
+        }
+        toolkitSlot.findByToolkitIdAndSlotStartAt(toolkitId, slotStartAt)
+                .ifPresentOrElse(
+                        existing -> existing.replaceFrom(
+                                slotEndAt, actualVolume, sourceExerciseId, actorCcgid, now),
+                        () -> toolkitSlot.save(ToolkitVolumeSlot.create(
+                                toolkitId, slotStartAt, slotEndAt, actualVolume,
+                                sourceExerciseId, actorCcgid, now)));
+    }
+
+    /**
+     * One Toolkit volume seed used to pre-fill an Exercise grid row.
+     */
+    public record VolumeSeed(BigDecimal actualVolume, BigDecimal ratio) {
     }
 
     /**

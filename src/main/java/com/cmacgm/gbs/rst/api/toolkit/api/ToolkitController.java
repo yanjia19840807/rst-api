@@ -10,8 +10,13 @@ import com.cmacgm.gbs.rst.api.toolkit.api.dto.CreateToolkitRequest;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.ToolkitListView;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.ToolkitResponse;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.UpdateToolkitRequest;
+import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitExportService;
+import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitExportService.ExportFile;
 import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitService;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -30,9 +35,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ToolkitController {
 
     private final ToolkitService toolkits;
+    private final ToolkitExportService exports;
 
-    public ToolkitController(ToolkitService toolkits) {
+    public ToolkitController(ToolkitService toolkits, ToolkitExportService exports) {
         this.toolkits = toolkits;
+        this.exports = exports;
     }
 
     @GetMapping
@@ -60,6 +67,19 @@ public class ToolkitController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         return toolkits.listManaged(principal.ccgid(), name, pl3Name, page, pageSize);
+    }
+
+    @GetMapping("/{id}/export")
+    @PreAuthorize("hasRole('SUPERVISOR')")
+    public ResponseEntity<byte[]> export(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID id) {
+        ExportFile file = exports.export(principal.ccgid(), id);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + file.filename() + "\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(file.body());
     }
 
     @GetMapping("/{id}")

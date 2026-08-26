@@ -8,7 +8,6 @@ import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -16,13 +15,16 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitAssociatedDataService;
 import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitVolumeService;
+import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitVolumeService.VolumeSeed;
+import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitHoliday;
+import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitTeamSetup;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.VolumeTrainWindows;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.VolumeTrainWindows.SlotBound;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseHoliday;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup;
-import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup.TeamSetupInput;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseVolumeDailyInput;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseVolumeMonthlyInput;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseVolumeSlotInput;
@@ -37,27 +39,23 @@ import com.cmacgm.gbs.rst.api.exercise.cycletime.application.SystemCycleTimeBase
 import com.cmacgm.gbs.rst.api.exercise.cycletime.domain.ExerciseTmsSession;
 import com.cmacgm.gbs.rst.api.exercise.cycletime.persistence.ExerciseTmsSessionRepository;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
-import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.common.workingdays.HolidayDayKind;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSession;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSessionStatus;
 import com.cmacgm.gbs.rst.api.tms.persistence.TmsSessionRepository;
 import com.cmacgm.gbs.rst.api.tms.persistence.TmsSessionSpecification;
 import com.cmacgm.gbs.rst.api.tms.persistence.TmsSessionSpecification.Filter;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Single orchestration entry for Exercise Associated Data initialization and period refresh:
- * archive seed, volume grids, holidays, and TMS population.
+ * Toolkit latest-state seed, volume grids, holidays, and TMS population.
  */
 @Service
 public class ExerciseInitializationService {
 
-
-    private final RstExerciseRepository exercises;
     private final ExerciseTeamSetupRepository teamSetups;
     private final ExerciseHolidayRepository holidays;
     private final ExerciseProductionSupportItemRepository supportItems;
@@ -68,10 +66,10 @@ public class ExerciseInitializationService {
     private final ExerciseTmsSessionRepository exerciseTmsSessions;
     private final SystemCycleTimeBaselineWriter systemCycleTime;
     private final ToolkitVolumeService toolkitVolumes;
+    private final ToolkitAssociatedDataService toolkitAssociatedData;
     private final Clock clock;
 
     public ExerciseInitializationService(
-            RstExerciseRepository exercises,
             ExerciseTeamSetupRepository teamSetups,
             ExerciseHolidayRepository holidays,
             ExerciseProductionSupportItemRepository supportItems,
@@ -82,8 +80,8 @@ public class ExerciseInitializationService {
             ExerciseTmsSessionRepository exerciseTmsSessions,
             SystemCycleTimeBaselineWriter systemCycleTime,
             ToolkitVolumeService toolkitVolumes,
+            ToolkitAssociatedDataService toolkitAssociatedData,
             Clock clock) {
-        this.exercises = exercises;
         this.teamSetups = teamSetups;
         this.holidays = holidays;
         this.supportItems = supportItems;
@@ -94,6 +92,7 @@ public class ExerciseInitializationService {
         this.exerciseTmsSessions = exerciseTmsSessions;
         this.systemCycleTime = systemCycleTime;
         this.toolkitVolumes = toolkitVolumes;
+        this.toolkitAssociatedData = toolkitAssociatedData;
         this.clock = clock;
     }
 
@@ -104,26 +103,14 @@ public class ExerciseInitializationService {
     public List<String> initialize(RstExercise exercise, String actorCcgid) {
         Instant now = clock.instant();
         List<String> notices = new ArrayList<>();
-        Set<Short> holidayYears = resolveHolidayYears(exercise);
-        short primaryYear = primaryYear(exercise.getSizingMonth());
 
-        Optional<RstExercise> archive = findLatestArchive(exercise.getToolkitId());
-        if (archive.isPresent()) {
-            RstExercise source = archive.get();
-            seedFromArchive(source, exercise, actorCcgid, now);
-            notices.add("Associated Data seeded from archived exercise "
-                    + source.getExerciseCode()
-                    + " (Team Setup, Production Support, Calendar & Holidays).");
-            short archivePrimary = primaryYear(source.getSizingMonth());
-            if (archivePrimary != primaryYear) {
-                notices.add("Sizing year differs from the archive ("
-                        + archivePrimary + " → " + primaryYear
-                        + "). Holidays were copied for " + formatYears(holidayYears) + ".");
-            }
-            copyHolidays(source.getId(), exercise.getId(), holidayYears, actorCcgid, now);
+        if (seedFromToolkit(exercise, actorCcgid, now)) {
+            notices.add(
+                    "Associated Data seeded from Toolkit latest state "
+                            + "(Team Setup, Production Support, Calendar).");
         } else {
             notices.add(
-                    "No approved exercise found for this Toolkit. "
+                    "No Toolkit latest state yet. "
                             + "Associated Data starts empty. Add holiday dates in Calendar if needed.");
         }
 
@@ -135,7 +122,7 @@ public class ExerciseInitializationService {
     }
 
     /**
-     * Reconciles Volume Input grids after Exercise period changes (no archive re-seed).
+     * Reconciles Volume Input grids after Exercise period changes (does not re-seed AD snapshots).
      */
     @Transactional
     public void ensureTrainVolumeGrids(RstExercise exercise, String actorCcgid) {
@@ -196,50 +183,32 @@ public class ExerciseInitializationService {
                 + " COMPLETED TMS session(s) for the Exercise TMS period.";
     }
 
-    public static Set<Short> resolveHolidayYears(RstExercise exercise) {
-        Set<Short> years = new LinkedHashSet<>();
-        years.add(primaryYear(exercise.getSizingMonth()));
-        addYearRange(years, exercise.getTmsFrom(), exercise.getTmsTo());
-        if (exercise.hasSlotPeriod()) {
-            addYearRange(years, exercise.getSlotStartDate(), slotEnd(exercise));
+    private boolean seedFromToolkit(RstExercise target, String actorCcgid, Instant now) {
+        Optional<ToolkitTeamSetup> sourceTeam = toolkitAssociatedData.findTeamSetup(target.getToolkitId());
+        if (sourceTeam.isEmpty()) {
+            return false;
         }
-        return years;
+        copyTeamSetup(sourceTeam.get(), target.getId(), actorCcgid, now);
+        copySupport(target, actorCcgid, now);
+        copyHolidays(target.getToolkitId(), target.getId(), actorCcgid, now);
+        target.markInitializedFrom(sourceTeam.get().getSourceExerciseId(), actorCcgid, now);
+        return true;
     }
 
-    private Optional<RstExercise> findLatestArchive(UUID toolkitId) {
-        return exercises.findApprovedByToolkit(toolkitId, PageRequest.of(0, 1))
-                .stream()
-                .findFirst();
-    }
-
-    private void seedFromArchive(
-            RstExercise source,
-            RstExercise target,
-            String actorCcgid,
-            Instant now) {
-        copyTeamSetup(source.getId(), target.getId(), actorCcgid, now);
-        copySupport(source, target, actorCcgid, now);
-        target.markInitializedFrom(source.getId(), actorCcgid, now);
-    }
-
-    private void copyTeamSetup(UUID sourceId, UUID targetId, String actorCcgid, Instant now) {
+    private void copyTeamSetup(ToolkitTeamSetup source, UUID targetId, String actorCcgid, Instant now) {
         ExerciseTeamSetup target = teamSetups.findById(targetId)
                 .orElseThrow(() -> initializationConflict(
                         "exercise-team-setup-shell-missing",
                         "The target Exercise Team Setup shell is missing."));
-        ExerciseTeamSetup source = teamSetups.findById(sourceId)
-                .orElseThrow(() -> initializationConflict(
-                        "archive-team-setup-missing",
-                        "The archived Exercise has no Team Setup to copy."));
-        target.replaceInputs(toInput(source), actorCcgid, now);
+        target.replaceInputs(source.toInput(), actorCcgid, now);
         teamSetups.save(target);
     }
 
-    private void copySupport(RstExercise source, RstExercise target, String actorCcgid, Instant now) {
-        List<ExerciseProductionSupportItem> copies = supportItems
-                .findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(source.getId())
+    private void copySupport(RstExercise target, String actorCcgid, Instant now) {
+        List<ExerciseProductionSupportItem> copies = toolkitAssociatedData
+                .listSupport(target.getToolkitId())
                 .stream()
-                .map(sourceItem -> ExerciseProductionSupportItem.createFromArchive(
+                .map(sourceItem -> ExerciseProductionSupportItem.createFromToolkit(
                         target.getId(),
                         sourceItem,
                         actorCcgid,
@@ -248,33 +217,25 @@ public class ExerciseInitializationService {
         supportItems.saveAll(copies);
     }
 
-    private void copyHolidays(
-            UUID sourceId,
-            UUID targetId,
-            Set<Short> holidayYears,
-            String actorCcgid,
-            Instant now) {
+    private void copyHolidays(UUID toolkitId, UUID targetId, String actorCcgid, Instant now) {
         Set<LocalDate> existingDates = holidays
                 .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(targetId)
                 .stream()
                 .map(ExerciseHoliday::getHolidayDate)
                 .collect(Collectors.toSet());
         List<ExerciseHoliday> copies = new ArrayList<>();
-        for (ExerciseHoliday holiday : holidays
-                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(sourceId)) {
+        for (ToolkitHoliday holiday : toolkitAssociatedData.listHolidays(toolkitId)) {
             LocalDate date = holiday.getHolidayDate();
-            if (date == null || !holidayYears.contains((short) date.getYear())) {
+            if (date == null || !existingDates.add(date)) {
                 continue;
             }
-            if (existingDates.add(date)) {
-                copies.add(ExerciseHoliday.create(
-                        targetId,
-                        date,
-                        holiday.getHolidayName(),
-                        HolidayDayKind.parse(holiday.getHolidayType()).name(),
-                        actorCcgid,
-                        now));
-            }
+            copies.add(ExerciseHoliday.create(
+                    targetId,
+                    date,
+                    holiday.getHolidayName(),
+                    HolidayDayKind.parse(holiday.getHolidayType()).name(),
+                    actorCcgid,
+                    now));
         }
         holidays.saveAll(copies);
     }
@@ -302,17 +263,20 @@ public class ExerciseInitializationService {
         slotVolumes.flush();
         List<SlotBound> expected = VolumeTrainWindows.slotTrainBounds(
                 exercise.getSlotStartDate(), exercise.getSlotWeeks());
+        Map<Instant, BigDecimal> seed = toolkitVolumes.slotSeedByStart(exercise.getToolkitId());
         List<ExerciseVolumeSlotInput> rows = new ArrayList<>(expected.size());
         for (SlotBound bound : expected) {
-            rows.add(ExerciseVolumeSlotInput.create(
+            BigDecimal actual = seed.get(bound.start());
+            ExerciseVolumeSlotInput row = ExerciseVolumeSlotInput.create(
                     targetId,
                     bound.start(),
                     bound.end(),
-                    null,
-                    "MANUAL",
+                    actual,
+                    actual != null ? "TOOLKIT" : "MANUAL",
                     null,
                     actorCcgid,
-                    now));
+                    now);
+            rows.add(row);
         }
         slotVolumes.saveAll(rows);
         slotVolumes.flush();
@@ -326,7 +290,7 @@ public class ExerciseInitializationService {
                 monthlyVolumes.findByExerciseIdOrderByMonthAsc(targetId);
         Map<LocalDate, ExerciseVolumeMonthlyInput> targetByKey = new HashMap<>();
         targetRows.forEach(row -> targetByKey.put(row.getMonth(), row));
-        Map<LocalDate, BigDecimal> seed = toolkitVolumes.monthlySeedByMonth(exercise.getToolkitId());
+        Map<LocalDate, VolumeSeed> seed = toolkitVolumes.monthlySeedByMonth(exercise.getToolkitId());
         YearMonth min = null;
         YearMonth max = null;
         for (LocalDate month : targetByKey.keySet()) {
@@ -360,12 +324,13 @@ public class ExerciseInitializationService {
                 if (targetByKey.containsKey(month)) {
                     continue;
                 }
-                BigDecimal actual = seed.get(month);
+                VolumeSeed point = seed.get(month);
+                BigDecimal actual = point == null ? null : point.actualVolume();
                 missing.add(ExerciseVolumeMonthlyInput.create(
                         targetId,
                         month,
                         actual,
-                        null,
+                        point == null ? null : point.ratio(),
                         actual != null ? "TOOLKIT" : "MANUAL",
                         null,
                         actorCcgid,
@@ -385,7 +350,7 @@ public class ExerciseInitializationService {
                 dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(targetId);
         Map<LocalDate, ExerciseVolumeDailyInput> targetByKey = new HashMap<>();
         targetRows.forEach(row -> targetByKey.put(row.getVolumeDate(), row));
-        Map<LocalDate, BigDecimal> seed = toolkitVolumes.dailySeedByDate(exercise.getToolkitId());
+        Map<LocalDate, VolumeSeed> seed = toolkitVolumes.dailySeedByDate(exercise.getToolkitId());
         LocalDate min = null;
         LocalDate max = null;
         for (LocalDate date : targetByKey.keySet()) {
@@ -416,12 +381,13 @@ public class ExerciseInitializationService {
                 if (targetByKey.containsKey(date)) {
                     continue;
                 }
-                BigDecimal actual = seed.get(date);
+                VolumeSeed point = seed.get(date);
+                BigDecimal actual = point == null ? null : point.actualVolume();
                 missing.add(ExerciseVolumeDailyInput.create(
                         targetId,
                         date,
                         actual,
-                        null,
+                        point == null ? null : point.ratio(),
                         actual != null ? "TOOLKIT" : "MANUAL",
                         null,
                         actorCcgid,
@@ -434,57 +400,8 @@ public class ExerciseInitializationService {
         dailyVolumes.saveAll(missing);
     }
 
-    private static void addYearRange(Set<Short> years, LocalDate from, LocalDate to) {
-        if (from == null || to == null) {
-            return;
-        }
-        int start = Math.min(from.getYear(), to.getYear());
-        int end = Math.max(from.getYear(), to.getYear());
-        for (int year = start; year <= end; year++) {
-            years.add((short) year);
-        }
-    }
-
-    private static short primaryYear(LocalDate sizingMonth) {
-        return (short) YearMonth.from(sizingMonth).getYear();
-    }
-
-    private static LocalDate slotEnd(RstExercise exercise) {
-        return exercise.getSlotStartDate()
-                .plusWeeks(exercise.getSlotWeeks().shortValue())
-                .minusDays(1);
-    }
-
-    private static String formatYears(Set<Short> years) {
-        return years.stream()
-                .map(String::valueOf)
-                .collect(Collectors.joining(", "));
-    }
-
     private static ApiException initializationConflict(String code, String message) {
         return new ApiException(HttpStatus.CONFLICT, code, message);
-    }
-
-    private static TeamSetupInput toInput(ExerciseTeamSetup source) {
-        return new TeamSetupInput(
-                source.getAgentsLt6m(),
-                source.getAgents6To24m(),
-                source.getAgents24To48m(),
-                source.getAgentsGt48m(),
-                source.getPaidLeaveDays(),
-                source.getOtherLeaveDays(),
-                source.getAvailabilityRatio(),
-                source.getAutomationRatio(),
-                source.getMaxOvertimeMinutes(),
-                source.getSlaType(),
-                source.getSlaTargetRatio(),
-                source.getSlaTurnaroundMinutes(),
-                source.getSlaStartTime(),
-                source.getSlaEndTime(),
-                source.getSlaWeekendEnabled(),
-                source.getWeekendShiftHc(),
-                source.getSkeletonRatio(),
-                source.getWeekendCode());
     }
 
 }

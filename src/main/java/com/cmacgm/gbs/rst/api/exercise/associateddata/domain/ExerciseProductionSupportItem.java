@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitProductionSupportItem;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -109,11 +111,11 @@ public class ExerciseProductionSupportItem {
     }
 
     /**
-     * Copies a support item from an archived Exercise, preserving lineage.
+     * Copies a support item from Toolkit latest state, preserving lineage.
      */
-    public static ExerciseProductionSupportItem createFromArchive(
+    public static ExerciseProductionSupportItem createFromToolkit(
             UUID exerciseId,
-            ExerciseProductionSupportItem source,
+            ToolkitProductionSupportItem source,
             String actorCcgid,
             Instant now) {
         ExerciseProductionSupportItem item = create(

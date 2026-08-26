@@ -8,9 +8,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
+import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
+import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitAssociatedDataService;
+import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitVolumeService;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,6 +49,15 @@ class SupervisorApiIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private ToolkitAssociatedDataService toolkitAssociatedData;
+
+    @Autowired
+    private ToolkitVolumeService toolkitVolumes;
+
+    @Autowired
+    private RstExerciseRepository exercises;
+
     @BeforeEach
     void seedSupervisorAndActiveTimesheet() {
         jdbcTemplate.update("delete from tms_pause_interval");
@@ -70,6 +86,12 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update("delete from exercise_holiday");
         jdbcTemplate.update("delete from exercise_production_support_item");
         jdbcTemplate.update("delete from exercise_team_setup");
+        jdbcTemplate.update("delete from toolkit_volume_slot");
+        jdbcTemplate.update("delete from toolkit_holiday");
+        jdbcTemplate.update("delete from toolkit_production_support_item");
+        jdbcTemplate.update("delete from toolkit_team_setup");
+        jdbcTemplate.update("delete from toolkit_volume_daily");
+        jdbcTemplate.update("delete from toolkit_volume_monthly");
         jdbcTemplate.update("delete from exercise_shared_kpi_line");
         jdbcTemplate.update("delete from exercise_subtask");
         jdbcTemplate.update("delete from exercise_toolkit_snapshot");
@@ -325,7 +347,7 @@ class SupervisorApiIntegrationTests {
                         Integer.class,
                         createdExerciseId));
         org.junit.jupiter.api.Assertions.assertEquals(
-                728,
+                0,
                 jdbcTemplate.queryForObject(
                         "select count(*) from exercise_volume_slot_input where exercise_id = ?",
                         Integer.class,
@@ -420,7 +442,7 @@ class SupervisorApiIntegrationTests {
     }
 
     @Test
-    void seedsArchiveAssociatedDataWithoutShiftOrManualCycleTime() throws Exception {
+    void seedsToolkitLatestStateWithoutShiftOrManualCycleTime() throws Exception {
         String toolkitId = JsonPath.read(createToolkit("Archive Source Toolkit"), "$.id");
         String sourceId = JsonPath.read(createExercise(toolkitId), "$.exercise.id");
         UUID sourceExerciseId = UUID.fromString(sourceId);
@@ -451,6 +473,16 @@ class SupervisorApiIntegrationTests {
                         """
                         select count(*) from cycle_time_baseline
                         where exercise_id = ? and baseline_type = 'MANUAL'
+                        """,
+                        Integer.class,
+                        targetExerciseId));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                Integer.valueOf(1),
+                jdbcTemplate.queryForObject(
+                        """
+                        select count(*)
+                        from exercise_holiday
+                        where exercise_id = ? and deleted_at is null and holiday_date = DATE '2024-12-25'
                         """,
                         Integer.class,
                         targetExerciseId));
@@ -536,6 +568,263 @@ class SupervisorApiIntegrationTests {
                 .andExpect(jsonPath("$.exercise.slotWeeks").value(1))
                 .andExpect(jsonPath("$.volumes.length()").value(182))
                 .andExpect(jsonPath("$.volumes[0].actualVolume").isEmpty());
+    }
+
+    @Test
+    void appliesSlotPeriodOverlaysToolkitVolume() throws Exception {
+        String toolkitId = JsonPath.read(createToolkit("Slot Overlay Toolkit"), "$.id");
+        String exerciseId = JsonPath.read(createExercise(toolkitId), "$.exercise.id");
+        Instant slotStart = Instant.parse("2026-09-07T09:00:00Z");
+        Instant slotEnd = Instant.parse("2026-09-07T09:30:00Z");
+        jdbcTemplate.update(
+                """
+                insert into toolkit_volume_slot
+                    (id, toolkit_id, slot_start_at, slot_end_at, actual_volume, source_exercise_id,
+                     created_at, created_by, updated_at, updated_by)
+                values (?, ?, ?, ?, 12.5, ?, ?, ?, ?, ?)
+                """,
+                UUID.randomUUID(),
+                UUID.fromString(toolkitId),
+                slotStart,
+                slotEnd,
+                UUID.fromString(exerciseId),
+                NOW,
+                SUPERVISOR_CCGID,
+                NOW,
+                SUPERVISOR_CCGID);
+        mockMvc.perform(put("/api/v1/exercises/{id}/slot-period", exerciseId)
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "slotStartDate": "2026-09-07",
+                                  "slotWeeks": 1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.volumes.length()").value(182));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                Integer.valueOf(1),
+                jdbcTemplate.queryForObject(
+                        """
+                        select count(*) from exercise_volume_slot_input
+                        where exercise_id = ? and actual_volume = 12.5 and source_type = 'TOOLKIT'
+                        """,
+                        Integer.class,
+                        UUID.fromString(exerciseId)));
+    }
+
+    @Test
+    void writesToolkitSnapshotsAndUpsertsVolumeOnApproveWriter() throws Exception {
+        String toolkitJson = createToolkit("Approve Snapshot Toolkit");
+        String toolkitId = JsonPath.read(toolkitJson, "$.id");
+        String exerciseId = JsonPath.read(createExercise(toolkitId), "$.exercise.id");
+        UUID toolkitUuid = UUID.fromString(toolkitId);
+        UUID exerciseUuid = UUID.fromString(exerciseId);
+        jdbcTemplate.update(
+                """
+                insert into exercise_holiday
+                    (id, exercise_id, holiday_date, holiday_name, holiday_type,
+                     created_at, created_by, updated_at, updated_by, version)
+                values (?, ?, DATE '2024-12-25', 'Christmas', 'HOLIDAY', ?, ?, ?, ?, 0)
+                """,
+                UUID.randomUUID(),
+                exerciseUuid,
+                NOW,
+                SUPERVISOR_CCGID,
+                NOW,
+                SUPERVISOR_CCGID);
+        jdbcTemplate.update(
+                """
+                insert into exercise_production_support_item
+                    (id, exercise_id, lineage_id, category, activity, frequency_code,
+                     volume, unit_of_measure, workload_per_unit_minutes,
+                     created_at, created_by, updated_at, updated_by, version)
+                values (?, ?, ?, 'Operations', 'Approve reporting', 'MONTHLY',
+                        10, 'case', 5, ?, ?, ?, ?, 0)
+                """,
+                UUID.randomUUID(),
+                exerciseUuid,
+                UUID.randomUUID(),
+                NOW,
+                SUPERVISOR_CCGID,
+                NOW,
+                SUPERVISOR_CCGID);
+        RstExercise exercise = exercises.findById(exerciseUuid).orElseThrow();
+        toolkitAssociatedData.replaceSnapshots(exercise, SUPERVISOR_CCGID, NOW);
+        toolkitVolumes.upsertMonthly(
+                toolkitUuid,
+                LocalDate.of(2026, 7, 1),
+                new BigDecimal("100"),
+                new BigDecimal("0.80"),
+                exerciseUuid,
+                SUPERVISOR_CCGID,
+                NOW);
+        toolkitVolumes.upsertMonthly(
+                toolkitUuid,
+                LocalDate.of(2026, 7, 1),
+                new BigDecimal("110"),
+                new BigDecimal("0.90"),
+                exerciseUuid,
+                SUPERVISOR_CCGID,
+                NOW);
+        toolkitVolumes.upsertDaily(
+                toolkitUuid,
+                LocalDate.of(2026, 7, 15),
+                new BigDecimal("5"),
+                new BigDecimal("1.10"),
+                exerciseUuid,
+                SUPERVISOR_CCGID,
+                NOW);
+        toolkitVolumes.upsertSlot(
+                toolkitUuid,
+                Instant.parse("2026-09-07T09:00:00Z"),
+                Instant.parse("2026-09-07T09:30:00Z"),
+                new BigDecimal("12.5"),
+                exerciseUuid,
+                SUPERVISOR_CCGID,
+                NOW);
+
+        org.junit.jupiter.api.Assertions.assertEquals(
+                Integer.valueOf(1),
+                jdbcTemplate.queryForObject(
+                        "select count(*) from toolkit_team_setup where toolkit_id = ?",
+                        Integer.class,
+                        toolkitUuid));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                Integer.valueOf(1),
+                jdbcTemplate.queryForObject(
+                        """
+                        select count(*) from toolkit_holiday
+                        where toolkit_id = ? and holiday_date = DATE '2024-12-25'
+                        """,
+                        Integer.class,
+                        toolkitUuid));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                Integer.valueOf(1),
+                jdbcTemplate.queryForObject(
+                        """
+                        select count(*) from toolkit_production_support_item
+                        where toolkit_id = ? and activity = 'Approve reporting'
+                        """,
+                        Integer.class,
+                        toolkitUuid));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                0,
+                new BigDecimal("110.000000").compareTo(jdbcTemplate.queryForObject(
+                        """
+                        select actual_volume from toolkit_volume_monthly
+                        where toolkit_id = ? and month = DATE '2026-07-01'
+                        """,
+                        BigDecimal.class,
+                        toolkitUuid)));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                0,
+                new BigDecimal("0.90000000").compareTo(jdbcTemplate.queryForObject(
+                        """
+                        select commercial_ratio from toolkit_volume_monthly
+                        where toolkit_id = ? and month = DATE '2026-07-01'
+                        """,
+                        BigDecimal.class,
+                        toolkitUuid)));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                0,
+                new BigDecimal("1.10000000").compareTo(jdbcTemplate.queryForObject(
+                        """
+                        select daily_adjustment_ratio from toolkit_volume_daily
+                        where toolkit_id = ? and volume_date = DATE '2026-07-15'
+                        """,
+                        BigDecimal.class,
+                        toolkitUuid)));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                Integer.valueOf(1),
+                jdbcTemplate.queryForObject(
+                        "select count(*) from toolkit_volume_slot where toolkit_id = ?",
+                        Integer.class,
+                        toolkitUuid));
+    }
+
+    @Test
+    void seedsToolkitVolumeRatiosOnCreate() throws Exception {
+        String toolkitId = JsonPath.read(createToolkit("Ratio Seed Toolkit"), "$.id");
+        String sourceId = JsonPath.read(createExercise(toolkitId), "$.exercise.id");
+        jdbcTemplate.update(
+                """
+                insert into toolkit_volume_monthly
+                    (id, toolkit_id, month, actual_volume, commercial_ratio, source_exercise_id,
+                     created_at, created_by, updated_at, updated_by)
+                values (?, ?, DATE '2026-07-01', 100, 0.85, ?, ?, ?, ?, ?)
+                """,
+                UUID.randomUUID(),
+                UUID.fromString(toolkitId),
+                UUID.fromString(sourceId),
+                NOW,
+                SUPERVISOR_CCGID,
+                NOW,
+                SUPERVISOR_CCGID);
+        jdbcTemplate.update(
+                """
+                insert into toolkit_volume_daily
+                    (id, toolkit_id, volume_date, actual_volume, daily_adjustment_ratio,
+                     source_exercise_id, created_at, created_by, updated_at, updated_by)
+                values (?, ?, DATE '2026-07-15', 5, 1.10, ?, ?, ?, ?, ?)
+                """,
+                UUID.randomUUID(),
+                UUID.fromString(toolkitId),
+                UUID.fromString(sourceId),
+                NOW,
+                SUPERVISOR_CCGID,
+                NOW,
+                SUPERVISOR_CCGID);
+        String targetId = JsonPath.read(createExercise(toolkitId), "$.exercise.id");
+        org.junit.jupiter.api.Assertions.assertEquals(
+                0,
+                new BigDecimal("0.85000000").compareTo(jdbcTemplate.queryForObject(
+                        """
+                        select commercial_ratio from exercise_volume_monthly_input
+                        where exercise_id = ? and month = DATE '2026-07-01'
+                        """,
+                        BigDecimal.class,
+                        UUID.fromString(targetId))));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                0,
+                new BigDecimal("1.10000000").compareTo(jdbcTemplate.queryForObject(
+                        """
+                        select daily_adjustment_ratio from exercise_volume_daily_input
+                        where exercise_id = ? and volume_date = DATE '2026-07-15'
+                        """,
+                        BigDecimal.class,
+                        UUID.fromString(targetId))));
+    }
+
+    @Test
+    void exportsToolkitWorkbook() throws Exception {
+        String toolkitId = JsonPath.read(createToolkit("Export Toolkit"), "$.id");
+        var result = mockMvc.perform(get("/api/v1/toolkits/{id}/export", toolkitId)
+                        .header("X-Dev-Role", "SUPERVISOR"))
+                .andExpect(status().isOk())
+                .andReturn();
+        byte[] body = result.getResponse().getContentAsByteArray();
+        org.junit.jupiter.api.Assertions.assertTrue(body.length > 100);
+        try (var workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook(
+                new java.io.ByteArrayInputStream(body))) {
+            org.junit.jupiter.api.Assertions.assertEquals(10, workbook.getNumberOfSheets());
+            org.junit.jupiter.api.Assertions.assertEquals(
+                    List.of(
+                            "Toolkit",
+                            "Subtasks",
+                            "Shared KPI",
+                            "Team Setup",
+                            "Production Support",
+                            "Calendar",
+                            "TMS",
+                            "Monthly Volume",
+                            "Daily Volume",
+                            "Slot Volume"),
+                    java.util.stream.IntStream.range(0, workbook.getNumberOfSheets())
+                            .mapToObj(i -> workbook.getSheetAt(i).getSheetName())
+                            .toList());
+        }
     }
 
     @Test
@@ -671,6 +960,52 @@ class SupervisorApiIntegrationTests {
                 """,
                 UUID.randomUUID(),
                 exerciseId,
+                NOW,
+                SUPERVISOR_CCGID);
+        UUID toolkitId = jdbcTemplate.queryForObject(
+                "select toolkit_id from rst_exercise where id = ?", UUID.class, exerciseId);
+        jdbcTemplate.update(
+                """
+                insert into toolkit_team_setup
+                    (toolkit_id, source_exercise_id, weekend_code,
+                     created_at, created_by, updated_at, updated_by, version)
+                values (?, ?, '1', ?, ?, ?, ?, 0)
+                """,
+                toolkitId,
+                exerciseId,
+                NOW,
+                SUPERVISOR_CCGID,
+                NOW,
+                SUPERVISOR_CCGID);
+        jdbcTemplate.update(
+                """
+                insert into toolkit_production_support_item
+                    (id, toolkit_id, source_exercise_id, lineage_id, category, activity,
+                     frequency_code, volume, unit_of_measure, workload_per_unit_minutes,
+                     created_at, created_by, updated_at, updated_by)
+                values (?, ?, ?, ?, 'Operations', 'Archive reporting', 'MONTHLY',
+                        10, 'case', 5, ?, ?, ?, ?)
+                """,
+                UUID.randomUUID(),
+                toolkitId,
+                exerciseId,
+                supportItemId,
+                NOW,
+                SUPERVISOR_CCGID,
+                NOW,
+                SUPERVISOR_CCGID);
+        jdbcTemplate.update(
+                """
+                insert into toolkit_holiday
+                    (id, toolkit_id, source_exercise_id, holiday_date, holiday_name, holiday_type,
+                     created_at, created_by, updated_at, updated_by)
+                values (?, ?, ?, DATE '2024-12-25', 'Christmas', 'HOLIDAY', ?, ?, ?, ?)
+                """,
+                UUID.randomUUID(),
+                toolkitId,
+                exerciseId,
+                NOW,
+                SUPERVISOR_CCGID,
                 NOW,
                 SUPERVISOR_CCGID);
     }

@@ -699,14 +699,16 @@ public class AssociatedDataService {
             String key = MonthKeys.formatYearMonth(row.getMonth());
             byMonth.put(key, new MonthlyVolumeRequest(key, row.getActualVolume(), row.getCommercialRatio()));
         }
-        Map<LocalDate, BigDecimal> seed = toolkitVolumes.monthlySeedByMonth(exercise.getToolkitId());
+        Map<LocalDate, ToolkitVolumeService.VolumeSeed> seed =
+                toolkitVolumes.monthlySeedByMonth(exercise.getToolkitId());
         for (MonthlyVolumeRequest row : parsed) {
             String key = row.month().trim();
             BigDecimal volume = row.actualVolume();
             BigDecimal commercial = row.commercialRatio();
             MonthlyVolumeRequest existing = byMonth.get(key);
             if (!byMonth.containsKey(key) && volume == null) {
-                volume = seed.get(YearMonth.parse(key).atDay(1));
+                ToolkitVolumeService.VolumeSeed point = seed.get(YearMonth.parse(key).atDay(1));
+                volume = point == null ? null : point.actualVolume();
             }
             if (commercial == null && existing != null) {
                 commercial = existing.commercialRatio();
@@ -730,13 +732,15 @@ public class AssociatedDataService {
                     new DailyVolumeRequest(
                             row.getVolumeDate(), row.getActualVolume(), row.getDailyAdjustmentRatio()));
         }
-        Map<LocalDate, BigDecimal> seed = toolkitVolumes.dailySeedByDate(exercise.getToolkitId());
+        Map<LocalDate, ToolkitVolumeService.VolumeSeed> seed =
+                toolkitVolumes.dailySeedByDate(exercise.getToolkitId());
         for (DailyVolumeRequest row : parsed) {
             BigDecimal volume = row.actualVolume();
             BigDecimal adjustment = row.dailyAdjustmentRatio();
             DailyVolumeRequest existing = byDate.get(row.volumeDate());
             if (!byDate.containsKey(row.volumeDate()) && volume == null) {
-                volume = seed.get(row.volumeDate());
+                ToolkitVolumeService.VolumeSeed point = seed.get(row.volumeDate());
+                volume = point == null ? null : point.actualVolume();
             }
             if (adjustment == null && existing != null) {
                 adjustment = existing.dailyAdjustmentRatio();
@@ -753,7 +757,7 @@ public class AssociatedDataService {
 
     private static void fillMonthlyGaps(
             Map<String, MonthlyVolumeRequest> byMonth,
-            Map<LocalDate, BigDecimal> seed,
+            Map<LocalDate, ToolkitVolumeService.VolumeSeed> seed,
             YearMonth cutoff) {
         if (byMonth.isEmpty()) {
             return;
@@ -766,13 +770,19 @@ public class AssociatedDataService {
         for (YearMonth ym = min; !ym.isAfter(max); ym = ym.plusMonths(1)) {
             String key = ym.toString();
             LocalDate monthStart = ym.atDay(1);
-            byMonth.putIfAbsent(key, new MonthlyVolumeRequest(key, seed.get(monthStart)));
+            ToolkitVolumeService.VolumeSeed point = seed.get(monthStart);
+            byMonth.putIfAbsent(
+                    key,
+                    new MonthlyVolumeRequest(
+                            key,
+                            point == null ? null : point.actualVolume(),
+                            point == null ? null : point.ratio()));
         }
     }
 
     private static void fillDailyGaps(
             Map<LocalDate, DailyVolumeRequest> byDate,
-            Map<LocalDate, BigDecimal> seed,
+            Map<LocalDate, ToolkitVolumeService.VolumeSeed> seed,
             LocalDate cutoff) {
         if (byDate.isEmpty()) {
             return;
@@ -783,7 +793,13 @@ public class AssociatedDataService {
             max = cutoff;
         }
         for (LocalDate date = min; !date.isAfter(max); date = date.plusDays(1)) {
-            byDate.putIfAbsent(date, new DailyVolumeRequest(date, seed.get(date)));
+            ToolkitVolumeService.VolumeSeed point = seed.get(date);
+            byDate.putIfAbsent(
+                    date,
+                    new DailyVolumeRequest(
+                            date,
+                            point == null ? null : point.actualVolume(),
+                            point == null ? null : point.ratio()));
         }
     }
 

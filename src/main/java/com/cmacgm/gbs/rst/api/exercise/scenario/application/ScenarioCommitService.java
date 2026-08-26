@@ -23,12 +23,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.CommitResults;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.CommitScenarioRequest;
-import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.DailySizingView;
-import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ForecastBundleView;
-import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.MonthlySizingView;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.PersistedForecastIds;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ScenarioView;
-import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.SlotSimulationView;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.UpdateScenarioRequest;
 
 /**

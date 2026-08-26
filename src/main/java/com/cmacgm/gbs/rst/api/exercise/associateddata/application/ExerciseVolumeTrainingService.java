@@ -13,8 +13,10 @@ import java.util.UUID;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseVolumeDailyInput;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseVolumeMonthlyInput;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseVolumeSlotInput;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseVolumeDailyInputRepository;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseVolumeMonthlyInputRepository;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseVolumeSlotInputRepository;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.ForecastRun;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.ForecastTrainingSnapshot;
@@ -37,16 +39,19 @@ public class ExerciseVolumeTrainingService {
     private final ToolkitVolumeService toolkitVolumes;
     private final ExerciseVolumeMonthlyInputRepository exerciseMonthly;
     private final ExerciseVolumeDailyInputRepository exerciseDaily;
+    private final ExerciseVolumeSlotInputRepository exerciseSlot;
     private final ForecastRunRepository forecastRuns;
 
     public ExerciseVolumeTrainingService(
             ToolkitVolumeService toolkitVolumes,
             ExerciseVolumeMonthlyInputRepository exerciseMonthly,
             ExerciseVolumeDailyInputRepository exerciseDaily,
+            ExerciseVolumeSlotInputRepository exerciseSlot,
             ForecastRunRepository forecastRuns) {
         this.toolkitVolumes = toolkitVolumes;
         this.exerciseMonthly = exerciseMonthly;
         this.exerciseDaily = exerciseDaily;
+        this.exerciseSlot = exerciseSlot;
         this.forecastRuns = forecastRuns;
     }
 
@@ -192,6 +197,7 @@ public class ExerciseVolumeTrainingService {
                     toolkitId,
                     row.getMonth(),
                     row.getActualVolume(),
+                    row.getCommercialRatio(),
                     exercise.getId(),
                     actorCcgid,
                     now);
@@ -203,6 +209,17 @@ public class ExerciseVolumeTrainingService {
             toolkitVolumes.upsertDaily(
                     toolkitId,
                     row.getVolumeDate(),
+                    row.getActualVolume(),
+                    row.getDailyAdjustmentRatio(),
+                    exercise.getId(),
+                    actorCcgid,
+                    now);
+        }
+        for (ExerciseVolumeSlotInput row : exerciseSlot.findByExerciseIdOrderBySlotStartAtAsc(exercise.getId())) {
+            toolkitVolumes.upsertSlot(
+                    toolkitId,
+                    row.getSlotStartAt(),
+                    row.getSlotEndAt(),
                     row.getActualVolume(),
                     exercise.getId(),
                     actorCcgid,

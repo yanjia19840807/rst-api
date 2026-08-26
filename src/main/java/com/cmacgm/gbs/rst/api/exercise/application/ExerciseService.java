@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -242,8 +241,7 @@ public class ExerciseService {
     }
 
     /**
-     * Updates sizing / slot / TMS periods on an editable Exercise.
-     * When the sizing year changes, Supervisor is asked to review Calendar holidays.
+     * Updates sizing / TMS periods on an editable Exercise.
      *
      * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
@@ -261,8 +259,6 @@ public class ExerciseService {
                     "exercise-not-editable",
                     "Exercise periods can only be changed during Supervisor Sizing.");
         }
-        short previousYear = (short) YearMonth.from(exercise.getSizingMonth()).getYear();
-        short nextYear = (short) YearMonth.parse(request.sizingMonth()).getYear();
         boolean periodsChanged = periodsChanged(exercise, request);
         exercise.updatePeriods(
                 MonthKeys.parseMonthStart(request.sizingMonth()),
@@ -273,14 +269,6 @@ public class ExerciseService {
         exercises.saveAndFlush(exercise);
 
         List<String> notices = new ArrayList<>();
-        if (previousYear != nextYear) {
-            notices.add(
-                    "Sizing year changed ("
-                            + previousYear
-                            + " → "
-                            + nextYear
-                            + "). Review holiday dates in Calendar.");
-        }
         initialization.ensureTrainVolumeGrids(exercise, ownerCcgid);
         notices.add("Volume Input grids refreshed for the updated training windows.");
         notices.add(initialization.syncTmsPopulation(exercise, ownerCcgid));

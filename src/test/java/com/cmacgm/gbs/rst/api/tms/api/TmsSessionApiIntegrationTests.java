@@ -65,6 +65,12 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update("delete from exercise_shared_kpi_line");
         jdbcTemplate.update("delete from exercise_subtask");
         jdbcTemplate.update("delete from exercise_toolkit_snapshot");
+        jdbcTemplate.update("delete from toolkit_volume_slot");
+        jdbcTemplate.update("delete from toolkit_holiday");
+        jdbcTemplate.update("delete from toolkit_production_support_item");
+        jdbcTemplate.update("delete from toolkit_team_setup");
+        jdbcTemplate.update("delete from toolkit_volume_daily");
+        jdbcTemplate.update("delete from toolkit_volume_monthly");
         jdbcTemplate.update("delete from rst_exercise");
         jdbcTemplate.update("delete from timesheet_sync_issue");
         jdbcTemplate.update("delete from timesheet_kpi");

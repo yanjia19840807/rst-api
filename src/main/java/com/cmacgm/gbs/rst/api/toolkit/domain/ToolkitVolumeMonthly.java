@@ -32,6 +32,9 @@ public class ToolkitVolumeMonthly implements Persistable<UUID> {
     @Column(name = "actual_volume", nullable = false, precision = 24, scale = 6)
     private BigDecimal actualVolume;
 
+    @Column(name = "commercial_ratio", precision = 12, scale = 8)
+    private BigDecimal commercialRatio;
+
     @Column(name = "source_exercise_id", nullable = false)
     private UUID sourceExerciseId;
 
@@ -60,6 +63,7 @@ public class ToolkitVolumeMonthly implements Persistable<UUID> {
             UUID toolkitId,
             LocalDate month,
             BigDecimal actualVolume,
+            BigDecimal commercialRatio,
             UUID sourceExerciseId,
             String actorCcgid,
             Instant now) {
@@ -68,6 +72,7 @@ public class ToolkitVolumeMonthly implements Persistable<UUID> {
         row.toolkitId = toolkitId;
         row.month = month;
         row.actualVolume = actualVolume;
+        row.commercialRatio = commercialRatio;
         row.sourceExerciseId = sourceExerciseId;
         row.createdAt = now;
         row.createdBy = actorCcgid;
@@ -78,10 +83,16 @@ public class ToolkitVolumeMonthly implements Persistable<UUID> {
     }
 
     /**
-     * Overwrites actual from a newly approved Exercise.
+     * Overwrites actual and commercial ratio from a newly approved Exercise.
      */
-    public void replaceFrom(BigDecimal actualVolume, UUID sourceExerciseId, String actorCcgid, Instant now) {
+    public void replaceFrom(
+            BigDecimal actualVolume,
+            BigDecimal commercialRatio,
+            UUID sourceExerciseId,
+            String actorCcgid,
+            Instant now) {
         this.actualVolume = actualVolume;
+        this.commercialRatio = commercialRatio;
         this.sourceExerciseId = sourceExerciseId;
         this.updatedAt = now;
         this.updatedBy = actorCcgid;
@@ -106,5 +117,6 @@ public class ToolkitVolumeMonthly implements Persistable<UUID> {
     public UUID getToolkitId() { return toolkitId; }
     public LocalDate getMonth() { return month; }
     public BigDecimal getActualVolume() { return actualVolume; }
+    public BigDecimal getCommercialRatio() { return commercialRatio; }
     public UUID getSourceExerciseId() { return sourceExerciseId; }
 }

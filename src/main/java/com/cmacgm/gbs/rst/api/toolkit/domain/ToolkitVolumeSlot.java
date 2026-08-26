@@ -2,7 +2,6 @@ package com.cmacgm.gbs.rst.api.toolkit.domain;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.UUID;
 
 import jakarta.persistence.Column;
@@ -15,10 +14,10 @@ import jakarta.persistence.Transient;
 
 import org.springframework.data.domain.Persistable;
 
-/** Canonical daily actual volume for a Toolkit (upserted on Exercise APPROVED). */
+/** Canonical slot actual volume for a Toolkit (upserted on Exercise APPROVED). */
 @Entity
-@Table(name = "toolkit_volume_daily")
-public class ToolkitVolumeDaily implements Persistable<UUID> {
+@Table(name = "toolkit_volume_slot")
+public class ToolkitVolumeSlot implements Persistable<UUID> {
 
     @Id
     private UUID id;
@@ -26,14 +25,14 @@ public class ToolkitVolumeDaily implements Persistable<UUID> {
     @Column(name = "toolkit_id", nullable = false)
     private UUID toolkitId;
 
-    @Column(name = "volume_date", nullable = false)
-    private LocalDate volumeDate;
+    @Column(name = "slot_start_at", nullable = false)
+    private Instant slotStartAt;
+
+    @Column(name = "slot_end_at", nullable = false)
+    private Instant slotEndAt;
 
     @Column(name = "actual_volume", nullable = false, precision = 24, scale = 6)
     private BigDecimal actualVolume;
-
-    @Column(name = "daily_adjustment_ratio", precision = 12, scale = 8)
-    private BigDecimal dailyAdjustmentRatio;
 
     @Column(name = "source_exercise_id", nullable = false)
     private UUID sourceExerciseId;
@@ -53,26 +52,26 @@ public class ToolkitVolumeDaily implements Persistable<UUID> {
     @Transient
     private boolean isNew = true;
 
-    protected ToolkitVolumeDaily() {
+    protected ToolkitVolumeSlot() {
     }
 
     /**
-     * Creates a canonical daily row.
+     * Creates a canonical slot row.
      */
-    public static ToolkitVolumeDaily create(
+    public static ToolkitVolumeSlot create(
             UUID toolkitId,
-            LocalDate volumeDate,
+            Instant slotStartAt,
+            Instant slotEndAt,
             BigDecimal actualVolume,
-            BigDecimal dailyAdjustmentRatio,
             UUID sourceExerciseId,
             String actorCcgid,
             Instant now) {
-        ToolkitVolumeDaily row = new ToolkitVolumeDaily();
+        ToolkitVolumeSlot row = new ToolkitVolumeSlot();
         row.id = UUID.randomUUID();
         row.toolkitId = toolkitId;
-        row.volumeDate = volumeDate;
+        row.slotStartAt = slotStartAt;
+        row.slotEndAt = slotEndAt;
         row.actualVolume = actualVolume;
-        row.dailyAdjustmentRatio = dailyAdjustmentRatio;
         row.sourceExerciseId = sourceExerciseId;
         row.createdAt = now;
         row.createdBy = actorCcgid;
@@ -83,16 +82,16 @@ public class ToolkitVolumeDaily implements Persistable<UUID> {
     }
 
     /**
-     * Overwrites actual and daily adjustment from a newly approved Exercise.
+     * Overwrites actual from a newly approved Exercise.
      */
     public void replaceFrom(
+            Instant slotEndAt,
             BigDecimal actualVolume,
-            BigDecimal dailyAdjustmentRatio,
             UUID sourceExerciseId,
             String actorCcgid,
             Instant now) {
+        this.slotEndAt = slotEndAt;
         this.actualVolume = actualVolume;
-        this.dailyAdjustmentRatio = dailyAdjustmentRatio;
         this.sourceExerciseId = sourceExerciseId;
         this.updatedAt = now;
         this.updatedBy = actorCcgid;
@@ -115,8 +114,8 @@ public class ToolkitVolumeDaily implements Persistable<UUID> {
     }
 
     public UUID getToolkitId() { return toolkitId; }
-    public LocalDate getVolumeDate() { return volumeDate; }
+    public Instant getSlotStartAt() { return slotStartAt; }
+    public Instant getSlotEndAt() { return slotEndAt; }
     public BigDecimal getActualVolume() { return actualVolume; }
-    public BigDecimal getDailyAdjustmentRatio() { return dailyAdjustmentRatio; }
     public UUID getSourceExerciseId() { return sourceExerciseId; }
 }

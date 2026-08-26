@@ -67,7 +67,7 @@ public class ExerciseVolumeMonthlyInput implements Persistable<UUID> {
      * @param month first day of the month
      * @param actualVolume optional actual volume
      * @param commercialRatio Excel Commercial Ratio; null treated as 0 in sizing
-     * @param sourceType MANUAL / ARCHIVE / IMPORT
+     * @param sourceType MANUAL / TOOLKIT / IMPORT
      * @param importBatchId optional import batch
      * @param actorCcgid creating Supervisor
      * @param now creation timestamp

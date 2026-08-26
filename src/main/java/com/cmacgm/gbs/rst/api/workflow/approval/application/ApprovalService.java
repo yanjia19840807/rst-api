@@ -18,6 +18,7 @@ import java.util.UUID;
 import java.util.function.Function;
 
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.ExerciseVolumeTrainingService;
+import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitAssociatedDataService;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseProductionSupportItemRepository;
@@ -82,6 +83,7 @@ public class ApprovalService {
     private final WorkflowViews workflowViews;
     private final ApprovalWorkspaceAssembler workspaceAssembler;
     private final ExerciseVolumeTrainingService volumeTraining;
+    private final ToolkitAssociatedDataService toolkitAssociatedData;
     private final Clock clock;
 
     /**
@@ -99,6 +101,7 @@ public class ApprovalService {
             WorkflowViews workflowViews,
             ApprovalWorkspaceAssembler workspaceAssembler,
             ExerciseVolumeTrainingService volumeTraining,
+            ToolkitAssociatedDataService toolkitAssociatedData,
             Clock clock) {
         this.workflows = workflows;
         this.exercises = exercises;
@@ -111,6 +114,7 @@ public class ApprovalService {
         this.workflowViews = workflowViews;
         this.workspaceAssembler = workspaceAssembler;
         this.volumeTraining = volumeTraining;
+        this.toolkitAssociatedData = toolkitAssociatedData;
         this.clock = clock;
     }
 
@@ -326,6 +330,8 @@ public class ApprovalService {
                         now);
             } else if (current.getNode() == TaskNode.LTH) {
                 volumeTraining.freezeOfficialTrainingAndUpsert(
+                        loaded.exercise(), principal.ccgid(), now);
+                toolkitAssociatedData.replaceSnapshots(
                         loaded.exercise(), principal.ccgid(), now);
                 loaded.exercise().markApproved(principal.ccgid(), now);
             }

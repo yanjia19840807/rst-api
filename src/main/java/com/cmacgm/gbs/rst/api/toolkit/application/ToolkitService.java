@@ -214,6 +214,14 @@ public class ToolkitService {
         }
     }
 
+    /**
+     * Returns a Toolkit the Supervisor can manage.
+     */
+    @Transactional(readOnly = true)
+    public Toolkit requireManaged(String ccgid, UUID toolkitId) {
+        return ownedToolkit(ccgid, toolkitId);
+    }
+
     private Toolkit ownedToolkit(String ccgid, UUID toolkitId) {
         Toolkit toolkit = toolkits.findActiveById(toolkitId)
                 .orElseThrow(() -> notFound("toolkit-not-found", "The Toolkit was not found."));
