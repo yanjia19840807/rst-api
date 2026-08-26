@@ -101,12 +101,6 @@ public class SlotSimulationService {
         }
         List<SlotShift> draftShifts = toSlotShifts(request.shifts());
         Context ctx = loadContext(ownerCcgid, exerciseId, scenarioId, draftShifts);
-        if (!SlotMath.applicabilityOn(ctx.slaType(), ctx.slaTurnaroundMinutes())) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY,
-                    "slot-not-applicable",
-                    "Slot Simulation is available when Calendar SLA <= 24h or business-hours SLA <= 8h.");
-        }
         Instant now = clock.instant();
         SimulationRun run = SimulationRun.accepted(
                 scenarioId,
@@ -448,11 +442,13 @@ public class SlotSimulationService {
 
         List<ExerciseVolumeSlotInput> volumes =
                 slotVolumes.findByExerciseIdOrderBySlotStartAtAsc(exerciseId);
-        if (volumes.isEmpty()) {
+        boolean empty = volumes.isEmpty()
+                || volumes.stream().allMatch(row -> row.getActualVolume() == null);
+        if (empty) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "slot-volume-required",
-                    "Slot volume inputs are required before slot simulation.");
+                    "Set Slot Period and fill Per-slot Volume first.");
         }
         List<SlotShift> shiftRows = overrideShifts != null
                 ? overrideShifts

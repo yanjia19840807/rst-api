@@ -11,5 +11,5 @@ import jakarta.validation.constraints.NotNull;
 public record SlotVolumeRequest(
         @NotNull Instant slotStartAt,
         @NotNull Instant slotEndAt,
-        @NotNull BigDecimal actualVolume) {
+        BigDecimal actualVolume) {
 }

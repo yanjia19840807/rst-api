@@ -42,11 +42,11 @@ public class RstExercise {
     @Column(name = "sizing_month", nullable = false)
     private LocalDate sizingMonth;
 
-    @Column(name = "slot_start_date", nullable = false)
+    @Column(name = "slot_start_date")
     private LocalDate slotStartDate;
 
-    @Column(name = "slot_weeks", nullable = false)
-    private short slotWeeks;
+    @Column(name = "slot_weeks")
+    private Short slotWeeks;
 
     @Column(name = "tms_from", nullable = false)
     private LocalDate tmsFrom;
@@ -110,8 +110,8 @@ public class RstExercise {
      * @param toolkitId source Toolkit id
      * @param ownerCcgid owning Supervisor
      * @param sizingMonth first day of sizing month
-     * @param slotStartDate slot window start
-     * @param slotWeeks slot window length in weeks
+     * @param slotStartDate optional slot window start (set later in Volume Input)
+     * @param slotWeeks optional slot window length in weeks
      * @param tmsFrom TMS history from date
      * @param tmsTo TMS history to date
      * @param now creation timestamp
@@ -124,7 +124,7 @@ public class RstExercise {
             String ownerCcgid,
             LocalDate sizingMonth,
             LocalDate slotStartDate,
-            short slotWeeks,
+            Short slotWeeks,
             LocalDate tmsFrom,
             LocalDate tmsTo,
             Instant now) {
@@ -146,11 +146,9 @@ public class RstExercise {
     }
 
     /**
-     * Updates sizing / slot / TMS period fields while the Exercise remains editable.
+     * Updates sizing / TMS period fields while the Exercise remains editable.
      *
      * @param sizingMonth first day of sizing month
-     * @param slotStartDate slot window start
-     * @param slotWeeks slot window length in weeks
      * @param tmsFrom TMS history from date
      * @param tmsTo TMS history to date
      * @param actorCcgid updating Supervisor
@@ -158,19 +156,38 @@ public class RstExercise {
      */
     public void updatePeriods(
             LocalDate sizingMonth,
-            LocalDate slotStartDate,
-            short slotWeeks,
             LocalDate tmsFrom,
             LocalDate tmsTo,
             String actorCcgid,
             Instant now) {
         this.sizingMonth = sizingMonth;
-        this.slotStartDate = slotStartDate;
-        this.slotWeeks = slotWeeks;
         this.tmsFrom = tmsFrom;
         this.tmsTo = tmsTo;
         this.updatedAt = now;
         this.updatedBy = actorCcgid;
+    }
+
+    /**
+     * Sets the Slot Period used to generate Per-slot Volume rows.
+     *
+     * @param slotStartDate slot window start
+     * @param slotWeeks slot window length in weeks (1–12)
+     * @param actorCcgid updating Supervisor
+     * @param now update timestamp
+     */
+    public void updateSlotPeriod(
+            LocalDate slotStartDate,
+            short slotWeeks,
+            String actorCcgid,
+            Instant now) {
+        this.slotStartDate = slotStartDate;
+        this.slotWeeks = slotWeeks;
+        this.updatedAt = now;
+        this.updatedBy = actorCcgid;
+    }
+
+    public boolean hasSlotPeriod() {
+        return slotStartDate != null && slotWeeks != null && slotWeeks >= 1;
     }
 
     /**
@@ -389,7 +406,7 @@ public class RstExercise {
         return slotStartDate;
     }
 
-    public short getSlotWeeks() {
+    public Short getSlotWeeks() {
         return slotWeeks;
     }
 

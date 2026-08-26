@@ -176,6 +176,36 @@ public class ScenarioCommitService {
      * @param exerciseId Exercise id
      * @return number of scenarios that had results cleared
      */
+    /**
+     * Clears only Slot Simulation snapshots for every Scenario on an Exercise.
+     * Monthly/Daily Sizing and Forecast results are kept.
+     *
+     * @param exerciseId Exercise id
+     * @return number of scenarios that had slot results cleared
+     */
+    @Transactional
+    public int clearSlotResultsForExercise(UUID exerciseId) {
+        List<Scenario> items = scenarios.findByExerciseIdAndDeletedAtIsNullOrderByCreatedAtAsc(exerciseId);
+        int cleared = 0;
+        for (Scenario scenario : items) {
+            List<SimulationRun> slotRuns = simulationRuns.findByScenarioId(scenario.getId()).stream()
+                    .filter(run -> "SLOT".equals(run.getRunType()))
+                    .toList();
+            if (slotRuns.isEmpty()) {
+                continue;
+            }
+            for (SimulationRun run : slotRuns) {
+                slotResults.deleteBySimulationRunId(run.getId());
+            }
+            simulationRuns.deleteAll(slotRuns);
+            cleared++;
+        }
+        if (cleared > 0) {
+            entityManager.flush();
+        }
+        return cleared;
+    }
+
     @Transactional
     public int clearResultsForExercise(UUID exerciseId) {
         List<Scenario> items = scenarios.findByExerciseIdAndDeletedAtIsNullOrderByCreatedAtAsc(exerciseId);

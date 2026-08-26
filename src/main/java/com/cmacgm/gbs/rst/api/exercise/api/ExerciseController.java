@@ -15,6 +15,8 @@ import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseListView;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseResponse;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateExercisePeriodsRequest;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateExercisePeriodsResult;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateSlotPeriodRequest;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateSlotPeriodResult;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.exercise.submission.application.SubmissionService;
@@ -179,7 +181,7 @@ public class ExerciseController {
     }
 
     /**
-     * Updates sizing / slot / TMS periods on an editable Exercise.
+     * Updates sizing / TMS periods on an editable Exercise.
      *
      * @param principal authenticated owner
      * @param id Exercise id
@@ -193,6 +195,18 @@ public class ExerciseController {
             @PathVariable UUID id,
             @Valid @RequestBody UpdateExercisePeriodsRequest request) {
         return service.updatePeriods(principal.ccgid(), id, request);
+    }
+
+    /**
+     * Sets Slot Period and rebuilds the empty Per-slot Volume grid.
+     */
+    @PutMapping("/{id}/slot-period")
+    @PreAuthorize("hasRole('SUPERVISOR')")
+    public UpdateSlotPeriodResult updateSlotPeriod(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateSlotPeriodRequest request) {
+        return service.updateSlotPeriod(principal.ccgid(), id, request);
     }
 
     /**

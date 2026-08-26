@@ -334,8 +334,6 @@ class TmsSessionApiIntegrationTests {
                                 {
                                   "toolkitId": "%s",
                                   "sizingMonth": "2026-09",
-                                  "slotStartDate": "2026-09-07",
-                                  "slotWeeks": 4,
                                   "tmsFrom": "2026-08-01",
                                   "tmsTo": "2026-08-31"
                                 }

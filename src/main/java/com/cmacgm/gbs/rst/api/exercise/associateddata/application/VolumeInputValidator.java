@@ -231,7 +231,7 @@ public class VolumeInputValidator {
                         "volume-slot-duration",
                         "Each slot must be exactly " + SLOT_MINUTES + " minutes.");
             }
-            if (row.actualVolume() == null || row.actualVolume().compareTo(BigDecimal.ZERO) < 0) {
+            if (row.actualVolume() != null && row.actualVolume().compareTo(BigDecimal.ZERO) < 0) {
                 fail("volume-negative", "Row " + (i + 1) + ": actualVolume must be non-negative.");
             }
             String key = row.slotStartAt() + "|" + row.slotEndAt();
@@ -251,6 +251,40 @@ public class VolumeInputValidator {
                 fail(
                         "volume-slot-gap",
                         "Slots on " + prevDay + " must be continuous without gaps.");
+            }
+        }
+    }
+
+    /**
+     * Import / replace rows must match the current Slot Period keys exactly.
+     */
+    public void validateSlotMatchesPeriod(
+            List<SlotVolumeRequest> request, LocalDate slotStartDate, Short slotWeeks) {
+        if (slotStartDate == null || slotWeeks == null) {
+            fail("slot-period-required", "Set a Slot Period to generate the per-slot grid.");
+        }
+        validateSlotMatchesPeriod(request, slotStartDate, slotWeeks.shortValue());
+    }
+
+    public void validateSlotMatchesPeriod(
+            List<SlotVolumeRequest> request, LocalDate slotStartDate, short slotWeeks) {
+        List<VolumeTrainWindows.SlotBound> expected =
+                VolumeTrainWindows.slotTrainBounds(slotStartDate, slotWeeks);
+        if (request == null || request.size() != expected.size()) {
+            fail(
+                    "volume-slot-period-mismatch",
+                    "Slot rows must match the current Slot Period. Download the template and try again.");
+        }
+        Set<String> expectedKeys = new HashSet<>();
+        for (VolumeTrainWindows.SlotBound bound : expected) {
+            expectedKeys.add(bound.start() + "|" + bound.end());
+        }
+        for (SlotVolumeRequest row : request) {
+            String key = row.slotStartAt() + "|" + row.slotEndAt();
+            if (!expectedKeys.contains(key)) {
+                fail(
+                        "volume-slot-period-mismatch",
+                        "Slot " + row.slotStartAt() + " is outside the current Slot Period.");
             }
         }
     }

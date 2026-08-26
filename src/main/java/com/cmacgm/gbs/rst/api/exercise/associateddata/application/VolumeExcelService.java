@@ -114,8 +114,11 @@ public class VolumeExcelService {
                 Cell startCell = excelRow.createCell(0);
                 startCell.setCellValue(LocalDateTime.ofInstant(row.slotStartAt(), ZoneOffset.UTC));
                 startCell.setCellStyle(dateStyle);
-                excelRow.createCell(1).setCellValue(
-                        row.actualVolume() == null ? 0d : row.actualVolume().doubleValue());
+                if (row.actualVolume() != null) {
+                    excelRow.createCell(1).setCellValue(row.actualVolume().doubleValue());
+                } else {
+                    excelRow.createCell(1).setBlank();
+                }
             }
             sheet.autoSizeColumn(0);
             sheet.autoSizeColumn(1);

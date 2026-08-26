@@ -505,12 +505,37 @@ class SupervisorApiIntegrationTests {
     @Test
     void rejectsSlotPeriodLongerThanTwelveWeeks() throws Exception {
         String toolkitId = JsonPath.read(createToolkit("Slot Limit Toolkit"), "$.id");
-        mockMvc.perform(post("/api/v1/exercises")
+        String exerciseId = JsonPath.read(createExercise(toolkitId), "$.exercise.id");
+        mockMvc.perform(put("/api/v1/exercises/{id}/slot-period", exerciseId)
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(exerciseRequest(toolkitId).replace(
-                                "\"slotWeeks\": 4", "\"slotWeeks\": 13")))
+                        .content("""
+                                {
+                                  "slotStartDate": "2026-09-07",
+                                  "slotWeeks": 13
+                                }
+                                """))
                 .andExpect(status().is(422));
+    }
+
+    @Test
+    void appliesSlotPeriodAndGeneratesEmptyGrid() throws Exception {
+        String toolkitId = JsonPath.read(createToolkit("Slot Period Toolkit"), "$.id");
+        String exerciseId = JsonPath.read(createExercise(toolkitId), "$.exercise.id");
+        mockMvc.perform(put("/api/v1/exercises/{id}/slot-period", exerciseId)
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "slotStartDate": "2026-09-07",
+                                  "slotWeeks": 1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.exercise.slotStartDate").value("2026-09-07"))
+                .andExpect(jsonPath("$.exercise.slotWeeks").value(1))
+                .andExpect(jsonPath("$.volumes.length()").value(182))
+                .andExpect(jsonPath("$.volumes[0].actualVolume").isEmpty());
     }
 
     @Test
@@ -691,8 +716,6 @@ class SupervisorApiIntegrationTests {
                 {
                   "toolkitId": "%s",
                   "sizingMonth": "2026-09",
-                  "slotStartDate": "2026-09-07",
-                  "slotWeeks": 4,
                   "tmsFrom": "2026-08-01",
                   "tmsTo": "2026-08-31"
                 }

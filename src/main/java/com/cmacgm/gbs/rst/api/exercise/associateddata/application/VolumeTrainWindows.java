@@ -62,6 +62,13 @@ public final class VolumeTrainWindows {
      * 30-minute slot bounds covering the slot training window.
      * Each day generates slots from 09:00 through 21:30–22:00 (prototype rule).
      */
+    public static List<SlotBound> slotTrainBounds(LocalDate slotStartDate, Short slotWeeks) {
+        if (slotStartDate == null || slotWeeks == null) {
+            return List.of();
+        }
+        return slotTrainBounds(slotStartDate, slotWeeks.shortValue());
+    }
+
     public static List<SlotBound> slotTrainBounds(LocalDate slotStartDate, short slotWeeks) {
         LocalDate endDate = slotTrainEnd(slotStartDate, slotWeeks);
         List<SlotBound> bounds = new ArrayList<>();

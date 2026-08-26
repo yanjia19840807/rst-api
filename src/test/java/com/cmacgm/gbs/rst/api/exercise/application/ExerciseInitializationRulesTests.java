@@ -51,6 +51,26 @@ class ExerciseInitializationRulesTests {
     }
 
     @Test
+    void resolveHolidayYearsSkipsSlotWhenPeriodUnset() {
+        UUID id = UUID.randomUUID();
+        RstExercise exercise = RstExercise.create(
+                id,
+                "EX-TEST-NO-SLOT",
+                UUID.randomUUID(),
+                "SUPERVISOR001",
+                LocalDate.of(2026, 1, 1),
+                null,
+                null,
+                LocalDate.of(2025, 12, 1),
+                LocalDate.of(2026, 1, 31),
+                Instant.parse("2026-01-01T00:00:00Z"));
+
+        assertEquals(
+                Set.of((short) 2025, (short) 2026),
+                ExerciseInitializationService.resolveHolidayYears(exercise));
+    }
+
+    @Test
     void kpiBusinessKeyTreatsNullValuesDeterministically() {
         assertEquals(
                 new KpiBusinessKey("", "Singapore", ""),

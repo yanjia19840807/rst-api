@@ -571,8 +571,14 @@ public class AssociatedDataService {
      */
     @Transactional(readOnly = true)
     public byte[] exportSlotTemplate(String ownerCcgid, UUID exerciseId) {
-        exercises.requireOwned(ownerCcgid, exerciseId);
-        return importTemplates.download(ImportTemplateService.Kind.VOLUME_SLOT);
+        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
+        requireSlotPeriod(exercise);
+        List<SlotVolumeRequest> rows = VolumeTrainWindows.slotTrainBounds(
+                        exercise.getSlotStartDate(), exercise.getSlotWeeks())
+                .stream()
+                .map(bound -> new SlotVolumeRequest(bound.start(), bound.end(), null))
+                .toList();
+        return volumeExcel.exportSlot(rows);
     }
 
     /**
@@ -580,7 +586,8 @@ public class AssociatedDataService {
      */
     @Transactional(readOnly = true)
     public byte[] exportSlotExcel(String ownerCcgid, UUID exerciseId) {
-        exercises.requireOwned(ownerCcgid, exerciseId);
+        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
+        requireSlotPeriod(exercise);
         List<SlotVolumeRequest> rows = slotVolumes.findByExerciseIdOrderBySlotStartAtAsc(exerciseId).stream()
                 .map(v -> new SlotVolumeRequest(
                         v.getSlotStartAt(), v.getSlotEndAt(), v.getActualVolume()))
@@ -661,8 +668,11 @@ public class AssociatedDataService {
             List<SlotVolumeRequest> request,
             String sourceType,
             UUID importBatchId) {
-        editable(ownerCcgid, exerciseId);
+        RstExercise exercise = editable(ownerCcgid, exerciseId);
+        requireSlotPeriod(exercise);
         volumeValidator.validateSlot(request);
+        volumeValidator.validateSlotMatchesPeriod(
+                request, exercise.getSlotStartDate(), exercise.getSlotWeeks());
         Instant now = clock.instant();
         slotVolumes.deleteByExerciseId(exerciseId);
         slotVolumes.flush();
@@ -813,6 +823,15 @@ public class AssociatedDataService {
                 ownerCcgid,
                 now));
         return batch.getId();
+    }
+
+    private static void requireSlotPeriod(RstExercise exercise) {
+        if (!exercise.hasSlotPeriod()) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "slot-period-required",
+                    "Set a Slot Period to generate the per-slot grid.");
+        }
     }
 
     private RstExercise editable(String ownerCcgid, UUID exerciseId) {

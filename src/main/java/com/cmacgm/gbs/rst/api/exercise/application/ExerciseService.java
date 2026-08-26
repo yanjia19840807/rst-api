@@ -39,6 +39,10 @@ import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseSubtaskView;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseToolkitView;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateExercisePeriodsRequest;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateExercisePeriodsResult;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateSlotPeriodRequest;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateSlotPeriodResult;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.SlotVolumeView;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseVolumeSlotInput;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
@@ -144,8 +148,8 @@ public class ExerciseService {
                 freeze.toolkit().getId(),
                 ownerCcgid,
                 MonthKeys.parseMonthStart(request.sizingMonth()),
-                request.slotStartDate(),
-                request.slotWeeks(),
+                null,
+                null,
                 request.tmsFrom(),
                 request.tmsTo(),
                 now);
@@ -262,8 +266,6 @@ public class ExerciseService {
         boolean periodsChanged = periodsChanged(exercise, request);
         exercise.updatePeriods(
                 MonthKeys.parseMonthStart(request.sizingMonth()),
-                request.slotStartDate(),
-                request.slotWeeks(),
                 request.tmsFrom(),
                 request.tmsTo(),
                 ownerCcgid,
@@ -299,6 +301,46 @@ public class ExerciseService {
     }
 
     /**
+     * Sets Slot Period, rebuilds an empty Per-slot grid, and clears Slot Simulation only.
+     */
+    @Transactional
+    public UpdateSlotPeriodResult updateSlotPeriod(
+            String ownerCcgid, UUID exerciseId, UpdateSlotPeriodRequest request) {
+        RstExercise exercise = access.requireOwned(ownerCcgid, exerciseId);
+        if (!ExerciseLifecycle.canEdit(processOf(exercise.getId()))) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "exercise-not-editable",
+                    "Slot Period can only be changed during Supervisor Sizing.");
+        }
+        exercise.updateSlotPeriod(
+                request.slotStartDate(), request.slotWeeks(), ownerCcgid, clock.instant());
+        exercises.saveAndFlush(exercise);
+        List<ExerciseVolumeSlotInput> rows = initialization.replaceEmptySlotGrid(exercise, ownerCcgid);
+        int cleared = scenarioCommits.clearSlotResultsForExercise(exerciseId);
+        List<String> notices = new ArrayList<>();
+        notices.add("Per-slot Volume grid generated for the selected Slot Period.");
+        if (cleared > 0) {
+            notices.add(
+                    "Cleared saved Slot Simulation results for "
+                            + cleared
+                            + " scenario(s).");
+        }
+        RstExercise reloaded = access.requireOwned(ownerCcgid, exerciseId);
+        List<SlotVolumeView> volumes = rows.stream()
+                .map(row -> new SlotVolumeView(
+                        row.getId(),
+                        row.getSlotStartAt(),
+                        row.getSlotEndAt(),
+                        row.getActualVolume(),
+                        row.getSourceType(),
+                        row.getImportBatchId()))
+                .toList();
+        return new UpdateSlotPeriodResult(
+                toResponse(reloaded, null, processOf(reloaded.getId())), volumes, notices);
+    }
+
+    /**
      * Returns how many scenarios currently have saved Forecast / Simulation snapshots.
      */
     @Transactional(readOnly = true)
@@ -321,8 +363,6 @@ public class ExerciseService {
     private static boolean periodsChanged(RstExercise exercise, UpdateExercisePeriodsRequest request) {
         LocalDate sizing = MonthKeys.parseMonthStart(request.sizingMonth());
         return !sizing.equals(exercise.getSizingMonth())
-                || !request.slotStartDate().equals(exercise.getSlotStartDate())
-                || request.slotWeeks() != exercise.getSlotWeeks()
                 || !request.tmsFrom().equals(exercise.getTmsFrom())
                 || !request.tmsTo().equals(exercise.getTmsTo());
     }

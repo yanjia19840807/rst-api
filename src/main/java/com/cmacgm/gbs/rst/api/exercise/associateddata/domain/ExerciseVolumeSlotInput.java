@@ -31,7 +31,7 @@ public class ExerciseVolumeSlotInput implements Persistable<UUID> {
     @Column(name = "slot_end_at", nullable = false)
     private Instant slotEndAt;
 
-    @Column(name = "actual_volume", nullable = false, precision = 24, scale = 6)
+    @Column(name = "actual_volume", precision = 24, scale = 6)
     private BigDecimal actualVolume;
 
     @Column(name = "source_type", nullable = false, length = 30)

@@ -127,7 +127,7 @@ public class ExerciseInitializationService {
                             + "Associated Data starts empty. Add holiday dates in Calendar if needed.");
         }
 
-        syncVolumeGrids(exercise, archive.map(RstExercise::getId).orElse(null), actorCcgid);
+        syncVolumeGrids(exercise, actorCcgid);
         notices.add("Volume Input pre-filled from Toolkit volume when available.");
 
         notices.add(syncTmsPopulation(exercise, actorCcgid));
@@ -139,7 +139,7 @@ public class ExerciseInitializationService {
      */
     @Transactional
     public void ensureTrainVolumeGrids(RstExercise exercise, String actorCcgid) {
-        syncVolumeGrids(exercise, null, actorCcgid);
+        syncVolumeGrids(exercise, actorCcgid);
     }
 
     /**
@@ -200,7 +200,9 @@ public class ExerciseInitializationService {
         Set<Short> years = new LinkedHashSet<>();
         years.add(primaryYear(exercise.getSizingMonth()));
         addYearRange(years, exercise.getTmsFrom(), exercise.getTmsTo());
-        addYearRange(years, exercise.getSlotStartDate(), slotEnd(exercise));
+        if (exercise.hasSlotPeriod()) {
+            addYearRange(years, exercise.getSlotStartDate(), slotEnd(exercise));
+        }
         return years;
     }
 
@@ -277,11 +279,44 @@ public class ExerciseInitializationService {
         holidays.saveAll(copies);
     }
 
-    private void syncVolumeGrids(RstExercise exercise, UUID archiveExerciseId, String actorCcgid) {
+    private void syncVolumeGrids(RstExercise exercise, String actorCcgid) {
         Instant now = clock.instant();
         syncMonthly(exercise, actorCcgid, now);
         syncDaily(exercise, actorCcgid, now);
-        syncSlot(exercise, archiveExerciseId, actorCcgid, now);
+    }
+
+    /**
+     * Wipes existing slot rows and generates an empty Per-slot grid for the current Slot Period.
+     */
+    @Transactional
+    public List<ExerciseVolumeSlotInput> replaceEmptySlotGrid(RstExercise exercise, String actorCcgid) {
+        if (!exercise.hasSlotPeriod()) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "slot-period-required",
+                    "Set a Slot Period to generate the per-slot grid.");
+        }
+        Instant now = clock.instant();
+        UUID targetId = exercise.getId();
+        slotVolumes.deleteByExerciseId(targetId);
+        slotVolumes.flush();
+        List<SlotBound> expected = VolumeTrainWindows.slotTrainBounds(
+                exercise.getSlotStartDate(), exercise.getSlotWeeks());
+        List<ExerciseVolumeSlotInput> rows = new ArrayList<>(expected.size());
+        for (SlotBound bound : expected) {
+            rows.add(ExerciseVolumeSlotInput.create(
+                    targetId,
+                    bound.start(),
+                    bound.end(),
+                    null,
+                    "MANUAL",
+                    null,
+                    actorCcgid,
+                    now));
+        }
+        slotVolumes.saveAll(rows);
+        slotVolumes.flush();
+        return slotVolumes.findByExerciseIdOrderBySlotStartAtAsc(targetId);
     }
 
     private void syncMonthly(RstExercise exercise, String actorCcgid, Instant now) {
@@ -399,50 +434,6 @@ public class ExerciseInitializationService {
         dailyVolumes.saveAll(missing);
     }
 
-    private void syncSlot(
-            RstExercise exercise, UUID archiveExerciseId, String actorCcgid, Instant now) {
-        UUID targetId = exercise.getId();
-        List<SlotBound> expected = VolumeTrainWindows.slotTrainBounds(
-                exercise.getSlotStartDate(), exercise.getSlotWeeks());
-        Set<SlotKey> expectedKeys = expected.stream()
-                .map(bound -> new SlotKey(bound.start(), bound.end()))
-                .collect(Collectors.toSet());
-        List<ExerciseVolumeSlotInput> targetRows =
-                slotVolumes.findByExerciseIdOrderBySlotStartAtAsc(targetId);
-        Map<SlotKey, ExerciseVolumeSlotInput> targetByKey = new HashMap<>();
-        targetRows.forEach(row -> targetByKey.put(
-                new SlotKey(row.getSlotStartAt(), row.getSlotEndAt()), row));
-        Map<SlotKey, ExerciseVolumeSlotInput> archiveByKey = new HashMap<>();
-        if (archiveExerciseId != null) {
-            slotVolumes.findByExerciseIdOrderBySlotStartAtAsc(archiveExerciseId)
-                    .forEach(row -> archiveByKey.put(
-                            new SlotKey(row.getSlotStartAt(), row.getSlotEndAt()), row));
-        }
-
-        List<ExerciseVolumeSlotInput> missing = new ArrayList<>();
-        for (SlotBound bound : expected) {
-            SlotKey key = new SlotKey(bound.start(), bound.end());
-            if (targetByKey.containsKey(key)) {
-                continue;
-            }
-            ExerciseVolumeSlotInput seed = archiveByKey.get(key);
-            missing.add(ExerciseVolumeSlotInput.create(
-                    targetId,
-                    bound.start(),
-                    bound.end(),
-                    seed != null ? seed.getActualVolume() : BigDecimal.ZERO,
-                    seed != null ? "ARCHIVE" : "MANUAL",
-                    seed != null ? seed.getImportBatchId() : null,
-                    actorCcgid,
-                    now));
-        }
-        slotVolumes.deleteAllInBatch(targetRows.stream()
-                .filter(row -> !expectedKeys.contains(
-                        new SlotKey(row.getSlotStartAt(), row.getSlotEndAt())))
-                .toList());
-        slotVolumes.saveAll(missing);
-    }
-
     private static void addYearRange(Set<Short> years, LocalDate from, LocalDate to) {
         if (from == null || to == null) {
             return;
@@ -460,7 +451,7 @@ public class ExerciseInitializationService {
 
     private static LocalDate slotEnd(RstExercise exercise) {
         return exercise.getSlotStartDate()
-                .plusWeeks(exercise.getSlotWeeks())
+                .plusWeeks(exercise.getSlotWeeks().shortValue())
                 .minusDays(1);
     }
 
@@ -496,6 +487,4 @@ public class ExerciseInitializationService {
                 source.getWeekendCode());
     }
 
-    private record SlotKey(Instant start, Instant end) {
-    }
 }

@@ -10,7 +10,7 @@ import java.util.UUID;
  */
 public record ExerciseResponse(
         UUID id, String exerciseCode, UUID toolkitId, String sizingMonth,
-        LocalDate slotStartDate, short slotWeeks, LocalDate tmsFrom, LocalDate tmsTo,
+        LocalDate slotStartDate, Short slotWeeks, LocalDate tmsFrom, LocalDate tmsTo,
         String workflowStatus, String submissionStatus, UUID officialScenarioId, Instant submittedAt,
         boolean canDelete, boolean canSubmit, boolean canEdit,
         long version, Instant createdAt,
