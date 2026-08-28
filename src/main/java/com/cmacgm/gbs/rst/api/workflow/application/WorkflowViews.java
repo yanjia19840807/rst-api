@@ -72,7 +72,7 @@ public class WorkflowViews {
                 actor.getStatus().name(),
                 actor.getCcgid(),
                 task.getNode().roleCode(),
-                actor.getCcgid() == null ? null : displayNames.get(actor.getCcgid()),
+                actor.handlerDisplayName(displayNames),
                 actor.getComments(),
                 actor.getActedAt(),
                 actor.getRequestId());

@@ -16,6 +16,7 @@ class CycleTimeControlChartMathTests {
         var chart = CycleTimeControlChartMath.build(List.of());
         assertThat(chart.points()).isEmpty();
         assertThat(chart.sampleCount()).isZero();
+        assertThat(chart.centerSeconds()).isNull();
         assertThat(chart.upperControlLimitSeconds()).isNull();
         assertThat(chart.lowerControlLimitSeconds()).isNull();
     }
@@ -35,6 +36,7 @@ class CycleTimeControlChartMathTests {
         assertThat(chart.points().get(1).date()).isEqualTo(LocalDate.of(2026, 8, 2));
         assertThat(chart.points().get(1).dailyMedianSeconds()).isEqualByComparingTo("50");
         assertThat(chart.points().get(1).rollingMedianSeconds()).isEqualByComparingTo("35");
+        assertThat(chart.centerSeconds()).isEqualByComparingTo("35");
         assertThat(chart.upperControlLimitSeconds()).isNotNull();
         assertThat(chart.lowerControlLimitSeconds()).isEqualByComparingTo("0");
     }

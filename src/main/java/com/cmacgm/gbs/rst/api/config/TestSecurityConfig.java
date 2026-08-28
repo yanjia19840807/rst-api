@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.config;
 
+import com.cmacgm.gbs.rst.api.delegation.security.DelegationAuthenticationFilter;
 import com.cmacgm.gbs.rst.api.security.ProblemSecurityHandler;
 import com.cmacgm.gbs.rst.api.security.dev.DevAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
@@ -32,6 +33,7 @@ public class TestSecurityConfig {
     SecurityFilterChain testSecurityFilterChain(
             HttpSecurity http,
             DevAuthenticationFilter devAuthenticationFilter,
+            DelegationAuthenticationFilter delegationAuthenticationFilter,
             ProblemSecurityHandler problemSecurityHandler) throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
@@ -49,6 +51,7 @@ public class TestSecurityConfig {
                         .authenticationEntryPoint(problemSecurityHandler)
                         .accessDeniedHandler(problemSecurityHandler))
                 .addFilterBefore(devAuthenticationFilter, AnonymousAuthenticationFilter.class)
+                .addFilterAfter(delegationAuthenticationFilter, DevAuthenticationFilter.class)
                 .build();
     }
 }

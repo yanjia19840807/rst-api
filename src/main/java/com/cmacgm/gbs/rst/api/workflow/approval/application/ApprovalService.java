@@ -32,6 +32,7 @@ import com.cmacgm.gbs.rst.api.exercise.associateddata.application.WorkingDaysSer
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
+import com.cmacgm.gbs.rst.api.security.Handler;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.ActionView;
@@ -310,6 +311,8 @@ public class ApprovalService {
                         "workflow-step-not-ready",
                         "Current workflow step is not READY."));
         TaskActor actor = requirePendingActor(principal, current);
+        forbidSelfApproval(principal, loaded.exercise());
+        actor.applyHandler(Handler.from(principal));
         Instant now = clock.instant();
         loaded.workflow().approve(actor, request.comments(), requestId, now);
 
@@ -376,6 +379,8 @@ public class ApprovalService {
                         "workflow-step-not-ready",
                         "Current workflow step is not READY."));
         TaskActor actor = requirePendingActor(principal, current);
+        forbidSelfApproval(principal, loaded.exercise());
+        actor.applyHandler(Handler.from(principal));
         Instant now = clock.instant();
         loaded.workflow().returnToSupervisor(actor, request.comments(), requestId, now);
         reopenExercise(loaded, principal.ccgid(), now, true);
@@ -417,6 +422,8 @@ public class ApprovalService {
                         "workflow-step-not-ready",
                         "Current workflow step is not READY."));
         TaskActor actor = requirePendingActor(principal, current);
+        forbidSelfApproval(principal, loaded.exercise());
+        actor.applyHandler(Handler.from(principal));
         Instant now = clock.instant();
         loaded.workflow().refuse(actor, request.comments(), requestId, now);
         loaded.exercise().markRejected(principal.ccgid(), now);
@@ -434,6 +441,22 @@ public class ApprovalService {
      */
     @Transactional
     public ApprovalDetailView withdraw(String ownerCcgid, UUID exerciseId) {
+        return withdrawInternal(ownerCcgid, exerciseId, Handler.self(ownerCcgid, ownerCcgid));
+    }
+
+    /**
+     * Withdraws as the current principal (records a delegate when acting).
+     *
+     * @param principal supervisor
+     * @param exerciseId Exercise id
+     * @return review detail after withdraw
+     */
+    @Transactional
+    public ApprovalDetailView withdraw(RstPrincipal principal, UUID exerciseId) {
+        return withdrawInternal(principal.ccgid(), exerciseId, Handler.from(principal));
+    }
+
+    private ApprovalDetailView withdrawInternal(String ownerCcgid, UUID exerciseId, Handler handler) {
         RstExercise exercise = exercises.findByIdAndOwnerCcgidAndDeletedAtIsNull(exerciseId, ownerCcgid)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "exercise-not-found", "The Exercise was not found."));
@@ -446,7 +469,7 @@ public class ApprovalService {
         }
 
         Instant now = clock.instant();
-        workflow.withdraw(ownerCcgid, UUID.randomUUID(), now);
+        workflow.withdraw(handler, UUID.randomUUID(), now);
         Loaded loaded = new Loaded(workflow, exercise);
         reopenExercise(loaded, ownerCcgid, now, false);
         persist(loaded);
@@ -700,6 +723,9 @@ public class ApprovalService {
             if (actor.getCcgid() != null) {
                 ids.add(actor.getCcgid());
             }
+            if (actor.getActedByCcgid() != null) {
+                ids.add(actor.getActedByCcgid());
+            }
         }));
         Map<String, String> names = new HashMap<>();
         for (String ccgid : ids) {
@@ -724,6 +750,19 @@ public class ApprovalService {
                 HttpStatus.BAD_REQUEST,
                 "invalid-status-filter",
                 "status must be AWAITING, OPEN, or omitted.");
+    }
+
+    private static void forbidSelfApproval(RstPrincipal principal, RstExercise exercise) {
+        if (principal == null || exercise == null || !principal.isDelegated()) {
+            return;
+        }
+        if (principal.realCcgid() != null
+                && principal.realCcgid().equalsIgnoreCase(exercise.getOwnerCcgid())) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "self-approval-forbidden",
+                    "You cannot review a submission you own while acting as another user.");
+        }
     }
 
     private TaskActor requirePendingActor(RstPrincipal principal, ProcessTask current) {

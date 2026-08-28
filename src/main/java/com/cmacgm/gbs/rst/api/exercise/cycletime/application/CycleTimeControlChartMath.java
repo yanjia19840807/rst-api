@@ -47,14 +47,14 @@ final class CycleTimeControlChartMath {
         }
 
         List<Double> rolling = rollingMedians(dailyMedians);
+        BigDecimal center = round(SystemCycleTimeBaselineWriter.medianOf(dailyMedians).doubleValue());
         BigDecimal ucl = null;
         BigDecimal lcl = null;
         if (dailyMedians.size() >= 2) {
-            double center = SystemCycleTimeBaselineWriter.medianOf(dailyMedians).doubleValue();
             double stdev = sampleStdev(dailyMedians);
             if (stdev > 0 && !Double.isNaN(stdev)) {
-                ucl = round(center + CONTROL_SIGMA * stdev);
-                lcl = round(Math.max(0, center - CONTROL_SIGMA * stdev));
+                ucl = round(center.doubleValue() + CONTROL_SIGMA * stdev);
+                lcl = round(Math.max(0, center.doubleValue() - CONTROL_SIGMA * stdev));
             }
         }
 
@@ -69,7 +69,7 @@ final class CycleTimeControlChartMath {
                     round(rolling.get(i)),
                     outlier));
         }
-        return new CycleTimeChartView(points, ucl, lcl, samples.size());
+        return new CycleTimeChartView(points, center, ucl, lcl, samples.size());
     }
 
     private static List<Double> rollingMedians(List<Double> dailyMedians) {

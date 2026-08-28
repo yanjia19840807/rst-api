@@ -1,7 +1,10 @@
 package com.cmacgm.gbs.rst.api.workflow.domain;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
+
+import com.cmacgm.gbs.rst.api.security.Handler;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -49,6 +52,15 @@ public class TaskActor {
     @Column(name = "request_id")
     private UUID requestId;
 
+    @Column(name = "subject_name", length = 200)
+    private String subjectName;
+
+    @Column(name = "acted_by_ccgid", length = 64)
+    private String actedByCcgid;
+
+    @Column(name = "acted_by_name", length = 200)
+    private String actedByName;
+
     protected TaskActor() {
     }
 
@@ -80,15 +92,65 @@ public class TaskActor {
      * @return completed initiator
      */
     public static TaskActor submit(String ccgid, String remarks, UUID requestId, Instant now) {
+        return submit(Handler.self(ccgid, ccgid), remarks, requestId, now);
+    }
+
+    /**
+     * Supervisor submit recorded on the SUBMIT node.
+     *
+     * @param handler subject plus optional delegate
+     * @param remarks submit remarks
+     * @param requestId idempotency key
+     * @param now submit time
+     * @return completed initiator
+     */
+    public static TaskActor submit(Handler handler, String remarks, UUID requestId, Instant now) {
         TaskActor actor = new TaskActor();
         actor.id = UUID.randomUUID();
         actor.actorType = ActorType.INITIATOR;
-        actor.ccgid = ccgid;
+        actor.ccgid = handler.subjectCcgid();
         actor.status = ActorStatus.APPROVED;
         actor.comments = remarks;
         actor.actedAt = now;
         actor.requestId = requestId;
+        actor.applyHandler(handler);
         return actor;
+    }
+
+    /**
+     * Records who performed this action.
+     *
+     * @param handler subject plus optional delegate
+     */
+    public void applyHandler(Handler handler) {
+        if (handler == null) {
+            return;
+        }
+        if (handler.subjectCcgid() != null) {
+            this.ccgid = handler.subjectCcgid();
+        }
+        this.subjectName = handler.subjectName();
+        if (handler.hasActor()) {
+            this.actedByCcgid = handler.actorCcgid();
+            this.actedByName = handler.actorName();
+        }
+    }
+
+    /**
+     * @return handler snapshot for this actor
+     */
+    public Handler handler() {
+        return new Handler(ccgid, subjectName, actedByCcgid, actedByName);
+    }
+
+    /**
+     * Formatted display name for history.
+     *
+     * @param displayNames ccgid → name fallback
+     * @return display
+     */
+    public String handlerDisplayName(Map<String, String> displayNames) {
+        return handler().displayName(displayNames);
     }
 
     /**
@@ -180,4 +242,7 @@ public class TaskActor {
     public String getComments() { return comments; }
     public Instant getActedAt() { return actedAt; }
     public UUID getRequestId() { return requestId; }
+    public String getSubjectName() { return subjectName; }
+    public String getActedByCcgid() { return actedByCcgid; }
+    public String getActedByName() { return actedByName; }
 }

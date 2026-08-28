@@ -18,6 +18,8 @@ import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
+import com.cmacgm.gbs.rst.api.security.Handler;
+
 import org.hibernate.annotations.BatchSize;
 
 /**
@@ -35,6 +37,15 @@ public class ProcessInstance {
 
     @Column(name = "submitted_by_ccgid", nullable = false)
     private String submittedByCcgid;
+
+    @Column(name = "submitted_by_name", length = 200)
+    private String submittedByName;
+
+    @Column(name = "submitted_by_actor_ccgid", length = 64)
+    private String submittedByActorCcgid;
+
+    @Column(name = "submitted_by_actor_name", length = 200)
+    private String submittedByActorName;
 
     @Column(name = "submitted_at", nullable = false)
     private Instant submittedAt;
@@ -79,14 +90,32 @@ public class ProcessInstance {
             String actorCcgid,
             UUID requestId,
             Instant now) {
+        return start(exerciseId, remarks, Handler.self(actorCcgid, actorCcgid), requestId, now);
+    }
+
+    /**
+     * Opens a process and records the first Submit.
+     *
+     * @param exerciseId Exercise being submitted
+     * @param remarks submit remarks
+     * @param handler subject plus optional delegate
+     * @param requestId idempotency key
+     * @param now submit time
+     * @return new instance with a completed SUBMIT task
+     */
+    public static ProcessInstance start(
+            UUID exerciseId,
+            String remarks,
+            Handler handler,
+            UUID requestId,
+            Instant now) {
         ProcessInstance instance = new ProcessInstance();
         instance.id = UUID.randomUUID();
         instance.exerciseId = exerciseId;
-        instance.submittedByCcgid = actorCcgid;
         instance.submittedAt = now;
         instance.remarks = remarks;
         instance.status = ProcessStatus.OPEN;
-        instance.recordSubmit(actorCcgid, remarks, requestId, now);
+        instance.recordSubmit(handler, remarks, requestId, now);
         return instance;
     }
 
@@ -99,13 +128,46 @@ public class ProcessInstance {
      * @param now submit time
      */
     public void recordSubmit(String actorCcgid, String remarks, UUID requestId, Instant now) {
+        recordSubmit(Handler.self(actorCcgid, actorCcgid), remarks, requestId, now);
+    }
+
+    /**
+     * Records a Submit (first or after Return / Withdraw).
+     *
+     * @param handler subject plus optional delegate
+     * @param remarks remarks
+     * @param requestId idempotency key
+     * @param now submit time
+     */
+    public void recordSubmit(Handler handler, String remarks, UUID requestId, Instant now) {
         this.status = ProcessStatus.OPEN;
-        this.submittedByCcgid = actorCcgid;
+        applySubmittedBy(handler);
         this.submittedAt = now;
         this.remarks = remarks;
         ProcessTask submit = ProcessTask.submit(now);
         addTask(submit);
-        submit.addActor(TaskActor.submit(actorCcgid, remarks, requestId, now));
+        submit.addActor(TaskActor.submit(handler, remarks, requestId, now));
+    }
+
+    /**
+     * Withdraws an open process from the Supervisor workbench.
+     *
+     * @param handler supervisor plus optional delegate
+     * @param requestId audit id
+     * @param now withdraw time
+     */
+    public void withdraw(Handler handler, UUID requestId, Instant now) {
+        ProcessTask current = findCurrentPendingTask().orElse(null);
+        if (current == null) {
+            return;
+        }
+        TaskActor initiator = TaskActor.pending(ActorType.INITIATOR, null, handler.subjectCcgid());
+        initiator.applyHandler(handler);
+        current.addActor(initiator);
+        initiator.withdraw(handler.subjectCcgid(), requestId, now);
+        initiator.applyHandler(handler);
+        current.complete(TaskStatus.WITHDRAWN, now);
+        this.currentStep = null;
     }
 
     /**
@@ -180,15 +242,19 @@ public class ProcessInstance {
      * @param now withdraw time
      */
     public void withdraw(String ownerCcgid, UUID requestId, Instant now) {
-        ProcessTask current = findCurrentPendingTask().orElse(null);
-        if (current == null) {
-            return;
+        withdraw(Handler.self(ownerCcgid, ownerCcgid), requestId, now);
+    }
+
+    private void applySubmittedBy(Handler handler) {
+        this.submittedByCcgid = handler.subjectCcgid();
+        this.submittedByName = handler.subjectName();
+        if (handler.hasActor()) {
+            this.submittedByActorCcgid = handler.actorCcgid();
+            this.submittedByActorName = handler.actorName();
+        } else {
+            this.submittedByActorCcgid = null;
+            this.submittedByActorName = null;
         }
-        TaskActor initiator = TaskActor.pending(ActorType.INITIATOR, null, ownerCcgid);
-        current.addActor(initiator);
-        initiator.withdraw(ownerCcgid, requestId, now);
-        current.complete(TaskStatus.WITHDRAWN, now);
-        this.currentStep = null;
     }
 
     /**
@@ -309,6 +375,13 @@ public class ProcessInstance {
     public UUID getId() { return id; }
     public UUID getExerciseId() { return exerciseId; }
     public String getSubmittedByCcgid() { return submittedByCcgid; }
+
+    /**
+     * @return who submitted, including an optional delegate
+     */
+    public Handler getSubmittedBy() {
+        return new Handler(submittedByCcgid, submittedByName, submittedByActorCcgid, submittedByActorName);
+    }
     public Instant getSubmittedAt() { return submittedAt; }
     public String getRemarks() { return remarks; }
     public ProcessStatus getStatus() { return status; }

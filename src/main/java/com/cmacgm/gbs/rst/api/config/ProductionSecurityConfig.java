@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.config;
 
+import com.cmacgm.gbs.rst.api.delegation.security.DelegationAuthenticationFilter;
 import com.cmacgm.gbs.rst.api.security.JwtPrincipalConverter;
 import com.cmacgm.gbs.rst.api.security.ProblemSecurityHandler;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,6 +11,7 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtDecoders;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
@@ -30,6 +32,7 @@ public class ProductionSecurityConfig {
     SecurityFilterChain productionSecurityFilterChain(
             HttpSecurity http,
             JwtPrincipalConverter principalConverter,
+            DelegationAuthenticationFilter delegationAuthenticationFilter,
             ProblemSecurityHandler problemSecurityHandler) throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
@@ -44,6 +47,7 @@ public class ProductionSecurityConfig {
                         .accessDeniedHandler(problemSecurityHandler))
                 .oauth2ResourceServer(oauth -> oauth
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(principalConverter)))
+                .addFilterAfter(delegationAuthenticationFilter, BearerTokenAuthenticationFilter.class)
                 .build();
     }
 }

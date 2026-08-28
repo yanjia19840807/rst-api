@@ -1,7 +1,5 @@
 package com.cmacgm.gbs.rst.api.security.api;
 
-import java.util.ArrayList;
-
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.security.api.dto.CurrentUserResponse;
@@ -30,12 +28,6 @@ public class MeController {
                     "unauthenticated",
                     "Authentication is required.");
         }
-        return new CurrentUserResponse(
-                principal.ccgid(),
-                principal.displayName(),
-                principal.email(),
-                new ArrayList<>(principal.roles()),
-                new ArrayList<>(principal.scopes()),
-                principal.center());
+        return CurrentUserResponse.from(principal);
     }
 }

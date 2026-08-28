@@ -271,10 +271,42 @@ public class TimesheetReadService {
     }
 
     /**
+     * Active Daily person by CCGID.
+     *
+     * @param ccgid identity
+     * @return person when present
+     */
+    @Transactional(readOnly = true)
+    public Optional<TimesheetPerson> findActivePerson(String ccgid) {
+        if (ccgid == null || ccgid.isBlank()) {
+            return Optional.empty();
+        }
+        return people.findActiveByCcgid(ccgid.trim());
+    }
+
+    /**
+     * People across centers matching name or CCGID.
+     *
+     * @param query name or CCGID fragment
+     * @param page 1-based page
+     * @param pageSize page size
+     * @return people
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<ListedPerson> searchActivePeople(String query, int page, int pageSize) {
+        int safePage = Math.max(1, page);
+        int safePageSize = Math.min(100, Math.max(1, pageSize));
+        String needle = query == null ? "" : query.trim();
+        return PageResponse.from(
+                people.findActiveByNameOrCcgid(needle, PageRequest.of(safePage - 1, safePageSize)),
+                person -> new ListedPerson(person.getCcgid(), person.getName(), person.getCenter()));
+    }
+
+    /**
      * People in a Center who have a bindable position.
      *
      * @param center GBS center
-     * @param name optional name fragment
+     * @param name optional name or CCGID fragment
      * @param page 1-based page
      * @param pageSize page size
      * @return people
@@ -414,5 +446,8 @@ public class TimesheetReadService {
     }
 
     public record CenterPerson(String ccgid, String name, String positionId) {
+    }
+
+    public record ListedPerson(String ccgid, String name, String center) {
     }
 }

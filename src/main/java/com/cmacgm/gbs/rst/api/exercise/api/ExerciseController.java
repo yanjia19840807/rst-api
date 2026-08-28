@@ -262,7 +262,7 @@ public class ExerciseController {
             @PathVariable UUID id,
             @RequestBody(required = false) SubmitRequest request) {
         SubmitRequest payload = request == null ? new SubmitRequest(null, null) : request;
-        return submissions.submit(principal.ccgid(), id, payload);
+        return submissions.submit(principal, id, payload);
     }
 
     /**
@@ -292,6 +292,6 @@ public class ExerciseController {
     public ApprovalDetailView withdraw(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
-        return approvals.withdraw(principal.ccgid(), id);
+        return approvals.withdraw(principal, id);
     }
 }

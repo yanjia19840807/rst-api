@@ -8,11 +8,12 @@ import java.util.List;
  */
 public record CycleTimeChartView(
         List<CycleTimeChartPoint> points,
+        BigDecimal centerSeconds,
         BigDecimal upperControlLimitSeconds,
         BigDecimal lowerControlLimitSeconds,
         int sampleCount) {
 
     public static CycleTimeChartView empty() {
-        return new CycleTimeChartView(List.of(), null, null, 0);
+        return new CycleTimeChartView(List.of(), null, null, null, 0);
     }
 }

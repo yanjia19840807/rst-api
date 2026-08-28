@@ -40,6 +40,8 @@ import com.cmacgm.gbs.rst.api.workflow.application.WorkflowViews;
 import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.ApprovalWorkspaceView;
 import com.cmacgm.gbs.rst.api.workflow.approval.application.ApprovalWorkspaceAssembler;
 import com.cmacgm.gbs.rst.api.workflow.domain.ExerciseLifecycle;
+import com.cmacgm.gbs.rst.api.security.Handler;
+import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.workflow.domain.ProcessInstance;
 import com.cmacgm.gbs.rst.api.workflow.domain.TaskNode;
 import com.cmacgm.gbs.rst.api.workflow.persistence.ProcessInstanceRepository;
@@ -119,6 +121,19 @@ public class SubmissionService {
     }
 
     /**
+     * Submits as the current principal (records a delegate when acting).
+     *
+     * @param principal owner
+     * @param exerciseId Exercise id
+     * @param request payload
+     * @return submitted details
+     */
+    @Transactional
+    public SubmittedDetailsView submit(RstPrincipal principal, UUID exerciseId, SubmitRequest request) {
+        return submit(principal.ccgid(), exerciseId, request, Handler.from(principal));
+    }
+
+    /**
      * Submits the Official Scenario into Manager approval.
      *
      * <p>First submit creates the workflow; after Return/Withdraw the same
@@ -126,6 +141,11 @@ public class SubmissionService {
      */
     @Transactional
     public SubmittedDetailsView submit(String ownerCcgid, UUID exerciseId, SubmitRequest request) {
+        return submit(ownerCcgid, exerciseId, request, Handler.self(ownerCcgid, ownerCcgid));
+    }
+
+    private SubmittedDetailsView submit(
+            String ownerCcgid, UUID exerciseId, SubmitRequest request, Handler handler) {
         RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         if (!ExerciseLifecycle.canSubmit(
                 exercise.hasOfficialScenario(), workflows.findByExerciseId(exerciseId).orElse(null))) {
@@ -157,7 +177,7 @@ public class SubmissionService {
             return submittedDetails(ownerCcgid, exerciseId);
         }
         if (existing != null && existing.isResubmittable()) {
-            return reopenWorkflow(ownerCcgid, exercise, existing, request.remarks(), requestId, now, finding);
+            return reopenWorkflow(ownerCcgid, exercise, existing, request.remarks(), requestId, now, finding, handler);
         }
         if (existing != null) {
             return submittedDetails(ownerCcgid, exerciseId);
@@ -166,7 +186,7 @@ public class SubmissionService {
         requireDomainHead(exercise);
         validations.save(finding);
         ProcessInstance workflow = ProcessInstance.start(
-                exerciseId, request.remarks(), ownerCcgid, requestId, now);
+                exerciseId, request.remarks(), handler, requestId, now);
         attachScopes(exercise, workflow);
         openManager(workflow, exercise, now);
         workflows.save(workflow);
@@ -184,7 +204,8 @@ public class SubmissionService {
             String remarks,
             UUID requestId,
             Instant now,
-            ValidationResult finding) {
+            ValidationResult finding,
+            Handler handler) {
         if (workflow.findActorByRequestId(requestId).isPresent()) {
             return toDetails(exercise, workflow);
         }
@@ -195,7 +216,7 @@ public class SubmissionService {
 
         requireDomainHead(exercise);
         validations.save(finding);
-        workflow.recordSubmit(ownerCcgid, remarks, requestId, now);
+        workflow.recordSubmit(handler, remarks, requestId, now);
         openManager(workflow, exercise, now);
         workflows.save(workflow);
 

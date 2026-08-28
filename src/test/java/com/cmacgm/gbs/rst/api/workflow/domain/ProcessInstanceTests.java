@@ -7,12 +7,26 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.security.Handler;
 import org.junit.jupiter.api.Test;
 
 class ProcessInstanceTests {
 
     private static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");
     private static final Instant T1 = Instant.parse("2026-01-02T00:00:00Z");
+
+    @Test
+    void submitHandlerRecordsDelegateOnInitiator() {
+        Handler handler = new Handler("sup1", "Yang Brenda", "agt1", "Li Wei");
+        ProcessInstance instance = ProcessInstance.start(
+                UUID.randomUUID(), "go", handler, UUID.randomUUID(), T0);
+
+        assertThat(instance.getSubmittedBy().hasActor()).isTrue();
+        assertThat(instance.getSubmittedBy().displayName())
+                .isEqualTo("Li Wei (on behalf of Yang Brenda)");
+        assertThat(instance.getTasks().get(0).getActors().get(0).handlerDisplayName(java.util.Map.of()))
+                .isEqualTo("Li Wei (on behalf of Yang Brenda)");
+    }
 
     @Test
     void startRecordsApprovedSubmitAndOpensManager() {

@@ -161,7 +161,7 @@ public class ApprovalWorkspaceAssembler {
                 task.getNodeOrder(),
                 historyStep(task, actor),
                 roleLabel(task.getNode().roleCode()),
-                actor.getCcgid() == null ? null : displayNames.get(actor.getCcgid()),
+                actor.handlerDisplayName(displayNames),
                 decision,
                 actor.getComments(),
                 actor.getActedAt(),

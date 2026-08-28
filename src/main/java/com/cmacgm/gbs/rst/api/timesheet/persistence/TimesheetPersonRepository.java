@@ -120,7 +120,9 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                       and p.center = :center
                       and p.positionId is not null
                       and p.positionId <> ''
-                      and (:name = '' or lower(p.name) like lower(concat('%', :name, '%')))
+                      and (:name = ''
+                           or lower(p.name) like lower(concat('%', :name, '%'))
+                           or lower(p.id.ccgid) like lower(concat('%', :name, '%')))
                     order by p.name, p.id.ccgid
                     """,
             countQuery = """
@@ -132,10 +134,47 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                       and p.center = :center
                       and p.positionId is not null
                       and p.positionId <> ''
-                      and (:name = '' or lower(p.name) like lower(concat('%', :name, '%')))
+                      and (:name = ''
+                           or lower(p.name) like lower(concat('%', :name, '%'))
+                           or lower(p.id.ccgid) like lower(concat('%', :name, '%')))
                     """)
     Page<TimesheetPerson> findActiveByCenter(
             @Param("center") String center, @Param("name") String name, Pageable pageable);
+
+    /**
+     * Active people whose name or CCGID contains the query.
+     *
+     * @param query name or CCGID fragment; blank matches all
+     * @param pageable page
+     * @return people
+     */
+    @Query(
+            value = """
+                    select p
+                    from TimesheetPerson p, TimesheetSyncRun r
+                    where p.id.syncRunId = r.id
+                      and r.kind = 'DAILY'
+                      and r.status = 'ACTIVE'
+                      and p.positionId is not null
+                      and p.positionId <> ''
+                      and (:query = ''
+                           or lower(p.name) like lower(concat('%', :query, '%'))
+                           or lower(p.id.ccgid) like lower(concat('%', :query, '%')))
+                    order by p.name, p.id.ccgid
+                    """,
+            countQuery = """
+                    select count(p)
+                    from TimesheetPerson p, TimesheetSyncRun r
+                    where p.id.syncRunId = r.id
+                      and r.kind = 'DAILY'
+                      and r.status = 'ACTIVE'
+                      and p.positionId is not null
+                      and p.positionId <> ''
+                      and (:query = ''
+                           or lower(p.name) like lower(concat('%', :query, '%'))
+                           or lower(p.id.ccgid) like lower(concat('%', :query, '%')))
+                    """)
+    Page<TimesheetPerson> findActiveByNameOrCcgid(@Param("query") String query, Pageable pageable);
 
     /**
      * Whether this person belongs to the Center in the ACTIVE Daily snapshot.
