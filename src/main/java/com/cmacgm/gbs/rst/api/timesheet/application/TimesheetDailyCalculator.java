@@ -15,19 +15,15 @@ import org.springframework.stereotype.Component;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPosition;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 
 /**
- * Builds Daily person and position tables from one file scan.
- * One person occupies exactly one bindable position.
+ * Builds Daily person and position tables from distinct employee rows
+ * and production report lines.
  */
 @Component
 public class TimesheetDailyCalculator {
-
-    private static final int RANK_EMPLOYEE = 0;
-    private static final int RANK_SUPERVISOR = 1;
-    private static final int RANK_SR_MANAGER = 2;
-    private static final int RANK_DOMAIN_HEAD = 3;
 
     /**
      * Daily compute result.
@@ -48,134 +44,88 @@ public class TimesheetDailyCalculator {
      * @return result
      */
     public Result compute(UUID runId, List<ReportRow> rows, Instant now) {
-        Map<String, PersonDraft> people = new LinkedHashMap<>();
-        Map<String, PositionDraft> positions = new LinkedHashMap<>();
-        Map<String, Set<String>> personToCenter = new LinkedHashMap<>();
-        Map<String, Set<String>> personToPositions = new LinkedHashMap<>();
-        Map<String, Set<String>> positionToPeople = new LinkedHashMap<>();
-        Map<String, Set<String>> supervisorToManager = new LinkedHashMap<>();
-        Map<String, Set<String>> managerToDomainHead = new LinkedHashMap<>();
-        List<TimesheetSyncIssue> issues = new ArrayList<>();
+        return compute(runId, rows, now, null);
+    }
 
-        LocalDate syncDate = null;
+    /**
+     * Computes Daily org tables and checks the file-name date.
+     *
+     * @param runId Daily run
+     * @param rows parsed rows
+     * @param now issue timestamp
+     * @param expectedDate date from the file name
+     * @return result
+     */
+    public Result compute(UUID runId, List<ReportRow> rows, Instant now, LocalDate expectedDate) {
+        List<TimesheetSyncIssue> issues = new ArrayList<>(
+                TimesheetRowValidator.validate(runId, "DAILY", expectedDate, rows, now));
+        Map<String, PersonDraft> people = new LinkedHashMap<>();
+        Map<String, Set<String>> personToPosition = new LinkedHashMap<>();
+        Map<String, Set<String>> positionToPerson = new LinkedHashMap<>();
+        Map<String, Set<String>> personToCenter = new LinkedHashMap<>();
+        Map<String, PositionDraft> positions = new LinkedHashMap<>();
+        Map<String, Set<String>> childToParent = new LinkedHashMap<>();
+        LocalDate syncDate = expectedDate;
+
         for (ReportRow row : rows) {
             if (syncDate == null && row.date() != null) {
                 syncDate = row.date();
             }
-            addPerson(people, row.empCcgid(), row.empId(), row.empName(), row.center());
-            addPerson(
-                    people,
-                    row.supervisorCcgid(),
-                    row.supervisorId(),
-                    row.supervisorName(),
-                    row.center());
-            addPerson(
-                    people,
-                    row.srManagerCcgid(),
-                    row.srManagerId(),
-                    row.srManagerName(),
-                    row.center());
-            addPerson(
-                    people,
-                    row.domainHeadCcgid(),
-                    row.domainHeadId(),
-                    row.domainHeadName(),
-                    row.center());
-            putEdge(personToCenter, row.empCcgid(), row.center());
-            putEdge(personToCenter, row.supervisorCcgid(), row.center());
-            putEdge(personToCenter, row.srManagerCcgid(), row.center());
-            putEdge(personToCenter, row.domainHeadCcgid(), row.center());
-
-            addPosition(
-                    positions,
-                    "SUPERVISOR",
-                    row.supervisorPositionId(),
-                    row.srManagerPositionId());
-            addPosition(
-                    positions,
-                    "SR_MANAGER",
-                    row.srManagerPositionId(),
-                    row.domainHeadPositionId());
-            addPosition(positions, "DOMAIN_HEAD", row.domainHeadPositionId(), null);
-
-            bindSeat(
-                    people,
-                    personToPositions,
-                    positionToPeople,
+            if (!hasText(row.empCcgid()) || !hasText(row.empName()) || !hasText(row.empPositionId())) {
+                continue;
+            }
+            people.putIfAbsent(
                     row.empCcgid(),
-                    firstText(row.empPositionId(), row.empId()),
-                    RANK_EMPLOYEE);
-            bindSeat(
-                    people,
-                    personToPositions,
-                    positionToPeople,
-                    row.supervisorCcgid(),
-                    row.supervisorPositionId(),
-                    RANK_SUPERVISOR);
-            bindSeat(
-                    people,
-                    personToPositions,
-                    positionToPeople,
-                    row.srManagerCcgid(),
+                    new PersonDraft(row.empCcgid(), row.empId(), row.empName(), row.center(), row.empPositionId()));
+            personToPosition.computeIfAbsent(row.empCcgid(), ignored -> new LinkedHashSet<>()).add(row.empPositionId());
+            positionToPerson.computeIfAbsent(row.empPositionId(), ignored -> new LinkedHashSet<>()).add(row.empCcgid());
+            if (hasText(row.center())) {
+                personToCenter.computeIfAbsent(row.empCcgid(), ignored -> new LinkedHashSet<>()).add(row.center());
+            }
+            if (!TimesheetRowValidator.isProductionLine(row)) {
+                continue;
+            }
+            addPosition(positions, childToParent, row.empPositionId(), "PRODUCTION", row.supervisorPositionId());
+            addPosition(
+                    positions, childToParent, row.supervisorPositionId(), "SUPERVISOR", row.srManagerPositionId());
+            addPosition(
+                    positions,
+                    childToParent,
                     row.srManagerPositionId(),
-                    RANK_SR_MANAGER);
-            bindSeat(
-                    people,
-                    personToPositions,
-                    positionToPeople,
-                    row.domainHeadCcgid(),
-                    row.domainHeadPositionId(),
-                    RANK_DOMAIN_HEAD);
-
-            putEdge(supervisorToManager, row.supervisorPositionId(), row.srManagerPositionId());
-            putEdge(managerToDomainHead, row.srManagerPositionId(), row.domainHeadPositionId());
+                    "SR_MANAGER",
+                    row.domainHeadPositionId());
+            addPosition(positions, childToParent, row.domainHeadPositionId(), "DOMAIN_HEAD", null);
         }
 
+        addConflicts(issues, runId, now, "emp_ccgid", "emp_position_id", personToPosition, true);
+        addConflicts(issues, runId, now, "emp_position_id", "emp_ccgid", positionToPerson, false);
         addConflicts(issues, runId, now, "emp_ccgid", "center", personToCenter, true);
-        addConflicts(
-                issues, runId, now, "supervisor_position_id", "sr_manager_position_id", supervisorToManager, false);
-        addConflicts(
-                issues,
-                runId,
-                now,
-                "sr_manager_position_id",
-                "domain_head_position_id",
-                managerToDomainHead,
-                false);
-        for (Map.Entry<String, Set<String>> entry : personToPositions.entrySet()) {
-            if (entry.getValue().size() > 1) {
-                issues.add(TimesheetSyncIssue.error(
-                        runId,
-                        "PERSON_POSITION_CONFLICT",
-                        "emp_ccgid maps to multiple position_id: " + String.join(", ", entry.getValue()),
-                        null,
-                        entry.getKey(),
-                        null,
-                        null,
-                        null,
-                        now));
-            }
-        }
-        for (Map.Entry<String, Set<String>> entry : positionToPeople.entrySet()) {
-            if (entry.getValue().size() > 1) {
-                issues.add(TimesheetSyncIssue.error(
-                        runId,
-                        "OCCUPANCY_CONFLICT",
-                        "position_id maps to multiple emp_ccgid: " + String.join(", ", entry.getValue()),
-                        null,
-                        null,
-                        entry.getKey(),
-                        null,
-                        null,
-                        now));
-            }
-        }
+        addConflicts(issues, runId, now, "position_id", "parent_position_id", childToParent, false);
 
         if (syncDate == null) {
             issues.add(TimesheetSyncIssue.error(
-                    runId, "INVALID_DATE", "Daily file has no valid date.", null, null, null, null, null, now));
+                    runId,
+                    TimesheetSyncErrorCode.INVALID_DATE,
+                    "Daily file has no valid date.",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    now));
         }
-
+        if (people.isEmpty() && positions.isEmpty() && issues.isEmpty()) {
+            issues.add(TimesheetSyncIssue.error(
+                    runId,
+                    TimesheetSyncErrorCode.EMPTY_FILE,
+                    "Daily file produced no person or position rows.",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    now));
+        }
         return new Result(
                 syncDate,
                 people.values().stream()
@@ -189,63 +139,19 @@ public class TimesheetDailyCalculator {
                 issues);
     }
 
-    private static void addPerson(
-            Map<String, PersonDraft> people,
-            String ccgid,
-            String empId,
-            String name,
-            String center) {
-        if (!hasText(ccgid) || !hasText(name)) {
-            return;
-        }
-        PersonDraft existing = people.get(ccgid);
-        if (existing == null) {
-            people.put(ccgid, new PersonDraft(ccgid, empId, name, center));
-            return;
-        }
-        if (!hasText(existing.empId) && hasText(empId)) {
-            existing.empId = empId;
-        }
-        if (!hasText(existing.center) && hasText(center)) {
-            existing.center = center;
-        }
-    }
-
     private static void addPosition(
-            Map<String, PositionDraft> positions, String roleType, String positionId, String parent) {
+            Map<String, PositionDraft> positions,
+            Map<String, Set<String>> childToParent,
+            String positionId,
+            String roleType,
+            String parent) {
         if (!hasText(positionId)) {
             return;
         }
         positions.putIfAbsent(positionId, new PositionDraft(positionId, roleType, parent));
-    }
-
-    private static void bindSeat(
-            Map<String, PersonDraft> people,
-            Map<String, Set<String>> personToPositions,
-            Map<String, Set<String>> positionToPeople,
-            String ccgid,
-            String positionId,
-            int rank) {
-        if (!hasText(ccgid) || !hasText(positionId)) {
-            return;
+        if (hasText(parent)) {
+            childToParent.computeIfAbsent(positionId, ignored -> new LinkedHashSet<>()).add(parent);
         }
-        putEdge(personToPositions, ccgid, positionId);
-        putEdge(positionToPeople, positionId, ccgid);
-        PersonDraft draft = people.get(ccgid);
-        if (draft == null) {
-            return;
-        }
-        if (!hasText(draft.positionId) || rank >= draft.positionRank) {
-            draft.positionId = positionId;
-            draft.positionRank = rank;
-        }
-    }
-
-    private static void putEdge(Map<String, Set<String>> edges, String child, String parent) {
-        if (!hasText(child) || !hasText(parent)) {
-            return;
-        }
-        edges.computeIfAbsent(child, ignored -> new LinkedHashSet<>()).add(parent);
     }
 
     private static void addConflicts(
@@ -260,9 +166,14 @@ public class TimesheetDailyCalculator {
             if (entry.getValue().size() <= 1) {
                 continue;
             }
+            TimesheetSyncErrorCode code = "emp_ccgid".equals(childLabel) && "emp_position_id".equals(parentLabel)
+                    ? TimesheetSyncErrorCode.PERSON_POSITION_CONFLICT
+                    : "emp_position_id".equals(childLabel)
+                            ? TimesheetSyncErrorCode.OCCUPANCY_CONFLICT
+                            : TimesheetSyncErrorCode.HIERARCHY_CONFLICT;
             issues.add(TimesheetSyncIssue.error(
                     runId,
-                    "HIERARCHY_CONFLICT",
+                    code,
                     childLabel + " maps to multiple " + parentLabel + ": "
                             + String.join(", ", entry.getValue()),
                     null,
@@ -278,24 +189,8 @@ public class TimesheetDailyCalculator {
         return value != null && !value.isBlank();
     }
 
-    private static String firstText(String first, String second) {
-        return hasText(first) ? first : second;
-    }
-
-    private static final class PersonDraft {
-        private final String ccgid;
-        private String empId;
-        private final String name;
-        private String center;
-        private String positionId;
-        private int positionRank = Integer.MIN_VALUE;
-
-        private PersonDraft(String ccgid, String empId, String name, String center) {
-            this.ccgid = ccgid;
-            this.empId = empId;
-            this.name = name;
-            this.center = center;
-        }
+    private record PersonDraft(
+            String ccgid, String empId, String name, String center, String positionId) {
     }
 
     private record PositionDraft(String positionId, String roleType, String parentPositionId) {

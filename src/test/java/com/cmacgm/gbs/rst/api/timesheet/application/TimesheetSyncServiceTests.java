@@ -1,8 +1,11 @@
 package com.cmacgm.gbs.rst.api.timesheet.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -17,12 +20,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.graph.RstSharePointProperties;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSourceResolver.Source;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetAssignment;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetAssignmentRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
@@ -60,6 +66,7 @@ class TimesheetSyncServiceTests {
                             .findFirst();
                     case "findByKindAndStatusAndSourceDriveItemIdAndSourceEtag" -> Optional.empty();
                     case "findMaxAttemptNo" -> null;
+                    case "archiveOtherActive" -> 0;
                     default -> unsupported(method);
                 });
         TimesheetScopeRepository scopes = capturingRepository(TimesheetScopeRepository.class, savedScopes);
@@ -94,7 +101,8 @@ class TimesheetSyncServiceTests {
                 kpis,
                 issues,
                 noOpTransactions(),
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                null);
     }
 
     @Test
@@ -136,6 +144,80 @@ class TimesheetSyncServiceTests {
         assertThat(savedKpis).allMatch(kpi -> kpi.getSyncRunId().equals(result.id()));
     }
 
+    @Test
+    void validationFailureEmailsOnceAndDoesNotCreateASecondRun() {
+        AtomicInteger mails = new AtomicInteger();
+        List<TimesheetSyncIssue> savedIssues = new ArrayList<>();
+        TimesheetSyncRunRepository syncRuns = proxy(TimesheetSyncRunRepository.class, (proxy, method, args) ->
+                switch (method.getName()) {
+                    case "saveAndFlush", "save" -> store((TimesheetSyncRun) args[0]);
+                    case "findById" -> Optional.ofNullable(runStore.get(args[0]));
+                    case "findByKindAndStatus" -> runStore.values().stream()
+                            .filter(run -> run.getKind().equals(args[0]) && run.getStatus().equals(args[1]))
+                            .findFirst();
+                    case "findByKindAndStatusAndSourceDriveItemIdAndSourceEtag" -> Optional.empty();
+                    case "findMaxAttemptNo" -> null;
+                    case "archiveOtherActive" -> 0;
+                    default -> unsupported(method);
+                });
+        TimesheetSyncIssueRepository issues = proxy(TimesheetSyncIssueRepository.class, (proxy, method, args) ->
+                switch (method.getName()) {
+                    case "saveAll" -> {
+                        @SuppressWarnings("unchecked")
+                        Iterable<TimesheetSyncIssue> rows = (Iterable<TimesheetSyncIssue>) args[0];
+                        rows.forEach(savedIssues::add);
+                        yield savedIssues;
+                    }
+                    case "findBySyncRunIdOrderBySourceRowAscCreatedAtAsc" -> savedIssues.stream()
+                            .filter(issue -> issue.getSyncRunId().equals(args[0]))
+                            .toList();
+                    default -> unsupported(method);
+                });
+        TimesheetSourceResolver sources = new TimesheetSourceResolver(
+                new RstSharePointProperties("2.UAT/Data Output/RST"), null) {
+            @Override
+            public Source open(String kind) {
+                String csv =
+                        """
+                        month,emp_id,emp_ccgid,emp_name,emp_position_id,supervisor_id,supervisor_ccgid,supervisor_name,supervisor_position_id,sr_manager_id,sr_manager_ccgid,sr_manager_name,sr_manager_position_id,domain_head_id,domain_head_ccgid,domain_head_name,domain_head_position_id,center,site,gbs_domain,pl1,pl2,pl3_code,pl3,carrier,customer_country,hc,management_or_production,cost_type
+                        2026-06,EMP-1,S00000001,Agent One,EMP-POS-1,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,Kuala Lumpur,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,1,production,productive
+                        """;
+                return new Source(
+                        "mismatch.csv",
+                        new ByteArrayInputStream(csv.getBytes(StandardCharsets.UTF_8)),
+                        "drive-monthly-1",
+                        "etag-monthly-1",
+                        "SHAREPOINT",
+                        LocalDate.of(2026, 1, 31));
+            }
+        };
+        TimesheetSyncAlertNotifier notifier = new TimesheetSyncAlertNotifier(null, null, null, null) {
+            @Override
+            public void notifyFailed(UUID runId) {
+                mails.incrementAndGet();
+            }
+        };
+        TimesheetSyncService failing = new TimesheetSyncService(
+                new TimesheetReportParser(),
+                new TimesheetDailyCalculator(),
+                new TimesheetMonthlyCalculator(),
+                sources,
+                syncRuns,
+                unusedRepository(TimesheetPersonRepository.class),
+                unusedRepository(TimesheetPositionRepository.class),
+                capturingRepository(TimesheetScopeRepository.class, savedScopes),
+                capturingRepository(TimesheetAssignmentRepository.class, savedAssignments),
+                capturingRepository(TimesheetKpiRepository.class, savedKpis),
+                issues,
+                noOpTransactions(),
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                notifier);
+
+        assertThatThrownBy(() -> failing.sync("MONTHLY")).isInstanceOf(ApiException.class);
+        assertThat(mails.get()).isEqualTo(1);
+        assertThat(runStore.values()).hasSize(1).allMatch(run -> "FAILED".equals(run.getStatus()));
+    }
+
     private TimesheetSyncRun store(TimesheetSyncRun run) {
         runStore.put(run.getId(), run);
         return run;
@@ -144,7 +226,13 @@ class TimesheetSyncServiceTests {
     private static Source monthlySource() {
         InputStream content = TimesheetSyncServiceTests.class.getResourceAsStream("/timesheet/monthly-sample.csv");
         assertThat(content).as("monthly-sample.csv").isNotNull();
-        return new Source("monthly-sample.csv", content, "drive-monthly-1", "etag-monthly-1");
+        return new Source(
+                "monthly-sample.csv",
+                content,
+                "drive-monthly-1",
+                "etag-monthly-1",
+                "SHAREPOINT",
+                LocalDate.of(2026, 6, 30));
     }
 
     private static PlatformTransactionManager noOpTransactions() {

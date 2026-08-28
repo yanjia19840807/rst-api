@@ -13,6 +13,7 @@ import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.Report
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetAssignment;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 import org.junit.jupiter.api.Test;
 
 class TimesheetMonthlyCalculatorTests {
@@ -59,6 +60,32 @@ class TimesheetMonthlyCalculatorTests {
                 .contains("ASSIGNMENT_CONFLICT");
     }
 
+    @Test
+    void doesNotRequireFieldsOnManagementLines() {
+        UUID runId = UUID.randomUUID();
+        TimesheetMonthlyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(
+                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "Kuala Lumpur", "1"),
+                        row("S00000002", "EMP-2", "POS-SUP-1", "", "Kuala Lumpur", "1", "management", "non-productive")),
+                Instant.parse("2026-08-24T00:00:00Z"));
+
+        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("MISSING_FIELD");
+    }
+
+    @Test
+    void requiresFieldsOnProductionLines() {
+        UUID runId = UUID.randomUUID();
+        TimesheetMonthlyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(row("S00000001", "EMP-1", "POS-SUP-1", "", "Kuala Lumpur", "1", "production", "productive")),
+                Instant.parse("2026-08-24T00:00:00Z"));
+
+        assertThat(result.issues())
+                .extracting(TimesheetSyncIssue::getMessage)
+                .contains("Row 2 is missing pl3_code.");
+    }
+
     private static ReportRow row(
             String empCcgid,
             String empId,
@@ -66,6 +93,18 @@ class TimesheetMonthlyCalculatorTests {
             String pl3Code,
             String center,
             String hc) {
+        return row(empCcgid, empId, supervisorPositionId, pl3Code, center, hc, "production", "productive");
+    }
+
+    private static ReportRow row(
+            String empCcgid,
+            String empId,
+            String supervisorPositionId,
+            String pl3Code,
+            String center,
+            String hc,
+            String managementOrProduction,
+            String costType) {
         return new ReportRow(
                 2,
                 null,
@@ -95,6 +134,8 @@ class TimesheetMonthlyCalculatorTests {
                 "PL3 Name",
                 "CMA",
                 "MY",
-                new HcValue(new BigDecimal(hc), false));
+                new HcValue(new BigDecimal(hc), false),
+                managementOrProduction,
+                costType);
     }
 }

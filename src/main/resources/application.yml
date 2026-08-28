@@ -24,9 +24,17 @@ spring:
         order_updates: true
   flyway:
     enabled: true
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 25MB
   web:
     error:
       include-message: never
+server:
+  tomcat:
+    max-http-form-post-size: 25MB
+    max-swallow-size: 25MB
 
 # Keep p6spy JDBC logging off outside local/dev (enable in application-dev.yml).
 decorator:
@@ -72,6 +80,10 @@ timesheet:
   sync:
     enabled: false
     kind: all
+    schedule:
+      enabled: ${TIMESHEET_SYNC_SCHEDULE_ENABLED:false}
+      daily-cron: ${TIMESHEET_SYNC_DAILY_CRON:0 0 6 * * ?}
+      monthly-cron: ${TIMESHEET_SYNC_MONTHLY_CRON:0 30 6 * * ?}
 
 microsoft:
   graph:
@@ -82,3 +94,4 @@ microsoft:
     client-secret: ${MS_GRAPH_CLIENT_SECRET:}
     sharepoint-site: ${MS_GRAPH_SHAREPOINT_SITE:https://cmacgmgroup.sharepoint.com/sites/CMA-SharedKPIAutomation}
     list-name: ${MS_GRAPH_LIST_NAME:Timesheet}
+    from-mail: ${MS_GRAPH_FROM_MAIL:GBS.TIMESHEET@cma-cgm.com}

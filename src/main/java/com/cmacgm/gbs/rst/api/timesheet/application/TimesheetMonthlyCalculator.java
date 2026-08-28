@@ -17,6 +17,7 @@ import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.Report
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetAssignment;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 
 /**
@@ -45,19 +46,29 @@ public class TimesheetMonthlyCalculator {
      * @return result
      */
     public Result compute(UUID runId, List<ReportRow> rows, Instant now) {
+        return compute(runId, rows, now, null);
+    }
+
+    /**
+     * Aggregates Monthly tables and checks the file-name date.
+     *
+     * @param runId Monthly run
+     * @param rows parsed rows
+     * @param now issue timestamp
+     * @param expectedDate date from the file name
+     * @return result
+     */
+    public Result compute(UUID runId, List<ReportRow> rows, Instant now, LocalDate expectedDate) {
+        List<TimesheetSyncIssue> issues = new ArrayList<>(
+                TimesheetRowValidator.validate(runId, "MONTHLY", expectedDate, rows, now));
         Map<String, ScopeDraft> scopes = new LinkedHashMap<>();
         Map<String, AssignmentDraft> assignments = new LinkedHashMap<>();
         Map<String, Set<String>> assignmentSupervisors = new LinkedHashMap<>();
         Map<String, KpiDraft> totals = new LinkedHashMap<>();
-        List<TimesheetSyncIssue> issues = new ArrayList<>();
-        LocalDate syncDate = null;
+        LocalDate syncDate = expectedDate;
         for (ReportRow row : rows) {
             if (syncDate == null) {
-                if (row.date() != null) {
-                    syncDate = row.date();
-                } else if (row.month() != null) {
-                    syncDate = row.month().withDayOfMonth(row.month().lengthOfMonth());
-                }
+                syncDate = TimesheetRowValidator.rowDate(row);
             }
             if (hasText(row.supervisorPositionId()) && hasText(row.pl3Code()) && hasText(row.center())
                     && hasText(row.domain()) && hasText(row.pl1()) && hasText(row.pl2())
@@ -122,7 +133,7 @@ public class TimesheetMonthlyCalculator {
             if (entry.getValue().size() > 1) {
                 issues.add(TimesheetSyncIssue.error(
                         runId,
-                        "ASSIGNMENT_CONFLICT",
+                        TimesheetSyncErrorCode.ASSIGNMENT_CONFLICT,
                         "emp_ccgid maps to multiple supervisor_position_id: "
                                 + String.join(", ", entry.getValue()),
                         null,
@@ -136,7 +147,7 @@ public class TimesheetMonthlyCalculator {
         if (syncDate == null) {
             issues.add(TimesheetSyncIssue.error(
                     runId,
-                    "INVALID_MONTH",
+                    TimesheetSyncErrorCode.INVALID_MONTH,
                     "Monthly file has no valid date or month.",
                     null,
                     null,
@@ -148,7 +159,7 @@ public class TimesheetMonthlyCalculator {
         if (scopes.isEmpty() && assignments.isEmpty() && totals.isEmpty() && issues.isEmpty()) {
             issues.add(TimesheetSyncIssue.error(
                     runId,
-                    "EMPTY_FILE",
+                    TimesheetSyncErrorCode.EMPTY_FILE,
                     "Monthly file produced no assignment, scope or KPI rows.",
                     null,
                     null,

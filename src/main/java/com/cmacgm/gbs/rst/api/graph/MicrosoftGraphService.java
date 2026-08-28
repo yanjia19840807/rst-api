@@ -19,14 +19,20 @@ import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphModels.GraphDriveItem;
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphModels.GraphFile;
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphModels.GraphFolder;
+import com.microsoft.graph.models.BodyType;
 import com.microsoft.graph.models.Drive;
 import com.microsoft.graph.models.DriveCollectionResponse;
 import com.microsoft.graph.models.DriveItem;
 import com.microsoft.graph.models.DriveItemCollectionResponse;
+import com.microsoft.graph.models.EmailAddress;
 import com.microsoft.graph.models.Folder;
+import com.microsoft.graph.models.ItemBody;
+import com.microsoft.graph.models.Message;
+import com.microsoft.graph.models.Recipient;
 import com.microsoft.graph.models.Site;
 import com.microsoft.graph.models.odataerrors.ODataError;
 import com.microsoft.graph.serviceclient.GraphServiceClient;
+import com.microsoft.graph.users.item.sendmail.SendMailPostRequestBody;
 
 /**
  * Microsoft Graph access to the Timesheet SharePoint library via the official SDK.
@@ -152,6 +158,57 @@ public class MicrosoftGraphService {
             return Boolean.TRUE;
         });
         return getDriveItem(itemPath);
+    }
+
+    /**
+     * Sends HTML mail from the configured Timesheet mailbox.
+     * Does nothing when Graph is disabled or credentials are missing.
+     *
+     * @param subject subject
+     * @param html body
+     * @param to recipients
+     */
+    public void sendMail(String subject, String html, List<String> to) {
+        if (!properties.enabled() || !properties.hasCredentials()) {
+            log.info(
+                    "Microsoft Graph sendMail skipped: enabled={} credentials={}",
+                    properties.enabled(),
+                    properties.hasCredentials());
+            return;
+        }
+        if (subject == null || subject.isBlank() || html == null || html.isBlank()
+                || to == null || to.isEmpty()) {
+            log.warn("Microsoft Graph sendMail skipped: subject, body or recipients missing");
+            return;
+        }
+        SendMailPostRequestBody body = new SendMailPostRequestBody();
+        Message message = new Message();
+        message.setSubject(subject);
+        ItemBody itemBody = new ItemBody();
+        itemBody.setContentType(BodyType.Html);
+        itemBody.setContent(html);
+        message.setBody(itemBody);
+        List<Recipient> recipients = new ArrayList<>(to.size());
+        for (String address : to) {
+            if (address == null || address.isBlank()) {
+                continue;
+            }
+            Recipient recipient = new Recipient();
+            EmailAddress email = new EmailAddress();
+            email.setAddress(address.trim());
+            recipient.setEmailAddress(email);
+            recipients.add(recipient);
+        }
+        if (recipients.isEmpty()) {
+            log.warn("Microsoft Graph sendMail skipped: no valid recipients");
+            return;
+        }
+        message.setToRecipients(recipients);
+        body.setMessage(message);
+        invoke("send mail", () -> {
+            graph().users().byUserId(properties.fromMail()).sendMail().post(body);
+            return Boolean.TRUE;
+        });
     }
 
     /**

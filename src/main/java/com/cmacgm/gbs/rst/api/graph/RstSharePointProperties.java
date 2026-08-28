@@ -43,6 +43,13 @@ public record RstSharePointProperties(String root) {
         return MicrosoftGraphPaths.folderPath(root, "Template");
     }
 
+    /**
+     * @return LTH manual-upload folder
+     */
+    public String manualFolder() {
+        return MicrosoftGraphPaths.folderPath(root, "Manual");
+    }
+
     private static String stripSlashes(String path) {
         String value = path.strip();
         if (value.startsWith("/")) {

@@ -140,7 +140,8 @@ class MicrosoftGraphRstFolderIT {
                 envOr("MS_GRAPH_CLIENT_ID", "5282c4c7-7d9a-4ddc-b8bb-955921a0adf7"),
                 env("MS_GRAPH_CLIENT_SECRET"),
                 envOr("MS_GRAPH_SHAREPOINT_SITE", "https://cmacgmgroup.sharepoint.com/sites/CMA-SharedKPIAutomation"),
-                envOr("MS_GRAPH_LIST_NAME", "Timesheet"));
+                envOr("MS_GRAPH_LIST_NAME", "Timesheet"),
+                envOr("MS_GRAPH_FROM_MAIL", "GBS.TIMESHEET@cma-cgm.com"));
         if (!properties.hasCredentials()) {
             return null;
         }

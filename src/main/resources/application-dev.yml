@@ -11,8 +11,8 @@ app:
     # HO	HO001	Dev User HO001	暂定假设账号
 
     dev-identity:
-      ccgid: HO001
-      role: HO
+      ccgid: LTH001
+      role: LTH
       # SSO Center claim is not wired yet; hardcode the Center for local LTH config.
       center: GBS CHINA
 

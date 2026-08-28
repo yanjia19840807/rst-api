@@ -14,7 +14,7 @@ class ImportTemplateServiceTest {
     @Test
     void download_fallsBackToGeneratedBlankWhenGraphIsOff() {
         MicrosoftGraphProperties graphOff = new MicrosoftGraphProperties(
-                false, null, "", "", "", null, null);
+                false, null, "", "", "", null, null, null);
         ImportTemplateService templates = new ImportTemplateService(
                 new RstSharePointProperties(null),
                 graphOff,

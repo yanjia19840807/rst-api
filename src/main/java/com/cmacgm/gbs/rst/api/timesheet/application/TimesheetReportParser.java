@@ -28,6 +28,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 
 /**
  * Parses aligned Daily / Monthly Timesheet files (xlsx or csv).
@@ -81,14 +82,14 @@ public class TimesheetReportParser {
         } catch (ApiException ex) {
             throw ex;
         } catch (IOException ex) {
-            throw conflict("INVALID_HEADER", "Unable to read Timesheet file: " + ex.getMessage());
+            throw conflict(TimesheetSyncErrorCode.INVALID_HEADER, "Unable to read Timesheet file: " + ex.getMessage());
         }
     }
 
     private List<ReportRow> parseExcel(InputStream inputStream) throws IOException {
         try (Workbook workbook = new XSSFWorkbook(inputStream)) {
             if (workbook.getNumberOfSheets() == 0) {
-                throw conflict("INVALID_HEADER", "Timesheet workbook has no sheets.");
+                throw conflict(TimesheetSyncErrorCode.INVALID_HEADER, "Timesheet workbook has no sheets.");
             }
             Sheet sheet = workbook.getSheetAt(0);
             Map<String, Integer> headers = readExcelHeaders(sheet.getRow(0));
@@ -101,7 +102,7 @@ public class TimesheetReportParser {
                 rows.add(mapExcel(excelRow, headers, i + 1));
             }
             if (rows.isEmpty()) {
-                throw conflict("EMPTY_FILE", "Timesheet file contains no data rows.");
+                throw conflict(TimesheetSyncErrorCode.EMPTY_FILE, "Timesheet file contains no data rows.");
             }
             return rows;
         }
@@ -112,7 +113,7 @@ public class TimesheetReportParser {
                 new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
             String headerLine = reader.readLine();
             if (headerLine == null) {
-                throw conflict("INVALID_HEADER", "Timesheet header row is missing.");
+                throw conflict(TimesheetSyncErrorCode.INVALID_HEADER, "Timesheet header row is missing.");
             }
             Map<String, Integer> headers = readCsvHeaders(splitCsv(headerLine));
             List<ReportRow> rows = new ArrayList<>();
@@ -127,7 +128,7 @@ public class TimesheetReportParser {
                 rows.add(mapCsv(cells, headers, rowNumber));
             }
             if (rows.isEmpty()) {
-                throw conflict("EMPTY_FILE", "Timesheet file contains no data rows.");
+                throw conflict(TimesheetSyncErrorCode.EMPTY_FILE, "Timesheet file contains no data rows.");
             }
             return rows;
         }
@@ -135,7 +136,7 @@ public class TimesheetReportParser {
 
     private Map<String, Integer> readExcelHeaders(Row headerRow) {
         if (headerRow == null) {
-            throw conflict("INVALID_HEADER", "Timesheet header row is missing.");
+            throw conflict(TimesheetSyncErrorCode.INVALID_HEADER, "Timesheet header row is missing.");
         }
         Map<String, Integer> headers = new LinkedHashMap<>();
         for (Cell cell : headerRow) {
@@ -144,7 +145,7 @@ public class TimesheetReportParser {
                 continue;
             }
             if (headers.containsKey(name)) {
-                throw conflict("INVALID_HEADER", "Duplicated Timesheet header: " + name);
+                throw conflict(TimesheetSyncErrorCode.INVALID_HEADER, "Duplicated Timesheet header: " + name);
             }
             headers.put(name, cell.getColumnIndex());
         }
@@ -160,7 +161,7 @@ public class TimesheetReportParser {
                 continue;
             }
             if (headers.containsKey(name)) {
-                throw conflict("INVALID_HEADER", "Duplicated Timesheet header: " + name);
+                throw conflict(TimesheetSyncErrorCode.INVALID_HEADER, "Duplicated Timesheet header: " + name);
             }
             headers.put(name, i);
         }
@@ -171,11 +172,11 @@ public class TimesheetReportParser {
     private void requireHeaders(Map<String, Integer> headers) {
         for (String required : REQUIRED_HEADERS) {
             if (!headers.containsKey(required)) {
-                throw conflict("INVALID_HEADER", "Missing required Timesheet header: " + required);
+                throw conflict(TimesheetSyncErrorCode.INVALID_HEADER, "Missing required Timesheet header: " + required);
             }
         }
         if (!headers.containsKey("date") && !headers.containsKey("month")) {
-            throw conflict("INVALID_HEADER", "Missing required Timesheet header: date or month");
+            throw conflict(TimesheetSyncErrorCode.INVALID_HEADER, "Missing required Timesheet header: date or month");
         }
     }
 
@@ -209,7 +210,9 @@ public class TimesheetReportParser {
                 optionalText(excelValue(excelRow, headers, "pl3")),
                 optionalText(excelValue(excelRow, headers, "carrier")),
                 optionalText(excelValue(excelRow, headers, "customer_country")),
-                parseHc(excelValue(excelRow, headers, "hc"), rowNumber));
+                parseHc(excelValue(excelRow, headers, "hc"), rowNumber),
+                optionalText(excelValue(excelRow, headers, "management_or_production")),
+                optionalText(excelValue(excelRow, headers, "cost_type")));
     }
 
     private ReportRow mapCsv(List<String> cells, Map<String, Integer> headers, int rowNumber) {
@@ -242,7 +245,9 @@ public class TimesheetReportParser {
                 optionalText(csvValue(cells, headers, "pl3")),
                 optionalText(csvValue(cells, headers, "carrier")),
                 optionalText(csvValue(cells, headers, "customer_country")),
-                parseHc(csvValue(cells, headers, "hc"), rowNumber));
+                parseHc(csvValue(cells, headers, "hc"), rowNumber),
+                optionalText(csvValue(cells, headers, "management_or_production")),
+                optionalText(csvValue(cells, headers, "cost_type")));
     }
 
     private boolean isBlankExcel(Row excelRow, Map<String, Integer> headers) {
@@ -341,11 +346,11 @@ public class TimesheetReportParser {
         try {
             BigDecimal hc = new BigDecimal(value.replace(",", "")).setScale(6, RoundingMode.HALF_UP);
             if (hc.compareTo(BigDecimal.ZERO) < 0) {
-                throw conflict("INVALID_HC", "Row " + rowNumber + " has negative hc.");
+                throw conflict(TimesheetSyncErrorCode.INVALID_HC, "Row " + rowNumber + " has negative hc.");
             }
             return new HcValue(hc, false);
         } catch (NumberFormatException ex) {
-            throw conflict("INVALID_HC", "Row " + rowNumber + " has invalid hc: " + value);
+            throw conflict(TimesheetSyncErrorCode.INVALID_HC, "Row " + rowNumber + " has invalid hc: " + value);
         }
     }
 
@@ -362,14 +367,7 @@ public class TimesheetReportParser {
 
     private static String asCcgid(String value) {
         String text = optionalText(value);
-        if (text == null) {
-            return null;
-        }
-        String ccgid = text.toUpperCase(Locale.ROOT);
-        if (ccgid.equals("S") || !ccgid.startsWith("S")) {
-            return null;
-        }
-        return ccgid;
+        return text == null ? null : text.toUpperCase(Locale.ROOT);
     }
 
     private static String optionalText(String value) {
@@ -402,8 +400,8 @@ public class TimesheetReportParser {
         return cells;
     }
 
-    private static ApiException conflict(String code, String detail) {
-        return new ApiException(HttpStatus.CONFLICT, code, detail);
+    private static ApiException conflict(TimesheetSyncErrorCode code, String detail) {
+        return new ApiException(HttpStatus.CONFLICT, code.code(), detail);
     }
 
     /**
@@ -438,7 +436,9 @@ public class TimesheetReportParser {
             String pl3Name,
             String carrier,
             String customerCountry,
-            HcValue hc) {
+            HcValue hc,
+            String managementOrProduction,
+            String costType) {
     }
 
     /**

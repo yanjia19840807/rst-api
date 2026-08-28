@@ -135,25 +135,38 @@ existing V2 session foreign keys survive the upgrade. V49 replaces the raw
 
 ## Timesheet sync (dev / ops)
 
-Daily and Monthly reports are two sources. Daily builds org (person, position,
-occupancy, scope, assignment). Monthly updates Delivery HC only. Each kind
-keeps one ACTIVE run; a failed run does not replace the previous ACTIVE.
+Daily and Monthly reports are two sources. Daily writes `timesheet_person` and
+`timesheet_position` (production report lines). Monthly writes
+`timesheet_scope`, `timesheet_assignment`, and Delivery HC. Each kind keeps one
+ACTIVE run; a failed run does not replace the previous ACTIVE.
+
+Automatic sync picks the file whose **name** has the latest business date
+(`Daily Report of yyyyMMdd(GBS CHINA).xlsx` /
+`Monthly Report of yyyyMM(GBS CHINA).xlsx`). Two files on the same date fail
+with `AMBIGUOUS_SOURCE`. LTH uploads land in `{root}/Manual` and activate
+immediately when valid; they do not pause the Quartz schedule.
 
 ```sh
 ./mvnw spring-boot:run \
   -Dspring-boot.run.arguments="--timesheet.sync.enabled=true --timesheet.sync.kind=all --server.port=0"
 ```
 
-`kind` is `daily`, `monthly`, or `all` (default). Sync always reads SharePoint
-via Microsoft Graph. Graph credentials come from `.env` / `MS_GRAPH_*`.
+`kind` is `daily`, `monthly`, or `all` (default). The one-shot CLI still reads
+SharePoint via Microsoft Graph. Recurring sync uses Quartz when
+`timesheet.sync.schedule.enabled=true` (`TIMESHEET_SYNC_SCHEDULE_ENABLED`).
+Cron is system configuration only.
 
 | Property | Default | Purpose |
 | --- | --- | --- |
-| `rst.sharepoint.root` | `2.UAT/Data Output/RST` | RST folder in the Timesheet library (`Daily`, `Monthly`, `Template`) |
+| `rst.sharepoint.root` | `2.UAT/Data Output/RST` | RST folder (`Daily`, `Monthly`, `Manual`, `Template`) |
+| `timesheet.sync.schedule.enabled` | `false` | Register Quartz jobs from application config |
+| `timesheet.sync.schedule.daily-cron` | `0 0 6 * * ?` | Daily Quartz cron (`TIMESHEET_SYNC_DAILY_CRON`) |
+| `timesheet.sync.schedule.monthly-cron` | `0 30 6 * * ?` | Monthly Quartz cron (`TIMESHEET_SYNC_MONTHLY_CRON`) |
 
-Graph picks the latest `.xlsx` / `.csv` in the folder. Same `driveItemId` +
-`etag`, or the same content hash, skips cutover. ERROR rows fail the run;
-WARNING is not persisted. Old ACTIVE headers are archived, not deleted.
+Same `driveItemId` + `etag` on the same business date, or the same content
+hash, skips cutover. An older filename date than the ACTIVE snapshot is also
+skipped. Required-field and `DATE_MISMATCH` issues fail the run. Old ACTIVE
+headers are archived, not deleted.
 
 ## Verification
 

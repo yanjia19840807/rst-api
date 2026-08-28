@@ -23,6 +23,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSourceResolver.Source;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetAssignmentRepository;
@@ -54,6 +55,7 @@ public class TimesheetSyncService {
     private final TimesheetSyncIssueRepository issues;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
+    private final TimesheetSyncAlertNotifier alertNotifier;
 
     /**
      * @param parser report parser
@@ -69,6 +71,7 @@ public class TimesheetSyncService {
      * @param issues issue repository
      * @param transactionManager cutover transactions
      * @param clock timestamps
+     * @param alertNotifier failure email
      */
     public TimesheetSyncService(
             TimesheetReportParser parser,
@@ -83,7 +86,8 @@ public class TimesheetSyncService {
             TimesheetKpiRepository kpis,
             TimesheetSyncIssueRepository issues,
             PlatformTransactionManager transactionManager,
-            Clock clock) {
+            Clock clock,
+            TimesheetSyncAlertNotifier alertNotifier) {
         this.parser = parser;
         this.dailyCalculator = dailyCalculator;
         this.monthlyCalculator = monthlyCalculator;
@@ -97,6 +101,7 @@ public class TimesheetSyncService {
         this.issues = issues;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.clock = clock;
+        this.alertNotifier = alertNotifier;
     }
 
     /**
@@ -115,80 +120,134 @@ public class TimesheetSyncService {
      * @return result
      */
     public SyncResult sync(String kind) {
-        String normalized = kind.trim().toUpperCase(Locale.ROOT);
-        if (!"DAILY".equals(normalized) && !"MONTHLY".equals(normalized)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_HEADER", "Unknown Timesheet kind: " + kind);
+        return syncFromSharePoint(kind, "SYSTEM");
+    }
+
+    /**
+     * Uploads to Manual then parses. The file is stored even when parse fails.
+     *
+     * @param fileName original name
+     * @param content file bytes
+     * @param actorCcgid LTH
+     * @return result
+     */
+    public SyncResult syncUploaded(String fileName, byte[] content, String actorCcgid) {
+        Source source = sources.storeManual(fileName, content == null ? new byte[0] : content);
+        String kind = TimesheetReportName.parse(source.fileName())
+                .map(TimesheetReportName.Parsed::kind)
+                .orElseGet(() -> guessKind(source.fileName()));
+        return syncFromSource(kind, source, actorCcgid == null ? "SYSTEM" : actorCcgid);
+    }
+
+    /**
+     * Syncs one kind from SharePoint.
+     *
+     * @param kind DAILY or MONTHLY
+     * @param actorCcgid SYSTEM or a person
+     * @return result
+     */
+    public SyncResult syncFromSharePoint(String kind, String actorCcgid) {
+        String normalized = normalizeKind(kind);
+        String actor = actorCcgid == null ? "SYSTEM" : actorCcgid;
+        Source source;
+        try {
+            source = sources.open(normalized);
+        } catch (ApiException ex) {
+            failWithoutRows(
+                    normalized,
+                    new Source(null, InputStream.nullInputStream(), null, null, "SHAREPOINT", null),
+                    actor,
+                    ex.code(),
+                    ex.getMessage());
+            throw ex;
         }
-        Source source = sources.open(normalized);
-        if (source.driveItemId() != null && source.etag() != null) {
-            var existing = syncRuns.findByKindAndStatusAndSourceDriveItemIdAndSourceEtag(
-                    normalized, "ACTIVE", source.driveItemId(), source.etag());
-            if (existing.isPresent()) {
-                TimesheetSyncRun active = existing.get();
-                log.info("Timesheet {} unchanged: id={}", normalized, active.getId());
-                return new SyncResult(
-                        active.getId(),
-                        normalized,
-                        active.getSyncDate(),
-                        active.getAttemptNo(),
-                        active.getStatus(),
-                        active.getRowCount(),
-                        active.getDataHash());
+        return syncFromSource(normalized, source, actor);
+    }
+
+    private SyncResult syncFromSource(String kind, Source source, String actorCcgid) {
+        if (syncRuns.findByKindAndStatus(kind, "LOADING").isPresent()) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    TimesheetSyncErrorCode.SYNC_IN_PROGRESS.code(),
+                    "A " + kind + " Timesheet sync is already running.");
+        }
+        var active = syncRuns.findByKindAndStatus(kind, "ACTIVE");
+        if (source.filenameDate() != null && active.isPresent()
+                && source.filenameDate().isBefore(active.get().getSyncDate())) {
+            log.info("Timesheet {} stale file skipped: {}", kind, source.fileName());
+            return toResult(active.get());
+        }
+        if (source.filenameDate() != null
+                && active.isPresent()
+                && source.filenameDate().equals(active.get().getSyncDate())
+                && source.driveItemId() != null
+                && source.etag() != null) {
+            var same = syncRuns.findByKindAndStatusAndSourceDriveItemIdAndSourceEtag(
+                    kind, "ACTIVE", source.driveItemId(), source.etag());
+            if (same.isPresent()) {
+                log.info("Timesheet {} unchanged: id={}", kind, same.get().getId());
+                return toResult(same.get());
             }
         }
+        List<ReportRow> rows;
         try (InputStream in = source.content()) {
-            List<ReportRow> rows = parser.parse(in, source.fileName());
-            return persist(normalized, source, rows);
+            rows = parser.parse(in, source.fileName());
         } catch (ApiException ex) {
-            failWithoutRows(normalized, source, ex.code(), ex.getMessage());
+            failWithoutRows(kind, source, actorCcgid, ex.code(), ex.getMessage());
             throw ex;
         } catch (IOException ex) {
             ApiException wrapped = new ApiException(
-                    HttpStatus.BAD_REQUEST, "SOURCE_UNAVAILABLE", "Unable to read Timesheet file: " + ex.getMessage());
-            failWithoutRows(normalized, source, wrapped.code(), wrapped.getMessage());
+                    HttpStatus.BAD_REQUEST,
+                    TimesheetSyncErrorCode.SOURCE_UNAVAILABLE.code(),
+                    "Unable to read Timesheet file: " + ex.getMessage());
+            failWithoutRows(kind, source, actorCcgid, wrapped.code(), wrapped.getMessage());
             throw wrapped;
         }
+        return persist(kind, source, rows, actorCcgid);
     }
 
-    private SyncResult persist(String kind, Source source, List<ReportRow> rows) {
+    private SyncResult persist(String kind, Source source, List<ReportRow> rows, String actorCcgid) {
         Instant now = clock.instant();
         String hash = hashRows(rows);
         var unchanged = syncRuns.findByKindAndStatus(kind, "ACTIVE")
                 .filter(active -> hash.equals(active.getDataHash()));
         if (unchanged.isPresent()) {
-            TimesheetSyncRun active = unchanged.get();
-            log.info("Timesheet {} hash unchanged: id={}", kind, active.getId());
-            return new SyncResult(
-                    active.getId(),
-                    kind,
-                    active.getSyncDate(),
-                    active.getAttemptNo(),
-                    active.getStatus(),
-                    active.getRowCount(),
-                    active.getDataHash());
+            log.info("Timesheet {} hash unchanged: id={}", kind, unchanged.get().getId());
+            return toResult(unchanged.get());
         }
-        LocalDate previewDate = previewDate(kind, rows);
+        LocalDate previewDate = source.filenameDate() != null ? source.filenameDate() : previewDate(kind, rows);
         TimesheetSyncRun run = TimesheetSyncRun.startLoading(
                 kind, previewDate, nextAttemptNo(kind, previewDate), now);
-        run.setSource(source.driveItemId(), source.etag());
+        run.setSource(
+                source.driveItemId(),
+                source.etag(),
+                source.sourceType(),
+                source.fileName(),
+                actorCcgid);
         syncRuns.saveAndFlush(run);
         try {
             if ("DAILY".equals(kind)) {
-                TimesheetDailyCalculator.Result computed = dailyCalculator.compute(run.getId(), rows, now);
+                TimesheetDailyCalculator.Result computed =
+                        dailyCalculator.compute(run.getId(), rows, now, source.filenameDate());
                 return activateOrFail(run, rows.size(), hash, computed.issues(), () -> {
                     people.saveAll(computed.people());
                     positions.saveAll(computed.positions());
                 });
             }
-            TimesheetMonthlyCalculator.Result computed = monthlyCalculator.compute(run.getId(), rows, now);
+            TimesheetMonthlyCalculator.Result computed =
+                    monthlyCalculator.compute(run.getId(), rows, now, source.filenameDate());
             return activateOrFail(run, rows.size(), hash, computed.issues(), () -> {
                 scopes.saveAll(computed.scopes());
                 assignments.saveAll(computed.assignments());
                 kpis.saveAll(computed.kpis());
             });
         } catch (RuntimeException ex) {
-            markFailed(run.getId(), errorCodeOf(ex), sanitize(ex.getMessage()));
-            throw ex;
+            String code = errorCodeOf(ex);
+            String message = userMessage(ex);
+            markFailed(run.getId(), code, message);
+            persistRunIssueIfMissing(run.getId(), code, message, now);
+            notifyFailed(run.getId());
+            throw ex instanceof ApiException ? ex : new ApiException(HttpStatus.CONFLICT, code, message);
         }
     }
 
@@ -247,25 +306,65 @@ public class TimesheetSyncService {
             Instant now = clock.instant();
             TimesheetSyncRun run = syncRuns.findById(runId)
                     .orElseThrow(() -> new ApiException(
-                            HttpStatus.CONFLICT, "COUNT_MISMATCH", "Sync run disappeared before activation."));
-            syncRuns.findByKindAndStatus(kind, "ACTIVE").ifPresent(previous -> {
-                if (!previous.getId().equals(run.getId())) {
-                    previous.markArchived(now);
-                    syncRuns.saveAndFlush(previous);
-                }
-            });
+                            HttpStatus.CONFLICT,
+                            TimesheetSyncErrorCode.COUNT_MISMATCH.code(),
+                            "Sync run disappeared before activation."));
+            syncRuns.archiveOtherActive(kind, run.getId(), now);
             run.markActive(rowCount, dataHash, now);
-            syncRuns.save(run);
+            syncRuns.saveAndFlush(run);
         });
     }
 
-    private void failWithoutRows(String kind, Source source, String code, String message) {
+    private void failWithoutRows(String kind, Source source, String actorCcgid, String code, String message) {
         Instant now = clock.instant();
-        LocalDate date = LocalDate.now(clock);
+        LocalDate date = source.filenameDate() != null ? source.filenameDate() : LocalDate.now(clock);
         TimesheetSyncRun run = TimesheetSyncRun.startLoading(kind, date, nextAttemptNo(kind, date), now);
-        run.setSource(source.driveItemId(), source.etag());
+        run.setSource(
+                source.driveItemId(), source.etag(), source.sourceType(), source.fileName(), actorCcgid);
         run.markFailed(code, sanitize(message), now);
         syncRuns.save(run);
+        persistRunIssueIfMissing(run.getId(), code, sanitize(message), now);
+        notifyFailed(run.getId());
+    }
+
+    private void persistRunIssueIfMissing(UUID runId, String code, String message, Instant now) {
+        if (!issues.findBySyncRunIdOrderBySourceRowAscCreatedAtAsc(runId).isEmpty()) {
+            return;
+        }
+        issues.save(TimesheetSyncIssue.error(runId, code, message, null, null, null, null, null, now));
+    }
+
+    private static String normalizeKind(String kind) {
+        String normalized = kind.trim().toUpperCase(Locale.ROOT);
+        if (!"DAILY".equals(normalized) && !"MONTHLY".equals(normalized)) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    TimesheetSyncErrorCode.INVALID_HEADER.code(),
+                    "Unknown Timesheet kind: " + kind);
+        }
+        return normalized;
+    }
+
+    private static String guessKind(String fileName) {
+        String lower = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
+        return lower.contains("monthly") ? "MONTHLY" : "DAILY";
+    }
+
+    private static SyncResult toResult(TimesheetSyncRun run) {
+        return new SyncResult(
+                run.getId(),
+                run.getKind(),
+                run.getSyncDate(),
+                run.getAttemptNo(),
+                run.getStatus(),
+                run.getRowCount(),
+                run.getDataHash());
+    }
+
+    private void notifyFailed(UUID runId) {
+        if (alertNotifier != null) {
+            alertNotifier.notifyFailed(runId);
+        }
     }
 
     private void markFailed(UUID runId, String errorCode, String message) {
@@ -282,7 +381,9 @@ public class TimesheetSyncService {
         int next = (max == null ? 0 : max) + 1;
         if (next > Short.MAX_VALUE) {
             throw new ApiException(
-                    HttpStatus.CONFLICT, "COUNT_MISMATCH", "Too many sync attempts for " + kind + " " + syncDate);
+                    HttpStatus.CONFLICT,
+                    TimesheetSyncErrorCode.COUNT_MISMATCH.code(),
+                    "Too many sync attempts for " + kind + " " + syncDate);
         }
         return (short) next;
     }
@@ -334,14 +435,48 @@ public class TimesheetSyncService {
         if (ex instanceof ApiException api) {
             return api.code();
         }
-        return "COUNT_MISMATCH";
+        if (isActiveConstraint(ex)) {
+            return TimesheetSyncErrorCode.CUTOVER_CONFLICT.code();
+        }
+        return TimesheetSyncErrorCode.COUNT_MISMATCH.code();
+    }
+
+    private static String userMessage(RuntimeException ex) {
+        if (ex instanceof ApiException api) {
+            return sanitize(api.getMessage());
+        }
+        if (isActiveConstraint(ex)) {
+            return "Could not replace the current ACTIVE Timesheet snapshot. Retry the sync.";
+        }
+        return "Timesheet sync failed unexpectedly.";
+    }
+
+    private static boolean isActiveConstraint(Throwable ex) {
+        for (Throwable current = ex; current != null; current = current.getCause()) {
+            String text = current.getMessage() == null ? "" : current.getMessage();
+            if (text.contains("uk_timesheet_one_active_run_per_kind")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String sanitize(String message) {
         if (message == null) {
             return "Timesheet sync failed.";
         }
+        if (message.contains("uk_timesheet_one_active_run_per_kind") || looksLikeSql(message)) {
+            return "Timesheet sync failed unexpectedly.";
+        }
         return message.length() > 1000 ? message.substring(0, 1000) : message;
+    }
+
+    private static boolean looksLikeSql(String message) {
+        String lower = message.toLowerCase(Locale.ROOT);
+        return lower.contains("batch entry")
+                || lower.contains("duplicate key")
+                || lower.contains("sql [")
+                || lower.contains("could not execute");
     }
 
     /**

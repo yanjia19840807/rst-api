@@ -43,6 +43,15 @@ public class TimesheetSyncRun {
     @Column(name = "source_etag", length = 200)
     private String sourceEtag;
 
+    @Column(name = "source_type", length = 16)
+    private String sourceType;
+
+    @Column(name = "source_file_name", length = 260)
+    private String sourceFileName;
+
+    @Column(name = "triggered_by_ccgid", length = 32)
+    private String triggeredByCcgid;
+
     @Column(name = "started_at", nullable = false)
     private Instant startedAt;
 
@@ -86,8 +95,25 @@ public class TimesheetSyncRun {
      * @param etag Graph etag
      */
     public void setSource(String driveItemId, String etag) {
+        setSource(driveItemId, etag, null, null, null);
+    }
+
+    /**
+     * Records source identity and who triggered the run.
+     *
+     * @param driveItemId Graph item id
+     * @param etag Graph etag
+     * @param sourceType SHAREPOINT or MANUAL
+     * @param fileName original file name
+     * @param triggeredByCcgid actor, or SYSTEM
+     */
+    public void setSource(
+            String driveItemId, String etag, String sourceType, String fileName, String triggeredByCcgid) {
         this.sourceDriveItemId = driveItemId;
         this.sourceEtag = etag;
+        this.sourceType = sourceType;
+        this.sourceFileName = fileName;
+        this.triggeredByCcgid = triggeredByCcgid;
     }
 
     /**
@@ -166,6 +192,18 @@ public class TimesheetSyncRun {
 
     public String getSourceEtag() {
         return sourceEtag;
+    }
+
+    public String getSourceType() {
+        return sourceType;
+    }
+
+    public String getSourceFileName() {
+        return sourceFileName;
+    }
+
+    public String getTriggeredByCcgid() {
+        return triggeredByCcgid;
     }
 
     public Instant getStartedAt() {

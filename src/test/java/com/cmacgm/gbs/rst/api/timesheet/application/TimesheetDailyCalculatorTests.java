@@ -11,6 +11,7 @@ import java.util.UUID;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.HcValue;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPosition;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 import org.junit.jupiter.api.Test;
 
@@ -19,72 +20,88 @@ class TimesheetDailyCalculatorTests {
     private final TimesheetDailyCalculator calculator = new TimesheetDailyCalculator();
 
     @Test
-    void personKeepsOnePosition() {
+    void personComesFromDistinctEmpColumns() {
         UUID runId = UUID.randomUUID();
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId,
-                List.of(row(
-                        "S00000001",
-                        "EMP-1",
-                        "Agent One",
-                        "EMP-POS-1",
-                        "S00000002",
-                        "SUP-1",
-                        "Supervisor One",
-                        "POS-SUP-1",
-                        "S00000003",
-                        "SRM-1",
-                        "Manager One",
-                        "POS-SRM-1",
-                        "S00000004",
-                        "DH-1",
-                        "Head One",
-                        "POS-DH-1",
-                        "Kuala Lumpur")),
+                List.of(row("S00000001", "EMP-1", "Agent One", "EMP-POS-1", "production", "productive")),
                 Instant.parse("2026-08-23T00:00:00Z"));
 
         assertThat(result.issues()).isEmpty();
         assertThat(result.people())
                 .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getCenter, TimesheetPerson::getPositionId)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("S00000001", "Kuala Lumpur", "EMP-POS-1"));
+        assertThat(result.positions())
+                .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
                 .contains(
-                        org.assertj.core.groups.Tuple.tuple("S00000001", "Kuala Lumpur", "EMP-POS-1"),
-                        org.assertj.core.groups.Tuple.tuple("S00000002", "Kuala Lumpur", "POS-SUP-1"),
-                        org.assertj.core.groups.Tuple.tuple("S00000003", "Kuala Lumpur", "POS-SRM-1"),
-                        org.assertj.core.groups.Tuple.tuple("S00000004", "Kuala Lumpur", "POS-DH-1"));
+                        org.assertj.core.groups.Tuple.tuple("EMP-POS-1", "PRODUCTION"),
+                        org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "SUPERVISOR"));
     }
 
     @Test
-    void samePersonOnTwoPositionsIsAConflict() {
+    void skipsManagementLinesWhenBuildingPositions() {
         UUID runId = UUID.randomUUID();
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId,
-                List.of(row(
-                        "S00000001",
-                        "EMP-1",
-                        "Same Person",
-                        "EMP-POS-1",
-                        "S00000001",
-                        "EMP-1",
-                        "Same Person",
-                        "POS-SUP-1",
-                        "S00000003",
-                        "SRM-1",
-                        "Manager One",
-                        "POS-SRM-1",
-                        "S00000004",
-                        "DH-1",
-                        "Head One",
-                        "POS-DH-1",
-                        "Kuala Lumpur")),
+                List.of(row("S00000002", "SUP-1", "Supervisor One", "POS-SUP-1", "management", "non-productive")),
+                Instant.parse("2026-08-23T00:00:00Z"));
+
+        assertThat(result.issues()).isEmpty();
+        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).containsExactly("S00000002");
+        assertThat(result.positions()).isEmpty();
+    }
+
+    @Test
+    void doesNotRequireHierarchyOnManagementLines() {
+        UUID runId = UUID.randomUUID();
+        TimesheetDailyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(row("S00000002", "SUP-1", "Supervisor One", "POS-SUP-1", "management", "non-productive", "")),
+                Instant.parse("2026-08-23T00:00:00Z"));
+
+        assertThat(result.issues()).isEmpty();
+        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).containsExactly("S00000002");
+        assertThat(result.positions()).isEmpty();
+    }
+
+    @Test
+    void requiresHierarchyOnProductionLines() {
+        UUID runId = UUID.randomUUID();
+        TimesheetDailyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(row("S00000001", "EMP-1", "Agent One", "EMP-POS-1", "production", "productive", "")),
+                Instant.parse("2026-08-23T00:00:00Z"));
+
+        assertThat(result.issues())
+                .extracting(TimesheetSyncIssue::getMessage)
+                .contains("Row 2 is missing sr_manager_id.");
+    }
+
+    @Test
+    void flagsDateMismatchAgainstFileName() {
+        UUID runId = UUID.randomUUID();
+        TimesheetDailyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(row("S00000001", "EMP-1", "Agent One", "EMP-POS-1", "production", "productive")),
+                Instant.parse("2026-08-23T00:00:00Z"),
+                LocalDate.of(2026, 7, 26));
+
+        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).contains("DATE_MISMATCH");
+    }
+
+    @Test
+    void samePersonOnTwoEmpPositionsIsAConflict() {
+        UUID runId = UUID.randomUUID();
+        TimesheetDailyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(
+                        row("S00000001", "EMP-1", "Same Person", "EMP-POS-1", "production", "productive"),
+                        row("S00000001", "EMP-1", "Same Person", "EMP-POS-2", "production", "productive")),
                 Instant.parse("2026-08-23T00:00:00Z"));
 
         assertThat(result.issues())
                 .extracting(TimesheetSyncIssue::getCode)
                 .contains("PERSON_POSITION_CONFLICT");
-        assertThat(result.people())
-                .filteredOn(person -> "S00000001".equals(person.getCcgid()))
-                .extracting(TimesheetPerson::getPositionId)
-                .containsExactly("POS-SUP-1");
     }
 
     private static ReportRow row(
@@ -92,19 +109,19 @@ class TimesheetDailyCalculatorTests {
             String empId,
             String empName,
             String empPositionId,
-            String supervisorCcgid,
-            String supervisorId,
-            String supervisorName,
-            String supervisorPositionId,
-            String srManagerCcgid,
-            String srManagerId,
-            String srManagerName,
-            String srManagerPositionId,
-            String domainHeadCcgid,
-            String domainHeadId,
-            String domainHeadName,
-            String domainHeadPositionId,
-            String center) {
+            String managementOrProduction,
+            String costType) {
+        return row(empCcgid, empId, empName, empPositionId, managementOrProduction, costType, "SRM-1");
+    }
+
+    private static ReportRow row(
+            String empCcgid,
+            String empId,
+            String empName,
+            String empPositionId,
+            String managementOrProduction,
+            String costType,
+            String srManagerId) {
         return new ReportRow(
                 2,
                 LocalDate.of(2026, 7, 27),
@@ -113,19 +130,19 @@ class TimesheetDailyCalculatorTests {
                 empCcgid,
                 empName,
                 empPositionId,
-                supervisorId,
-                supervisorCcgid,
-                supervisorName,
-                supervisorPositionId,
+                "SUP-1",
+                "S00000002",
+                "Supervisor One",
+                "POS-SUP-1",
                 srManagerId,
-                srManagerCcgid,
-                srManagerName,
-                srManagerPositionId,
-                domainHeadId,
-                domainHeadCcgid,
-                domainHeadName,
-                domainHeadPositionId,
-                center,
+                "S00000003",
+                "Manager One",
+                "POS-SRM-1",
+                "DH-1",
+                "S00000004",
+                "Head One",
+                "POS-DH-1",
+                "Kuala Lumpur",
                 "Site",
                 "Finance",
                 "PL1",
@@ -134,6 +151,8 @@ class TimesheetDailyCalculatorTests {
                 "PL3 Name",
                 "CMA",
                 "MY",
-                new HcValue(BigDecimal.ONE, false));
+                new HcValue(BigDecimal.ONE, false),
+                managementOrProduction,
+                costType);
     }
 }

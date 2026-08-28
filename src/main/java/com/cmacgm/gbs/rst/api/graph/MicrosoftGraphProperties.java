@@ -13,6 +13,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param clientSecret application client secret
  * @param sharepointSite SharePoint site web URL
  * @param listName document library / list name on that site
+ * @param fromMail mailbox used for Graph sendMail
  */
 @ConfigurationProperties(prefix = "microsoft.graph")
 public record MicrosoftGraphProperties(
@@ -22,7 +23,8 @@ public record MicrosoftGraphProperties(
         String clientId,
         String clientSecret,
         String sharepointSite,
-        String listName) {
+        String listName,
+        String fromMail) {
 
     /**
      * Fills Graph defaults when a field is blank.
@@ -34,6 +36,7 @@ public record MicrosoftGraphProperties(
      * @param clientSecret application secret
      * @param sharepointSite SharePoint site URL
      * @param listName document library name
+     * @param fromMail sendMail from mailbox
      */
     public MicrosoftGraphProperties {
         if (secretName == null || secretName.isBlank()) {
@@ -45,9 +48,13 @@ public record MicrosoftGraphProperties(
         if (listName == null || listName.isBlank()) {
             listName = "Timesheet";
         }
+        if (fromMail == null || fromMail.isBlank()) {
+            fromMail = "GBS.TIMESHEET@cma-cgm.com";
+        }
         clientId = blankToEmpty(clientId);
         clientSecret = blankToEmpty(clientSecret);
         tenantId = blankToEmpty(tenantId);
+        fromMail = fromMail.trim();
     }
 
     /**

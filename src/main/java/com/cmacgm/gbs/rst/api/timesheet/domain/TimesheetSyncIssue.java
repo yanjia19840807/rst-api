@@ -49,7 +49,43 @@ public class TimesheetSyncIssue {
     }
 
     /**
-     * Creates an ERROR issue.
+     * Creates an ERROR issue from a catalog code.
+     *
+     * @param syncRunId owning run
+     * @param code catalog code
+     * @param message human message
+     * @param empId optional person id
+     * @param empCcgid optional identity
+     * @param positionId optional position
+     * @param pl3Code optional PL3
+     * @param sourceRow optional Excel row
+     * @param createdAt created at
+     * @return issue
+     */
+    public static TimesheetSyncIssue error(
+            UUID syncRunId,
+            TimesheetSyncErrorCode code,
+            String message,
+            String empId,
+            String empCcgid,
+            String positionId,
+            String pl3Code,
+            Integer sourceRow,
+            Instant createdAt) {
+        return error(
+                syncRunId,
+                code.code(),
+                message,
+                empId,
+                empCcgid,
+                positionId,
+                pl3Code,
+                sourceRow,
+                createdAt);
+    }
+
+    /**
+     * Creates an ERROR issue from a persisted or external code.
      *
      * @param syncRunId owning run
      * @param code stable code
@@ -100,5 +136,25 @@ public class TimesheetSyncIssue {
 
     public String getMessage() {
         return message;
+    }
+
+    public String getEmpId() {
+        return empId;
+    }
+
+    public String getEmpCcgid() {
+        return empCcgid;
+    }
+
+    public String getPositionId() {
+        return positionId;
+    }
+
+    public String getPl3Code() {
+        return pl3Code;
+    }
+
+    public Integer getSourceRow() {
+        return sourceRow;
     }
 }
