@@ -179,8 +179,8 @@ class TimesheetSyncServiceTests {
             public Source open(String kind) {
                 String csv =
                         """
-                        month,emp_id,emp_ccgid,emp_name,emp_position_id,supervisor_id,supervisor_ccgid,supervisor_name,supervisor_position_id,sr_manager_id,sr_manager_ccgid,sr_manager_name,sr_manager_position_id,domain_head_id,domain_head_ccgid,domain_head_name,domain_head_position_id,center,site,gbs_domain,pl1,pl2,pl3_code,pl3,carrier,customer_country,hc,management_or_production,cost_type
-                        2026-06,EMP-1,S00000001,Agent One,EMP-POS-1,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,Kuala Lumpur,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,1,production,productive
+                        month,emp_id,emp_ccgid,emp_name,emp_email,emp_position_id,supervisor_id,supervisor_ccgid,supervisor_name,supervisor_position_id,sr_manager_id,sr_manager_ccgid,sr_manager_name,sr_manager_position_id,domain_head_id,domain_head_ccgid,domain_head_name,domain_head_position_id,center,site,gbs_domain,pl1,pl2,pl3_code,pl3,carrier,customer_country,hc,management_or_production,cost_type
+                        2026-06,EMP-1,S00000001,Agent One,s00000001@dev.local,EMP-POS-1,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,Kuala Lumpur,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,1,production,productive
                         """;
                 return new Source(
                         "mismatch.csv",
@@ -191,7 +191,7 @@ class TimesheetSyncServiceTests {
                         LocalDate.of(2026, 1, 31));
             }
         };
-        TimesheetSyncAlertNotifier notifier = new TimesheetSyncAlertNotifier(null, null, null, null) {
+        TimesheetSyncAlertNotifier notifier = new TimesheetSyncAlertNotifier(null, null, null, null, null) {
             @Override
             public void notifyFailed(UUID runId) {
                 mails.incrementAndGet();

@@ -74,9 +74,7 @@ public class TimesheetDailyCalculator {
             if (!hasText(row.empCcgid()) || !hasText(row.empName()) || !hasText(row.empPositionId())) {
                 continue;
             }
-            people.putIfAbsent(
-                    row.empCcgid(),
-                    new PersonDraft(row.empCcgid(), row.empId(), row.empName(), row.center(), row.empPositionId()));
+            rememberPerson(people, row);
             personToPosition.computeIfAbsent(row.empCcgid(), ignored -> new LinkedHashSet<>()).add(row.empPositionId());
             positionToPerson.computeIfAbsent(row.empPositionId(), ignored -> new LinkedHashSet<>()).add(row.empCcgid());
             if (hasText(row.center())) {
@@ -130,13 +128,32 @@ public class TimesheetDailyCalculator {
                 syncDate,
                 people.values().stream()
                         .map(draft -> TimesheetPerson.create(
-                                runId, draft.ccgid, draft.empId, draft.center, draft.name, draft.positionId))
+                                runId,
+                                draft.ccgid,
+                                draft.empId,
+                                draft.center,
+                                draft.name,
+                                draft.email,
+                                draft.positionId))
                         .toList(),
                 positions.values().stream()
                         .map(draft -> TimesheetPosition.create(
                                 runId, draft.positionId, draft.roleType, draft.parentPositionId))
                         .toList(),
                 issues);
+    }
+
+    private static void rememberPerson(Map<String, PersonDraft> people, ReportRow row) {
+        PersonDraft incoming = new PersonDraft(
+                row.empCcgid(), row.empId(), row.empName(), row.empEmail(), row.center(), row.empPositionId());
+        PersonDraft existing = people.get(row.empCcgid());
+        if (existing == null) {
+            people.put(row.empCcgid(), incoming);
+            return;
+        }
+        if (!hasText(existing.email()) && hasText(incoming.email())) {
+            people.put(row.empCcgid(), incoming);
+        }
     }
 
     private static void addPosition(
@@ -190,7 +207,7 @@ public class TimesheetDailyCalculator {
     }
 
     private record PersonDraft(
-            String ccgid, String empId, String name, String center, String positionId) {
+            String ccgid, String empId, String name, String email, String center, String positionId) {
     }
 
     private record PositionDraft(String positionId, String roleType, String parentPositionId) {

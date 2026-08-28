@@ -32,6 +32,8 @@ import com.cmacgm.gbs.rst.api.exercise.associateddata.application.WorkingDaysSer
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
+import com.cmacgm.gbs.rst.api.mail.application.MailNotificationService;
+import com.cmacgm.gbs.rst.api.mail.application.MailNotificationService.OwnerOutcome;
 import com.cmacgm.gbs.rst.api.security.Handler;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
@@ -85,6 +87,7 @@ public class ApprovalService {
     private final ApprovalWorkspaceAssembler workspaceAssembler;
     private final ExerciseVolumeTrainingService volumeTraining;
     private final ToolkitAssociatedDataService toolkitAssociatedData;
+    private final MailNotificationService mail;
     private final Clock clock;
 
     /**
@@ -103,6 +106,7 @@ public class ApprovalService {
             ApprovalWorkspaceAssembler workspaceAssembler,
             ExerciseVolumeTrainingService volumeTraining,
             ToolkitAssociatedDataService toolkitAssociatedData,
+            MailNotificationService mail,
             Clock clock) {
         this.workflows = workflows;
         this.exercises = exercises;
@@ -116,6 +120,7 @@ public class ApprovalService {
         this.workspaceAssembler = workspaceAssembler;
         this.volumeTraining = volumeTraining;
         this.toolkitAssociatedData = toolkitAssociatedData;
+        this.mail = mail;
         this.clock = clock;
     }
 
@@ -316,6 +321,9 @@ public class ApprovalService {
         Instant now = clock.instant();
         loaded.workflow().approve(actor, request.comments(), requestId, now);
 
+        String nextApproverCcgid = null;
+        boolean notifyLth = false;
+        boolean notifyOwnerApproved = false;
         if (current.getStatus() == TaskStatus.APPROVED) {
             TaskNode next = current.getNode().nextReview();
             if (next == TaskNode.CDH) {
@@ -325,22 +333,36 @@ public class ApprovalService {
                         next,
                         List.of(new ProcessInstance.Assignee(cdh.positionId(), cdh.assigneeCcgid())),
                         now);
+                nextApproverCcgid = cdh.assigneeCcgid();
             } else if (next == TaskNode.LTH) {
                 WorkflowRouter.RoutedStep lth = workflowRouter.resolveLth();
                 loaded.workflow().openReview(
                         next,
                         List.of(new ProcessInstance.Assignee(lth.positionId(), lth.assigneeCcgid())),
                         now);
+                notifyLth = true;
             } else if (current.getNode() == TaskNode.LTH) {
                 volumeTraining.freezeOfficialTrainingAndUpsert(
                         loaded.exercise(), principal.ccgid(), now);
                 toolkitAssociatedData.replaceSnapshots(
                         loaded.exercise(), principal.ccgid(), now);
                 loaded.exercise().markApproved(principal.ccgid(), now);
+                notifyOwnerApproved = true;
             }
         }
 
         persist(loaded);
+        if (nextApproverCcgid != null) {
+            mail.notifyApprovalRequested(nextApproverCcgid, loaded.exercise());
+        } else if (notifyLth) {
+            mail.notifyLthApprovalRequested(toolkitCenter(loaded.exercise()), loaded.exercise());
+        } else if (notifyOwnerApproved) {
+            mail.notifyOwner(
+                    OwnerOutcome.APPROVED,
+                    loaded.exercise().getOwnerCcgid(),
+                    loaded.exercise(),
+                    request.comments());
+        }
         return toDetail(loaded, principal);
     }
 
@@ -385,6 +407,11 @@ public class ApprovalService {
         loaded.workflow().returnToSupervisor(actor, request.comments(), requestId, now);
         reopenExercise(loaded, principal.ccgid(), now, true);
         persist(loaded);
+        mail.notifyOwner(
+                OwnerOutcome.RETURNED,
+                loaded.exercise().getOwnerCcgid(),
+                loaded.exercise(),
+                request.comments());
         return toDetail(loaded, principal);
     }
 
@@ -428,6 +455,11 @@ public class ApprovalService {
         loaded.workflow().refuse(actor, request.comments(), requestId, now);
         loaded.exercise().markRejected(principal.ccgid(), now);
         persist(loaded);
+        mail.notifyOwner(
+                OwnerOutcome.REJECTED,
+                loaded.exercise().getOwnerCcgid(),
+                loaded.exercise(),
+                request.comments());
         return toDetail(loaded, principal);
     }
 

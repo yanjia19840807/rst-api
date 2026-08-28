@@ -29,8 +29,13 @@ class TimesheetDailyCalculatorTests {
 
         assertThat(result.issues()).isEmpty();
         assertThat(result.people())
-                .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getCenter, TimesheetPerson::getPositionId)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("S00000001", "Kuala Lumpur", "EMP-POS-1"));
+                .extracting(
+                        TimesheetPerson::getCcgid,
+                        TimesheetPerson::getCenter,
+                        TimesheetPerson::getEmail,
+                        TimesheetPerson::getPositionId)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(
+                        "S00000001", "Kuala Lumpur", "s00000001@dev.local", "EMP-POS-1"));
         assertThat(result.positions())
                 .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
                 .contains(
@@ -129,6 +134,7 @@ class TimesheetDailyCalculatorTests {
                 empId,
                 empCcgid,
                 empName,
+                empCcgid.toLowerCase() + "@dev.local",
                 empPositionId,
                 "SUP-1",
                 "S00000002",

@@ -112,6 +112,7 @@ class TimesheetMonthlyCalculatorTests {
                 empId,
                 empCcgid,
                 "Agent",
+                empCcgid.toLowerCase() + "@dev.local",
                 empId,
                 "SUP-1",
                 "S00000002",

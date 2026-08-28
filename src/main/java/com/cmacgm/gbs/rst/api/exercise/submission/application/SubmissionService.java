@@ -40,6 +40,7 @@ import com.cmacgm.gbs.rst.api.workflow.application.WorkflowViews;
 import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.ApprovalWorkspaceView;
 import com.cmacgm.gbs.rst.api.workflow.approval.application.ApprovalWorkspaceAssembler;
 import com.cmacgm.gbs.rst.api.workflow.domain.ExerciseLifecycle;
+import com.cmacgm.gbs.rst.api.mail.application.MailNotificationService;
 import com.cmacgm.gbs.rst.api.security.Handler;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.workflow.domain.ProcessInstance;
@@ -67,6 +68,7 @@ public class SubmissionService {
     private final WorkflowViews workflowViews;
     private final ApprovalWorkspaceAssembler workspaceAssembler;
     private final TimesheetReadService timesheet;
+    private final MailNotificationService mail;
     private final Clock clock;
 
     /**
@@ -85,6 +87,7 @@ public class SubmissionService {
             WorkflowViews workflowViews,
             ApprovalWorkspaceAssembler workspaceAssembler,
             TimesheetReadService timesheet,
+            MailNotificationService mail,
             Clock clock) {
         this.exercises = exercises;
         this.exerciseRepository = exerciseRepository;
@@ -98,6 +101,7 @@ public class SubmissionService {
         this.workflowViews = workflowViews;
         this.workspaceAssembler = workspaceAssembler;
         this.timesheet = timesheet;
+        this.mail = mail;
         this.clock = clock;
     }
 
@@ -188,11 +192,12 @@ public class SubmissionService {
         ProcessInstance workflow = ProcessInstance.start(
                 exerciseId, request.remarks(), handler, requestId, now);
         attachScopes(exercise, workflow);
-        openManager(workflow, exercise, now);
+        String managerCcgid = openManager(workflow, exercise, now);
         workflows.save(workflow);
 
         exercise.markSubmitted(ownerCcgid, now);
         exerciseRepository.save(exercise);
+        mail.notifyApprovalRequested(managerCcgid, exercise);
 
         return toDetails(exercise, workflow);
     }
@@ -217,15 +222,16 @@ public class SubmissionService {
         requireDomainHead(exercise);
         validations.save(finding);
         workflow.recordSubmit(handler, remarks, requestId, now);
-        openManager(workflow, exercise, now);
+        String managerCcgid = openManager(workflow, exercise, now);
         workflows.save(workflow);
 
         exercise.markSubmitted(ownerCcgid, now);
         exerciseRepository.save(exercise);
+        mail.notifyApprovalRequested(managerCcgid, exercise);
         return toDetails(exercise, workflow);
     }
 
-    private void openManager(ProcessInstance workflow, RstExercise exercise, Instant now) {
+    private String openManager(ProcessInstance workflow, RstExercise exercise, Instant now) {
         String supervisorPositionId = exercise.getToolkitSnapshot() == null
                 ? null
                 : exercise.getToolkitSnapshot().getSupervisorPositionId();
@@ -234,6 +240,7 @@ public class SubmissionService {
                 TaskNode.MANAGER,
                 List.of(new ProcessInstance.Assignee(manager.positionId(), manager.assigneeCcgid())),
                 now);
+        return manager.assigneeCcgid();
     }
 
     private void attachScopes(RstExercise exercise, ProcessInstance workflow) {

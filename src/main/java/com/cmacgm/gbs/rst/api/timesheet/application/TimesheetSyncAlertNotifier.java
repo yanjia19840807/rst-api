@@ -1,6 +1,8 @@
 package com.cmacgm.gbs.rst.api.timesheet.application;
 
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -9,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphService;
+import com.cmacgm.gbs.rst.api.mail.application.MailNotificationService;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncAlert;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncAlertRepository;
@@ -28,22 +31,26 @@ public class TimesheetSyncAlertNotifier {
     private final TimesheetSyncRunRepository syncRuns;
     private final TimesheetSyncIssueRepository issues;
     private final MicrosoftGraphService graph;
+    private final MailNotificationService mail;
 
     /**
      * @param alerts alert config
      * @param syncRuns run headers
      * @param issues issue rows
      * @param graph Graph sendMail
+     * @param mail LTH SSO recipients
      */
     public TimesheetSyncAlertNotifier(
             TimesheetSyncAlertRepository alerts,
             TimesheetSyncRunRepository syncRuns,
             TimesheetSyncIssueRepository issues,
-            MicrosoftGraphService graph) {
+            MicrosoftGraphService graph,
+            MailNotificationService mail) {
         this.alerts = alerts;
         this.syncRuns = syncRuns;
         this.issues = issues;
         this.graph = graph;
+        this.mail = mail;
     }
 
     /**
@@ -65,24 +72,27 @@ public class TimesheetSyncAlertNotifier {
     }
 
     private void send(UUID runId) {
-        TimesheetSyncAlert config = alerts.findById(TimesheetSyncAlert.SINGLETON_ID)
-                .orElseGet(TimesheetSyncAlert::disabled);
-        if (!config.isEnabled()) {
-            return;
-        }
-        List<String> recipients = TimesheetSyncAdminService.parseRecipients(config.getRecipients());
-        if (recipients.isEmpty()) {
-            return;
-        }
         TimesheetSyncRun run = syncRuns.findById(runId).orElse(null);
         if (run == null || !"FAILED".equals(run.getStatus())) {
+            return;
+        }
+        TimesheetSyncAlert config = alerts.findById(TimesheetSyncAlert.SINGLETON_ID)
+                .orElseGet(TimesheetSyncAlert::disabled);
+        Set<String> recipients = new LinkedHashSet<>();
+        if (config.isEnabled()) {
+            recipients.addAll(TimesheetSyncAdminService.parseRecipients(config.getRecipients()));
+        }
+        if (mail != null) {
+            recipients.addAll(mail.timesheetSyncFailedAddresses());
+        }
+        if (recipients.isEmpty()) {
             return;
         }
         long issueCount = issues.countBySyncRunId(runId);
         String kind = blankToDash(run.getKind());
         String date = run.getSyncDate() == null ? "—" : run.getSyncDate().toString();
         String subject = "RST Timesheet sync failed: " + kind + " " + date;
-        graph.sendMail(subject, html(run, issueCount), recipients);
+        graph.sendMail(subject, html(run, issueCount), List.copyOf(recipients));
     }
 
     private static String html(TimesheetSyncRun run, long issueCount) {

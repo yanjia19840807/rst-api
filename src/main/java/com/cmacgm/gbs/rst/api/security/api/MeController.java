@@ -1,6 +1,7 @@
 package com.cmacgm.gbs.rst.api.security.api;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.mail.application.SsoProfileService;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.security.api.dto.CurrentUserResponse;
 import org.springframework.http.HttpStatus;
@@ -16,6 +17,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/me")
 public class MeController {
 
+    private final SsoProfileService profiles;
+
+    /**
+     * @param profiles SSO directory
+     */
+    public MeController(SsoProfileService profiles) {
+        this.profiles = profiles;
+    }
+
     /**
      * @param principal current security principal
      * @return caller identity (CCGID, display name, roles)
@@ -28,6 +38,7 @@ public class MeController {
                     "unauthenticated",
                     "Authentication is required.");
         }
+        profiles.touch(principal);
         return CurrentUserResponse.from(principal);
     }
 }

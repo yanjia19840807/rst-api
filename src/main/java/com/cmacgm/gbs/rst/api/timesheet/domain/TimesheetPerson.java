@@ -29,6 +29,9 @@ public class TimesheetPerson {
     @Column(nullable = false, length = 200)
     private String name;
 
+    @Column(name = "emp_email", length = 254)
+    private String email;
+
     @Column(name = "position_id", length = 80)
     private String positionId;
 
@@ -43,6 +46,7 @@ public class TimesheetPerson {
      * @param empId Timesheet person id
      * @param center GBS center the person belongs to
      * @param name display name
+     * @param email Timesheet emp_email
      * @param positionId occupied bindable position; one person, one seat
      * @return row
      */
@@ -52,12 +56,14 @@ public class TimesheetPerson {
             String empId,
             String center,
             String name,
+            String email,
             String positionId) {
         TimesheetPerson row = new TimesheetPerson();
         row.id = new Id(syncRunId, ccgid);
         row.empId = empId;
         row.center = center;
         row.name = name;
+        row.email = email;
         row.positionId = positionId;
         return row;
     }
@@ -84,6 +90,10 @@ public class TimesheetPerson {
 
     public String getName() {
         return name;
+    }
+
+    public String getEmail() {
+        return email;
     }
 
     public String getPositionId() {
