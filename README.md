@@ -41,8 +41,8 @@ In `application-dev.yml` set only `ccgid` + `role`:
 app:
   security:
     dev-identity:
-      ccgid: S00628182   # Timesheet person, or any CCGID for assumed LTH/HO
-      role: SUPERVISOR   # AGENT | SUPERVISOR | MANAGER | CDH | LTH | HO
+      ccgid: S00628182   # Timesheet person, or any CCGID for assumed LTH/HO/ADMIN
+      role: SUPERVISOR   # AGENT | SUPERVISOR | MANAGER | CDH | LTH | HO | ADMIN
 ```
 
 On first API call Dev identity resolves display name from the ACTIVE Daily

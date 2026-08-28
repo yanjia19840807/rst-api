@@ -13,4 +13,6 @@ public interface SupportCategoryRepository extends JpaRepository<SupportCategory
     List<SupportCategory> findByDeletedAtIsNullOrderByDisplayOrderAscNameAsc();
 
     Optional<SupportCategory> findByIdAndDeletedAtIsNull(UUID id);
+
+    Optional<SupportCategory> findByDeletedAtIsNullAndNameIgnoreCase(String name);
 }

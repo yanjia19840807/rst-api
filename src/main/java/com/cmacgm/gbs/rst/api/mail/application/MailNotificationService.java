@@ -31,7 +31,7 @@ public class MailNotificationService {
     private final MicrosoftGraphService graph;
 
     /**
-     * @param profiles LTH directory
+     * @param profiles LTH / ADMIN directory
      * @param preferences switches
      * @param addresses Timesheet emp_email
      * @param graph sendMail
@@ -125,13 +125,16 @@ public class MailNotificationService {
     }
 
     /**
-     * Timesheet addresses of LTHs who still want sync-failure mail.
+     * Timesheet addresses of LTHs and Admins who still want sync-failure mail.
      *
      * @return emails
      */
     public List<String> timesheetSyncFailedAddresses() {
         Set<String> emails = new LinkedHashSet<>();
         for (SsoProfile profile : profiles.findByRole("LTH")) {
+            addIfSendable(emails, MailType.TIMESHEET_SYNC_FAILED, profile.getCcgid());
+        }
+        for (SsoProfile profile : profiles.findByRole("ADMIN")) {
             addIfSendable(emails, MailType.TIMESHEET_SYNC_FAILED, profile.getCcgid());
         }
         return List.copyOf(emails);

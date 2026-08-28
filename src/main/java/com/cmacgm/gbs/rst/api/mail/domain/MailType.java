@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Mail types a signed-in Supervisor / Manager / CDH / LTH can opt into.
+ * Mail types a signed-in Supervisor / Manager / CDH / LTH / ADMIN can opt into.
  */
 public enum MailType {
     APPROVAL_REQUESTED("approval.requested", "Awaiting my approval"),
@@ -56,7 +56,7 @@ public enum MailType {
     /**
      * Types this product role may receive. One person has one role.
      *
-     * @param role SUPERVISOR / MANAGER / CDH / LTH
+     * @param role SUPERVISOR / MANAGER / CDH / LTH / ADMIN
      * @return types, possibly empty
      */
     public static List<MailType> forRole(String role) {
@@ -67,6 +67,7 @@ public enum MailType {
             case "SUPERVISOR" -> List.of(SUBMISSION_OUTCOME);
             case "MANAGER", "CDH" -> List.of(APPROVAL_REQUESTED);
             case "LTH" -> List.of(APPROVAL_REQUESTED, TIMESHEET_SYNC_FAILED);
+            case "ADMIN" -> List.of(TIMESHEET_SYNC_FAILED);
             default -> List.of();
         };
     }
@@ -79,7 +80,7 @@ public enum MailType {
         if (roles == null) {
             return null;
         }
-        for (String candidate : List.of("SUPERVISOR", "MANAGER", "CDH", "LTH")) {
+        for (String candidate : List.of("SUPERVISOR", "MANAGER", "CDH", "LTH", "ADMIN")) {
             for (String role : roles) {
                 if (candidate.equalsIgnoreCase(role == null ? "" : role.trim())) {
                     return candidate;

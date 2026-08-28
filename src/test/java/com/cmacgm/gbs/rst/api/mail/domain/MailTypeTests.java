@@ -27,6 +27,11 @@ class MailTypeTests {
     }
 
     @Test
+    void adminOwnsSyncFailedOnly() {
+        assertThat(MailType.forRole("ADMIN")).containsExactly(MailType.TIMESHEET_SYNC_FAILED);
+    }
+
+    @Test
     void agentAndHoHaveNoMailTypes() {
         assertThat(MailType.forRole("AGENT")).isEmpty();
         assertThat(MailType.forRole("HO")).isEmpty();
@@ -37,6 +42,7 @@ class MailTypeTests {
     void mailRolePicksTheSingleProductRole() {
         assertThat(MailType.mailRole(List.of("SUPERVISOR"))).isEqualTo("SUPERVISOR");
         assertThat(MailType.mailRole(Set.of("lth"))).isEqualTo("LTH");
+        assertThat(MailType.mailRole(Set.of("admin"))).isEqualTo("ADMIN");
         assertThat(MailType.mailRole(List.of("AGENT", "HO"))).isNull();
     }
 

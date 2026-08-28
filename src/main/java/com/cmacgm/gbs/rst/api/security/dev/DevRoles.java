@@ -14,7 +14,8 @@ public final class DevRoles {
             "MANAGER",
             "CDH",
             "LTH",
-            "HO");
+            "HO",
+            "ADMIN");
 
     private DevRoles() {
     }

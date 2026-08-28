@@ -49,6 +49,20 @@ class MailPreferenceServiceTests {
     }
 
     @Test
+    void adminSeesTimesheetEmailAndSyncFailedType() {
+        MailPreferenceService service = new MailPreferenceService(emptyRepo(), ccgid -> "admin@timesheet.local");
+        RstPrincipal principal = new RstPrincipal(
+                "ADMIN001", "Admin", "admin@dev.local", Set.of("ADMIN"), Set.of(), "GBS CHINA");
+
+        MailPreferenceService.PreferenceView view = service.current(principal);
+
+        assertThat(view.role()).isEqualTo("ADMIN");
+        assertThat(view.email()).isEqualTo("admin@timesheet.local");
+        assertThat(view.types()).extracting(MailPreferenceService.TypeView::id)
+                .containsExactly("timesheet.sync.failed");
+    }
+
+    @Test
     void missingTimesheetEmailIsFlagged() {
         MailPreferenceService service = new MailPreferenceService(emptyRepo(), ccgid -> null);
         RstPrincipal principal = new RstPrincipal(

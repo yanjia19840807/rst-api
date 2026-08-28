@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Governance report endpoints for LTH / HO.
+ * Governance report endpoints for LTH / HO / ADMIN.
  */
 @RestController
 @RequestMapping("/api/v1/governance")
@@ -65,7 +65,7 @@ public class GovernanceController {
      * @return dashboard payload
      */
     @GetMapping("/dashboard")
-    @PreAuthorize("hasAnyRole('LTH','HO')")
+    @PreAuthorize("hasAnyRole('LTH','HO','ADMIN')")
     public DashboardView dashboard() {
         return dashboardService.build();
     }
@@ -85,7 +85,7 @@ public class GovernanceController {
      * @return one page of filtered rows and unfiltered dropdown options
      */
     @GetMapping("/repository")
-    @PreAuthorize("hasAnyRole('LTH','HO')")
+    @PreAuthorize("hasAnyRole('LTH','HO','ADMIN')")
     public RepositoryListView repository(
             @RequestParam(required = false) String exerciseCode,
             @RequestParam(required = false) String center,
@@ -127,7 +127,7 @@ public class GovernanceController {
      * @return one page of filtered rows, summaries from all matches, and unfiltered dropdown options
      */
     @GetMapping("/support-repository")
-    @PreAuthorize("hasAnyRole('LTH','HO')")
+    @PreAuthorize("hasAnyRole('LTH','HO','ADMIN')")
     public SupportRepositoryView supportRepository(
             @RequestParam(required = false) String center,
             @RequestParam(required = false) UUID categoryId,
@@ -167,7 +167,7 @@ public class GovernanceController {
      * @return one page of rows, cards from all matches, and unfiltered dropdown options
      */
     @GetMapping("/benchmarking")
-    @PreAuthorize("hasAnyRole('LTH','HO')")
+    @PreAuthorize("hasAnyRole('LTH','HO','ADMIN')")
     public BenchmarkingView benchmarking(
             @RequestParam(required = false) String center,
             @RequestParam(required = false) String domain,
@@ -205,7 +205,7 @@ public class GovernanceController {
      * @return one page of filtered rows and unfiltered dropdown options
      */
     @GetMapping("/validation-workflow")
-    @PreAuthorize("hasRole('LTH')")
+    @PreAuthorize("hasAnyRole('LTH','ADMIN')")
     public ValidationWorkflowView validationWorkflow(
             @RequestParam(required = false) String exerciseCode,
             @RequestParam(required = false) String center,

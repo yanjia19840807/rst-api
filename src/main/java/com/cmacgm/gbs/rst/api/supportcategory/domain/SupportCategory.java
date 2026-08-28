@@ -90,6 +90,15 @@ public class SupportCategory {
     }
 
     /**
+     * Sets display order.
+     */
+    public void reorder(int displayOrder, String actorCcgid, Instant now) {
+        ensureEditable();
+        this.displayOrder = displayOrder;
+        touch(actorCcgid, now);
+    }
+
+    /**
      * Soft-deletes this category.
      */
     public void softDelete(String actorCcgid, Instant now) {

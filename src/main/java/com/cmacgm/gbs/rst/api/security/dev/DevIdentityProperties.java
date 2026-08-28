@@ -6,7 +6,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * Dev identity selection ({@code application-dev.yml}).
  *
  * <p>Set {@code ccgid} + {@code role} to simulate one user login. Allowed roles:
- * {@code AGENT}, {@code SUPERVISOR}, {@code MANAGER}, {@code CDH}, {@code LTH}, {@code HO}.
+ * {@code AGENT}, {@code SUPERVISOR}, {@code MANAGER}, {@code CDH}, {@code LTH}, {@code HO},
+ * {@code ADMIN}.
  */
 @ConfigurationProperties(prefix = "app.security.dev-identity")
 public class DevIdentityProperties {
@@ -17,7 +18,7 @@ public class DevIdentityProperties {
     private String ccgid = "SUPERVISOR001";
 
     /**
-     * Simulated RST role (one of the six product roles).
+     * Simulated RST role (one of the product roles).
      */
     private String role = "SUPERVISOR";
 

@@ -24,11 +24,11 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * LTH Timesheet sync monitor and upload.
+ * LTH / ADMIN Timesheet sync monitor and upload.
  */
 @RestController
 @RequestMapping("/api/v1/timesheet/sync")
-@PreAuthorize("hasRole('LTH')")
+@PreAuthorize("hasAnyRole('LTH','ADMIN')")
 public class TimesheetSyncController {
 
     private final TimesheetSyncAdminService admin;

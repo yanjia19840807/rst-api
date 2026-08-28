@@ -19,6 +19,8 @@ class SupportCategoryTests {
         assertThat(category.getName()).isEqualTo("Ops Communication");
         category.setStatus(SupportCategory.STATUS_INACTIVE, "S001", NOW);
         assertThat(category.isActive()).isFalse();
+        category.reorder(4, "S001", NOW);
+        assertThat(category.getDisplayOrder()).isEqualTo(4);
     }
 
     @Test

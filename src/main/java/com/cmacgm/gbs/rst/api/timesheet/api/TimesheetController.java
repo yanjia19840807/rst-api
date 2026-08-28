@@ -46,7 +46,7 @@ public class TimesheetController {
      * @return people
      */
     @GetMapping("/people")
-    @PreAuthorize("hasAnyRole('AGENT','SUPERVISOR','MANAGER','CDH','LTH','HO')")
+    @PreAuthorize("hasAnyRole('AGENT','SUPERVISOR','MANAGER','CDH','LTH','HO','ADMIN')")
     public PageResponse<TimesheetPersonView> people(
             @AuthenticationPrincipal RstPrincipal principal,
             @RequestParam(required = false) String center,
