@@ -9,20 +9,29 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
+
+import org.springframework.data.domain.Persistable;
 
 /**
  * Aggregated Monthly Delivery HC.
  */
 @Entity
 @Table(name = "timesheet_kpi")
-public class TimesheetKpi {
+public class TimesheetKpi implements Persistable<TimesheetKpi.Id> {
 
     @EmbeddedId
     private Id id;
 
     @Column(nullable = false, precision = 18, scale = 6)
     private BigDecimal hc;
+
+    /** Assigned-id rows: true until first persist/load so saveAll does not merge+select. */
+    @Transient
+    private boolean isNew = true;
 
     protected TimesheetKpi() {
     }
@@ -50,7 +59,24 @@ public class TimesheetKpi {
         TimesheetKpi row = new TimesheetKpi();
         row.id = new Id(syncRunId, supervisorPositionId, pl3Code, carrier, site, customerCountry);
         row.hc = hc;
+        row.isNew = true;
         return row;
+    }
+
+    @Override
+    public Id getId() {
+        return id;
+    }
+
+    @Override
+    public boolean isNew() {
+        return isNew;
+    }
+
+    @PrePersist
+    @PostLoad
+    void markNotNew() {
+        this.isNew = false;
     }
 
     public UUID getSyncRunId() {

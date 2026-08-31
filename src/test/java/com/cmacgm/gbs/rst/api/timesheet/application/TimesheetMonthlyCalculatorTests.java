@@ -86,6 +86,30 @@ class TimesheetMonthlyCalculatorTests {
                 .contains("Row 2 is missing pl3_code.");
     }
 
+    @Test
+    void skipsManagementLinesWhenPersisting() {
+        UUID runId = UUID.randomUUID();
+        TimesheetMonthlyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(
+                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "Kuala Lumpur", "1"),
+                        row(
+                                "S00000002",
+                                "EMP-2",
+                                "POS-SUP-2",
+                                "PL3",
+                                "Kuala Lumpur",
+                                "1",
+                                "management",
+                                "non-productive")),
+                Instant.parse("2026-08-24T00:00:00Z"));
+
+        assertThat(result.issues()).isEmpty();
+        assertThat(result.assignments()).extracting(TimesheetAssignment::getEmpCcgid).containsExactly("S00000001");
+        assertThat(result.scopes()).extracting(TimesheetScope::getSupervisorPositionId).containsExactly("POS-SUP-1");
+        assertThat(result.kpis()).extracting(TimesheetKpi::getHc).containsExactly(new BigDecimal("1"));
+    }
+
     private static ReportRow row(
             String empCcgid,
             String empId,

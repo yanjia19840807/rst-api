@@ -95,17 +95,42 @@ public class TimesheetSyncAdminService {
 
     /**
      * @param id run
-     * @return detail
+     * @param page 1-based page
+     * @param pageSize page size
+     * @return detail with a page of issues
      */
     @Transactional(readOnly = true)
-    public RunDetail run(UUID id) {
+    public RunDetail run(UUID id, int page, int pageSize) {
         TimesheetSyncRun run = syncRuns.findById(id)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Timesheet sync run not found."));
-        return new RunDetail(
-                toHeader(run),
-                issues.findBySyncRunIdOrderBySourceRowAscCreatedAtAsc(id).stream()
-                        .map(this::toIssue)
-                        .toList());
+        int safePageSize = Math.min(100, Math.max(1, pageSize));
+        int safePage = Math.max(1, page);
+        PageResponse<IssueView> issuePage = PageResponse.from(
+                issues.findBySyncRunId(
+                        id,
+                        PageRequest.of(
+                                safePage - 1,
+                                safePageSize,
+                                Sort.by(Sort.Direction.ASC, "sourceRow")
+                                        .and(Sort.by(Sort.Direction.ASC, "createdAt")))),
+                this::toIssue);
+        if (issuePage.total() == 0 && run.getErrorCode() != null) {
+            issuePage = PageResponse.ofList(List.of(runLevelIssue(run)), 1, safePageSize);
+        }
+        return new RunDetail(toHeader(run), issuePage);
+    }
+
+    private IssueView runLevelIssue(TimesheetSyncRun run) {
+        return new IssueView(
+                run.getId(),
+                run.getErrorCode(),
+                run.getErrorMessage() == null || run.getErrorMessage().isBlank()
+                        ? "Timesheet sync failed."
+                        : run.getErrorMessage(),
+                null,
+                null,
+                null,
+                null);
     }
 
     /**
@@ -259,7 +284,7 @@ public class TimesheetSyncAdminService {
     public record AlertConfig(boolean enabled, List<String> recipients) {
     }
 
-    public record RunDetail(RunHeader run, List<IssueView> issues) {
+    public record RunDetail(RunHeader run, PageResponse<IssueView> issues) {
     }
 
     public record RunHeader(

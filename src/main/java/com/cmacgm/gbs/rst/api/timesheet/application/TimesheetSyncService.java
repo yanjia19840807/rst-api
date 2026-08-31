@@ -312,7 +312,30 @@ public class TimesheetSyncService {
             syncRuns.archiveOtherActive(kind, run.getId(), now);
             run.markActive(rowCount, dataHash, now);
             syncRuns.saveAndFlush(run);
+            dropStaleComputed(kind, run.getId());
         });
+    }
+
+    private void dropStaleComputed(String kind, UUID keepRunId) {
+        if ("DAILY".equals(kind)) {
+            int peopleDropped = people.deleteBySyncRunIdNot(keepRunId);
+            int positionsDropped = positions.deleteBySyncRunIdNot(keepRunId);
+            log.info(
+                    "Timesheet DAILY kept computed rows for {}; dropped people={} positions={}",
+                    keepRunId,
+                    peopleDropped,
+                    positionsDropped);
+            return;
+        }
+        int scopesDropped = scopes.deleteBySyncRunIdNot(keepRunId);
+        int assignmentsDropped = assignments.deleteBySyncRunIdNot(keepRunId);
+        int kpisDropped = kpis.deleteBySyncRunIdNot(keepRunId);
+        log.info(
+                "Timesheet MONTHLY kept computed rows for {}; dropped scopes={} assignments={} kpis={}",
+                keepRunId,
+                scopesDropped,
+                assignmentsDropped,
+                kpisDropped);
     }
 
     private void failWithoutRows(String kind, Source source, String actorCcgid, String code, String message) {

@@ -1,9 +1,13 @@
 package com.cmacgm.gbs.rst.api.timesheet.persistence;
 
 import java.util.List;
+import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -91,4 +95,95 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
             order by s.domain
             """)
     List<String> findActiveDomainsByCenter(@Param("center") String center);
+
+    /**
+     * ACTIVE Monthly scopes for the Timesheet Sync browser.
+     *
+     * @param center exact center; blank matches all
+     * @param domain exact domain; blank matches all
+     * @param q PL3 / supervisor / PL1 / PL2 fragment; blank matches all
+     * @param pageable page
+     * @return scopes
+     */
+    @Query(
+            value = """
+                    select s
+                    from TimesheetScope s, TimesheetSyncRun r
+                    where s.id.syncRunId = r.id
+                      and r.kind = 'MONTHLY'
+                      and r.status = 'ACTIVE'
+                      and (:center = '' or s.id.center = :center)
+                      and (:domain = '' or s.domain = :domain)
+                      and (:q = ''
+                           or lower(s.id.pl3Code) like lower(concat('%', :q, '%'))
+                           or lower(coalesce(s.pl3Name, '')) like lower(concat('%', :q, '%'))
+                           or lower(s.id.supervisorPositionId) like lower(concat('%', :q, '%'))
+                           or lower(coalesce(s.pl1, '')) like lower(concat('%', :q, '%'))
+                           or lower(coalesce(s.pl2, '')) like lower(concat('%', :q, '%')))
+                    order by s.id.center, s.id.supervisorPositionId, s.id.pl3Code
+                    """,
+            countQuery = """
+                    select count(s)
+                    from TimesheetScope s, TimesheetSyncRun r
+                    where s.id.syncRunId = r.id
+                      and r.kind = 'MONTHLY'
+                      and r.status = 'ACTIVE'
+                      and (:center = '' or s.id.center = :center)
+                      and (:domain = '' or s.domain = :domain)
+                      and (:q = ''
+                           or lower(s.id.pl3Code) like lower(concat('%', :q, '%'))
+                           or lower(coalesce(s.pl3Name, '')) like lower(concat('%', :q, '%'))
+                           or lower(s.id.supervisorPositionId) like lower(concat('%', :q, '%'))
+                           or lower(coalesce(s.pl1, '')) like lower(concat('%', :q, '%'))
+                           or lower(coalesce(s.pl2, '')) like lower(concat('%', :q, '%')))
+                    """)
+    Page<TimesheetScope> searchActive(
+            @Param("center") String center,
+            @Param("domain") String domain,
+            @Param("q") String q,
+            Pageable pageable);
+
+    /**
+     * Distinct centers in the ACTIVE Monthly scope snapshot.
+     *
+     * @return centers
+     */
+    @Query("""
+            select distinct s.id.center
+            from TimesheetScope s, TimesheetSyncRun r
+            where s.id.syncRunId = r.id
+              and r.kind = 'MONTHLY'
+              and r.status = 'ACTIVE'
+              and s.id.center is not null
+              and s.id.center <> ''
+            order by s.id.center
+            """)
+    List<String> findActiveCenters();
+
+    /**
+     * Distinct domains in the ACTIVE Monthly scope snapshot.
+     *
+     * @return domains
+     */
+    @Query("""
+            select distinct s.domain
+            from TimesheetScope s, TimesheetSyncRun r
+            where s.id.syncRunId = r.id
+              and r.kind = 'MONTHLY'
+              and r.status = 'ACTIVE'
+              and s.domain is not null
+              and s.domain <> ''
+            order by s.domain
+            """)
+    List<String> findActiveDomains();
+
+    /**
+     * Drops Monthly scope rows that are not the kept snapshot.
+     *
+     * @param keepRunId ACTIVE Monthly run to keep
+     * @return deleted rows
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from TimesheetScope s where s.id.syncRunId <> :keepRunId")
+    int deleteBySyncRunIdNot(@Param("keepRunId") UUID keepRunId);
 }

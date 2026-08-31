@@ -8,14 +8,19 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
+
+import org.springframework.data.domain.Persistable;
 
 /**
  * Current Supervisor position × PL3 × Center scope from Monthly.
  */
 @Entity
 @Table(name = "timesheet_scope")
-public class TimesheetScope {
+public class TimesheetScope implements Persistable<TimesheetScope.Id> {
 
     @EmbeddedId
     private Id id;
@@ -31,6 +36,10 @@ public class TimesheetScope {
 
     @Column(nullable = false, length = 200)
     private String pl2;
+
+    /** Assigned-id rows: true until first persist/load so saveAll does not merge+select. */
+    @Transient
+    private boolean isNew = true;
 
     protected TimesheetScope() {
     }
@@ -63,7 +72,24 @@ public class TimesheetScope {
         row.domain = domain;
         row.pl1 = pl1;
         row.pl2 = pl2;
+        row.isNew = true;
         return row;
+    }
+
+    @Override
+    public Id getId() {
+        return id;
+    }
+
+    @Override
+    public boolean isNew() {
+        return isNew;
+    }
+
+    @PrePersist
+    @PostLoad
+    void markNotNew() {
+        this.isNew = false;
     }
 
     public UUID getSyncRunId() {

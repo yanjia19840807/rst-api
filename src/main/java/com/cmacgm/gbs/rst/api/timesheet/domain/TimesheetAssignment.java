@@ -8,20 +8,29 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
+
+import org.springframework.data.domain.Persistable;
 
 /**
  * Employee assigned to a Supervisor position and PL3 in a Monthly sync.
  */
 @Entity
 @Table(name = "timesheet_assignment")
-public class TimesheetAssignment {
+public class TimesheetAssignment implements Persistable<TimesheetAssignment.Id> {
 
     @EmbeddedId
     private Id id;
 
     @Column(name = "emp_id", length = 80)
     private String empId;
+
+    /** Assigned-id rows: true until first persist/load so saveAll does not merge+select. */
+    @Transient
+    private boolean isNew = true;
 
     protected TimesheetAssignment() {
     }
@@ -45,7 +54,24 @@ public class TimesheetAssignment {
         TimesheetAssignment row = new TimesheetAssignment();
         row.id = new Id(syncRunId, empCcgid, supervisorPositionId, pl3Code);
         row.empId = empId;
+        row.isNew = true;
         return row;
+    }
+
+    @Override
+    public Id getId() {
+        return id;
+    }
+
+    @Override
+    public boolean isNew() {
+        return isNew;
+    }
+
+    @PrePersist
+    @PostLoad
+    void markNotNew() {
+        this.isNew = false;
     }
 
     public UUID getSyncRunId() {

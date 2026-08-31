@@ -2,9 +2,13 @@ package com.cmacgm.gbs.rst.api.timesheet.persistence;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -99,4 +103,57 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
               and r.status = 'ACTIVE'
             """)
     BigDecimal sumActiveHeadcount();
+
+    /**
+     * ACTIVE Monthly Delivery HC rows for the Timesheet Sync browser.
+     *
+     * @param supervisorPositionId exact supervisor position; blank matches all
+     * @param pl3Code exact PL3; blank matches all
+     * @param q carrier / site / country fragment; blank matches all
+     * @param pageable page
+     * @return KPI rows
+     */
+    @Query(
+            value = """
+                    select k
+                    from TimesheetKpi k, TimesheetSyncRun r
+                    where k.id.syncRunId = r.id
+                      and r.kind = 'MONTHLY'
+                      and r.status = 'ACTIVE'
+                      and (:supervisorPositionId = '' or k.id.supervisorPositionId = :supervisorPositionId)
+                      and (:pl3Code = '' or k.id.pl3Code = :pl3Code)
+                      and (:q = ''
+                           or lower(k.id.carrier) like lower(concat('%', :q, '%'))
+                           or lower(k.id.site) like lower(concat('%', :q, '%'))
+                           or lower(k.id.customerCountry) like lower(concat('%', :q, '%')))
+                    order by k.id.supervisorPositionId, k.id.pl3Code, k.id.customerCountry, k.id.carrier, k.id.site
+                    """,
+            countQuery = """
+                    select count(k)
+                    from TimesheetKpi k, TimesheetSyncRun r
+                    where k.id.syncRunId = r.id
+                      and r.kind = 'MONTHLY'
+                      and r.status = 'ACTIVE'
+                      and (:supervisorPositionId = '' or k.id.supervisorPositionId = :supervisorPositionId)
+                      and (:pl3Code = '' or k.id.pl3Code = :pl3Code)
+                      and (:q = ''
+                           or lower(k.id.carrier) like lower(concat('%', :q, '%'))
+                           or lower(k.id.site) like lower(concat('%', :q, '%'))
+                           or lower(k.id.customerCountry) like lower(concat('%', :q, '%')))
+                    """)
+    Page<TimesheetKpi> searchActive(
+            @Param("supervisorPositionId") String supervisorPositionId,
+            @Param("pl3Code") String pl3Code,
+            @Param("q") String q,
+            Pageable pageable);
+
+    /**
+     * Drops Monthly KPI rows that are not the kept snapshot.
+     *
+     * @param keepRunId ACTIVE Monthly run to keep
+     * @return deleted rows
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from TimesheetKpi k where k.id.syncRunId <> :keepRunId")
+    int deleteBySyncRunIdNot(@Param("keepRunId") UUID keepRunId);
 }

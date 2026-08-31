@@ -51,9 +51,9 @@ class TimesheetDailyCalculatorTests {
                 List.of(row("S00000002", "SUP-1", "Supervisor One", "POS-SUP-1", "management", "non-productive")),
                 Instant.parse("2026-08-23T00:00:00Z"));
 
-        assertThat(result.issues()).isEmpty();
-        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).containsExactly("S00000002");
+        assertThat(result.people()).isEmpty();
         assertThat(result.positions()).isEmpty();
+        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).contains("EMPTY_FILE");
     }
 
     @Test
@@ -64,9 +64,9 @@ class TimesheetDailyCalculatorTests {
                 List.of(row("S00000002", "SUP-1", "Supervisor One", "POS-SUP-1", "management", "non-productive", "")),
                 Instant.parse("2026-08-23T00:00:00Z"));
 
-        assertThat(result.issues()).isEmpty();
-        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).containsExactly("S00000002");
+        assertThat(result.people()).isEmpty();
         assertThat(result.positions()).isEmpty();
+        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("MISSING_FIELD");
     }
 
     @Test
@@ -109,6 +109,53 @@ class TimesheetDailyCalculatorTests {
                 .contains("PERSON_POSITION_CONFLICT");
     }
 
+    @Test
+    void ignoresNonProductionLinesWhenCheckingConflicts() {
+        UUID runId = UUID.randomUUID();
+        TimesheetDailyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(
+                        row("S00000001", "EMP-1", "Same Person", "EMP-POS-1", "production", "productive"),
+                        row("S00000001", "EMP-1", "Same Person", "EMP-POS-2", "management", "non-productive"),
+                        row("S00000005", "EMP-5", "Other Person", "EMP-POS-1", "management", "non-productive")),
+                Instant.parse("2026-08-23T00:00:00Z"));
+
+        assertThat(result.issues())
+                .extracting(TimesheetSyncIssue::getCode)
+                .doesNotContain("PERSON_POSITION_CONFLICT", "OCCUPANCY_CONFLICT", "HIERARCHY_CONFLICT");
+        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).containsExactly("S00000001");
+    }
+
+    @Test
+    void samePersonOnTwoCentersIsNotAConflict() {
+        UUID runId = UUID.randomUUID();
+        TimesheetDailyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(
+                        row(
+                                "S00000001",
+                                "EMP-1",
+                                "Same Person",
+                                "EMP-POS-1",
+                                "production",
+                                "productive",
+                                "SRM-1",
+                                "Shanghai"),
+                        row(
+                                "S00000001",
+                                "EMP-1",
+                                "Same Person",
+                                "EMP-POS-1",
+                                "production",
+                                "productive",
+                                "SRM-1",
+                                "Kuala Lumpur")),
+                Instant.parse("2026-08-23T00:00:00Z"));
+
+        assertThat(result.issues()).isEmpty();
+        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).containsExactly("S00000001");
+    }
+
     private static ReportRow row(
             String empCcgid,
             String empId,
@@ -116,7 +163,7 @@ class TimesheetDailyCalculatorTests {
             String empPositionId,
             String managementOrProduction,
             String costType) {
-        return row(empCcgid, empId, empName, empPositionId, managementOrProduction, costType, "SRM-1");
+        return row(empCcgid, empId, empName, empPositionId, managementOrProduction, costType, "SRM-1", "Kuala Lumpur");
     }
 
     private static ReportRow row(
@@ -127,6 +174,26 @@ class TimesheetDailyCalculatorTests {
             String managementOrProduction,
             String costType,
             String srManagerId) {
+        return row(
+                empCcgid,
+                empId,
+                empName,
+                empPositionId,
+                managementOrProduction,
+                costType,
+                srManagerId,
+                "Kuala Lumpur");
+    }
+
+    private static ReportRow row(
+            String empCcgid,
+            String empId,
+            String empName,
+            String empPositionId,
+            String managementOrProduction,
+            String costType,
+            String srManagerId,
+            String center) {
         return new ReportRow(
                 2,
                 LocalDate.of(2026, 7, 27),
@@ -148,7 +215,7 @@ class TimesheetDailyCalculatorTests {
                 "S00000004",
                 "Head One",
                 "POS-DH-1",
-                "Kuala Lumpur",
+                center,
                 "Site",
                 "Finance",
                 "PL1",

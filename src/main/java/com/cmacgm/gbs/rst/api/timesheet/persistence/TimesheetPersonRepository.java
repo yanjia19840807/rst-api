@@ -1,11 +1,14 @@
 package com.cmacgm.gbs.rst.api.timesheet.persistence;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -193,4 +196,70 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
               and p.center = :center
             """)
     boolean existsActiveInCenter(@Param("ccgid") String ccgid, @Param("center") String center);
+
+    /**
+     * ACTIVE Daily people for the Timesheet Sync browser.
+     *
+     * @param center exact center; blank matches all
+     * @param q name / CCGID / emp id / email fragment; blank matches all
+     * @param pageable page
+     * @return people
+     */
+    @Query(
+            value = """
+                    select p
+                    from TimesheetPerson p, TimesheetSyncRun r
+                    where p.id.syncRunId = r.id
+                      and r.kind = 'DAILY'
+                      and r.status = 'ACTIVE'
+                      and (:center = '' or p.center = :center)
+                      and (:q = ''
+                           or lower(p.name) like lower(concat('%', :q, '%'))
+                           or lower(p.id.ccgid) like lower(concat('%', :q, '%'))
+                           or lower(coalesce(p.empId, '')) like lower(concat('%', :q, '%'))
+                           or lower(coalesce(p.email, '')) like lower(concat('%', :q, '%')))
+                    order by p.name, p.id.ccgid
+                    """,
+            countQuery = """
+                    select count(p)
+                    from TimesheetPerson p, TimesheetSyncRun r
+                    where p.id.syncRunId = r.id
+                      and r.kind = 'DAILY'
+                      and r.status = 'ACTIVE'
+                      and (:center = '' or p.center = :center)
+                      and (:q = ''
+                           or lower(p.name) like lower(concat('%', :q, '%'))
+                           or lower(p.id.ccgid) like lower(concat('%', :q, '%'))
+                           or lower(coalesce(p.empId, '')) like lower(concat('%', :q, '%'))
+                           or lower(coalesce(p.email, '')) like lower(concat('%', :q, '%')))
+                    """)
+    Page<TimesheetPerson> searchActive(
+            @Param("center") String center, @Param("q") String q, Pageable pageable);
+
+    /**
+     * Distinct centers in the ACTIVE Daily people snapshot.
+     *
+     * @return centers
+     */
+    @Query("""
+            select distinct p.center
+            from TimesheetPerson p, TimesheetSyncRun r
+            where p.id.syncRunId = r.id
+              and r.kind = 'DAILY'
+              and r.status = 'ACTIVE'
+              and p.center is not null
+              and p.center <> ''
+            order by p.center
+            """)
+    List<String> findActiveCenters();
+
+    /**
+     * Drops Daily person rows that are not the kept snapshot.
+     *
+     * @param keepRunId ACTIVE Daily run to keep
+     * @return deleted rows
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from TimesheetPerson p where p.id.syncRunId <> :keepRunId")
+    int deleteBySyncRunIdNot(@Param("keepRunId") UUID keepRunId);
 }

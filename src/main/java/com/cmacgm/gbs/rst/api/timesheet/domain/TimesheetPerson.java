@@ -8,14 +8,19 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
+
+import org.springframework.data.domain.Persistable;
 
 /**
  * One person identity in a Daily sync. One person occupies at most one position.
  */
 @Entity
 @Table(name = "timesheet_person")
-public class TimesheetPerson {
+public class TimesheetPerson implements Persistable<TimesheetPerson.Id> {
 
     @EmbeddedId
     private Id id;
@@ -34,6 +39,10 @@ public class TimesheetPerson {
 
     @Column(name = "position_id", length = 80)
     private String positionId;
+
+    /** Assigned-id rows: true until first persist/load so saveAll does not merge+select. */
+    @Transient
+    private boolean isNew = true;
 
     protected TimesheetPerson() {
     }
@@ -65,11 +74,24 @@ public class TimesheetPerson {
         row.name = name;
         row.email = email;
         row.positionId = positionId;
+        row.isNew = true;
         return row;
     }
 
+    @Override
     public Id getId() {
         return id;
+    }
+
+    @Override
+    public boolean isNew() {
+        return isNew;
+    }
+
+    @PrePersist
+    @PostLoad
+    void markNotNew() {
+        this.isNew = false;
     }
 
     public UUID getSyncRunId() {

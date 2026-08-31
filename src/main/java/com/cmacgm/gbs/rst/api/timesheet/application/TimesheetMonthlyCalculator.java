@@ -21,7 +21,8 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 
 /**
- * Builds Monthly assignment, scope and KPI tables from one file scan.
+ * Builds Monthly assignment, scope and KPI tables from Production +
+ * Productive rows.
  */
 @Component
 public class TimesheetMonthlyCalculator {
@@ -69,6 +70,9 @@ public class TimesheetMonthlyCalculator {
         for (ReportRow row : rows) {
             if (syncDate == null) {
                 syncDate = TimesheetRowValidator.rowDate(row);
+            }
+            if (!TimesheetRowValidator.isProductionLine(row)) {
+                continue;
             }
             if (hasText(row.supervisorPositionId()) && hasText(row.pl3Code()) && hasText(row.center())
                     && hasText(row.domain()) && hasText(row.pl1()) && hasText(row.pl2())

@@ -19,8 +19,9 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 
 /**
- * Builds Daily person and position tables from distinct employee rows
- * and production report lines.
+ * Builds Daily person and position tables from Production + Productive
+ * rows. Occupancy, person-position and hierarchy conflicts use the same
+ * filtered set.
  */
 @Component
 public class TimesheetDailyCalculator {
@@ -62,7 +63,6 @@ public class TimesheetDailyCalculator {
         Map<String, PersonDraft> people = new LinkedHashMap<>();
         Map<String, Set<String>> personToPosition = new LinkedHashMap<>();
         Map<String, Set<String>> positionToPerson = new LinkedHashMap<>();
-        Map<String, Set<String>> personToCenter = new LinkedHashMap<>();
         Map<String, PositionDraft> positions = new LinkedHashMap<>();
         Map<String, Set<String>> childToParent = new LinkedHashMap<>();
         LocalDate syncDate = expectedDate;
@@ -71,18 +71,15 @@ public class TimesheetDailyCalculator {
             if (syncDate == null && row.date() != null) {
                 syncDate = row.date();
             }
+            if (!TimesheetRowValidator.isProductionLine(row)) {
+                continue;
+            }
             if (!hasText(row.empCcgid()) || !hasText(row.empName()) || !hasText(row.empPositionId())) {
                 continue;
             }
             rememberPerson(people, row);
             personToPosition.computeIfAbsent(row.empCcgid(), ignored -> new LinkedHashSet<>()).add(row.empPositionId());
             positionToPerson.computeIfAbsent(row.empPositionId(), ignored -> new LinkedHashSet<>()).add(row.empCcgid());
-            if (hasText(row.center())) {
-                personToCenter.computeIfAbsent(row.empCcgid(), ignored -> new LinkedHashSet<>()).add(row.center());
-            }
-            if (!TimesheetRowValidator.isProductionLine(row)) {
-                continue;
-            }
             addPosition(positions, childToParent, row.empPositionId(), "PRODUCTION", row.supervisorPositionId());
             addPosition(
                     positions, childToParent, row.supervisorPositionId(), "SUPERVISOR", row.srManagerPositionId());
@@ -97,7 +94,6 @@ public class TimesheetDailyCalculator {
 
         addConflicts(issues, runId, now, "emp_ccgid", "emp_position_id", personToPosition, true);
         addConflicts(issues, runId, now, "emp_position_id", "emp_ccgid", positionToPerson, false);
-        addConflicts(issues, runId, now, "emp_ccgid", "center", personToCenter, true);
         addConflicts(issues, runId, now, "position_id", "parent_position_id", childToParent, false);
 
         if (syncDate == null) {
