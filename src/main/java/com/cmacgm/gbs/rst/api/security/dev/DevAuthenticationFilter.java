@@ -25,8 +25,9 @@ import com.cmacgm.gbs.rst.api.common.error.ApiException;
 /**
  * Injects a configurable demo principal in {@code dev}/{@code test}.
  *
- * <p>Configure {@code app.security.dev-identity.ccgid} and {@code role} to simulate one login.
- * Optional request overrides: {@code X-Dev-Ccgid}, {@code X-Dev-Role}, {@code X-Dev-Center}.
+ * <p>When {@code override-enabled} is {@code true}, identity comes from the SPA via
+ * {@code X-Dev-Ccgid}, {@code X-Dev-Role}, and {@code X-Dev-Center}. Requests
+ * without those headers default to {@code ADMIN001} / {@code ADMIN}.
  */
 @Component
 @Profile({"dev", "test"})
@@ -58,23 +59,24 @@ public class DevAuthenticationFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
         if (SecurityContextHolder.getContext().getAuthentication() == null) {
+            boolean override = properties.isOverrideEnabled();
             String ccgid = firstNonBlank(
-                    request.getHeader("X-Dev-Ccgid"),
+                    override ? request.getHeader("X-Dev-Ccgid") : null,
                     properties.getCcgid(),
-                    "SUPERVISOR001");
+                    "ADMIN001");
             String role;
             try {
                 role = DevRoles.requireValid(firstNonBlank(
-                        request.getHeader("X-Dev-Role"),
+                        override ? request.getHeader("X-Dev-Role") : null,
                         properties.getRole(),
-                        "SUPERVISOR"));
+                        "ADMIN"));
             } catch (IllegalArgumentException ex) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "dev-identity-role", ex.getMessage());
             }
 
             Set<String> roles = Set.of(role);
             String center = firstNonBlankPreserveCase(
-                    request.getHeader("X-Dev-Center"),
+                    override ? request.getHeader("X-Dev-Center") : null,
                     properties.getCenter());
             RstPrincipal principal = identities.resolve(ccgid, roles, center);
             var authentication = new RstAuthenticationToken(

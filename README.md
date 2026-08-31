@@ -35,20 +35,22 @@ IDE Run Configuration: leave Active profiles empty — `application.yml` already
 
 ### Dev identity (simulate one user login)
 
-In `application-dev.yml` set only `ccgid` + `role`:
+Turn on one switch. The person is chosen in the SPA, not in YAML.
+Requests without a person default to `ADMIN001` / `ADMIN`.
 
 ```yaml
 app:
   security:
     dev-identity:
-      ccgid: S00628182   # Timesheet person, or any CCGID for assumed LTH/HO/ADMIN
-      role: SUPERVISOR   # AGENT | SUPERVISOR | MANAGER | CDH | LTH | HO | ADMIN
+      override-enabled: true
 ```
 
-On first API call Dev identity resolves display name from the ACTIVE Daily
-Timesheet (or a synthetic name). Identity is the CCGID only — no local `app_user` row.
-Optional request overrides: `X-Dev-Ccgid`, `X-Dev-Role`. Restart the API after
-changing config.
+- URL: `?ccgid=S00813982&role=SUPERVISOR` (optional `&center=GBS%20CHINA`)
+- Headers: `X-Dev-Ccgid`, `X-Dev-Role`, `X-Dev-Center`
+
+Display name comes from the ACTIVE Daily Timesheet (or `Dev User <ccgid>`).
+Identity is the CCGID only — no local `app_user` row. Keep the switch
+`false` after SSO is connected.
 
 - API: `http://localhost:8080/api/v1`
 - Health: `http://localhost:8080/actuator/health`

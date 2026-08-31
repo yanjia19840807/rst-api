@@ -1,21 +1,9 @@
 app:
   security:
-    # Simulate one login: set ccgid + role (AGENT|SUPERVISOR|MANAGER|CDH|LTH|HO|ADMIN).
-    # Restart API after changing. Optional per-request: X-Dev-Ccgid / X-Dev-Role.
-    # role	ccgid	姓名（参考）	说明	
-    # AGENT	S00661142	WU Rongchan 下属 Agent	
-    # SUPERVISOR	S00813982	CHEN Cindy	当前默认 walkthrough	
-    # MANAGER	S00628202	HUANG Hilary 链路上的 Sr Manager	
-    # CDH	S00571942	LOO Hui Ping	Brenda 链路上的 Domain Head	
-    # LTH	LTH001	Dev User LTH001	暂定假设账号	
-    # HO	HO001	Dev User HO001	暂定假设账号
-    # ADMIN	ADMIN001	Dev User ADMIN001	暂定假设账号
-
+    # Test login. When true, the SPA picks the person (URL / account menu).
+    # Unspecified requests default to ADMIN. Keep false after SSO is connected.
     dev-identity:
-      ccgid: ADMIN001
-      role: ADMIN
-      # SSO Center claim is not wired yet; hardcode the Center for local LTH config.
-      center: GBS CHINA
+      override-enabled: true
 
 microsoft:
   graph:

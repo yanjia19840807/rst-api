@@ -12,6 +12,7 @@ spring:
 app:
   security:
     dev-identity:
+      override-enabled: true
       ccgid: SUPERVISOR001
       role: SUPERVISOR
       center: Kuala Lumpur

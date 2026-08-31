@@ -16,7 +16,8 @@ public record CurrentUserResponse(
         List<String> scopes,
         String center,
         ActorView actor,
-        UUID delegationId) {
+        UUID delegationId,
+        Boolean devOverrideEnabled) {
 
     /**
      * Maps the current principal.
@@ -25,6 +26,18 @@ public record CurrentUserResponse(
      * @return response
      */
     public static CurrentUserResponse from(RstPrincipal principal) {
+        return from(principal, null);
+    }
+
+    /**
+     * Maps the current principal and whether header/query identity override is on.
+     *
+     * @param principal security principal
+     * @param devOverrideEnabled {@code true} when {@code app.security.dev-identity.override-enabled}
+     *        is on; {@code null} outside {@code dev}/{@code test}
+     * @return response
+     */
+    public static CurrentUserResponse from(RstPrincipal principal, Boolean devOverrideEnabled) {
         ActorView actor = new ActorView(principal.actorCcgid(), principal.actorDisplayName());
         return new CurrentUserResponse(
                 principal.ccgid(),
@@ -34,7 +47,8 @@ public record CurrentUserResponse(
                 List.copyOf(principal.scopes()),
                 principal.center(),
                 actor,
-                principal.delegationId());
+                principal.delegationId(),
+                devOverrideEnabled);
     }
 
     /**

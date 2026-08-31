@@ -4,6 +4,8 @@ import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.mail.application.SsoProfileService;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.security.api.dto.CurrentUserResponse;
+import com.cmacgm.gbs.rst.api.security.dev.DevIdentityProperties;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,12 +20,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class MeController {
 
     private final SsoProfileService profiles;
+    private final ObjectProvider<DevIdentityProperties> devIdentity;
 
     /**
      * @param profiles SSO directory
+     * @param devIdentity optional dev-identity settings ({@code dev}/{@code test} only)
      */
-    public MeController(SsoProfileService profiles) {
+    public MeController(
+            SsoProfileService profiles, ObjectProvider<DevIdentityProperties> devIdentity) {
         this.profiles = profiles;
+        this.devIdentity = devIdentity;
     }
 
     /**
@@ -39,6 +45,8 @@ public class MeController {
                     "Authentication is required.");
         }
         profiles.touch(principal);
-        return CurrentUserResponse.from(principal);
+        DevIdentityProperties properties = devIdentity.getIfAvailable();
+        Boolean overrideEnabled = properties == null ? null : properties.isOverrideEnabled();
+        return CurrentUserResponse.from(principal, overrideEnabled);
     }
 }
