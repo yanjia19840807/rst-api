@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetAssignment;
@@ -184,11 +185,11 @@ public class TimesheetReadService {
     public List<TeamAgent> teamAgents(String supervisorCcgid) {
         LinkedHashMap<String, TeamAgent> unique = new LinkedHashMap<>();
         for (TimesheetAssignment assignment : assignments.findActiveBySupervisorCcgid(supervisorCcgid)) {
-            unique.computeIfAbsent(
-                    assignment.getEmpCcgid(),
-                    ccgid -> new TeamAgent(
-                            ccgid,
-                            people.findActiveNameByCcgid(ccgid).orElse(ccgid)));
+            for (TimesheetPerson person : people.findActiveByPositionId(assignment.getEmpPositionId())) {
+                unique.computeIfAbsent(
+                        person.getCcgid(),
+                        ccgid -> new TeamAgent(ccgid, person.getName() == null ? ccgid : person.getName()));
+            }
         }
         return List.copyOf(unique.values());
     }
@@ -237,7 +238,8 @@ public class TimesheetReadService {
     }
 
     /**
-     * Occupant of a bindable position.
+     * Occupants of a bindable position. Display name lists every occupant when
+     * more than one person shares the seat; {@code ccgid} is the first by CCGID.
      *
      * @param positionId position
      * @return occupant when present
@@ -247,9 +249,17 @@ public class TimesheetReadService {
         if (positionId == null || positionId.isBlank()) {
             return null;
         }
-        return people.findActiveByPositionId(positionId)
-                .map(row -> new Occupant(row.getPositionId(), row.getCcgid(), row.getName()))
-                .orElse(null);
+        List<TimesheetPerson> rows = people.findActiveByPositionId(positionId);
+        if (rows.isEmpty()) {
+            return null;
+        }
+        TimesheetPerson first = rows.getFirst();
+        String names = rows.stream()
+                .map(TimesheetPerson::getName)
+                .filter(name -> name != null && !name.isBlank())
+                .distinct()
+                .collect(Collectors.joining(", "));
+        return new Occupant(first.getPositionId(), first.getCcgid(), names.isBlank() ? first.getName() : names);
     }
 
     /**
@@ -371,6 +381,22 @@ public class TimesheetReadService {
     }
 
     /**
+     * Distinct GBS centers from ACTIVE Daily people and Monthly scopes (union, sorted).
+     *
+     * @return centers
+     */
+    @Transactional(readOnly = true)
+    public List<String> activeCenters() {
+        return java.util.stream.Stream.concat(
+                        people.findActiveCenters().stream(), scopes.findActiveCenters().stream())
+                .filter(center -> center != null && !center.isBlank())
+                .map(String::trim)
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    /**
      * ACTIVE Daily header when one exists.
      *
      * @return daily snapshot, or empty
@@ -378,6 +404,21 @@ public class TimesheetReadService {
     @Transactional(readOnly = true)
     public Optional<ActiveSnapshot> findActiveDaily() {
         return syncRuns.findByKindAndStatus("DAILY", "ACTIVE")
+                .map(run -> new ActiveSnapshot(
+                        run.getId(),
+                        run.getKind(),
+                        run.getSyncDate(),
+                        run.getRowCount() == null ? 0 : run.getRowCount()));
+    }
+
+    /**
+     * ACTIVE Monthly header when one exists.
+     *
+     * @return monthly snapshot, or empty
+     */
+    @Transactional(readOnly = true)
+    public Optional<ActiveSnapshot> findActiveMonthly() {
+        return syncRuns.findByKindAndStatus("MONTHLY", "ACTIVE")
                 .map(run -> new ActiveSnapshot(
                         run.getId(),
                         run.getKind(),

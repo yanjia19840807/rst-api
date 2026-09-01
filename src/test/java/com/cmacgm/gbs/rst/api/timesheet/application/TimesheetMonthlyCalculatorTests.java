@@ -33,16 +33,17 @@ class TimesheetMonthlyCalculatorTests {
         assertThat(result.issues()).isEmpty();
         assertThat(result.assignments())
                 .extracting(
-                        TimesheetAssignment::getEmpCcgid,
+                        TimesheetAssignment::getEmpPositionId,
                         TimesheetAssignment::getSupervisorPositionId,
-                        TimesheetAssignment::getPl3Code)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("S00000001", "POS-SUP-1", "PL3"));
+                        TimesheetAssignment::getPl3Code,
+                        TimesheetAssignment::getCenter)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("EMP-1", "POS-SUP-1", "PL3", "Kuala Lumpur"));
         assertThat(result.scopes())
                 .extracting(TimesheetScope::getSupervisorPositionId, TimesheetScope::getCenter, TimesheetScope::getPl3Code)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "Kuala Lumpur", "PL3"));
         assertThat(result.kpis())
-                .extracting(TimesheetKpi::getSupervisorPositionId, TimesheetKpi::getHc)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("POS-SUP-1", new BigDecimal("2.0")));
+                .extracting(TimesheetKpi::getSupervisorPositionId, TimesheetKpi::getCenter, TimesheetKpi::getHc)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "Kuala Lumpur", new BigDecimal("2.0")));
     }
 
     @Test
@@ -61,7 +62,7 @@ class TimesheetMonthlyCalculatorTests {
     }
 
     @Test
-    void doesNotRequireFieldsOnManagementLines() {
+    void writesMissingFieldOnIncompleteRowsRegardlessOfType() {
         UUID runId = UUID.randomUUID();
         TimesheetMonthlyCalculator.Result result = calculator.compute(
                 runId,
@@ -70,7 +71,12 @@ class TimesheetMonthlyCalculatorTests {
                         row("S00000002", "EMP-2", "POS-SUP-1", "", "Kuala Lumpur", "1", "management", "non-productive")),
                 Instant.parse("2026-08-24T00:00:00Z"));
 
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("MISSING_FIELD");
+        assertThat(result.issues())
+                .extracting(TimesheetSyncIssue::getMessage)
+                .contains("Missing pl3_code.");
+        assertThat(result.assignments())
+                .extracting(TimesheetAssignment::getEmpPositionId)
+                .containsExactly("EMP-1");
     }
 
     @Test
@@ -87,7 +93,7 @@ class TimesheetMonthlyCalculatorTests {
     }
 
     @Test
-    void skipsManagementLinesWhenPersisting() {
+    void persistsScopeAndKpiFromEveryCompleteRowButAssignmentOnlyFromProduction() {
         UUID runId = UUID.randomUUID();
         TimesheetMonthlyCalculator.Result result = calculator.compute(
                 runId,
@@ -101,13 +107,34 @@ class TimesheetMonthlyCalculatorTests {
                                 "Kuala Lumpur",
                                 "1",
                                 "management",
+                                "non-productive"),
+                        row(
+                                "S00000003",
+                                "EMP-3",
+                                "182894",
+                                "344",
+                                "GBS CHINA",
+                                "0.5",
+                                "production",
                                 "non-productive")),
                 Instant.parse("2026-08-24T00:00:00Z"));
 
         assertThat(result.issues()).isEmpty();
-        assertThat(result.assignments()).extracting(TimesheetAssignment::getEmpCcgid).containsExactly("S00000001");
-        assertThat(result.scopes()).extracting(TimesheetScope::getSupervisorPositionId).containsExactly("POS-SUP-1");
-        assertThat(result.kpis()).extracting(TimesheetKpi::getHc).containsExactly(new BigDecimal("1"));
+        assertThat(result.assignments())
+                .extracting(TimesheetAssignment::getEmpPositionId, TimesheetAssignment::getSupervisorPositionId)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("EMP-1", "POS-SUP-1"));
+        assertThat(result.scopes())
+                .extracting(TimesheetScope::getSupervisorPositionId, TimesheetScope::getPl3Code)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "PL3"),
+                        org.assertj.core.groups.Tuple.tuple("POS-SUP-2", "PL3"),
+                        org.assertj.core.groups.Tuple.tuple("182894", "344"));
+        assertThat(result.kpis())
+                .extracting(TimesheetKpi::getSupervisorPositionId, TimesheetKpi::getHc)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("POS-SUP-1", new BigDecimal("1")),
+                        org.assertj.core.groups.Tuple.tuple("POS-SUP-2", new BigDecimal("1")),
+                        org.assertj.core.groups.Tuple.tuple("182894", new BigDecimal("0.5")));
     }
 
     private static ReportRow row(

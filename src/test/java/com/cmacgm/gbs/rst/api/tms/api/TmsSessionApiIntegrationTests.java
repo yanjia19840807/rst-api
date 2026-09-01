@@ -165,16 +165,17 @@ class TmsSessionApiIntegrationTests {
                 "Test Supervisor",
                 "POS-SUP-001");
         jdbcTemplate.update(
-                "insert into timesheet_person (sync_run_id, ccgid, emp_id, name) values (?, ?, ?, ?)",
+                "insert into timesheet_person (sync_run_id, ccgid, emp_id, name, position_id) values (?, ?, ?, ?, ?)",
                 dailyRunId,
                 "AGENT001",
                 "AGENT001",
-                "Test Agent");
+                "Test Agent",
+                "POS-AGENT-001");
         jdbcTemplate.update(
                 """
                 insert into timesheet_position
-                    (sync_run_id, position_id, role_type, parent_position_id)
-                values (?, 'POS-SUP-001', 'SUPERVISOR', 'POS-SRM-001')
+                    (sync_run_id, position_id, role_type, parent_position_id, center)
+                values (?, 'POS-SUP-001', 'SUPERVISOR', 'POS-SRM-001', 'Kuala Lumpur')
                 """,
                 dailyRunId);
         jdbcTemplate.update(
@@ -189,16 +190,16 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into timesheet_assignment
-                    (sync_run_id, emp_ccgid, emp_id, supervisor_position_id, pl3_code)
-                values (?, 'AGENT001', 'AGENT001', 'POS-SUP-001', 'BANK_REC')
+                    (sync_run_id, emp_position_id, supervisor_position_id, pl3_code, center)
+                values (?, 'POS-AGENT-001', 'POS-SUP-001', 'BANK_REC', 'Kuala Lumpur')
                 """,
                 monthlyRunId);
         jdbcTemplate.update(
                 """
                 insert into timesheet_kpi
-                    (sync_run_id, supervisor_position_id, pl3_code,
+                    (sync_run_id, supervisor_position_id, pl3_code, center,
                      carrier, site, customer_country, hc)
-                values (?, 'POS-SUP-001', 'BANK_REC', 'Carrier A', 'KL', 'Australia', 1)
+                values (?, 'POS-SUP-001', 'BANK_REC', 'Kuala Lumpur', 'Carrier A', 'KL', 'Australia', 1)
                 """,
                 monthlyRunId);
     }

@@ -114,20 +114,14 @@ public class TimesheetSourceResolver {
                     TimesheetSyncErrorCode.SOURCE_UNAVAILABLE.code(),
                     "No Timesheet file found in " + folder);
         }
-        LocalDate latestDate = named.stream()
-                .map(file -> file.parsed().syncDate())
-                .max(Comparator.naturalOrder())
+        return named.stream()
+                .max(Comparator.comparing((NamedFile file) -> file.parsed().syncDate())
+                        .thenComparingInt(file -> file.parsed().revision())
+                        .thenComparing(
+                                file -> file.item().lastModifiedDateTime(),
+                                Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(file -> file.item().name(), Comparator.nullsLast(String::compareTo)))
                 .orElseThrow();
-        List<NamedFile> sameDay = named.stream()
-                .filter(file -> file.parsed().syncDate().equals(latestDate))
-                .toList();
-        if (sameDay.size() > 1) {
-            throw new ApiException(
-                    HttpStatus.CONFLICT,
-                    TimesheetSyncErrorCode.AMBIGUOUS_SOURCE.code(),
-                    "Multiple Timesheet files share business date " + latestDate);
-        }
-        return sameDay.getFirst();
     }
 
     record NamedFile(GraphDriveItem item, Parsed parsed) {

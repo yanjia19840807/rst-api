@@ -28,7 +28,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * LTH Center × Domain CDH configuration and remount of READY CDH steps.
+ * Center × Domain CDH configuration and remount of READY CDH steps.
+ * LTH always uses identity Center; ADMIN may select any ACTIVE Person/Scope center.
  */
 @Service
 public class DomainHeadConfigService {
@@ -46,7 +47,7 @@ public class DomainHeadConfigService {
      * Creates the Domain Head config service.
      *
      * @param mappings Center × Domain rows
-     * @param timesheet ACTIVE Daily org
+     * @param timesheet ACTIVE Daily / Monthly org
      * @param workflows in-flight remount
      * @param clock timestamps
      */
@@ -62,29 +63,47 @@ public class DomainHeadConfigService {
     }
 
     /**
-     * Builds the LTH page for the caller's Center.
+     * Distinct GBS centers from ACTIVE Daily people and Monthly scopes.
      *
-     * @param principal current LTH
+     * @return centers for the Admin picker
+     */
+    @Transactional(readOnly = true)
+    public List<String> availableCenters() {
+        return timesheet.activeCenters();
+    }
+
+    /**
+     * Builds the Domain Head page for the resolved Center.
+     *
+     * @param principal current caller
+     * @param requestedCenter Admin-selected center; ignored for LTH
      * @return page
      */
     @Transactional(readOnly = true)
-    public DomainHeadPageView page(RstPrincipal principal) {
-        return page(requireCenter(principal), null);
+    public DomainHeadPageView page(RstPrincipal principal, String requestedCenter) {
+        return page(resolveCenter(principal, requestedCenter), null);
     }
 
     /**
      * Saves dirty mappings and remounts READY CDH steps for changed Domains.
      *
-     * @param principal current LTH
-     * @param request dirty rows
+     * @param principal current caller
+     * @param request dirty rows (and center for ADMIN)
      * @return updated page including remount count
      */
     @Transactional
     public DomainHeadPageView save(RstPrincipal principal, SaveDomainHeadsRequest request) {
-        String center = requireCenter(principal);
+        String center = resolveCenter(principal, request == null ? null : request.center());
+        if (!hasText(center)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "invalid-center", "center is required.");
+        }
         Instant now = clock.instant();
         int remounted = 0;
-        for (SaveDomainHeadsRequest.Mapping mapping : request.mappings() == null ? List.<SaveDomainHeadsRequest.Mapping>of() : request.mappings()) {
+        List<SaveDomainHeadsRequest.Mapping> mappingsToSave =
+                request == null || request.mappings() == null
+                        ? List.of()
+                        : request.mappings();
+        for (SaveDomainHeadsRequest.Mapping mapping : mappingsToSave) {
             String domain = requireText(mapping.domain(), "domain");
             String positionId = blankToNull(mapping.positionId());
             CenterDomainHead existing = mappings.findByIdCenterAndIdDomain(center, domain).orElse(null);
@@ -156,8 +175,10 @@ public class DomainHeadConfigService {
 
     private DomainHeadPageView page(String center, Integer remountedCount) {
         boolean dailyAvailable = timesheet.findActiveDaily().isPresent();
-        if (!dailyAvailable) {
-            return new DomainHeadPageView(center, false, remountedCount, List.of());
+        boolean monthlyAvailable = timesheet.findActiveMonthly().isPresent();
+        if (!hasText(center) || !dailyAvailable || !monthlyAvailable) {
+            return new DomainHeadPageView(
+                    nullToBlank(center), dailyAvailable, monthlyAvailable, remountedCount, List.of());
         }
         Map<String, CenterDomainHead> byDomain = new LinkedHashMap<>();
         for (CenterDomainHead row : mappings.findByIdCenterOrderByIdDomainAsc(center)) {
@@ -174,7 +195,24 @@ public class DomainHeadConfigService {
                     resolved.name(),
                     resolved.status()));
         }
-        return new DomainHeadPageView(center, true, remountedCount, domains);
+        return new DomainHeadPageView(center, true, true, remountedCount, domains);
+    }
+
+    /**
+     * LTH always uses identity Center (request center ignored). ADMIN uses the request center
+     * (may be blank on GET before the picker selection). Save for ADMIN still requires center.
+     */
+    private String resolveCenter(RstPrincipal principal, String requestedCenter) {
+        if (principal != null && hasRole(principal, "LTH")) {
+            return requireIdentityCenter(principal);
+        }
+        if (principal != null && hasRole(principal, "ADMIN")) {
+            return blankToNull(requestedCenter) == null ? "" : requestedCenter.trim();
+        }
+        throw new ApiException(
+                HttpStatus.FORBIDDEN,
+                "domain-head-forbidden",
+                "Domain Head configuration requires LTH or ADMIN.");
     }
 
     private Resolved resolve(String center, String domain) {
@@ -224,7 +262,7 @@ public class DomainHeadConfigService {
         }
     }
 
-    private static String requireCenter(RstPrincipal principal) {
+    private static String requireIdentityCenter(RstPrincipal principal) {
         if (principal == null || !hasText(principal.center())) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
@@ -232,6 +270,10 @@ public class DomainHeadConfigService {
                     "Current identity has no Center.");
         }
         return principal.center().trim();
+    }
+
+    private static boolean hasRole(RstPrincipal principal, String role) {
+        return principal.roles() != null && principal.roles().contains(role);
     }
 
     private static String requireText(String value, String field) {

@@ -42,6 +42,7 @@ public class TimesheetKpi implements Persistable<TimesheetKpi.Id> {
      * @param syncRunId Monthly run
      * @param supervisorPositionId supervisor position
      * @param pl3Code process level 3
+     * @param center GBS center
      * @param carrier carrier
      * @param site site
      * @param customerCountry country
@@ -52,12 +53,13 @@ public class TimesheetKpi implements Persistable<TimesheetKpi.Id> {
             UUID syncRunId,
             String supervisorPositionId,
             String pl3Code,
+            String center,
             String carrier,
             String site,
             String customerCountry,
             BigDecimal hc) {
         TimesheetKpi row = new TimesheetKpi();
-        row.id = new Id(syncRunId, supervisorPositionId, pl3Code, carrier, site, customerCountry);
+        row.id = new Id(syncRunId, supervisorPositionId, pl3Code, center, carrier, site, customerCountry);
         row.hc = hc;
         row.isNew = true;
         return row;
@@ -91,6 +93,10 @@ public class TimesheetKpi implements Persistable<TimesheetKpi.Id> {
         return id.pl3Code;
     }
 
+    public String getCenter() {
+        return id.center;
+    }
+
     public String getCarrier() {
         return id.carrier;
     }
@@ -122,6 +128,9 @@ public class TimesheetKpi implements Persistable<TimesheetKpi.Id> {
         @Column(name = "pl3_code", nullable = false, length = 80)
         private String pl3Code;
 
+        @Column(name = "center", nullable = false, length = 120)
+        private String center;
+
         @Column(nullable = false, length = 120)
         private String carrier;
 
@@ -138,12 +147,14 @@ public class TimesheetKpi implements Persistable<TimesheetKpi.Id> {
                 UUID syncRunId,
                 String supervisorPositionId,
                 String pl3Code,
+                String center,
                 String carrier,
                 String site,
                 String customerCountry) {
             this.syncRunId = syncRunId;
             this.supervisorPositionId = supervisorPositionId;
             this.pl3Code = pl3Code;
+            this.center = center;
             this.carrier = carrier;
             this.site = site;
             this.customerCountry = customerCountry;
@@ -160,6 +171,7 @@ public class TimesheetKpi implements Persistable<TimesheetKpi.Id> {
             return Objects.equals(syncRunId, that.syncRunId)
                     && Objects.equals(supervisorPositionId, that.supervisorPositionId)
                     && Objects.equals(pl3Code, that.pl3Code)
+                    && Objects.equals(center, that.center)
                     && Objects.equals(carrier, that.carrier)
                     && Objects.equals(site, that.site)
                     && Objects.equals(customerCountry, that.customerCountry);
@@ -168,7 +180,7 @@ public class TimesheetKpi implements Persistable<TimesheetKpi.Id> {
         @Override
         public int hashCode() {
             return Objects.hash(
-                    syncRunId, supervisorPositionId, pl3Code, carrier, site, customerCountry);
+                    syncRunId, supervisorPositionId, pl3Code, center, carrier, site, customerCountry);
         }
     }
 }

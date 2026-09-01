@@ -135,7 +135,8 @@ public class TimesheetController {
                 ? null
                 : principal.center().trim();
         String query = requested == null || requested.isBlank() ? null : requested.trim();
-        if (identity != null && query != null && !identity.equals(query)) {
+        boolean admin = principal != null && principal.roles() != null && principal.roles().contains("ADMIN");
+        if (!admin && identity != null && query != null && !identity.equals(query)) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
                     "timesheet-center-forbidden",

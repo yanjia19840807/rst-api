@@ -107,9 +107,9 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
     /**
      * ACTIVE Monthly Delivery HC rows for the Timesheet Sync browser.
      *
-     * @param supervisorPositionId exact supervisor position; blank matches all
-     * @param pl3Code exact PL3; blank matches all
-     * @param q carrier / site / country fragment; blank matches all
+     * @param center exact center; blank matches all
+     * @param supervisor Supervisor position id or occupant name; blank matches all
+     * @param pl3Code PL3 code or name fragment; blank matches all
      * @param pageable page
      * @return KPI rows
      */
@@ -120,13 +120,28 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
                     where k.id.syncRunId = r.id
                       and r.kind = 'MONTHLY'
                       and r.status = 'ACTIVE'
-                      and (:supervisorPositionId = '' or k.id.supervisorPositionId = :supervisorPositionId)
-                      and (:pl3Code = '' or k.id.pl3Code = :pl3Code)
-                      and (:q = ''
-                           or lower(k.id.carrier) like lower(concat('%', :q, '%'))
-                           or lower(k.id.site) like lower(concat('%', :q, '%'))
-                           or lower(k.id.customerCountry) like lower(concat('%', :q, '%')))
-                    order by k.id.supervisorPositionId, k.id.pl3Code, k.id.customerCountry, k.id.carrier, k.id.site
+                      and (:center = '' or k.id.center = :center)
+                      and (:supervisor = ''
+                           or lower(k.id.supervisorPositionId) like lower(concat('%', :supervisor, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetPerson occupant, TimesheetSyncRun occupantRun
+                                where occupant.id.syncRunId = occupantRun.id
+                                  and occupantRun.kind = 'DAILY'
+                                  and occupantRun.status = 'ACTIVE'
+                                  and occupant.positionId = k.id.supervisorPositionId
+                                  and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
+                      and (:pl3Code = ''
+                           or lower(k.id.pl3Code) like lower(concat('%', :pl3Code, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetScope scope
+                                where scope.id.syncRunId = k.id.syncRunId
+                                  and scope.id.supervisorPositionId = k.id.supervisorPositionId
+                                  and scope.id.pl3Code = k.id.pl3Code
+                                  and scope.id.center = k.id.center
+                                  and lower(coalesce(scope.pl3Name, '')) like lower(concat('%', :pl3Code, '%'))))
+                    order by k.id.center, k.id.supervisorPositionId, k.id.pl3Code, k.id.customerCountry, k.id.carrier, k.id.site
                     """,
             countQuery = """
                     select count(k)
@@ -134,17 +149,32 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
                     where k.id.syncRunId = r.id
                       and r.kind = 'MONTHLY'
                       and r.status = 'ACTIVE'
-                      and (:supervisorPositionId = '' or k.id.supervisorPositionId = :supervisorPositionId)
-                      and (:pl3Code = '' or k.id.pl3Code = :pl3Code)
-                      and (:q = ''
-                           or lower(k.id.carrier) like lower(concat('%', :q, '%'))
-                           or lower(k.id.site) like lower(concat('%', :q, '%'))
-                           or lower(k.id.customerCountry) like lower(concat('%', :q, '%')))
+                      and (:center = '' or k.id.center = :center)
+                      and (:supervisor = ''
+                           or lower(k.id.supervisorPositionId) like lower(concat('%', :supervisor, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetPerson occupant, TimesheetSyncRun occupantRun
+                                where occupant.id.syncRunId = occupantRun.id
+                                  and occupantRun.kind = 'DAILY'
+                                  and occupantRun.status = 'ACTIVE'
+                                  and occupant.positionId = k.id.supervisorPositionId
+                                  and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
+                      and (:pl3Code = ''
+                           or lower(k.id.pl3Code) like lower(concat('%', :pl3Code, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetScope scope
+                                where scope.id.syncRunId = k.id.syncRunId
+                                  and scope.id.supervisorPositionId = k.id.supervisorPositionId
+                                  and scope.id.pl3Code = k.id.pl3Code
+                                  and scope.id.center = k.id.center
+                                  and lower(coalesce(scope.pl3Name, '')) like lower(concat('%', :pl3Code, '%'))))
                     """)
     Page<TimesheetKpi> searchActive(
-            @Param("supervisorPositionId") String supervisorPositionId,
+            @Param("center") String center,
+            @Param("supervisor") String supervisor,
             @Param("pl3Code") String pl3Code,
-            @Param("q") String q,
             Pageable pageable);
 
     /**

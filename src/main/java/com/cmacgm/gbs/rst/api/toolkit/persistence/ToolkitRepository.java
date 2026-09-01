@@ -19,11 +19,17 @@ public interface ToolkitRepository extends JpaRepository<Toolkit, UUID> {
             join TimesheetAssignment assignment
               on assignment.id.supervisorPositionId = toolkit.supervisorPositionId
              and assignment.id.pl3Code = toolkit.primaryPl3Code
-            join TimesheetSyncRun run
-              on assignment.id.syncRunId = run.id
-            where upper(assignment.id.empCcgid) = upper(:ccgid)
-              and run.kind = 'MONTHLY'
-              and run.status = 'ACTIVE'
+            join TimesheetSyncRun monthly
+              on assignment.id.syncRunId = monthly.id
+            join TimesheetPerson person
+              on person.positionId = assignment.id.empPositionId
+            join TimesheetSyncRun daily
+              on person.id.syncRunId = daily.id
+            where upper(person.id.ccgid) = upper(:ccgid)
+              and daily.kind = 'DAILY'
+              and daily.status = 'ACTIVE'
+              and monthly.kind = 'MONTHLY'
+              and monthly.status = 'ACTIVE'
               and toolkit.deletedAt is null
             order by toolkit.name
             """)

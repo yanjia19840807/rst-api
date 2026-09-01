@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.timesheet.persistence;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -50,6 +51,22 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
     Optional<TimesheetPerson> findActiveByCcgid(@Param("ccgid") String ccgid);
 
     /**
+     * ACTIVE Daily people for the given CCGIDs.
+     *
+     * @param ccgids identities
+     * @return people
+     */
+    @Query("""
+            select p
+            from TimesheetPerson p, TimesheetSyncRun r
+            where p.id.syncRunId = r.id
+              and r.kind = 'DAILY'
+              and r.status = 'ACTIVE'
+              and upper(p.id.ccgid) in :ccgids
+            """)
+    List<TimesheetPerson> findActiveByCcgidIn(@Param("ccgids") Collection<String> ccgids);
+
+    /**
      * Occupant of a bindable position in the ACTIVE Daily snapshot.
      *
      * @param positionId occupied position
@@ -62,8 +79,26 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
               and r.kind = 'DAILY'
               and r.status = 'ACTIVE'
               and p.positionId = :positionId
+            order by p.id.ccgid
             """)
-    Optional<TimesheetPerson> findActiveByPositionId(@Param("positionId") String positionId);
+    List<TimesheetPerson> findActiveByPositionId(@Param("positionId") String positionId);
+
+    /**
+     * Occupants of bindable positions in the ACTIVE Daily snapshot.
+     *
+     * @param positionIds occupied positions
+     * @return people for those seats
+     */
+    @Query("""
+            select p
+            from TimesheetPerson p, TimesheetSyncRun r
+            where p.id.syncRunId = r.id
+              and r.kind = 'DAILY'
+              and r.status = 'ACTIVE'
+              and p.positionId in :positionIds
+            order by p.positionId, p.id.ccgid
+            """)
+    List<TimesheetPerson> findActiveByPositionIdIn(@Param("positionIds") Collection<String> positionIds);
 
     /**
      * Position occupied by this person when it has the given role.
@@ -201,7 +236,7 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
      * ACTIVE Daily people for the Timesheet Sync browser.
      *
      * @param center exact center; blank matches all
-     * @param q name / CCGID / emp id / email fragment; blank matches all
+     * @param q name / CCGID / emp id / email / position fragment; blank matches all
      * @param pageable page
      * @return people
      */
@@ -217,7 +252,8 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                            or lower(p.name) like lower(concat('%', :q, '%'))
                            or lower(p.id.ccgid) like lower(concat('%', :q, '%'))
                            or lower(coalesce(p.empId, '')) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(p.email, '')) like lower(concat('%', :q, '%')))
+                           or lower(coalesce(p.email, '')) like lower(concat('%', :q, '%'))
+                           or lower(coalesce(p.positionId, '')) like lower(concat('%', :q, '%')))
                     order by p.name, p.id.ccgid
                     """,
             countQuery = """
@@ -231,7 +267,8 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                            or lower(p.name) like lower(concat('%', :q, '%'))
                            or lower(p.id.ccgid) like lower(concat('%', :q, '%'))
                            or lower(coalesce(p.empId, '')) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(p.email, '')) like lower(concat('%', :q, '%')))
+                           or lower(coalesce(p.email, '')) like lower(concat('%', :q, '%'))
+                           or lower(coalesce(p.positionId, '')) like lower(concat('%', :q, '%')))
                     """)
     Page<TimesheetPerson> searchActive(
             @Param("center") String center, @Param("q") String q, Pageable pageable);

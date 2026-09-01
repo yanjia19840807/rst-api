@@ -36,7 +36,8 @@ public interface TimesheetPositionRepository
     /**
      * ACTIVE Daily AGENT seats with the parent chain walked to Domain Head.
      *
-     * @param q any of the four position ids; blank matches all
+     * @param center exact Agent-seat center; blank matches all
+     * @param q position id or occupant name on any of the four levels; blank matches all
      * @param pageable page
      * @return one row per AGENT position
      */
@@ -45,7 +46,8 @@ public interface TimesheetPositionRepository
                     select agent.id.positionId as agentPositionId,
                            agent.parentPositionId as supervisorPositionId,
                            supervisor.parentPositionId as srManagerPositionId,
-                           srManager.parentPositionId as domainHeadPositionId
+                           srManager.parentPositionId as domainHeadPositionId,
+                           agent.center as center
                     from TimesheetPosition agent
                     join TimesheetSyncRun r on agent.id.syncRunId = r.id
                     left join TimesheetPosition supervisor
@@ -57,12 +59,25 @@ public interface TimesheetPositionRepository
                     where r.kind = 'DAILY'
                       and r.status = 'ACTIVE'
                       and agent.roleType = 'AGENT'
+                      and (:center = '' or agent.center = :center)
                       and (:q = ''
                            or lower(agent.id.positionId) like lower(concat('%', :q, '%'))
                            or lower(coalesce(agent.parentPositionId, '')) like lower(concat('%', :q, '%'))
                            or lower(coalesce(supervisor.parentPositionId, '')) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(srManager.parentPositionId, '')) like lower(concat('%', :q, '%')))
-                    order by agent.id.positionId
+                           or lower(coalesce(srManager.parentPositionId, '')) like lower(concat('%', :q, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetPerson occupant, TimesheetSyncRun occupantRun
+                                where occupant.id.syncRunId = occupantRun.id
+                                  and occupantRun.kind = 'DAILY'
+                                  and occupantRun.status = 'ACTIVE'
+                                  and occupant.positionId in (
+                                        agent.id.positionId,
+                                        agent.parentPositionId,
+                                        supervisor.parentPositionId,
+                                        srManager.parentPositionId)
+                                  and lower(occupant.name) like lower(concat('%', :q, '%'))))
+                    order by agent.center, agent.id.positionId
                     """,
             countQuery = """
                     select count(agent)
@@ -77,13 +92,27 @@ public interface TimesheetPositionRepository
                     where r.kind = 'DAILY'
                       and r.status = 'ACTIVE'
                       and agent.roleType = 'AGENT'
+                      and (:center = '' or agent.center = :center)
                       and (:q = ''
                            or lower(agent.id.positionId) like lower(concat('%', :q, '%'))
                            or lower(coalesce(agent.parentPositionId, '')) like lower(concat('%', :q, '%'))
                            or lower(coalesce(supervisor.parentPositionId, '')) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(srManager.parentPositionId, '')) like lower(concat('%', :q, '%')))
+                           or lower(coalesce(srManager.parentPositionId, '')) like lower(concat('%', :q, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetPerson occupant, TimesheetSyncRun occupantRun
+                                where occupant.id.syncRunId = occupantRun.id
+                                  and occupantRun.kind = 'DAILY'
+                                  and occupantRun.status = 'ACTIVE'
+                                  and occupant.positionId in (
+                                        agent.id.positionId,
+                                        agent.parentPositionId,
+                                        supervisor.parentPositionId,
+                                        srManager.parentPositionId)
+                                  and lower(occupant.name) like lower(concat('%', :q, '%'))))
                     """)
-    Page<PositionChain> searchActiveChains(@Param("q") String q, Pageable pageable);
+    Page<PositionChain> searchActiveChains(
+            @Param("center") String center, @Param("q") String q, Pageable pageable);
 
     /**
      * One AGENT seat and its walked parent positions.
@@ -96,6 +125,8 @@ public interface TimesheetPositionRepository
         String getSrManagerPositionId();
 
         String getDomainHeadPositionId();
+
+        String getCenter();
     }
 
     /**

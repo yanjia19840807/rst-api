@@ -36,20 +36,22 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 @Component
 public class TimesheetReportParser {
 
+    private static final String DATA_SHEET = "Original Raw Data";
+
     private static final List<String> REQUIRED_HEADERS = List.of(
-            "emp_id",
+            "emp_emp_id",
             "emp_ccgid",
             "emp_name",
             "emp_email",
-            "supervisor_id",
+            "supervisor_emp_id",
             "supervisor_ccgid",
             "supervisor_name",
             "supervisor_position_id",
-            "sr_manager_id",
+            "sr_manager_emp_id",
             "sr_manager_ccgid",
             "sr_manager_name",
             "sr_manager_position_id",
-            "domain_head_id",
+            "domain_head_emp_id",
             "domain_head_ccgid",
             "domain_head_name",
             "domain_head_position_id",
@@ -92,7 +94,10 @@ public class TimesheetReportParser {
             if (workbook.getNumberOfSheets() == 0) {
                 throw conflict(TimesheetSyncErrorCode.INVALID_HEADER, "Timesheet workbook has no sheets.");
             }
-            Sheet sheet = workbook.getSheetAt(0);
+            Sheet sheet = workbook.getSheet(DATA_SHEET);
+            if (sheet == null) {
+                sheet = workbook.getSheetAt(0);
+            }
             Map<String, Integer> headers = readExcelHeaders(sheet.getRow(0));
             List<ReportRow> rows = new ArrayList<>();
             for (int i = 1; i <= sheet.getLastRowNum(); i++) {
@@ -186,20 +191,20 @@ public class TimesheetReportParser {
                 rowNumber,
                 parseDate(excelValue(excelRow, headers, "date"), excelCell(excelRow, headers, "date")),
                 parseMonth(excelValue(excelRow, headers, "month"), excelCell(excelRow, headers, "month")),
-                asId(excelValue(excelRow, headers, "emp_id")),
+                asId(excelValue(excelRow, headers, "emp_emp_id")),
                 asCcgid(excelValue(excelRow, headers, "emp_ccgid")),
                 optionalText(excelValue(excelRow, headers, "emp_name")),
                 optionalText(excelValue(excelRow, headers, "emp_email")),
                 asId(excelValue(excelRow, headers, "emp_position_id")),
-                asId(excelValue(excelRow, headers, "supervisor_id")),
+                asId(excelValue(excelRow, headers, "supervisor_emp_id")),
                 asCcgid(excelValue(excelRow, headers, "supervisor_ccgid")),
                 optionalText(excelValue(excelRow, headers, "supervisor_name")),
                 asId(excelValue(excelRow, headers, "supervisor_position_id")),
-                asId(excelValue(excelRow, headers, "sr_manager_id")),
+                asId(excelValue(excelRow, headers, "sr_manager_emp_id")),
                 asCcgid(excelValue(excelRow, headers, "sr_manager_ccgid")),
                 optionalText(excelValue(excelRow, headers, "sr_manager_name")),
                 asId(excelValue(excelRow, headers, "sr_manager_position_id")),
-                asId(excelValue(excelRow, headers, "domain_head_id")),
+                asId(excelValue(excelRow, headers, "domain_head_emp_id")),
                 asCcgid(excelValue(excelRow, headers, "domain_head_ccgid")),
                 optionalText(excelValue(excelRow, headers, "domain_head_name")),
                 asId(excelValue(excelRow, headers, "domain_head_position_id")),
@@ -222,20 +227,20 @@ public class TimesheetReportParser {
                 rowNumber,
                 parseDate(csvValue(cells, headers, "date"), null),
                 parseMonth(csvValue(cells, headers, "month"), null),
-                asId(csvValue(cells, headers, "emp_id")),
+                asId(csvValue(cells, headers, "emp_emp_id")),
                 asCcgid(csvValue(cells, headers, "emp_ccgid")),
                 optionalText(csvValue(cells, headers, "emp_name")),
                 optionalText(csvValue(cells, headers, "emp_email")),
                 asId(csvValue(cells, headers, "emp_position_id")),
-                asId(csvValue(cells, headers, "supervisor_id")),
+                asId(csvValue(cells, headers, "supervisor_emp_id")),
                 asCcgid(csvValue(cells, headers, "supervisor_ccgid")),
                 optionalText(csvValue(cells, headers, "supervisor_name")),
                 asId(csvValue(cells, headers, "supervisor_position_id")),
-                asId(csvValue(cells, headers, "sr_manager_id")),
+                asId(csvValue(cells, headers, "sr_manager_emp_id")),
                 asCcgid(csvValue(cells, headers, "sr_manager_ccgid")),
                 optionalText(csvValue(cells, headers, "sr_manager_name")),
                 asId(csvValue(cells, headers, "sr_manager_position_id")),
-                asId(csvValue(cells, headers, "domain_head_id")),
+                asId(csvValue(cells, headers, "domain_head_emp_id")),
                 asCcgid(csvValue(cells, headers, "domain_head_ccgid")),
                 optionalText(csvValue(cells, headers, "domain_head_name")),
                 asId(csvValue(cells, headers, "domain_head_position_id")),
@@ -297,8 +302,12 @@ public class TimesheetReportParser {
     }
 
     private LocalDate parseMonth(String text, Cell cell) {
+        LocalDate yearMonth = parseYearMonth(text);
+        if (yearMonth != null) {
+            return yearMonth;
+        }
         LocalDate date = parseDate(text, cell);
-        return date == null ? parseYearMonth(text) : date.withDayOfMonth(1);
+        return date == null ? null : date.withDayOfMonth(1);
     }
 
     private static LocalDate parseIsoDate(String text) {
@@ -316,7 +325,11 @@ public class TimesheetReportParser {
                 // try next
             }
         }
-        if (value.matches("\\d{5,6}")) {
+        LocalDate yearMonth = parseYearMonth(value);
+        if (yearMonth != null) {
+            return yearMonth;
+        }
+        if (value.matches("\\d{5}")) {
             try {
                 double serial = Double.parseDouble(value);
                 return LocalDate.of(1899, 12, 30).plusDays((long) serial);
@@ -324,7 +337,7 @@ public class TimesheetReportParser {
                 return null;
             }
         }
-        return parseYearMonth(value);
+        return null;
     }
 
     private static LocalDate parseYearMonth(String text) {
@@ -333,12 +346,18 @@ public class TimesheetReportParser {
             return null;
         }
         String compact = value.replace("-", "").replace("/", "");
-        if (compact.matches("\\d{6}")) {
-            int year = Integer.parseInt(compact.substring(0, 4));
-            int month = Integer.parseInt(compact.substring(4, 6));
-            return LocalDate.of(year, month, 1);
+        if (compact.matches("\\d{6}\\.0+")) {
+            compact = compact.substring(0, 6);
         }
-        return null;
+        if (!compact.matches("\\d{6}")) {
+            return null;
+        }
+        int year = Integer.parseInt(compact.substring(0, 4));
+        int month = Integer.parseInt(compact.substring(4, 6));
+        if (year < 1990 || year > 2100 || month < 1 || month > 12) {
+            return null;
+        }
+        return LocalDate.of(year, month, 1);
     }
 
     private HcValue parseHc(String text, int rowNumber) {

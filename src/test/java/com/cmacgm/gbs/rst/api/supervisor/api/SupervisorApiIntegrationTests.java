@@ -110,9 +110,9 @@ class SupervisorApiIntegrationTests {
         insertSyncRun(DAILY_RUN_ID, "DAILY", 3);
         insertSyncRun(MONTHLY_RUN_ID, "MONTHLY", 2);
         insertPerson(DAILY_RUN_ID, SUPERVISOR_CCGID, "Test Supervisor", SUPERVISOR_POSITION_ID);
-        insertPerson(DAILY_RUN_ID, "AGENT010", "Test Agent AGENT010", null);
-        insertPerson(DAILY_RUN_ID, "AGENT011", "Test Agent AGENT011", null);
-        insertPerson(DAILY_RUN_ID, "AGENT012", "Test Agent AGENT012", null);
+        insertPerson(DAILY_RUN_ID, "AGENT010", "Test Agent AGENT010", "AGENT010");
+        insertPerson(DAILY_RUN_ID, "AGENT011", "Test Agent AGENT011", "AGENT011");
+        insertPerson(DAILY_RUN_ID, "AGENT012", "Test Agent AGENT012", "AGENT012");
         insertPosition(DAILY_RUN_ID, SUPERVISOR_POSITION_ID, "SUPERVISOR", "POS-SRM-001");
         insertPosition(DAILY_RUN_ID, "POS-SRM-001", "SR_MANAGER", "POS-DH-001");
         insertPosition(DAILY_RUN_ID, "POS-DH-001", "DOMAIN_HEAD", null);
@@ -1119,13 +1119,14 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into timesheet_position
-                    (sync_run_id, position_id, role_type, parent_position_id)
-                values (?, ?, ?, ?)
+                    (sync_run_id, position_id, role_type, parent_position_id, center)
+                values (?, ?, ?, ?, ?)
                 """,
                 runId,
                 positionId,
                 roleType,
-                parentPositionId);
+                parentPositionId,
+                "Kuala Lumpur");
     }
 
     private void insertScope(UUID runId) {
@@ -1146,31 +1147,32 @@ class SupervisorApiIntegrationTests {
                 "Record to Report");
     }
 
-    private void insertAssignment(UUID runId, String empCcgid) {
+    private void insertAssignment(UUID runId, String empPositionId) {
         jdbcTemplate.update(
                 """
                 insert into timesheet_assignment
-                    (sync_run_id, emp_ccgid, emp_id, supervisor_position_id, pl3_code)
+                    (sync_run_id, emp_position_id, supervisor_position_id, pl3_code, center)
                 values (?, ?, ?, ?, ?)
                 """,
                 runId,
-                empCcgid,
-                empCcgid,
+                empPositionId,
                 SUPERVISOR_POSITION_ID,
-                PL3_CODE);
+                PL3_CODE,
+                "Kuala Lumpur");
     }
 
     private void insertKpi(UUID runId, String carrier, String site, String country, String hc) {
         jdbcTemplate.update(
                 """
                 insert into timesheet_kpi
-                    (sync_run_id, supervisor_position_id, pl3_code,
+                    (sync_run_id, supervisor_position_id, pl3_code, center,
                      carrier, site, customer_country, hc)
-                values (?, ?, ?, ?, ?, ?, ?)
+                values (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 runId,
                 SUPERVISOR_POSITION_ID,
                 PL3_CODE,
+                "Kuala Lumpur",
                 carrier,
                 site,
                 country,

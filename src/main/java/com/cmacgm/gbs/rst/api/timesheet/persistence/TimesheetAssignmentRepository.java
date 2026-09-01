@@ -12,13 +12,13 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 /**
- * Monthly employee assignments.
+ * Monthly Agent-seat assignments.
  */
 public interface TimesheetAssignmentRepository
         extends JpaRepository<TimesheetAssignment, TimesheetAssignment.Id> {
 
     /**
-     * Whether an Agent can use a Toolkit scope.
+     * Whether the Agent's current seat is assigned to this Supervisor × PL3.
      *
      * @param ccgid employee
      * @param positionId supervisor position
@@ -27,11 +27,15 @@ public interface TimesheetAssignmentRepository
      */
     @Query("""
             select count(a) > 0
-            from TimesheetAssignment a, TimesheetSyncRun r
-            where a.id.syncRunId = r.id
-              and r.kind = 'MONTHLY'
-              and r.status = 'ACTIVE'
-              and upper(a.id.empCcgid) = upper(:ccgid)
+            from TimesheetAssignment a, TimesheetPerson p, TimesheetSyncRun monthly, TimesheetSyncRun daily
+            where a.id.syncRunId = monthly.id
+              and monthly.kind = 'MONTHLY'
+              and monthly.status = 'ACTIVE'
+              and p.id.syncRunId = daily.id
+              and daily.kind = 'DAILY'
+              and daily.status = 'ACTIVE'
+              and upper(p.id.ccgid) = upper(:ccgid)
+              and p.positionId = a.id.empPositionId
               and a.id.supervisorPositionId = :positionId
               and a.id.pl3Code = :pl3Code
             """)
@@ -41,7 +45,7 @@ public interface TimesheetAssignmentRepository
             @Param("pl3Code") String pl3Code);
 
     /**
-     * Distinct agents under a Supervisor occupant.
+     * Distinct Agent seats under a Supervisor occupant.
      *
      * @param supervisorCcgid supervisor
      * @return assignments
@@ -64,9 +68,10 @@ public interface TimesheetAssignmentRepository
     /**
      * ACTIVE Monthly assignments for the Timesheet Sync browser.
      *
-     * @param supervisorPositionId exact supervisor position; blank matches all
-     * @param pl3Code exact PL3; blank matches all
-     * @param q CCGID / emp id fragment; blank matches all
+     * @param center exact center; blank matches all
+     * @param agent Agent position id or occupant name; blank matches all
+     * @param supervisor Supervisor position id or occupant name; blank matches all
+     * @param pl3Code PL3 code or name fragment; blank matches all
      * @param pageable page
      * @return assignments
      */
@@ -77,12 +82,38 @@ public interface TimesheetAssignmentRepository
                     where a.id.syncRunId = r.id
                       and r.kind = 'MONTHLY'
                       and r.status = 'ACTIVE'
-                      and (:supervisorPositionId = '' or a.id.supervisorPositionId = :supervisorPositionId)
-                      and (:pl3Code = '' or a.id.pl3Code = :pl3Code)
-                      and (:q = ''
-                           or lower(a.id.empCcgid) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(a.empId, '')) like lower(concat('%', :q, '%')))
-                    order by a.id.empCcgid, a.id.supervisorPositionId, a.id.pl3Code
+                      and (:center = '' or a.id.center = :center)
+                      and (:agent = ''
+                           or lower(a.id.empPositionId) like lower(concat('%', :agent, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetPerson occupant, TimesheetSyncRun occupantRun
+                                where occupant.id.syncRunId = occupantRun.id
+                                  and occupantRun.kind = 'DAILY'
+                                  and occupantRun.status = 'ACTIVE'
+                                  and occupant.positionId = a.id.empPositionId
+                                  and lower(occupant.name) like lower(concat('%', :agent, '%'))))
+                      and (:supervisor = ''
+                           or lower(a.id.supervisorPositionId) like lower(concat('%', :supervisor, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetPerson occupant, TimesheetSyncRun occupantRun
+                                where occupant.id.syncRunId = occupantRun.id
+                                  and occupantRun.kind = 'DAILY'
+                                  and occupantRun.status = 'ACTIVE'
+                                  and occupant.positionId = a.id.supervisorPositionId
+                                  and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
+                      and (:pl3Code = ''
+                           or lower(a.id.pl3Code) like lower(concat('%', :pl3Code, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetScope scope
+                                where scope.id.syncRunId = a.id.syncRunId
+                                  and scope.id.supervisorPositionId = a.id.supervisorPositionId
+                                  and scope.id.pl3Code = a.id.pl3Code
+                                  and scope.id.center = a.id.center
+                                  and lower(coalesce(scope.pl3Name, '')) like lower(concat('%', :pl3Code, '%'))))
+                    order by a.id.empPositionId, a.id.supervisorPositionId, a.id.pl3Code, a.id.center
                     """,
             countQuery = """
                     select count(a)
@@ -90,16 +121,43 @@ public interface TimesheetAssignmentRepository
                     where a.id.syncRunId = r.id
                       and r.kind = 'MONTHLY'
                       and r.status = 'ACTIVE'
-                      and (:supervisorPositionId = '' or a.id.supervisorPositionId = :supervisorPositionId)
-                      and (:pl3Code = '' or a.id.pl3Code = :pl3Code)
-                      and (:q = ''
-                           or lower(a.id.empCcgid) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(a.empId, '')) like lower(concat('%', :q, '%')))
+                      and (:center = '' or a.id.center = :center)
+                      and (:agent = ''
+                           or lower(a.id.empPositionId) like lower(concat('%', :agent, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetPerson occupant, TimesheetSyncRun occupantRun
+                                where occupant.id.syncRunId = occupantRun.id
+                                  and occupantRun.kind = 'DAILY'
+                                  and occupantRun.status = 'ACTIVE'
+                                  and occupant.positionId = a.id.empPositionId
+                                  and lower(occupant.name) like lower(concat('%', :agent, '%'))))
+                      and (:supervisor = ''
+                           or lower(a.id.supervisorPositionId) like lower(concat('%', :supervisor, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetPerson occupant, TimesheetSyncRun occupantRun
+                                where occupant.id.syncRunId = occupantRun.id
+                                  and occupantRun.kind = 'DAILY'
+                                  and occupantRun.status = 'ACTIVE'
+                                  and occupant.positionId = a.id.supervisorPositionId
+                                  and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
+                      and (:pl3Code = ''
+                           or lower(a.id.pl3Code) like lower(concat('%', :pl3Code, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetScope scope
+                                where scope.id.syncRunId = a.id.syncRunId
+                                  and scope.id.supervisorPositionId = a.id.supervisorPositionId
+                                  and scope.id.pl3Code = a.id.pl3Code
+                                  and scope.id.center = a.id.center
+                                  and lower(coalesce(scope.pl3Name, '')) like lower(concat('%', :pl3Code, '%'))))
                     """)
     Page<TimesheetAssignment> searchActive(
-            @Param("supervisorPositionId") String supervisorPositionId,
+            @Param("center") String center,
+            @Param("agent") String agent,
+            @Param("supervisor") String supervisor,
             @Param("pl3Code") String pl3Code,
-            @Param("q") String q,
             Pageable pageable);
 
     /**

@@ -22,6 +22,9 @@ public class TimesheetSyncRun {
     @Column(nullable = false, length = 16)
     private String kind;
 
+    @Column(nullable = false, length = 120)
+    private String center = "";
+
     @Column(name = "sync_date", nullable = false)
     private LocalDate syncDate;
 
@@ -81,6 +84,7 @@ public class TimesheetSyncRun {
         TimesheetSyncRun run = new TimesheetSyncRun();
         run.id = UUID.randomUUID();
         run.kind = kind;
+        run.center = "";
         run.syncDate = syncDate;
         run.attemptNo = attemptNo;
         run.status = "LOADING";
@@ -114,6 +118,15 @@ public class TimesheetSyncRun {
         this.sourceType = sourceType;
         this.sourceFileName = fileName;
         this.triggeredByCcgid = triggeredByCcgid;
+    }
+
+    /**
+     * Records the GBS center from the report file name.
+     *
+     * @param center GBS center
+     */
+    public void setCenter(String center) {
+        this.center = center == null ? "" : center.trim();
     }
 
     /**
@@ -164,6 +177,10 @@ public class TimesheetSyncRun {
 
     public String getKind() {
         return kind;
+    }
+
+    public String getCenter() {
+        return center;
     }
 
     public LocalDate getSyncDate() {

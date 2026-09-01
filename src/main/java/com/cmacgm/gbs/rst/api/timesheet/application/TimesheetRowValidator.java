@@ -21,24 +21,24 @@ final class TimesheetRowValidator {
             UUID runId, String kind, LocalDate expectedDate, List<ReportRow> rows, java.time.Instant now) {
         List<TimesheetSyncIssue> issues = new ArrayList<>();
         for (ReportRow row : rows) {
-            if (!isProductionLine(row)) {
+            if ("DAILY".equals(kind) && !isProductionLine(row)) {
                 continue;
             }
             if ("DAILY".equals(kind)) {
                 require(issues, runId, now, row, "date", row.date() != null);
-                require(issues, runId, now, row, "emp_id", hasText(row.empId()));
+                require(issues, runId, now, row, "emp_emp_id", hasText(row.empId()));
                 require(issues, runId, now, row, "emp_ccgid", hasText(row.empCcgid()));
                 require(issues, runId, now, row, "emp_name", hasText(row.empName()));
                 require(issues, runId, now, row, "emp_position_id", hasText(row.empPositionId()));
-                require(issues, runId, now, row, "supervisor_id", hasText(row.supervisorId()));
+                require(issues, runId, now, row, "supervisor_emp_id", hasText(row.supervisorId()));
                 require(issues, runId, now, row, "supervisor_ccgid", hasText(row.supervisorCcgid()));
                 require(issues, runId, now, row, "supervisor_name", hasText(row.supervisorName()));
                 require(issues, runId, now, row, "supervisor_position_id", hasText(row.supervisorPositionId()));
-                require(issues, runId, now, row, "sr_manager_id", hasText(row.srManagerId()));
+                require(issues, runId, now, row, "sr_manager_emp_id", hasText(row.srManagerId()));
                 require(issues, runId, now, row, "sr_manager_ccgid", hasText(row.srManagerCcgid()));
                 require(issues, runId, now, row, "sr_manager_name", hasText(row.srManagerName()));
                 require(issues, runId, now, row, "sr_manager_position_id", hasText(row.srManagerPositionId()));
-                require(issues, runId, now, row, "domain_head_id", hasText(row.domainHeadId()));
+                require(issues, runId, now, row, "domain_head_emp_id", hasText(row.domainHeadId()));
                 require(issues, runId, now, row, "domain_head_ccgid", hasText(row.domainHeadCcgid()));
                 require(issues, runId, now, row, "domain_head_name", hasText(row.domainHeadName()));
                 require(issues, runId, now, row, "domain_head_position_id", hasText(row.domainHeadPositionId()));
@@ -49,7 +49,7 @@ final class TimesheetRowValidator {
             } else {
                 LocalDate rowDate = rowDate(row);
                 require(issues, runId, now, row, "month", rowDate != null);
-                require(issues, runId, now, row, "emp_id", hasText(row.empId()));
+                require(issues, runId, now, row, "emp_emp_id", hasText(row.empId()));
                 require(issues, runId, now, row, "emp_ccgid", hasText(row.empCcgid()));
                 require(issues, runId, now, row, "supervisor_position_id", hasText(row.supervisorPositionId()));
                 require(issues, runId, now, row, "pl3_code", hasText(row.pl3Code()));
@@ -71,7 +71,8 @@ final class TimesheetRowValidator {
     }
 
     /**
-     * Required-field checks apply only to Production + Productive rows.
+     * Daily required-field checks apply only to Production + Productive rows.
+     * Monthly required-field checks apply to every row.
      *
      * @param row parsed row
      * @return true when the row is in the validated scope
@@ -79,6 +80,52 @@ final class TimesheetRowValidator {
     static boolean isProductionLine(ReportRow row) {
         return "production".equalsIgnoreCase(nullToEmpty(row.managementOrProduction()))
                 && "productive".equalsIgnoreCase(nullToEmpty(row.costType()));
+    }
+
+    /**
+     * Whether the employee identity on a Daily row can be persisted.
+     * Applies to every row, not only Production.
+     *
+     * @param row parsed row
+     * @return true when ccgid, name and position are present
+     */
+    static boolean isCompleteDaily(ReportRow row) {
+        return hasText(row.empCcgid()) && hasText(row.empName()) && hasText(row.empPositionId());
+    }
+
+    /**
+     * Whether a Monthly row has every required cell. Applies to every
+     * management / cost-type combination.
+     *
+     * @param row parsed row
+     * @return true when the row can be persisted
+     */
+    static boolean isCompleteMonthly(ReportRow row) {
+        return rowDate(row) != null
+                && hasText(row.empId())
+                && hasText(row.empCcgid())
+                && hasText(row.supervisorPositionId())
+                && hasText(row.pl3Code())
+                && hasText(row.pl3Name())
+                && hasText(row.center())
+                && hasText(row.domain())
+                && hasText(row.pl1())
+                && hasText(row.pl2())
+                && hasText(row.carrier())
+                && hasText(row.site())
+                && hasText(row.customerCountry())
+                && row.hc() != null
+                && row.hc().value() != null;
+    }
+
+    /**
+     * {@code MISSING_FIELD} is recorded but does not fail the run.
+     *
+     * @param issue persisted or computed issue
+     * @return true when the code is advisory
+     */
+    static boolean isAdvisory(TimesheetSyncIssue issue) {
+        return TimesheetSyncErrorCode.MISSING_FIELD.code().equals(issue.getCode());
     }
 
     static LocalDate rowDate(ReportRow row) {

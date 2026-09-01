@@ -31,6 +31,9 @@ public class TimesheetPosition implements Persistable<TimesheetPosition.Id> {
     @Column(name = "parent_position_id", length = 80)
     private String parentPositionId;
 
+    @Column(name = "center", nullable = false, length = 120)
+    private String center;
+
     /** Assigned-id rows: true until first persist/load so saveAll does not merge+select. */
     @Transient
     private boolean isNew = true;
@@ -45,14 +48,16 @@ public class TimesheetPosition implements Persistable<TimesheetPosition.Id> {
      * @param positionId Timesheet position
      * @param roleType AGENT / SUPERVISOR / SR_MANAGER / DOMAIN_HEAD
      * @param parentPositionId parent position
+     * @param center GBS center of the source row
      * @return row
      */
     public static TimesheetPosition create(
-            UUID syncRunId, String positionId, String roleType, String parentPositionId) {
+            UUID syncRunId, String positionId, String roleType, String parentPositionId, String center) {
         TimesheetPosition row = new TimesheetPosition();
         row.id = new Id(syncRunId, positionId);
         row.roleType = roleType;
         row.parentPositionId = parentPositionId;
+        row.center = center == null ? "" : center;
         row.isNew = true;
         return row;
     }
@@ -87,6 +92,10 @@ public class TimesheetPosition implements Persistable<TimesheetPosition.Id> {
 
     public String getParentPositionId() {
         return parentPositionId;
+    }
+
+    public String getCenter() {
+        return center;
     }
 
     /**

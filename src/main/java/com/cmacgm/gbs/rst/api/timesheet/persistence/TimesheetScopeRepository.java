@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.timesheet.persistence;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -100,8 +101,8 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
      * ACTIVE Monthly scopes for the Timesheet Sync browser.
      *
      * @param center exact center; blank matches all
-     * @param domain exact domain; blank matches all
-     * @param q PL3 / supervisor / PL1 / PL2 fragment; blank matches all
+     * @param supervisor Supervisor position id or occupant name; blank matches all
+     * @param pl3Code PL3 code or name fragment; blank matches all
      * @param pageable page
      * @return scopes
      */
@@ -113,13 +114,19 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
                       and r.kind = 'MONTHLY'
                       and r.status = 'ACTIVE'
                       and (:center = '' or s.id.center = :center)
-                      and (:domain = '' or s.domain = :domain)
-                      and (:q = ''
-                           or lower(s.id.pl3Code) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(s.pl3Name, '')) like lower(concat('%', :q, '%'))
-                           or lower(s.id.supervisorPositionId) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(s.pl1, '')) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(s.pl2, '')) like lower(concat('%', :q, '%')))
+                      and (:supervisor = ''
+                           or lower(s.id.supervisorPositionId) like lower(concat('%', :supervisor, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetPerson occupant, TimesheetSyncRun occupantRun
+                                where occupant.id.syncRunId = occupantRun.id
+                                  and occupantRun.kind = 'DAILY'
+                                  and occupantRun.status = 'ACTIVE'
+                                  and occupant.positionId = s.id.supervisorPositionId
+                                  and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
+                      and (:pl3Code = ''
+                           or lower(s.id.pl3Code) like lower(concat('%', :pl3Code, '%'))
+                           or lower(coalesce(s.pl3Name, '')) like lower(concat('%', :pl3Code, '%')))
                     order by s.id.center, s.id.supervisorPositionId, s.id.pl3Code
                     """,
             countQuery = """
@@ -129,19 +136,42 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
                       and r.kind = 'MONTHLY'
                       and r.status = 'ACTIVE'
                       and (:center = '' or s.id.center = :center)
-                      and (:domain = '' or s.domain = :domain)
-                      and (:q = ''
-                           or lower(s.id.pl3Code) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(s.pl3Name, '')) like lower(concat('%', :q, '%'))
-                           or lower(s.id.supervisorPositionId) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(s.pl1, '')) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(s.pl2, '')) like lower(concat('%', :q, '%')))
+                      and (:supervisor = ''
+                           or lower(s.id.supervisorPositionId) like lower(concat('%', :supervisor, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetPerson occupant, TimesheetSyncRun occupantRun
+                                where occupant.id.syncRunId = occupantRun.id
+                                  and occupantRun.kind = 'DAILY'
+                                  and occupantRun.status = 'ACTIVE'
+                                  and occupant.positionId = s.id.supervisorPositionId
+                                  and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
+                      and (:pl3Code = ''
+                           or lower(s.id.pl3Code) like lower(concat('%', :pl3Code, '%'))
+                           or lower(coalesce(s.pl3Name, '')) like lower(concat('%', :pl3Code, '%')))
                     """)
     Page<TimesheetScope> searchActive(
             @Param("center") String center,
-            @Param("domain") String domain,
-            @Param("q") String q,
+            @Param("supervisor") String supervisor,
+            @Param("pl3Code") String pl3Code,
             Pageable pageable);
+
+    /**
+     * ACTIVE Monthly scopes owned by the given Supervisor positions.
+     *
+     * @param supervisorPositionIds supervisor seats
+     * @return scopes
+     */
+    @Query("""
+            select s
+            from TimesheetScope s, TimesheetSyncRun r
+            where s.id.syncRunId = r.id
+              and r.kind = 'MONTHLY'
+              and r.status = 'ACTIVE'
+              and s.id.supervisorPositionId in :supervisorPositionIds
+            """)
+    List<TimesheetScope> findActiveBySupervisorPositionIdIn(
+            @Param("supervisorPositionIds") Collection<String> supervisorPositionIds);
 
     /**
      * Distinct centers in the ACTIVE Monthly scope snapshot.

@@ -78,40 +78,42 @@ public class TimesheetSyncController {
 
     @GetMapping("/tables/positions")
     public PageResponse<PositionView> positions(
+            @RequestParam(required = false) String center,
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        return snapshots.positions(q, page, pageSize);
+        return snapshots.positions(center, q, page, pageSize);
     }
 
     @GetMapping("/tables/scopes")
     public PageResponse<ScopeView> scopes(
             @RequestParam(required = false) String center,
-            @RequestParam(required = false) String domain,
-            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String supervisor,
+            @RequestParam(required = false) String pl3Code,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        return snapshots.scopes(center, domain, q, page, pageSize);
+        return snapshots.scopes(center, supervisor, pl3Code, page, pageSize);
     }
 
     @GetMapping("/tables/assignments")
     public PageResponse<AssignmentView> assignments(
-            @RequestParam(required = false) String supervisorPositionId,
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String agent,
+            @RequestParam(required = false) String supervisor,
             @RequestParam(required = false) String pl3Code,
-            @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        return snapshots.assignments(supervisorPositionId, pl3Code, q, page, pageSize);
+        return snapshots.assignments(center, agent, supervisor, pl3Code, page, pageSize);
     }
 
     @GetMapping("/tables/kpis")
     public PageResponse<KpiView> kpis(
-            @RequestParam(required = false) String supervisorPositionId,
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String supervisor,
             @RequestParam(required = false) String pl3Code,
-            @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        return snapshots.kpis(supervisorPositionId, pl3Code, q, page, pageSize);
+        return snapshots.kpis(center, supervisor, pl3Code, page, pageSize);
     }
 
     @GetMapping("/alert")

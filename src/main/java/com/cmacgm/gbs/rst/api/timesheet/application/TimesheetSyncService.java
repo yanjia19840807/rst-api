@@ -177,7 +177,8 @@ public class TimesheetSyncService {
             log.info("Timesheet {} stale file skipped: {}", kind, source.fileName());
             return toResult(active.get());
         }
-        if (source.filenameDate() != null
+        if (!isManual(source)
+                && source.filenameDate() != null
                 && active.isPresent()
                 && source.filenameDate().equals(active.get().getSyncDate())
                 && source.driveItemId() != null
@@ -211,7 +212,7 @@ public class TimesheetSyncService {
         String hash = hashRows(rows);
         var unchanged = syncRuns.findByKindAndStatus(kind, "ACTIVE")
                 .filter(active -> hash.equals(active.getDataHash()));
-        if (unchanged.isPresent()) {
+        if (unchanged.isPresent() && !isManual(source)) {
             log.info("Timesheet {} hash unchanged: id={}", kind, unchanged.get().getId());
             return toResult(unchanged.get());
         }
@@ -224,6 +225,7 @@ public class TimesheetSyncService {
                 source.sourceType(),
                 source.fileName(),
                 actorCcgid);
+        run.setCenter(resolveCenter(source));
         syncRuns.saveAndFlush(run);
         try {
             if ("DAILY".equals(kind)) {
@@ -276,11 +278,16 @@ public class TimesheetSyncService {
             Runnable persistRows) {
         if (!computedIssues.isEmpty()) {
             issues.saveAll(computedIssues);
-            markFailed(run.getId(), computedIssues.getFirst().getCode(), computedIssues.getFirst().getMessage());
+        }
+        List<TimesheetSyncIssue> blocking = computedIssues.stream()
+                .filter(issue -> !TimesheetRowValidator.isAdvisory(issue))
+                .toList();
+        if (!blocking.isEmpty()) {
+            markFailed(run.getId(), blocking.getFirst().getCode(), blocking.getFirst().getMessage());
             throw new ApiException(
                     HttpStatus.CONFLICT,
-                    computedIssues.getFirst().getCode(),
-                    computedIssues.getFirst().getMessage());
+                    blocking.getFirst().getCode(),
+                    blocking.getFirst().getMessage());
         }
         persistRows.run();
         activate(run.getId(), run.getKind(), rowCount, dataHash);
@@ -344,6 +351,7 @@ public class TimesheetSyncService {
         TimesheetSyncRun run = TimesheetSyncRun.startLoading(kind, date, nextAttemptNo(kind, date), now);
         run.setSource(
                 source.driveItemId(), source.etag(), source.sourceType(), source.fileName(), actorCcgid);
+        run.setCenter(resolveCenter(source));
         run.markFailed(code, sanitize(message), now);
         syncRuns.save(run);
         persistRunIssueIfMissing(run.getId(), code, sanitize(message), now);
@@ -371,6 +379,17 @@ public class TimesheetSyncService {
     private static String guessKind(String fileName) {
         String lower = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
         return lower.contains("monthly") ? "MONTHLY" : "DAILY";
+    }
+
+    private static String resolveCenter(Source source) {
+        return TimesheetReportName.parse(source == null ? null : source.fileName())
+                .map(TimesheetReportName.Parsed::region)
+                .map(String::trim)
+                .orElse("");
+    }
+
+    private static boolean isManual(Source source) {
+        return source != null && "MANUAL".equalsIgnoreCase(source.sourceType());
     }
 
     private static SyncResult toResult(TimesheetSyncRun run) {

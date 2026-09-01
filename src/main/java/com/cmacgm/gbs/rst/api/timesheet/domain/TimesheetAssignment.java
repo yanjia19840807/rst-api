@@ -16,7 +16,7 @@ import jakarta.persistence.Transient;
 import org.springframework.data.domain.Persistable;
 
 /**
- * Employee assigned to a Supervisor position and PL3 in a Monthly sync.
+ * Agent seat assigned to a Supervisor position × PL3 × Center in a Monthly sync.
  */
 @Entity
 @Table(name = "timesheet_assignment")
@@ -24,9 +24,6 @@ public class TimesheetAssignment implements Persistable<TimesheetAssignment.Id> 
 
     @EmbeddedId
     private Id id;
-
-    @Column(name = "emp_id", length = 80)
-    private String empId;
 
     /** Assigned-id rows: true until first persist/load so saveAll does not merge+select. */
     @Transient
@@ -39,21 +36,20 @@ public class TimesheetAssignment implements Persistable<TimesheetAssignment.Id> 
      * Creates an assignment row.
      *
      * @param syncRunId Monthly run
-     * @param empCcgid employee identity
-     * @param empId employee Timesheet id
+     * @param empPositionId Agent seat
      * @param supervisorPositionId supervisor position
      * @param pl3Code process level 3
+     * @param center GBS center
      * @return row
      */
     public static TimesheetAssignment create(
             UUID syncRunId,
-            String empCcgid,
-            String empId,
+            String empPositionId,
             String supervisorPositionId,
-            String pl3Code) {
+            String pl3Code,
+            String center) {
         TimesheetAssignment row = new TimesheetAssignment();
-        row.id = new Id(syncRunId, empCcgid, supervisorPositionId, pl3Code);
-        row.empId = empId;
+        row.id = new Id(syncRunId, empPositionId, supervisorPositionId, pl3Code, center);
         row.isNew = true;
         return row;
     }
@@ -78,8 +74,8 @@ public class TimesheetAssignment implements Persistable<TimesheetAssignment.Id> 
         return id.syncRunId;
     }
 
-    public String getEmpCcgid() {
-        return id.empCcgid;
+    public String getEmpPositionId() {
+        return id.empPositionId;
     }
 
     public String getSupervisorPositionId() {
@@ -90,8 +86,8 @@ public class TimesheetAssignment implements Persistable<TimesheetAssignment.Id> 
         return id.pl3Code;
     }
 
-    public String getEmpId() {
-        return empId;
+    public String getCenter() {
+        return id.center;
     }
 
     /**
@@ -103,8 +99,8 @@ public class TimesheetAssignment implements Persistable<TimesheetAssignment.Id> 
         @Column(name = "sync_run_id", nullable = false)
         private UUID syncRunId;
 
-        @Column(name = "emp_ccgid", nullable = false, length = 32)
-        private String empCcgid;
+        @Column(name = "emp_position_id", nullable = false, length = 80)
+        private String empPositionId;
 
         @Column(name = "supervisor_position_id", nullable = false, length = 80)
         private String supervisorPositionId;
@@ -112,15 +108,23 @@ public class TimesheetAssignment implements Persistable<TimesheetAssignment.Id> 
         @Column(name = "pl3_code", nullable = false, length = 80)
         private String pl3Code;
 
+        @Column(name = "center", nullable = false, length = 120)
+        private String center;
+
         protected Id() {
         }
 
         public Id(
-                UUID syncRunId, String empCcgid, String supervisorPositionId, String pl3Code) {
+                UUID syncRunId,
+                String empPositionId,
+                String supervisorPositionId,
+                String pl3Code,
+                String center) {
             this.syncRunId = syncRunId;
-            this.empCcgid = empCcgid;
+            this.empPositionId = empPositionId;
             this.supervisorPositionId = supervisorPositionId;
             this.pl3Code = pl3Code;
+            this.center = center;
         }
 
         @Override
@@ -132,14 +136,15 @@ public class TimesheetAssignment implements Persistable<TimesheetAssignment.Id> 
                 return false;
             }
             return Objects.equals(syncRunId, that.syncRunId)
-                    && Objects.equals(empCcgid, that.empCcgid)
+                    && Objects.equals(empPositionId, that.empPositionId)
                     && Objects.equals(supervisorPositionId, that.supervisorPositionId)
-                    && Objects.equals(pl3Code, that.pl3Code);
+                    && Objects.equals(pl3Code, that.pl3Code)
+                    && Objects.equals(center, that.center);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(syncRunId, empCcgid, supervisorPositionId, pl3Code);
+            return Objects.hash(syncRunId, empPositionId, supervisorPositionId, pl3Code, center);
         }
     }
 }

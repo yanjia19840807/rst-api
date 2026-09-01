@@ -118,6 +118,7 @@ class TimesheetSyncServiceTests {
 
         TimesheetSyncRun run = runStore.get(result.id());
         assertThat(run.getStatus()).isEqualTo("ACTIVE");
+        assertThat(run.getCenter()).isEmpty();
         assertThat(run.getSourceDriveItemId()).isEqualTo("drive-monthly-1");
         assertThat(run.getSourceEtag()).isEqualTo("etag-monthly-1");
 
@@ -130,10 +131,10 @@ class TimesheetSyncServiceTests {
                 .containsExactly(org.assertj.core.groups.Tuple.tuple(
                         "POS-SUP-1", "PL3", "Kuala Lumpur", "Finance"));
         assertThat(savedAssignments)
-                .extracting(TimesheetAssignment::getEmpCcgid, TimesheetAssignment::getPl3Code)
+                .extracting(TimesheetAssignment::getEmpPositionId, TimesheetAssignment::getPl3Code)
                 .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple("S00000001", "PL3"),
-                        org.assertj.core.groups.Tuple.tuple("S00000005", "PL3"));
+                        org.assertj.core.groups.Tuple.tuple("EMP-POS-1", "PL3"),
+                        org.assertj.core.groups.Tuple.tuple("EMP-POS-2", "PL3"));
         assertThat(savedKpis)
                 .extracting(TimesheetKpi::getSite, TimesheetKpi::getCustomerCountry, TimesheetKpi::getHc)
                 .containsExactly(
@@ -156,7 +157,7 @@ class TimesheetSyncServiceTests {
             public Source open(String kind) {
                 String csv =
                         """
-                        month,emp_id,emp_ccgid,emp_name,emp_email,emp_position_id,supervisor_id,supervisor_ccgid,supervisor_name,supervisor_position_id,sr_manager_id,sr_manager_ccgid,sr_manager_name,sr_manager_position_id,domain_head_id,domain_head_ccgid,domain_head_name,domain_head_position_id,center,site,gbs_domain,pl1,pl2,pl3_code,pl3,carrier,customer_country,hc,management_or_production,cost_type
+                        month,emp_emp_id,emp_ccgid,emp_name,emp_email,emp_position_id,supervisor_emp_id,supervisor_ccgid,supervisor_name,supervisor_position_id,sr_manager_emp_id,sr_manager_ccgid,sr_manager_name,sr_manager_position_id,domain_head_emp_id,domain_head_ccgid,domain_head_name,domain_head_position_id,center,site,gbs_domain,pl1,pl2,pl3_code,pl3,carrier,customer_country,hc,management_or_production,cost_type
                         2026-07,EMP-1,S00000001,Agent One,s00000001@dev.local,EMP-POS-1,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,Kuala Lumpur,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,3,production,productive
                         """;
                 return new Source(
@@ -244,7 +245,7 @@ class TimesheetSyncServiceTests {
             public Source open(String kind) {
                 String csv =
                         """
-                        month,emp_id,emp_ccgid,emp_name,emp_email,emp_position_id,supervisor_id,supervisor_ccgid,supervisor_name,supervisor_position_id,sr_manager_id,sr_manager_ccgid,sr_manager_name,sr_manager_position_id,domain_head_id,domain_head_ccgid,domain_head_name,domain_head_position_id,center,site,gbs_domain,pl1,pl2,pl3_code,pl3,carrier,customer_country,hc,management_or_production,cost_type
+                        month,emp_emp_id,emp_ccgid,emp_name,emp_email,emp_position_id,supervisor_emp_id,supervisor_ccgid,supervisor_name,supervisor_position_id,sr_manager_emp_id,sr_manager_ccgid,sr_manager_name,sr_manager_position_id,domain_head_emp_id,domain_head_ccgid,domain_head_name,domain_head_position_id,center,site,gbs_domain,pl1,pl2,pl3_code,pl3,carrier,customer_country,hc,management_or_production,cost_type
                         2026-06,EMP-1,S00000001,Agent One,s00000001@dev.local,EMP-POS-1,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,Kuala Lumpur,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,1,production,productive
                         """;
                 return new Source(
@@ -281,6 +282,81 @@ class TimesheetSyncServiceTests {
         assertThatThrownBy(() -> failing.sync("MONTHLY")).isInstanceOf(ApiException.class);
         assertThat(mails.get()).isEqualTo(1);
         assertThat(runStore.values()).hasSize(1).allMatch(run -> "FAILED".equals(run.getStatus()));
+    }
+
+    @Test
+    void missingFieldWritesIssueAndStillActivates() {
+        AtomicInteger mails = new AtomicInteger();
+        List<TimesheetSyncIssue> savedIssues = new ArrayList<>();
+        TimesheetSourceResolver sources = new TimesheetSourceResolver(
+                new RstSharePointProperties("2.UAT/Data Output/RST"), null) {
+            @Override
+            public Source open(String kind) {
+                String csv =
+                        """
+                        month,emp_emp_id,emp_ccgid,emp_name,emp_email,emp_position_id,supervisor_emp_id,supervisor_ccgid,supervisor_name,supervisor_position_id,sr_manager_emp_id,sr_manager_ccgid,sr_manager_name,sr_manager_position_id,domain_head_emp_id,domain_head_ccgid,domain_head_name,domain_head_position_id,center,site,gbs_domain,pl1,pl2,pl3_code,pl3,carrier,customer_country,hc,management_or_production,cost_type
+                        2026-06,EMP-1,S00000001,Agent One,s00000001@dev.local,EMP-POS-1,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,Kuala Lumpur,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,1,production,productive
+                        2026-06,EMP-2,S00000005,Agent Two,s00000005@dev.local,EMP-POS-2,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,Kuala Lumpur,Site B,Finance,PL1,PL2,,PL3 Name,CMA,SG,1,production,productive
+                        """;
+                return new Source(
+                        "missing-field.csv",
+                        new ByteArrayInputStream(csv.getBytes(StandardCharsets.UTF_8)),
+                        "drive-monthly-3",
+                        "etag-monthly-3",
+                        "SHAREPOINT",
+                        LocalDate.of(2026, 6, 30));
+            }
+        };
+        TimesheetSyncAlertNotifier notifier = new TimesheetSyncAlertNotifier(null, null, null, null, null) {
+            @Override
+            public void notifyFailed(UUID runId) {
+                mails.incrementAndGet();
+            }
+        };
+        TimesheetSyncService tolerant = new TimesheetSyncService(
+                new TimesheetReportParser(),
+                new TimesheetDailyCalculator(),
+                new TimesheetMonthlyCalculator(),
+                sources,
+                proxy(TimesheetSyncRunRepository.class, (proxy, method, args) ->
+                        switch (method.getName()) {
+                            case "saveAndFlush", "save" -> store((TimesheetSyncRun) args[0]);
+                            case "findById" -> Optional.ofNullable(runStore.get(args[0]));
+                            case "findByKindAndStatus" -> runStore.values().stream()
+                                    .filter(run -> run.getKind().equals(args[0]) && run.getStatus().equals(args[1]))
+                                    .findFirst();
+                            case "findByKindAndStatusAndSourceDriveItemIdAndSourceEtag" -> Optional.empty();
+                            case "findMaxAttemptNo" -> null;
+                            case "archiveOtherActive" -> archiveOther((String) args[0], (UUID) args[1], (Instant) args[2]);
+                            default -> unsupported(method);
+                        }),
+                unusedRepository(TimesheetPersonRepository.class),
+                unusedRepository(TimesheetPositionRepository.class),
+                capturingRepository(TimesheetScopeRepository.class, savedScopes),
+                capturingRepository(TimesheetAssignmentRepository.class, savedAssignments),
+                capturingRepository(TimesheetKpiRepository.class, savedKpis),
+                proxy(TimesheetSyncIssueRepository.class, (proxy, method, args) ->
+                        switch (method.getName()) {
+                            case "saveAll" -> {
+                                @SuppressWarnings("unchecked")
+                                Iterable<TimesheetSyncIssue> rows = (Iterable<TimesheetSyncIssue>) args[0];
+                                rows.forEach(savedIssues::add);
+                                yield savedIssues;
+                            }
+                            default -> unsupported(method);
+                        }),
+                noOpTransactions(),
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                notifier);
+
+        TimesheetSyncService.SyncResult result = tolerant.sync("MONTHLY");
+
+        assertThat(result.status()).isEqualTo("ACTIVE");
+        assertThat(mails.get()).isZero();
+        assertThat(savedIssues).extracting(TimesheetSyncIssue::getCode).containsExactly("MISSING_FIELD");
+        assertThat(savedAssignments)
+                .extracting(TimesheetAssignment::getEmpPositionId)
+                .containsExactly("EMP-POS-1");
     }
 
     private TimesheetSyncRun store(TimesheetSyncRun run) {

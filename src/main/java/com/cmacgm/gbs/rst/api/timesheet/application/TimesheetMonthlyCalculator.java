@@ -21,8 +21,8 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 
 /**
- * Builds Monthly assignment, scope and KPI tables from Production +
- * Productive rows.
+ * Builds Monthly scope and Delivery HC from every complete row.
+ * Assignments are Production + Productive only.
  */
 @Component
 public class TimesheetMonthlyCalculator {
@@ -71,48 +71,39 @@ public class TimesheetMonthlyCalculator {
             if (syncDate == null) {
                 syncDate = TimesheetRowValidator.rowDate(row);
             }
-            if (!TimesheetRowValidator.isProductionLine(row)) {
+            if (!TimesheetRowValidator.isCompleteMonthly(row)) {
                 continue;
             }
-            if (hasText(row.supervisorPositionId()) && hasText(row.pl3Code()) && hasText(row.center())
-                    && hasText(row.domain()) && hasText(row.pl1()) && hasText(row.pl2())
-                    && hasText(row.pl3Name())) {
-                scopes.putIfAbsent(
-                        key(row.supervisorPositionId(), row.pl3Code(), row.center()),
-                        new ScopeDraft(
+            scopes.putIfAbsent(
+                    key(row.supervisorPositionId(), row.pl3Code(), row.center()),
+                    new ScopeDraft(
+                            row.supervisorPositionId(),
+                            row.pl3Code(),
+                            row.center(),
+                            row.pl3Name(),
+                            row.domain(),
+                            row.pl1(),
+                            row.pl2()));
+            if (TimesheetRowValidator.isProductionLine(row)) {
+                assignments.putIfAbsent(
+                        key(row.empPositionId(), row.supervisorPositionId(), row.pl3Code(), row.center()),
+                        new AssignmentDraft(
+                                row.empPositionId(),
                                 row.supervisorPositionId(),
                                 row.pl3Code(),
-                                row.center(),
-                                row.pl3Name(),
-                                row.domain(),
-                                row.pl1(),
-                                row.pl2()));
-            }
-            if (hasText(row.empCcgid()) && hasText(row.supervisorPositionId()) && hasText(row.pl3Code())) {
-                assignments.putIfAbsent(
-                        key(row.empCcgid(), row.supervisorPositionId(), row.pl3Code()),
-                        new AssignmentDraft(
-                                row.empCcgid(),
-                                row.empId(),
-                                row.supervisorPositionId(),
-                                row.pl3Code()));
+                                row.center()));
                 assignmentSupervisors
-                        .computeIfAbsent(row.empCcgid(), ignored -> new LinkedHashSet<>())
+                        .computeIfAbsent(row.empPositionId(), ignored -> new LinkedHashSet<>())
                         .add(row.supervisorPositionId());
             }
-            if (!hasText(row.supervisorPositionId())
-                    || !hasText(row.pl3Code())
-                    || !hasText(row.carrier())
-                    || !hasText(row.site())
-                    || !hasText(row.customerCountry())
-                    || row.hc() == null
-                    || row.hc().value() == null) {
+            if (row.hc() == null || row.hc().value() == null) {
                 continue;
             }
             String kpiKey = String.join(
                     "|",
                     row.supervisorPositionId(),
                     row.pl3Code(),
+                    row.center(),
                     row.carrier(),
                     row.site(),
                     row.customerCountry());
@@ -121,6 +112,7 @@ public class TimesheetMonthlyCalculator {
                     new KpiDraft(
                             row.supervisorPositionId(),
                             row.pl3Code(),
+                            row.center(),
                             row.carrier(),
                             row.site(),
                             row.customerCountry(),
@@ -128,6 +120,7 @@ public class TimesheetMonthlyCalculator {
                     (left, right) -> new KpiDraft(
                             left.supervisorPositionId,
                             left.pl3Code,
+                            left.center,
                             left.carrier,
                             left.site,
                             left.customerCountry,
@@ -138,11 +131,11 @@ public class TimesheetMonthlyCalculator {
                 issues.add(TimesheetSyncIssue.error(
                         runId,
                         TimesheetSyncErrorCode.ASSIGNMENT_CONFLICT,
-                        "emp_ccgid " + entry.getKey() + " maps to multiple supervisor_position_id: "
+                        "emp_position_id " + entry.getKey() + " maps to multiple supervisor_position_id: "
                                 + String.join(", ", entry.getValue()),
                         null,
-                        entry.getKey(),
                         null,
+                        entry.getKey(),
                         null,
                         null,
                         now));
@@ -187,13 +180,18 @@ public class TimesheetMonthlyCalculator {
                         .toList(),
                 assignments.values().stream()
                         .map(draft -> TimesheetAssignment.create(
-                                runId, draft.empCcgid, draft.empId, draft.supervisorPositionId, draft.pl3Code))
+                                runId,
+                                draft.empPositionId,
+                                draft.supervisorPositionId,
+                                draft.pl3Code,
+                                draft.center))
                         .toList(),
                 totals.values().stream()
                         .map(draft -> TimesheetKpi.create(
                                 runId,
                                 draft.supervisorPositionId,
                                 draft.pl3Code,
+                                draft.center,
                                 draft.carrier,
                                 draft.site,
                                 draft.customerCountry,
@@ -204,10 +202,6 @@ public class TimesheetMonthlyCalculator {
 
     private static String key(String... parts) {
         return String.join("|", parts);
-    }
-
-    private static boolean hasText(String value) {
-        return value != null && !value.isBlank();
     }
 
     private record ScopeDraft(
@@ -221,12 +215,13 @@ public class TimesheetMonthlyCalculator {
     }
 
     private record AssignmentDraft(
-            String empCcgid, String empId, String supervisorPositionId, String pl3Code) {
+            String empPositionId, String supervisorPositionId, String pl3Code, String center) {
     }
 
     private record KpiDraft(
             String supervisorPositionId,
             String pl3Code,
+            String center,
             String carrier,
             String site,
             String customerCountry,

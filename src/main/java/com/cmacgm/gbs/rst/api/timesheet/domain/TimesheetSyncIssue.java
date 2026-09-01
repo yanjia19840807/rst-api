@@ -9,7 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 /**
- * One blocking ERROR from a Timesheet sync.
+ * One ERROR from a Timesheet sync. {@code MISSING_FIELD} is advisory.
  */
 @Entity
 @Table(name = "timesheet_sync_issue")
