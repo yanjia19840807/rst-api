@@ -39,7 +39,7 @@ class TimesheetDailyCalculatorTests {
         assertThat(result.positions())
                 .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
                 .contains(
-                        org.assertj.core.groups.Tuple.tuple("EMP-POS-1", "PRODUCTION"),
+                        org.assertj.core.groups.Tuple.tuple("EMP-POS-1", "AGENT"),
                         org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "SUPERVISOR"));
     }
 
@@ -79,7 +79,7 @@ class TimesheetDailyCalculatorTests {
 
         assertThat(result.issues())
                 .extracting(TimesheetSyncIssue::getMessage)
-                .contains("Row 2 is missing sr_manager_id.");
+                .contains("Missing sr_manager_id.");
     }
 
     @Test

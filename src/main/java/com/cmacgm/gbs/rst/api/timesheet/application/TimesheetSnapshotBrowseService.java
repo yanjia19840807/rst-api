@@ -11,7 +11,6 @@ import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetAssignment;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPosition;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetAssignmentRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
@@ -75,16 +74,14 @@ public class TimesheetSnapshotBrowseService {
     }
 
     /**
-     * @param roleType PRODUCTION / SUPERVISOR / SR_MANAGER / DOMAIN_HEAD
-     * @param q position or parent id
+     * @param q any of the four position ids
      * @param page 1-based page
      * @param pageSize page size
-     * @return positions page
+     * @return one row per AGENT position with the parent chain
      */
     @Transactional(readOnly = true)
-    public PageResponse<PositionView> positions(String roleType, String q, int page, int pageSize) {
-        return PageResponse.from(
-                positions.searchActive(blank(roleType), blank(q), pageOf(page, pageSize)), this::toPosition);
+    public PageResponse<PositionView> positions(String q, int page, int pageSize) {
+        return PageResponse.from(positions.searchActiveChains(blank(q), pageOf(page, pageSize)), this::toPosition);
     }
 
     /**
@@ -138,8 +135,12 @@ public class TimesheetSnapshotBrowseService {
                 row.getCcgid(), row.getEmpId(), row.getName(), row.getEmail(), row.getCenter(), row.getPositionId());
     }
 
-    private PositionView toPosition(TimesheetPosition row) {
-        return new PositionView(row.getPositionId(), row.getRoleType(), row.getParentPositionId());
+    private PositionView toPosition(TimesheetPositionRepository.PositionChain row) {
+        return new PositionView(
+                row.getAgentPositionId(),
+                row.getSupervisorPositionId(),
+                row.getSrManagerPositionId(),
+                row.getDomainHeadPositionId());
     }
 
     private ScopeView toScope(TimesheetScope row) {
@@ -190,9 +191,13 @@ public class TimesheetSnapshotBrowseService {
     }
 
     /**
-     * Daily position row.
+     * Daily AGENT seat with the walked parent chain.
      */
-    public record PositionView(String positionId, String roleType, String parentPositionId) {
+    public record PositionView(
+            String agentPositionId,
+            String supervisorPositionId,
+            String srManagerPositionId,
+            String domainHeadPositionId) {
     }
 
     /**

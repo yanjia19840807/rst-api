@@ -43,7 +43,7 @@ public class TimesheetPosition implements Persistable<TimesheetPosition.Id> {
      *
      * @param syncRunId Daily run
      * @param positionId Timesheet position
-     * @param roleType SUPERVISOR / SR_MANAGER / DOMAIN_HEAD
+     * @param roleType AGENT / SUPERVISOR / SR_MANAGER / DOMAIN_HEAD
      * @param parentPositionId parent position
      * @return row
      */

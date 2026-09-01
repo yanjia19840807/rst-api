@@ -80,7 +80,7 @@ public class TimesheetDailyCalculator {
             rememberPerson(people, row);
             personToPosition.computeIfAbsent(row.empCcgid(), ignored -> new LinkedHashSet<>()).add(row.empPositionId());
             positionToPerson.computeIfAbsent(row.empPositionId(), ignored -> new LinkedHashSet<>()).add(row.empCcgid());
-            addPosition(positions, childToParent, row.empPositionId(), "PRODUCTION", row.supervisorPositionId());
+            addPosition(positions, childToParent, row.empPositionId(), "AGENT", row.supervisorPositionId());
             addPosition(
                     positions, childToParent, row.supervisorPositionId(), "SUPERVISOR", row.srManagerPositionId());
             addPosition(
@@ -187,7 +187,7 @@ public class TimesheetDailyCalculator {
             issues.add(TimesheetSyncIssue.error(
                     runId,
                     code,
-                    childLabel + " maps to multiple " + parentLabel + ": "
+                    childLabel + " " + entry.getKey() + " maps to multiple " + parentLabel + ": "
                             + String.join(", ", entry.getValue()),
                     null,
                     childIsCcgid ? entry.getKey() : null,

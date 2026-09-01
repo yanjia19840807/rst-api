@@ -83,7 +83,7 @@ class TimesheetMonthlyCalculatorTests {
 
         assertThat(result.issues())
                 .extracting(TimesheetSyncIssue::getMessage)
-                .contains("Row 2 is missing pl3_code.");
+                .contains("Missing pl3_code.");
     }
 
     @Test

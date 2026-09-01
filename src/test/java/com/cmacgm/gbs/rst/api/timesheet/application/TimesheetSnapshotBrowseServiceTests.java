@@ -13,7 +13,6 @@ import java.util.UUID;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetAssignment;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPosition;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetAssignmentRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
@@ -63,6 +62,43 @@ class TimesheetSnapshotBrowseServiceTests {
                         TimesheetSnapshotBrowseService.PersonView::center,
                         TimesheetSnapshotBrowseService.PersonView::positionId)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("S00000001", "GBS CHINA", "748595"));
+    }
+
+    @Test
+    void mapsPositionChains() {
+        when(positions.searchActiveChains(eq("174"), any()))
+                .thenReturn(new PageImpl<>(
+                        List.of(new TimesheetPositionRepository.PositionChain() {
+                            @Override
+                            public String getAgentPositionId() {
+                                return "172545";
+                            }
+
+                            @Override
+                            public String getSupervisorPositionId() {
+                                return "174055";
+                            }
+
+                            @Override
+                            public String getSrManagerPositionId() {
+                                return "174100";
+                            }
+
+                            @Override
+                            public String getDomainHeadPositionId() {
+                                return "174200";
+                            }
+                        }),
+                        PageRequest.of(0, 10),
+                        1));
+
+        assertThat(service.positions("174", 1, 10).items())
+                .extracting(
+                        TimesheetSnapshotBrowseService.PositionView::agentPositionId,
+                        TimesheetSnapshotBrowseService.PositionView::supervisorPositionId,
+                        TimesheetSnapshotBrowseService.PositionView::srManagerPositionId,
+                        TimesheetSnapshotBrowseService.PositionView::domainHeadPositionId)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("172545", "174055", "174100", "174200"));
     }
 
     @Test

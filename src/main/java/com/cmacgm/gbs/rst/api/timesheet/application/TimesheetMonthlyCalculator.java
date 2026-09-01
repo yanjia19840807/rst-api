@@ -138,7 +138,7 @@ public class TimesheetMonthlyCalculator {
                 issues.add(TimesheetSyncIssue.error(
                         runId,
                         TimesheetSyncErrorCode.ASSIGNMENT_CONFLICT,
-                        "emp_ccgid maps to multiple supervisor_position_id: "
+                        "emp_ccgid " + entry.getKey() + " maps to multiple supervisor_position_id: "
                                 + String.join(", ", entry.getValue()),
                         null,
                         entry.getKey(),

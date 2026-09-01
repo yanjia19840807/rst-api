@@ -78,11 +78,10 @@ public class TimesheetSyncController {
 
     @GetMapping("/tables/positions")
     public PageResponse<PositionView> positions(
-            @RequestParam(required = false) String roleType,
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        return snapshots.positions(roleType, q, page, pageSize);
+        return snapshots.positions(q, page, pageSize);
     }
 
     @GetMapping("/tables/scopes")

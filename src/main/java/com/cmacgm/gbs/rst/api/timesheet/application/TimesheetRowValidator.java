@@ -104,7 +104,7 @@ final class TimesheetRowValidator {
         issues.add(TimesheetSyncIssue.error(
                 runId,
                 TimesheetSyncErrorCode.MISSING_FIELD,
-                "Row " + row.sourceRow() + " is missing " + field + ".",
+                "Missing " + field + ".",
                 row.empId(),
                 row.empCcgid(),
                 row.empPositionId(),
@@ -118,7 +118,7 @@ final class TimesheetRowValidator {
         return TimesheetSyncIssue.error(
                 runId,
                 TimesheetSyncErrorCode.DATE_MISMATCH,
-                "Row " + row.sourceRow() + " date " + actual + " does not match file " + expected + ".",
+                "Date " + actual + " does not match file " + expected + ".",
                 row.empId(),
                 row.empCcgid(),
                 row.empPositionId(),
