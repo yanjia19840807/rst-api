@@ -46,6 +46,7 @@ public class TimesheetSyncService {
     private final TimesheetDailyCalculator dailyCalculator;
     private final TimesheetMonthlyCalculator monthlyCalculator;
     private final TimesheetSourceResolver sources;
+    private final GbsProcessCatalogSource processCatalogs;
     private final TimesheetSyncRunRepository syncRuns;
     private final TimesheetPersonRepository people;
     private final TimesheetPositionRepository positions;
@@ -62,6 +63,7 @@ public class TimesheetSyncService {
      * @param dailyCalculator Daily compute
      * @param monthlyCalculator Monthly compute
      * @param sources SharePoint source
+     * @param processCatalogs GBS Process catalog
      * @param syncRuns run repository
      * @param people person repository
      * @param positions position repository
@@ -78,6 +80,7 @@ public class TimesheetSyncService {
             TimesheetDailyCalculator dailyCalculator,
             TimesheetMonthlyCalculator monthlyCalculator,
             TimesheetSourceResolver sources,
+            GbsProcessCatalogSource processCatalogs,
             TimesheetSyncRunRepository syncRuns,
             TimesheetPersonRepository people,
             TimesheetPositionRepository positions,
@@ -92,6 +95,7 @@ public class TimesheetSyncService {
         this.dailyCalculator = dailyCalculator;
         this.monthlyCalculator = monthlyCalculator;
         this.sources = sources;
+        this.processCatalogs = processCatalogs;
         this.syncRuns = syncRuns;
         this.people = people;
         this.positions = positions;
@@ -228,16 +232,17 @@ public class TimesheetSyncService {
         run.setCenter(resolveCenter(source));
         syncRuns.saveAndFlush(run);
         try {
+            GbsProcessCatalog catalog = processCatalogs.load();
             if ("DAILY".equals(kind)) {
                 TimesheetDailyCalculator.Result computed =
-                        dailyCalculator.compute(run.getId(), rows, now, source.filenameDate());
+                        dailyCalculator.compute(run.getId(), rows, now, source.filenameDate(), catalog);
                 return activateOrFail(run, rows.size(), hash, computed.issues(), () -> {
                     people.saveAll(computed.people());
                     positions.saveAll(computed.positions());
                 });
             }
             TimesheetMonthlyCalculator.Result computed =
-                    monthlyCalculator.compute(run.getId(), rows, now, source.filenameDate());
+                    monthlyCalculator.compute(run.getId(), rows, now, source.filenameDate(), catalog);
             return activateOrFail(run, rows.size(), hash, computed.issues(), () -> {
                 scopes.saveAll(computed.scopes());
                 assignments.saveAll(computed.assignments());

@@ -137,10 +137,12 @@ existing V2 session foreign keys survive the upgrade. V49 replaces the raw
 
 ## Timesheet sync (dev / ops)
 
-Daily and Monthly reports are two sources. Daily writes `timesheet_person` and
-`timesheet_position` (production report lines). Monthly writes
-`timesheet_scope`, `timesheet_assignment`, and Delivery HC. Each kind keeps one
-ACTIVE run; a failed run does not replace the previous ACTIVE.
+Daily and Monthly reports are two sources. Daily writes `timesheet_person` from
+every complete employee row and `timesheet_position` from rows whose PL3 is
+RST-applicable in GBS Process. Monthly writes `timesheet_scope`,
+`timesheet_assignment`, and Delivery HC for the same RST-applicable PL3 codes.
+Each kind keeps one ACTIVE run; a failed run does not replace the previous
+ACTIVE.
 
 Automatic sync picks the file whose **name** has the latest business date
 (`Daily Report of yyyyMMdd(GBS CHINA).xlsx` /
@@ -160,7 +162,9 @@ Cron is system configuration only.
 
 | Property | Default | Purpose |
 | --- | --- | --- |
-| `rst.sharepoint.root` | `2.UAT/Data Output/RST` | RST folder (`Daily`, `Monthly`, `Manual`, `Template`) |
+| `rst.sharepoint.root` | `2.UAT/Data Output/RST` | RST folder (`Daily`, `Monthly`, `Manual`, `Template`, `Process`) |
+| `timesheet.process.source` | `classpath` | GBS Process catalog (`classpath` mock; `sharepoint` reserved) |
+| `timesheet.process.classpath-location` | `GBS Process.csv` | Classpath CSV used while SharePoint is not wired |
 | `timesheet.sync.schedule.enabled` | `false` | Register Quartz jobs from application config |
 | `timesheet.sync.schedule.daily-cron` | `0 0 6 * * ?` | Daily Quartz cron (`TIMESHEET_SYNC_DAILY_CRON`) |
 | `timesheet.sync.schedule.monthly-cron` | `0 30 6 * * ?` | Monthly Quartz cron (`TIMESHEET_SYNC_MONTHLY_CRON`) |

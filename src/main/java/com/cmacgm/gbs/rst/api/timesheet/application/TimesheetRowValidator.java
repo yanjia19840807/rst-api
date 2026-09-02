@@ -19,9 +19,32 @@ final class TimesheetRowValidator {
 
     static List<TimesheetSyncIssue> validate(
             UUID runId, String kind, LocalDate expectedDate, List<ReportRow> rows, java.time.Instant now) {
+        return validate(runId, kind, expectedDate, rows, now, GbsProcessCatalog.allowing());
+    }
+
+    /**
+     * Validates rows. Daily required-field checks apply only to RST-applicable
+     * PL3 codes.
+     *
+     * @param runId sync run
+     * @param kind DAILY or MONTHLY
+     * @param expectedDate file-name date
+     * @param rows parsed rows
+     * @param now issue timestamp
+     * @param catalog RST-applicable PL3 codes
+     * @return issues
+     */
+    static List<TimesheetSyncIssue> validate(
+            UUID runId,
+            String kind,
+            LocalDate expectedDate,
+            List<ReportRow> rows,
+            java.time.Instant now,
+            GbsProcessCatalog catalog) {
+        GbsProcessCatalog processes = catalog == null ? GbsProcessCatalog.allowing() : catalog;
         List<TimesheetSyncIssue> issues = new ArrayList<>();
         for (ReportRow row : rows) {
-            if ("DAILY".equals(kind) && !isProductionLine(row)) {
+            if ("DAILY".equals(kind) && !processes.applies(row.pl3Code())) {
                 continue;
             }
             if ("DAILY".equals(kind)) {
@@ -71,20 +94,7 @@ final class TimesheetRowValidator {
     }
 
     /**
-     * Daily required-field checks apply only to Production + Productive rows.
-     * Monthly required-field checks apply to every row.
-     *
-     * @param row parsed row
-     * @return true when the row is in the validated scope
-     */
-    static boolean isProductionLine(ReportRow row) {
-        return "production".equalsIgnoreCase(nullToEmpty(row.managementOrProduction()))
-                && "productive".equalsIgnoreCase(nullToEmpty(row.costType()));
-    }
-
-    /**
      * Whether the employee identity on a Daily row can be persisted.
-     * Applies to every row, not only Production.
      *
      * @param row parsed row
      * @return true when ccgid, name and position are present
@@ -179,9 +189,5 @@ final class TimesheetRowValidator {
 
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
-    }
-
-    private static String nullToEmpty(String value) {
-        return value == null ? "" : value.trim();
     }
 }

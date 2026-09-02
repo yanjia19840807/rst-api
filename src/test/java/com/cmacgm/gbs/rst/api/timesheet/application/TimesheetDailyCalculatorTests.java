@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Test;
 
 class TimesheetDailyCalculatorTests {
 
+    private static final GbsProcessCatalog RST_YES = GbsProcessCatalog.allowing("PL3");
+
     private final TimesheetDailyCalculator calculator = new TimesheetDailyCalculator();
 
     @Test
@@ -25,7 +27,9 @@ class TimesheetDailyCalculatorTests {
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId,
                 List.of(row("S00000001", "EMP-1", "Agent One", "EMP-POS-1", "production", "productive")),
-                Instant.parse("2026-08-23T00:00:00Z"));
+                Instant.parse("2026-08-23T00:00:00Z"),
+                null,
+                RST_YES);
 
         assertThat(result.issues()).isEmpty();
         assertThat(result.people())
@@ -50,12 +54,14 @@ class TimesheetDailyCalculatorTests {
     }
 
     @Test
-    void skipsManagementLinesWhenBuildingPositions() {
+    void skipsRowsWhenPl3IsNotRstApplicable() {
         UUID runId = UUID.randomUUID();
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId,
-                List.of(row("S00000002", "SUP-1", "Supervisor One", "POS-SUP-1", "management", "non-productive")),
-                Instant.parse("2026-08-23T00:00:00Z"));
+                List.of(row("S00000002", "SUP-1", "Supervisor One", "POS-SUP-1", "production", "productive")),
+                Instant.parse("2026-08-23T00:00:00Z"),
+                null,
+                GbsProcessCatalog.allowing("OTHER"));
 
         assertThat(result.people())
                 .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getPositionId)
@@ -65,12 +71,31 @@ class TimesheetDailyCalculatorTests {
     }
 
     @Test
-    void doesNotRequireHierarchyOnManagementLines() {
+    void buildsPositionsFromRstApplicableNonProductionLines() {
         UUID runId = UUID.randomUUID();
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId,
-                List.of(row("S00000002", "SUP-1", "Supervisor One", "POS-SUP-1", "management", "non-productive", "")),
-                Instant.parse("2026-08-23T00:00:00Z"));
+                List.of(row("S00000001", "EMP-1", "Agent One", "EMP-POS-1", "management", "non-productive")),
+                Instant.parse("2026-08-23T00:00:00Z"),
+                null,
+                RST_YES);
+
+        assertThat(result.positions())
+                .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
+                .contains(
+                        org.assertj.core.groups.Tuple.tuple("EMP-POS-1", "AGENT"),
+                        org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "SUPERVISOR"));
+    }
+
+    @Test
+    void doesNotRequireHierarchyWhenPl3IsNotRstApplicable() {
+        UUID runId = UUID.randomUUID();
+        TimesheetDailyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(row("S00000002", "SUP-1", "Supervisor One", "POS-SUP-1", "production", "productive", "")),
+                Instant.parse("2026-08-23T00:00:00Z"),
+                null,
+                GbsProcessCatalog.allowing("OTHER"));
 
         assertThat(result.people())
                 .extracting(TimesheetPerson::getCcgid)
@@ -80,12 +105,14 @@ class TimesheetDailyCalculatorTests {
     }
 
     @Test
-    void requiresHierarchyOnProductionLines() {
+    void requiresHierarchyOnRstApplicableLines() {
         UUID runId = UUID.randomUUID();
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId,
-                List.of(row("S00000001", "EMP-1", "Agent One", "EMP-POS-1", "production", "productive", "")),
-                Instant.parse("2026-08-23T00:00:00Z"));
+                List.of(row("S00000001", "EMP-1", "Agent One", "EMP-POS-1", "management", "non-productive", "")),
+                Instant.parse("2026-08-23T00:00:00Z"),
+                null,
+                RST_YES);
 
         assertThat(result.issues())
                 .extracting(TimesheetSyncIssue::getCode, TimesheetSyncIssue::getMessage)
@@ -109,7 +136,9 @@ class TimesheetDailyCalculatorTests {
                 List.of(
                         row("S00000001", "EMP-1", "Agent One", "EMP-POS-1", "production", "productive"),
                         row("S00000006", "EMP-6", "Agent Six", "EMP-POS-6", "production", "productive", "")),
-                Instant.parse("2026-08-23T00:00:00Z"));
+                Instant.parse("2026-08-23T00:00:00Z"),
+                null,
+                RST_YES);
 
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).contains("MISSING_FIELD");
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("EMPTY_FILE");
@@ -125,7 +154,8 @@ class TimesheetDailyCalculatorTests {
                 runId,
                 List.of(row("S00000001", "EMP-1", "Agent One", "EMP-POS-1", "production", "productive")),
                 Instant.parse("2026-08-23T00:00:00Z"),
-                LocalDate.of(2026, 7, 26));
+                LocalDate.of(2026, 7, 26),
+                RST_YES);
 
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).contains("DATE_MISMATCH");
     }
@@ -138,7 +168,9 @@ class TimesheetDailyCalculatorTests {
                 List.of(
                         row("S00000001", "EMP-1", "Same Person", "EMP-POS-1", "production", "productive"),
                         row("S00000001", "EMP-1", "Same Person", "EMP-POS-2", "production", "productive")),
-                Instant.parse("2026-08-23T00:00:00Z"));
+                Instant.parse("2026-08-23T00:00:00Z"),
+                null,
+                RST_YES);
 
         assertThat(result.issues())
                 .extracting(TimesheetSyncIssue::getCode)
@@ -154,7 +186,9 @@ class TimesheetDailyCalculatorTests {
                 List.of(
                         row("S00000001", "EMP-1", "Agent One", "EMP-POS-1", "production", "productive"),
                         row("S00000005", "EMP-5", "Agent Five", "EMP-POS-1", "management", "non-productive")),
-                Instant.parse("2026-08-23T00:00:00Z"));
+                Instant.parse("2026-08-23T00:00:00Z"),
+                null,
+                RST_YES);
 
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("OCCUPANCY_CONFLICT");
         assertThat(result.people())
@@ -172,7 +206,9 @@ class TimesheetDailyCalculatorTests {
                 List.of(
                         row("S00000001", "EMP-1", "Same Person", "EMP-POS-1", "production", "productive"),
                         row("S00000001", "EMP-1", "Same Person", "EMP-POS-2", "management", "non-productive")),
-                Instant.parse("2026-08-23T00:00:00Z"));
+                Instant.parse("2026-08-23T00:00:00Z"),
+                null,
+                RST_YES);
 
         assertThat(result.issues())
                 .extracting(TimesheetSyncIssue::getCode)
@@ -205,7 +241,9 @@ class TimesheetDailyCalculatorTests {
                                 "productive",
                                 "SRM-1",
                                 "Kuala Lumpur")),
-                Instant.parse("2026-08-23T00:00:00Z"));
+                Instant.parse("2026-08-23T00:00:00Z"),
+                null,
+                RST_YES);
 
         assertThat(result.issues()).isEmpty();
         assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S00000001");
@@ -248,8 +286,8 @@ class TimesheetDailyCalculatorTests {
                 "production",
                 "productive");
 
-        TimesheetDailyCalculator.Result result =
-                calculator.compute(runId, List.of(agent), Instant.parse("2026-08-23T00:00:00Z"));
+        TimesheetDailyCalculator.Result result = calculator.compute(
+                runId, List.of(agent), Instant.parse("2026-08-23T00:00:00Z"), null, RST_YES);
 
         assertThat(result.people())
                 .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getPositionId)

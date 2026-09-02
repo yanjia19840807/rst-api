@@ -73,10 +73,13 @@ rst:
     # Timesheet has no LTH column yet; LTH steps share this position until IAM provides one.
     lth-position-id: ${RST_WORKFLOW_LTH_POSITION_ID:LTH}
   sharepoint:
-    # RST-owned root in the Timesheet library. Daily / Monthly / Template hang off this.
+    # RST-owned root in the Timesheet library. Daily / Monthly / Template / Process hang off this.
     root: ${RST_SHAREPOINT_ROOT:2.UAT/Data Output/RST}
 
 timesheet:
+  process:
+    source: ${TIMESHEET_PROCESS_SOURCE:classpath}
+    classpath-location: ${TIMESHEET_PROCESS_CLASSPATH:GBS Process.csv}
   sync:
     enabled: false
     kind: all

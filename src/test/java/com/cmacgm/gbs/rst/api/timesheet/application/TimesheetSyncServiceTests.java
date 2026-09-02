@@ -93,6 +93,7 @@ class TimesheetSyncServiceTests {
                 new TimesheetDailyCalculator(),
                 new TimesheetMonthlyCalculator(),
                 sources,
+                GbsProcessCatalogSource.of(GbsProcessCatalog.allowing("PL3")),
                 syncRuns,
                 people,
                 positions,
@@ -174,6 +175,7 @@ class TimesheetSyncServiceTests {
                 new TimesheetDailyCalculator(),
                 new TimesheetMonthlyCalculator(),
                 replacement,
+                GbsProcessCatalogSource.of(GbsProcessCatalog.allowing("PL3")),
                 proxy(TimesheetSyncRunRepository.class, (proxy, method, args) ->
                         switch (method.getName()) {
                             case "saveAndFlush", "save" -> store((TimesheetSyncRun) args[0]);
@@ -268,6 +270,7 @@ class TimesheetSyncServiceTests {
                 new TimesheetDailyCalculator(),
                 new TimesheetMonthlyCalculator(),
                 sources,
+                GbsProcessCatalogSource.of(GbsProcessCatalog.allowing("PL3")),
                 syncRuns,
                 unusedRepository(TimesheetPersonRepository.class),
                 unusedRepository(TimesheetPositionRepository.class),
@@ -318,6 +321,7 @@ class TimesheetSyncServiceTests {
                 new TimesheetDailyCalculator(),
                 new TimesheetMonthlyCalculator(),
                 sources,
+                GbsProcessCatalogSource.of(GbsProcessCatalog.allowing("PL3")),
                 proxy(TimesheetSyncRunRepository.class, (proxy, method, args) ->
                         switch (method.getName()) {
                             case "saveAndFlush", "save" -> store((TimesheetSyncRun) args[0]);

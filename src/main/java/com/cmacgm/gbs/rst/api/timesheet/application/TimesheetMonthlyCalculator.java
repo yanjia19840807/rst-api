@@ -46,7 +46,7 @@ public class TimesheetMonthlyCalculator {
      * @return result
      */
     public Result compute(UUID runId, List<ReportRow> rows, Instant now) {
-        return compute(runId, rows, now, null);
+        return compute(runId, rows, now, null, GbsProcessCatalog.allowing());
     }
 
     /**
@@ -59,8 +59,24 @@ public class TimesheetMonthlyCalculator {
      * @return result
      */
     public Result compute(UUID runId, List<ReportRow> rows, Instant now, LocalDate expectedDate) {
+        return compute(runId, rows, now, expectedDate, GbsProcessCatalog.allowing());
+    }
+
+    /**
+     * Aggregates Monthly tables for RST-applicable PL3 codes.
+     *
+     * @param runId Monthly run
+     * @param rows parsed rows
+     * @param now issue timestamp
+     * @param expectedDate date from the file name
+     * @param catalog RST-applicable PL3 codes
+     * @return result
+     */
+    public Result compute(
+            UUID runId, List<ReportRow> rows, Instant now, LocalDate expectedDate, GbsProcessCatalog catalog) {
+        GbsProcessCatalog processes = catalog == null ? GbsProcessCatalog.allowing() : catalog;
         List<TimesheetSyncIssue> issues = new ArrayList<>(
-                TimesheetRowValidator.validate(runId, "MONTHLY", expectedDate, rows, now));
+                TimesheetRowValidator.validate(runId, "MONTHLY", expectedDate, rows, now, processes));
         Map<String, ScopeDraft> scopes = new LinkedHashMap<>();
         Map<String, AssignmentDraft> assignments = new LinkedHashMap<>();
         Map<String, Set<String>> assignmentSupervisors = new LinkedHashMap<>();
@@ -70,7 +86,7 @@ public class TimesheetMonthlyCalculator {
             if (syncDate == null) {
                 syncDate = TimesheetRowValidator.rowDate(row);
             }
-            if (!TimesheetRowValidator.isCompleteMonthly(row)) {
+            if (!TimesheetRowValidator.isCompleteMonthly(row) || !processes.applies(row.pl3Code())) {
                 continue;
             }
             scopes.putIfAbsent(

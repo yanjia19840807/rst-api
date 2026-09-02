@@ -19,10 +19,9 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 
 /**
- * Daily People come from every complete identity on the file (no Production
- * filter). The position tree is still built only from Production + Productive
- * rows. One person on two seats is a blocking conflict; two people on one
- * seat is allowed.
+ * Daily People come from every complete identity on the file. The position
+ * tree is built only from rows whose PL3 is RST-applicable. One person on two
+ * seats is a blocking conflict; two people on one seat is allowed.
  */
 @Component
 public class TimesheetDailyCalculator {
@@ -46,7 +45,7 @@ public class TimesheetDailyCalculator {
      * @return result
      */
     public Result compute(UUID runId, List<ReportRow> rows, Instant now) {
-        return compute(runId, rows, now, null);
+        return compute(runId, rows, now, null, GbsProcessCatalog.allowing());
     }
 
     /**
@@ -59,8 +58,25 @@ public class TimesheetDailyCalculator {
      * @return result
      */
     public Result compute(UUID runId, List<ReportRow> rows, Instant now, LocalDate expectedDate) {
+        return compute(runId, rows, now, expectedDate, GbsProcessCatalog.allowing());
+    }
+
+    /**
+     * Computes Daily org tables, checks the file-name date, and filters
+     * positions by RST-applicable PL3 codes.
+     *
+     * @param runId Daily run
+     * @param rows parsed rows
+     * @param now issue timestamp
+     * @param expectedDate date from the file name
+     * @param catalog RST-applicable PL3 codes
+     * @return result
+     */
+    public Result compute(
+            UUID runId, List<ReportRow> rows, Instant now, LocalDate expectedDate, GbsProcessCatalog catalog) {
+        GbsProcessCatalog processes = catalog == null ? GbsProcessCatalog.allowing() : catalog;
         List<TimesheetSyncIssue> issues = new ArrayList<>(
-                TimesheetRowValidator.validate(runId, "DAILY", expectedDate, rows, now));
+                TimesheetRowValidator.validate(runId, "DAILY", expectedDate, rows, now, processes));
         Map<String, PersonDraft> people = new LinkedHashMap<>();
         Map<String, Set<String>> personToPosition = new LinkedHashMap<>();
         Map<String, PositionDraft> positions = new LinkedHashMap<>();
@@ -80,7 +96,7 @@ public class TimesheetDailyCalculator {
                     row.empEmail(),
                     row.center(),
                     row.empPositionId());
-            if (!TimesheetRowValidator.isProductionLine(row)) {
+            if (!processes.applies(row.pl3Code())) {
                 continue;
             }
             rememberPerson(

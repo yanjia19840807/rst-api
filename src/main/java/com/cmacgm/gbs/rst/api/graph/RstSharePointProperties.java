@@ -50,6 +50,13 @@ public record RstSharePointProperties(String root) {
         return MicrosoftGraphPaths.folderPath(root, "Manual");
     }
 
+    /**
+     * @return GBS Process catalog folder (SharePoint download reserved)
+     */
+    public String processFolder() {
+        return MicrosoftGraphPaths.folderPath(root, "Process");
+    }
+
     private static String stripSlashes(String path) {
         String value = path.strip();
         if (value.startsWith("/")) {

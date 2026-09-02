@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Test;
 
 class TimesheetMonthlyCalculatorTests {
 
+    private static final GbsProcessCatalog RST_YES = GbsProcessCatalog.allowing("PL3", "PL3-A", "PL3-B", "344");
+
     private final TimesheetMonthlyCalculator calculator = new TimesheetMonthlyCalculator();
 
     @Test
@@ -28,7 +30,9 @@ class TimesheetMonthlyCalculatorTests {
                 List.of(
                         row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "Kuala Lumpur", "1.5"),
                         row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "Kuala Lumpur", "0.5")),
-                Instant.parse("2026-08-24T00:00:00Z"));
+                Instant.parse("2026-08-24T00:00:00Z"),
+                null,
+                RST_YES);
 
         assertThat(result.issues()).isEmpty();
         assertThat(result.assignments())
@@ -54,7 +58,9 @@ class TimesheetMonthlyCalculatorTests {
                 List.of(
                         row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "Kuala Lumpur", "1"),
                         row("S00000001", "EMP-1", "POS-SUP-2", "PL3", "Kuala Lumpur", "1")),
-                Instant.parse("2026-08-24T00:00:00Z"));
+                Instant.parse("2026-08-24T00:00:00Z"),
+                null,
+                RST_YES);
 
         assertThat(result.issues())
                 .extracting(issue -> issue.getCode())
@@ -80,7 +86,9 @@ class TimesheetMonthlyCalculatorTests {
                                 "1",
                                 "management",
                                 "non-productive")),
-                Instant.parse("2026-08-24T00:00:00Z"));
+                Instant.parse("2026-08-24T00:00:00Z"),
+                null,
+                RST_YES);
 
         assertThat(result.issues()).isEmpty();
         assertThat(result.assignments())
@@ -98,7 +106,9 @@ class TimesheetMonthlyCalculatorTests {
                 List.of(
                         row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "Kuala Lumpur", "1"),
                         row("S00000002", "EMP-2", "POS-SUP-1", "", "Kuala Lumpur", "1", "management", "non-productive")),
-                Instant.parse("2026-08-24T00:00:00Z"));
+                Instant.parse("2026-08-24T00:00:00Z"),
+                null,
+                RST_YES);
 
         assertThat(result.issues())
                 .extracting(TimesheetSyncIssue::getMessage)
@@ -114,7 +124,9 @@ class TimesheetMonthlyCalculatorTests {
         TimesheetMonthlyCalculator.Result result = calculator.compute(
                 runId,
                 List.of(row("S00000001", "EMP-1", "POS-SUP-1", "", "Kuala Lumpur", "1", "production", "productive")),
-                Instant.parse("2026-08-24T00:00:00Z"));
+                Instant.parse("2026-08-24T00:00:00Z"),
+                null,
+                RST_YES);
 
         assertThat(result.issues())
                 .extracting(TimesheetSyncIssue::getMessage)
@@ -146,7 +158,9 @@ class TimesheetMonthlyCalculatorTests {
                                 "0.5",
                                 "production",
                                 "non-productive")),
-                Instant.parse("2026-08-24T00:00:00Z"));
+                Instant.parse("2026-08-24T00:00:00Z"),
+                null,
+                RST_YES);
 
         assertThat(result.issues()).isEmpty();
         assertThat(result.assignments())
@@ -167,6 +181,26 @@ class TimesheetMonthlyCalculatorTests {
                         org.assertj.core.groups.Tuple.tuple("POS-SUP-1", new BigDecimal("1")),
                         org.assertj.core.groups.Tuple.tuple("POS-SUP-2", new BigDecimal("1")),
                         org.assertj.core.groups.Tuple.tuple("182894", new BigDecimal("0.5")));
+    }
+
+    @Test
+    void skipsCompleteRowsWhenPl3IsNotRstApplicable() {
+        UUID runId = UUID.randomUUID();
+        TimesheetMonthlyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(
+                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "Kuala Lumpur", "1"),
+                        row("S00000002", "EMP-2", "POS-SUP-1", "SKIP", "Kuala Lumpur", "1")),
+                Instant.parse("2026-08-24T00:00:00Z"),
+                null,
+                RST_YES);
+
+        assertThat(result.issues()).isEmpty();
+        assertThat(result.assignments())
+                .extracting(TimesheetAssignment::getEmpPositionId, TimesheetAssignment::getPl3Code)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("EMP-1", "PL3"));
+        assertThat(result.scopes()).extracting(TimesheetScope::getPl3Code).containsExactly("PL3");
+        assertThat(result.kpis()).extracting(TimesheetKpi::getPl3Code).containsExactly("PL3");
     }
 
     private static ReportRow row(
