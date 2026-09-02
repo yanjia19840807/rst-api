@@ -335,6 +335,23 @@ class SupervisorApiIntegrationTests {
         UUID createdExerciseId = UUID.fromString(exerciseId);
 
         org.junit.jupiter.api.Assertions.assertEquals(
+                MONTHLY_RUN_ID,
+                jdbcTemplate.queryForObject(
+                        "select timesheet_sync_run_id from exercise_toolkit_snapshot where exercise_id = ?",
+                        UUID.class,
+                        createdExerciseId));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                MONTHLY_RUN_ID,
+                jdbcTemplate.queryForObject(
+                        """
+                        select distinct timesheet_sync_run_id
+                        from exercise_shared_kpi_line
+                        where exercise_id = ?
+                        """,
+                        UUID.class,
+                        createdExerciseId));
+
+        org.junit.jupiter.api.Assertions.assertEquals(
                 0,
                 jdbcTemplate.queryForObject(
                         "select count(*) from exercise_volume_monthly_input where exercise_id = ?",

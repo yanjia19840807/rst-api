@@ -31,6 +31,7 @@ public class ExerciseToolkitSnapshot {
     @Column(name = "source_toolkit_version", nullable = false)
     private long sourceToolkitVersion;
 
+    /** ACTIVE Monthly run that supplied Toolkit scope at freeze. */
     @Column(name = "timesheet_sync_run_id", nullable = false)
     private UUID timesheetSyncRunId;
 

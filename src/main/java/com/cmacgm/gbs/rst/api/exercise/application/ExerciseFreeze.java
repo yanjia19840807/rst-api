@@ -16,18 +16,16 @@ import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitSubtask;
 
 /**
  * Immutable Toolkit / Timesheet freeze snapshot for Exercise create.
- * Toolkit scope freezes the Daily run; KPI HC freezes the Monthly run.
+ * Toolkit scope and KPI HC both freeze the ACTIVE Monthly run.
  */
 public final class ExerciseFreeze {
 
     private final Toolkit toolkit;
-    private final ActiveSnapshot org;
     private final ActiveSnapshot kpi;
     private final List<ResolvedKpi> kpis;
 
-    ExerciseFreeze(Toolkit toolkit, ActiveSnapshot org, ActiveSnapshot kpi, List<ResolvedKpi> kpis) {
+    ExerciseFreeze(Toolkit toolkit, ActiveSnapshot kpi, List<ResolvedKpi> kpis) {
         this.toolkit = toolkit;
-        this.org = org;
         this.kpi = kpi;
         this.kpis = List.copyOf(kpis);
     }
@@ -39,7 +37,7 @@ public final class ExerciseFreeze {
         exercise.freezeToolkitSnapshot(
                 toolkit.getId(),
                 toolkit.getVersion(),
-                org.id(),
+                kpi.id(),
                 toolkit.getName(),
                 toolkit.getSupervisorPositionId(),
                 toolkit.getCenter(),
@@ -110,10 +108,6 @@ public final class ExerciseFreeze {
 
     public Toolkit toolkit() {
         return toolkit;
-    }
-
-    public ActiveSnapshot org() {
-        return org;
     }
 
     public ActiveSnapshot kpi() {

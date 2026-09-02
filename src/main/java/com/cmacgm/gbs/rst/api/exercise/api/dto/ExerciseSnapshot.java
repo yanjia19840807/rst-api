@@ -4,7 +4,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Exercise snapshot envelope.
+ * Exercise snapshot envelope. {@code timesheetSyncDate} is the frozen Monthly run date.
  */
 public record ExerciseSnapshot(
         ExerciseToolkitView toolkit, List<ExerciseSubtaskView> subtasks,

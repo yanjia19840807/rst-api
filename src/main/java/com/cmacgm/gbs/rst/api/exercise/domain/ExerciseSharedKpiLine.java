@@ -32,6 +32,7 @@ public class ExerciseSharedKpiLine {
     @Column(name = "toolkit_shared_kpi_selection_id", nullable = false)
     private UUID toolkitSharedKpiSelectionId;
 
+    /** ACTIVE Monthly run that supplied this line's Delivery HC at freeze. */
     @Column(name = "timesheet_sync_run_id", nullable = false)
     private UUID timesheetSyncRunId;
 
