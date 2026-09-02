@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -129,6 +130,34 @@ public class TimesheetReadService {
     @Transactional(readOnly = true)
     public List<String> countries(String supervisorPositionId, String pl3Code) {
         return kpis.findActiveCountries(supervisorPositionId, pl3Code);
+    }
+
+    /**
+     * Structural alignment of persisted KPI keys against ACTIVE Monthly.
+     *
+     * @param supervisorPositionId supervisor position
+     * @param pl3Code PL3
+     * @param keys persisted or frozen keys
+     * @return alignment; missing Monthly is treated as out of scope
+     */
+    @Transactional(readOnly = true)
+    public TimesheetAlignment align(
+            String supervisorPositionId, String pl3Code, List<TimesheetAlignment.Key> keys) {
+        boolean monthlyPresent = syncRuns.findByKindAndStatus("MONTHLY", "ACTIVE").isPresent();
+        boolean scopePresent = monthlyPresent
+                && supervisorPositionId != null
+                && pl3Code != null
+                && scopes.existsActiveScope(supervisorPositionId, pl3Code);
+        LocalDate syncDate = findActiveMonthly().map(ActiveSnapshot::syncDate).orElse(null);
+        Map<TimesheetAlignment.Key, BigDecimal> current = new LinkedHashMap<>();
+        if (scopePresent) {
+            for (var row : kpis.findActiveKpis(supervisorPositionId, pl3Code)) {
+                TimesheetAlignment.Key key = new TimesheetAlignment.Key(
+                        row.getCarrier(), row.getSite(), row.getCustomerCountry());
+                current.merge(key, row.getHc() == null ? BigDecimal.ZERO : row.getHc(), BigDecimal::add);
+            }
+        }
+        return TimesheetAlignment.evaluate(scopePresent, syncDate, keys == null ? List.of() : keys, current);
     }
 
     /**

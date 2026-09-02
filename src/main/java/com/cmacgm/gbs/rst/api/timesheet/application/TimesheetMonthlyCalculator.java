@@ -21,8 +21,7 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 
 /**
- * Builds Monthly scope and Delivery HC from every complete row.
- * Assignments are Production + Productive only.
+ * Builds Monthly scope, assignment and Delivery HC from every complete row.
  */
 @Component
 public class TimesheetMonthlyCalculator {
@@ -84,18 +83,18 @@ public class TimesheetMonthlyCalculator {
                             row.domain(),
                             row.pl1(),
                             row.pl2()));
-            if (TimesheetRowValidator.isProductionLine(row)) {
-                assignments.putIfAbsent(
-                        key(row.empPositionId(), row.supervisorPositionId(), row.pl3Code(), row.center()),
-                        new AssignmentDraft(
-                                row.empPositionId(),
-                                row.supervisorPositionId(),
-                                row.pl3Code(),
-                                row.center()));
-                assignmentSupervisors
-                        .computeIfAbsent(row.empPositionId(), ignored -> new LinkedHashSet<>())
-                        .add(row.supervisorPositionId());
-            }
+            assignments.putIfAbsent(
+                    key(row.empPositionId(), row.supervisorPositionId(), row.pl3Code(), row.center()),
+                    new AssignmentDraft(
+                            row.empPositionId(),
+                            row.supervisorPositionId(),
+                            row.pl3Code(),
+                            row.center()));
+            assignmentSupervisors
+                    .computeIfAbsent(
+                            key(row.empPositionId(), row.pl3Code(), row.center()),
+                            ignored -> new LinkedHashSet<>())
+                    .add(row.supervisorPositionId());
             if (row.hc() == null || row.hc().value() == null) {
                 continue;
             }
@@ -128,15 +127,21 @@ public class TimesheetMonthlyCalculator {
         }
         for (Map.Entry<String, Set<String>> entry : assignmentSupervisors.entrySet()) {
             if (entry.getValue().size() > 1) {
+                String[] parts = entry.getKey().split("\\|", 3);
+                String empPositionId = parts.length > 0 ? parts[0] : entry.getKey();
+                String pl3Code = parts.length > 1 ? parts[1] : null;
                 issues.add(TimesheetSyncIssue.error(
                         runId,
                         TimesheetSyncErrorCode.ASSIGNMENT_CONFLICT,
-                        "emp_position_id " + entry.getKey() + " maps to multiple supervisor_position_id: "
+                        "emp_position_id " + empPositionId
+                                + " maps to multiple supervisor_position_id on "
+                                + entry.getKey()
+                                + ": "
                                 + String.join(", ", entry.getValue()),
                         null,
                         null,
-                        entry.getKey(),
-                        null,
+                        empPositionId,
+                        pl3Code,
                         null,
                         now));
             }

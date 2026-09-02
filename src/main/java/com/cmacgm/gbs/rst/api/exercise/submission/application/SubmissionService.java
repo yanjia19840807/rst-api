@@ -16,6 +16,7 @@ import java.util.UUID;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
+import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.ScenarioService;
@@ -31,6 +32,8 @@ import com.cmacgm.gbs.rst.api.exercise.submission.api.dto.SubmitRequest;
 import com.cmacgm.gbs.rst.api.exercise.submission.api.dto.SubmittedDetailsView;
 import com.cmacgm.gbs.rst.api.exercise.submission.api.dto.ValidationFinding;
 import com.cmacgm.gbs.rst.api.workflow.domain.SubmissionScope;
+import com.cmacgm.gbs.rst.api.timesheet.api.dto.TimesheetAlignmentView;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetAlignment;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.ActionView;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.ScopeView;
@@ -120,8 +123,14 @@ public class SubmissionService {
         }
         UUID scenarioId = scenarioService.requireOfficialScenarioId(exercise);
         List<ValidationFinding> findings = List.of(toFinding(evaluateDailyVsMonthly(exercise, ownerCcgid)));
+        TimesheetAlignmentView alignment = align(exercise);
         return new SubmitPreviewView(
-                scenarioId, findings, remarksRequired(findings), submitBlocked(findings));
+                scenarioId,
+                findings,
+                remarksRequired(findings),
+                submitBlocked(findings),
+                alignment,
+                alignment.structuralDrift());
     }
 
     /**
@@ -174,6 +183,13 @@ public class SubmissionService {
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "remarks-required",
                     "WARNING validation failures require remarks before Submit.");
+        }
+        TimesheetAlignmentView alignment = align(exercise);
+        if (alignment.structuralDrift() && !Boolean.TRUE.equals(request.scopeAcknowledged())) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "scope-acknowledgement-required",
+                    "Confirm submitting with the frozen Shared KPI scope.");
         }
 
         ProcessInstance existing = workflows.findByExerciseId(exerciseId).orElse(null);
@@ -372,6 +388,20 @@ public class SubmissionService {
 
     private ProcessInstance processOf(UUID exerciseId) {
         return workflows.findByExerciseId(exerciseId).orElse(null);
+    }
+
+    private TimesheetAlignmentView align(RstExercise exercise) {
+        ExerciseToolkitSnapshot snapshot = exercise.getToolkitSnapshot();
+        List<TimesheetAlignment.Key> keys = exercise.getSharedKpiLines().stream()
+                .map(item -> new TimesheetAlignment.Key(
+                        item.getCarrier(), item.getSite(), item.getCustomerCountry()))
+                .toList();
+        if (snapshot == null) {
+            return TimesheetAlignmentView.from(
+                    TimesheetAlignment.evaluate(false, null, keys, Map.of()));
+        }
+        return TimesheetAlignmentView.from(timesheet.align(
+                snapshot.getSupervisorPositionId(), snapshot.getPl3Code(), keys));
     }
 
     private static boolean remarksRequired(List<ValidationFinding> findings) {

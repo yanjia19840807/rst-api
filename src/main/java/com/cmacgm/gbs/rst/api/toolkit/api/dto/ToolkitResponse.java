@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.timesheet.api.dto.TimesheetAlignmentView;
 import com.cmacgm.gbs.rst.api.toolkit.domain.Toolkit;
 
 public record ToolkitResponse(
@@ -21,9 +22,22 @@ public record ToolkitResponse(
         long version,
         List<SubtaskResponse> subtasks,
         List<SharedKpiResponse> sharedKpiSelections,
-        Instant deletedAt) {
+        Instant deletedAt,
+        boolean outOfSync,
+        TimesheetAlignmentView alignment) {
 
     public static ToolkitResponse from(Toolkit toolkit) {
+        return from(toolkit, null);
+    }
+
+    /**
+     * Maps a Toolkit and optional live Timesheet alignment.
+     *
+     * @param toolkit aggregate
+     * @param alignment structural alignment, or null
+     * @return response
+     */
+    public static ToolkitResponse from(Toolkit toolkit, TimesheetAlignmentView alignment) {
         return new ToolkitResponse(
                 toolkit.getId(),
                 toolkit.getName(),
@@ -53,7 +67,9 @@ public record ToolkitResponse(
                                 selection.getSite(),
                                 selection.getCustomerCountry()))
                         .toList(),
-                toolkit.getDeletedAt());
+                toolkit.getDeletedAt(),
+                alignment != null && alignment.structuralDrift(),
+                alignment);
     }
 
     public record SubtaskResponse(

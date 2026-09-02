@@ -119,13 +119,16 @@ final class TimesheetRowValidator {
     }
 
     /**
-     * {@code MISSING_FIELD} is recorded but does not fail the run.
+     * {@code MISSING_FIELD} and {@code ASSIGNMENT_CONFLICT} are recorded but
+     * do not fail the run.
      *
      * @param issue persisted or computed issue
      * @return true when the code is advisory
      */
     static boolean isAdvisory(TimesheetSyncIssue issue) {
-        return TimesheetSyncErrorCode.MISSING_FIELD.code().equals(issue.getCode());
+        String code = issue.getCode();
+        return TimesheetSyncErrorCode.MISSING_FIELD.code().equals(code)
+                || TimesheetSyncErrorCode.ASSIGNMENT_CONFLICT.code().equals(code);
     }
 
     static LocalDate rowDate(ReportRow row) {

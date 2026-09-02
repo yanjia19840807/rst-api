@@ -32,5 +32,6 @@ public record ApprovalQueueItem(
         String status,
         String myDecision,
         Instant myCompletedAt,
-        String completedStep) {
+        String completedStep,
+        boolean scopeChanged) {
 }

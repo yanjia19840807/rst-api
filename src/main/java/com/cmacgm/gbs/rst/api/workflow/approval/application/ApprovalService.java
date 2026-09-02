@@ -26,6 +26,7 @@ import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseTeamSe
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
+import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.WorkingDaysService;
@@ -36,6 +37,7 @@ import com.cmacgm.gbs.rst.api.mail.application.MailNotificationService;
 import com.cmacgm.gbs.rst.api.mail.application.MailNotificationService.OwnerOutcome;
 import com.cmacgm.gbs.rst.api.security.Handler;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetAlignment;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.ActionView;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.ScopeView;
@@ -655,7 +657,20 @@ public class ApprovalService {
                 workflow.submissionStatus(),
                 myDecision,
                 myCompletedAt,
-                completedStep);
+                completedStep,
+                workflow.isAwaitingReview() && structuralDrift(exercise, snapshot));
+    }
+
+    private boolean structuralDrift(RstExercise exercise, ExerciseToolkitSnapshot snapshot) {
+        if (snapshot == null) {
+            return false;
+        }
+        List<TimesheetAlignment.Key> keys = exercise.getSharedKpiLines().stream()
+                .map(item -> new TimesheetAlignment.Key(
+                        item.getCarrier(), item.getSite(), item.getCustomerCountry()))
+                .toList();
+        return timesheet.align(snapshot.getSupervisorPositionId(), snapshot.getPl3Code(), keys)
+                .structuralDrift();
     }
 
     private BigDecimal deliveryHc(RstExercise exercise) {

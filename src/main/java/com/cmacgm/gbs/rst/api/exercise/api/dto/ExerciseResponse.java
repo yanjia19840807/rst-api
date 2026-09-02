@@ -5,6 +5,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.timesheet.api.dto.TimesheetAlignmentView;
+
 /**
  * Exercise API response including action flags.
  */
@@ -17,5 +19,6 @@ public record ExerciseResponse(
         Short currentStep, String requiredRole, String currentReviewer, String lastDecisionComment,
         BigDecimal deliveryHc, BigDecimal rightSizingHc, BigDecimal productionSupport,
         BigDecimal capacityCreation, Integer agingDays, Instant archivedAt,
-        ExerciseSnapshot snapshot) {
+        ExerciseSnapshot snapshot,
+        TimesheetAlignmentView timesheetAlignment) {
 }

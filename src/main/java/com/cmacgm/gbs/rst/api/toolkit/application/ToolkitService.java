@@ -13,6 +13,8 @@ import java.util.stream.Collectors;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
+import com.cmacgm.gbs.rst.api.timesheet.api.dto.TimesheetAlignmentView;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetAlignment;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.tms.persistence.TmsSessionRepository;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.CreateToolkitRequest;
@@ -89,7 +91,7 @@ public class ToolkitService {
                 .filter(toolkit -> nameQuery.isEmpty()
                         || toolkit.getName().toLowerCase(Locale.ROOT).contains(nameQuery))
                 .filter(toolkit -> pl3Query.isEmpty() || pl3Query.equals(toolkit.getPl3Name()))
-                .map(ToolkitResponse::from)
+                .map(this::toAlignedResponse)
                 .toList();
         PageResponse<ToolkitResponse> paged = PageResponse.ofList(items, page, pageSize);
         return new ToolkitListView(
@@ -113,7 +115,7 @@ public class ToolkitService {
             throw forbidden("toolkit-out-of-scope",
                     "The Toolkit is outside the current Timesheet scope.");
         }
-        return ToolkitResponse.from(toolkit);
+        return toAlignedResponse(toolkit);
     }
 
     @Transactional
@@ -132,7 +134,7 @@ public class ToolkitService {
                     toolkit.addSubtask(item.name(), item.description(), item.displayOrder(), now));
         }
         validateAndAddKpis(toolkit, request.sharedKpiSelections(), now);
-        return ToolkitResponse.from(toolkits.saveAndFlush(toolkit));
+        return toAlignedResponse(toolkits.saveAndFlush(toolkit));
     }
 
     @Transactional
@@ -155,7 +157,7 @@ public class ToolkitService {
         // Flush old active KPI rows before inserting replacements due to partial uniqueness.
         toolkits.saveAndFlush(toolkit);
         validateAndAddKpis(toolkit, request.sharedKpiSelections(), now);
-        return ToolkitResponse.from(toolkits.saveAndFlush(toolkit));
+        return toAlignedResponse(toolkits.saveAndFlush(toolkit));
     }
 
     @Transactional
@@ -304,6 +306,18 @@ public class ToolkitService {
             }
             toolkit.selectKpi(item.carrier(), item.site(), item.customerCountry(), now);
         }
+    }
+
+    private ToolkitResponse toAlignedResponse(Toolkit toolkit) {
+        List<TimesheetAlignment.Key> keys = toolkit.getSharedKpiSelections().stream()
+                .filter(selection -> selection.getDeletedAt() == null)
+                .map(selection -> new TimesheetAlignment.Key(
+                        selection.getCarrier(), selection.getSite(), selection.getCustomerCountry()))
+                .toList();
+        return ToolkitResponse.from(
+                toolkit,
+                TimesheetAlignmentView.from(timesheet.align(
+                        toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), keys)));
     }
 
     private static ApiException conflict(String code, String message) {

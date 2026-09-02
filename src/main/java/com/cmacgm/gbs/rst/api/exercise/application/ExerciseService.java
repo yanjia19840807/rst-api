@@ -51,6 +51,8 @@ import com.cmacgm.gbs.rst.api.exercise.scenario.application.ScenarioCommitServic
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
+import com.cmacgm.gbs.rst.api.timesheet.api.dto.TimesheetAlignmentView;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetAlignment;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
@@ -489,6 +491,9 @@ public class ExerciseService {
                 snapshot.getPl3Name(),
                 snapshot.isCombineSubtasksTime(),
                 snapshot.getSourceToolkitVersion());
+        TimesheetAlignmentView alignment = ExerciseLifecycle.isArchived(process)
+                ? null
+                : align(exercise, snapshot);
         var subtasks = exercise.getSubtasks().stream()
                 .map(item -> new ExerciseSubtaskView(
                         item.getId(),
@@ -506,7 +511,9 @@ public class ExerciseService {
                         item.getSite(),
                         item.getCustomerCountry(),
                         item.getDeliveryHc(),
-                        true))
+                        alignment == null
+                                || !alignment.lineMissing(
+                                        item.getCarrier(), item.getSite(), item.getCustomerCountry())))
                 .toList();
         BigDecimal deliveryHc = deliveryHc(exercise);
         BigDecimal actualHc = actualHeadcount(exercise, deliveryHc);
@@ -551,7 +558,17 @@ public class ExerciseService {
                 capacityCreation,
                 agingDays,
                 archivedAt,
-                new ExerciseSnapshot(toolkitView, subtasks, kpis, syncDate));
+                new ExerciseSnapshot(toolkitView, subtasks, kpis, syncDate),
+                alignment);
+    }
+
+    private TimesheetAlignmentView align(RstExercise exercise, ExerciseToolkitSnapshot snapshot) {
+        List<TimesheetAlignment.Key> keys = exercise.getSharedKpiLines().stream()
+                .map(item -> new TimesheetAlignment.Key(
+                        item.getCarrier(), item.getSite(), item.getCustomerCountry()))
+                .toList();
+        return TimesheetAlignmentView.from(timesheet.align(
+                snapshot.getSupervisorPositionId(), snapshot.getPl3Code(), keys));
     }
 
     private ProcessInstance processOf(UUID exerciseId) {

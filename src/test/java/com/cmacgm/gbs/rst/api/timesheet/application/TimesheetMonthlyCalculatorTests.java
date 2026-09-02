@@ -59,6 +59,35 @@ class TimesheetMonthlyCalculatorTests {
         assertThat(result.issues())
                 .extracting(issue -> issue.getCode())
                 .contains("ASSIGNMENT_CONFLICT");
+        assertThat(result.assignments())
+                .extracting(TimesheetAssignment::getSupervisorPositionId)
+                .containsExactly("POS-SUP-1", "POS-SUP-2");
+    }
+
+    @Test
+    void allowsSameSeatUnderDifferentSupervisorsOnDifferentPl3() {
+        UUID runId = UUID.randomUUID();
+        TimesheetMonthlyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(
+                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3-A", "Kuala Lumpur", "1"),
+                        row(
+                                "S00000001",
+                                "EMP-1",
+                                "POS-SUP-2",
+                                "PL3-B",
+                                "Kuala Lumpur",
+                                "1",
+                                "management",
+                                "non-productive")),
+                Instant.parse("2026-08-24T00:00:00Z"));
+
+        assertThat(result.issues()).isEmpty();
+        assertThat(result.assignments())
+                .extracting(TimesheetAssignment::getEmpPositionId, TimesheetAssignment::getSupervisorPositionId)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("EMP-1", "POS-SUP-1"),
+                        org.assertj.core.groups.Tuple.tuple("EMP-1", "POS-SUP-2"));
     }
 
     @Test
@@ -93,7 +122,7 @@ class TimesheetMonthlyCalculatorTests {
     }
 
     @Test
-    void persistsScopeAndKpiFromEveryCompleteRowButAssignmentOnlyFromProduction() {
+    void persistsScopeAssignmentAndKpiFromEveryCompleteRow() {
         UUID runId = UUID.randomUUID();
         TimesheetMonthlyCalculator.Result result = calculator.compute(
                 runId,
@@ -122,7 +151,10 @@ class TimesheetMonthlyCalculatorTests {
         assertThat(result.issues()).isEmpty();
         assertThat(result.assignments())
                 .extracting(TimesheetAssignment::getEmpPositionId, TimesheetAssignment::getSupervisorPositionId)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("EMP-1", "POS-SUP-1"));
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("EMP-1", "POS-SUP-1"),
+                        org.assertj.core.groups.Tuple.tuple("EMP-2", "POS-SUP-2"),
+                        org.assertj.core.groups.Tuple.tuple("EMP-3", "182894"));
         assertThat(result.scopes())
                 .extracting(TimesheetScope::getSupervisorPositionId, TimesheetScope::getPl3Code)
                 .containsExactly(

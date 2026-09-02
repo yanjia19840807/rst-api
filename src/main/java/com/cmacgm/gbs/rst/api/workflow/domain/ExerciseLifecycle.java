@@ -66,4 +66,8 @@ public final class ExerciseLifecycle {
     public static boolean isRejected(ProcessInstance process) {
         return REJECTED.equals(workflowStatus(process));
     }
+
+    public static boolean isArchived(ProcessInstance process) {
+        return isApproved(process) || isRejected(process);
+    }
 }

@@ -66,6 +66,25 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
             @Param("pl3Code") String pl3Code);
 
     /**
+     * Whether this Supervisor position × PL3 still exists in ACTIVE Monthly.
+     *
+     * @param positionId supervisor position
+     * @param pl3Code PL3
+     * @return true when the scope row is present
+     */
+    @Query("""
+            select count(s) > 0
+            from TimesheetScope s, TimesheetSyncRun r
+            where s.id.syncRunId = r.id
+              and r.kind = 'MONTHLY'
+              and r.status = 'ACTIVE'
+              and s.id.supervisorPositionId = :positionId
+              and s.id.pl3Code = :pl3Code
+            """)
+    boolean existsActiveScope(
+            @Param("positionId") String positionId, @Param("pl3Code") String pl3Code);
+
+    /**
      * Dashboard obligations: Center × Supervisor position × PL3.
      *
      * @return scope rows

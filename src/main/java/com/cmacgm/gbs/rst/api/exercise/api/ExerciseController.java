@@ -261,7 +261,7 @@ public class ExerciseController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id,
             @RequestBody(required = false) SubmitRequest request) {
-        SubmitRequest payload = request == null ? new SubmitRequest(null, null) : request;
+        SubmitRequest payload = request == null ? new SubmitRequest(null, null, null) : request;
         return submissions.submit(principal, id, payload);
     }
 

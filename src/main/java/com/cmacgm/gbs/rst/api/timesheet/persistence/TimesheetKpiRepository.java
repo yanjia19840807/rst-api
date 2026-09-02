@@ -62,6 +62,25 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
             @Param("countries") List<String> countries);
 
     /**
+     * All ACTIVE Monthly KPI rows for a Supervisor position and PL3.
+     *
+     * @param positionId supervisor position
+     * @param pl3Code PL3
+     * @return KPI rows
+     */
+    @Query("""
+            select k
+            from TimesheetKpi k, TimesheetSyncRun r
+            where k.id.syncRunId = r.id
+              and r.kind = 'MONTHLY'
+              and r.status = 'ACTIVE'
+              and k.id.supervisorPositionId = :positionId
+              and k.id.pl3Code = :pl3Code
+            """)
+    List<TimesheetKpi> findActiveKpis(
+            @Param("positionId") String positionId, @Param("pl3Code") String pl3Code);
+
+    /**
      * Sums Delivery HC for one KPI key.
      *
      * @param positionId supervisor position

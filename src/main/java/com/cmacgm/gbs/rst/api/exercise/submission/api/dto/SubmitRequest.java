@@ -5,5 +5,5 @@ import java.util.UUID;
 /**
  * Submit request payload.
  */
-public record SubmitRequest(String remarks, UUID requestId) {
+public record SubmitRequest(String remarks, UUID requestId, Boolean scopeAcknowledged) {
 }
