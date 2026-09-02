@@ -176,7 +176,9 @@ public class TimesheetSyncService {
                     "A " + kind + " Timesheet sync is already running.");
         }
         var active = syncRuns.findByKindAndStatus(kind, "ACTIVE");
-        if (source.filenameDate() != null && active.isPresent()
+        if (!isManual(source)
+                && source.filenameDate() != null
+                && active.isPresent()
                 && source.filenameDate().isBefore(active.get().getSyncDate())) {
             log.info("Timesheet {} stale file skipped: {}", kind, source.fileName());
             return toResult(active.get());
@@ -251,8 +253,15 @@ public class TimesheetSyncService {
         } catch (RuntimeException ex) {
             String code = errorCodeOf(ex);
             String message = userMessage(ex);
+            if (!(ex instanceof ApiException)) {
+                log.error("Timesheet {} persist failed unexpectedly: id={}", kind, run.getId(), ex);
+            }
             markFailed(run.getId(), code, message);
-            persistRunIssueIfMissing(run.getId(), code, message, now);
+            try {
+                persistRunIssueIfMissing(run.getId(), code, message, now);
+            } catch (RuntimeException persistIssue) {
+                log.warn("Timesheet {} could not persist a run-level issue: id={}", kind, run.getId(), persistIssue);
+            }
             notifyFailed(run.getId());
             throw ex instanceof ApiException ? ex : new ApiException(HttpStatus.CONFLICT, code, message);
         }

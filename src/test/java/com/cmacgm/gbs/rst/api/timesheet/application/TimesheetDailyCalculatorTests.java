@@ -71,7 +71,7 @@ class TimesheetDailyCalculatorTests {
     }
 
     @Test
-    void buildsPositionsFromRstApplicableNonProductionLines() {
+    void skipsPositionsWhenRstApplicableButNotProductionLine() {
         UUID runId = UUID.randomUUID();
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId,
@@ -80,11 +80,11 @@ class TimesheetDailyCalculatorTests {
                 null,
                 RST_YES);
 
-        assertThat(result.positions())
-                .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
-                .contains(
-                        org.assertj.core.groups.Tuple.tuple("EMP-POS-1", "AGENT"),
-                        org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "SUPERVISOR"));
+        assertThat(result.people())
+                .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getPositionId)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-1"));
+        assertThat(result.positions()).isEmpty();
+        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("MISSING_FIELD");
     }
 
     @Test
@@ -109,7 +109,7 @@ class TimesheetDailyCalculatorTests {
         UUID runId = UUID.randomUUID();
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId,
-                List.of(row("S00000001", "EMP-1", "Agent One", "EMP-POS-1", "management", "non-productive", "")),
+                List.of(row("S00000001", "EMP-1", "Agent One", "EMP-POS-1", "production", "productive", "")),
                 Instant.parse("2026-08-23T00:00:00Z"),
                 null,
                 RST_YES);

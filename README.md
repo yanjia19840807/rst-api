@@ -138,8 +138,8 @@ existing V2 session foreign keys survive the upgrade. V49 replaces the raw
 ## Timesheet sync (dev / ops)
 
 Daily and Monthly reports are two sources. Daily writes `timesheet_person` from
-every complete employee row and `timesheet_position` from rows whose PL3 is
-RST-applicable in GBS Process. Monthly writes `timesheet_scope`,
+every complete employee row and `timesheet_position` from Production +
+Productive rows whose PL3 is RST-applicable in GBS Process. Monthly writes `timesheet_scope`,
 `timesheet_assignment`, and Delivery HC for the same RST-applicable PL3 codes.
 Each kind keeps one ACTIVE run; a failed run does not replace the previous
 ACTIVE.

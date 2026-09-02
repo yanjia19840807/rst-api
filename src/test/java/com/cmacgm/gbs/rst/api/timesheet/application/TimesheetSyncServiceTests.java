@@ -213,6 +213,73 @@ class TimesheetSyncServiceTests {
     }
 
     @Test
+    void manualUploadReplacesANewerActiveSnapshot() {
+        TimesheetSyncService.SyncResult first = service.sync("MONTHLY");
+        UUID firstId = first.id();
+        assertThat(first.syncDate()).isEqualTo(LocalDate.of(2026, 6, 30));
+
+        String fileName = "older-monthly.csv";
+        String csv =
+                """
+                month,emp_emp_id,emp_ccgid,emp_name,emp_email,emp_position_id,supervisor_emp_id,supervisor_ccgid,supervisor_name,supervisor_position_id,sr_manager_emp_id,sr_manager_ccgid,sr_manager_name,sr_manager_position_id,domain_head_emp_id,domain_head_ccgid,domain_head_name,domain_head_position_id,center,site,gbs_domain,pl1,pl2,pl3_code,pl3,carrier,customer_country,hc,management_or_production,cost_type
+                2026-05,EMP-1,S00000001,Agent One,s00000001@dev.local,EMP-POS-1,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,Kuala Lumpur,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,4,production,productive
+                """;
+        TimesheetSourceResolver manual = new TimesheetSourceResolver(
+                new RstSharePointProperties("2.UAT/Data Output/RST"), null) {
+            @Override
+            public Source storeManual(String uploadedName, byte[] content) {
+                return new Source(
+                        uploadedName,
+                        new ByteArrayInputStream(content),
+                        "drive-manual-1",
+                        "etag-manual-1",
+                        "MANUAL",
+                        LocalDate.of(2026, 5, 31));
+            }
+        };
+        service = new TimesheetSyncService(
+                new TimesheetReportParser(),
+                new TimesheetDailyCalculator(),
+                new TimesheetMonthlyCalculator(),
+                manual,
+                GbsProcessCatalogSource.of(GbsProcessCatalog.allowing("PL3")),
+                proxy(TimesheetSyncRunRepository.class, (proxy, method, args) ->
+                        switch (method.getName()) {
+                            case "saveAndFlush", "save" -> store((TimesheetSyncRun) args[0]);
+                            case "findById" -> Optional.ofNullable(runStore.get(args[0]));
+                            case "findByKindAndStatus" -> runStore.values().stream()
+                                    .filter(run -> run.getKind().equals(args[0]) && run.getStatus().equals(args[1]))
+                                    .findFirst();
+                            case "findByKindAndStatusAndSourceDriveItemIdAndSourceEtag" -> Optional.empty();
+                            case "findMaxAttemptNo" -> null;
+                            case "archiveOtherActive" ->
+                                    archiveOther((String) args[0], (UUID) args[1], (Instant) args[2]);
+                            default -> unsupported(method);
+                        }),
+                unusedRepository(TimesheetPersonRepository.class),
+                unusedRepository(TimesheetPositionRepository.class),
+                capturingRepository(TimesheetScopeRepository.class, savedScopes),
+                capturingRepository(TimesheetAssignmentRepository.class, savedAssignments),
+                capturingRepository(TimesheetKpiRepository.class, savedKpis),
+                proxy(TimesheetSyncIssueRepository.class, (proxy, method, args) -> {
+                    throw new AssertionError("Manual older Monthly must not persist issues: " + method.getName());
+                }),
+                noOpTransactions(),
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                null);
+
+        TimesheetSyncService.SyncResult uploaded =
+                service.syncUploaded(fileName, csv.getBytes(StandardCharsets.UTF_8), "LTH001");
+
+        assertThat(uploaded.id()).isNotEqualTo(firstId);
+        assertThat(uploaded.status()).isEqualTo("ACTIVE");
+        assertThat(uploaded.syncDate()).isEqualTo(LocalDate.of(2026, 5, 31));
+        assertThat(runStore.get(firstId).getStatus()).isEqualTo("ARCHIVED");
+        assertThat(runStore.get(uploaded.id()).getSourceType()).isEqualTo("MANUAL");
+        assertThat(savedKpis).extracting(TimesheetKpi::getHc).containsExactly(new BigDecimal("4.000000"));
+    }
+
+    @Test
     void validationFailureEmailsOnceAndDoesNotCreateASecondRun() {
         AtomicInteger mails = new AtomicInteger();
         List<TimesheetSyncIssue> savedIssues = new ArrayList<>();

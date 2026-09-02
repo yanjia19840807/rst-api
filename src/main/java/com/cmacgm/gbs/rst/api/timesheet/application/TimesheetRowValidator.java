@@ -23,8 +23,8 @@ final class TimesheetRowValidator {
     }
 
     /**
-     * Validates rows. Daily required-field checks apply only to RST-applicable
-     * PL3 codes.
+     * Validates rows. Daily required-field checks apply to RST-applicable
+     * Production + Productive rows.
      *
      * @param runId sync run
      * @param kind DAILY or MONTHLY
@@ -44,7 +44,8 @@ final class TimesheetRowValidator {
         GbsProcessCatalog processes = catalog == null ? GbsProcessCatalog.allowing() : catalog;
         List<TimesheetSyncIssue> issues = new ArrayList<>();
         for (ReportRow row : rows) {
-            if ("DAILY".equals(kind) && !processes.applies(row.pl3Code())) {
+            if ("DAILY".equals(kind)
+                    && (!processes.applies(row.pl3Code()) || !isProductionLine(row))) {
                 continue;
             }
             if ("DAILY".equals(kind)) {
@@ -91,6 +92,17 @@ final class TimesheetRowValidator {
             }
         }
         return issues;
+    }
+
+    /**
+     * Daily position mapping uses Production + Productive rows.
+     *
+     * @param row parsed row
+     * @return true when the row is Production and Productive
+     */
+    static boolean isProductionLine(ReportRow row) {
+        return "production".equalsIgnoreCase(nullToEmpty(row.managementOrProduction()))
+                && "productive".equalsIgnoreCase(nullToEmpty(row.costType()));
     }
 
     /**
@@ -189,5 +201,9 @@ final class TimesheetRowValidator {
 
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value.trim();
     }
 }

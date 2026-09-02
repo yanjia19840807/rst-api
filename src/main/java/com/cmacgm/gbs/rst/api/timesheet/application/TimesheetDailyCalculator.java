@@ -20,8 +20,8 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 
 /**
  * Daily People come from every complete identity on the file. The position
- * tree is built only from rows whose PL3 is RST-applicable. One person on two
- * seats is a blocking conflict; two people on one seat is allowed.
+ * tree is built from RST-applicable Production + Productive rows. One person
+ * on two seats is a blocking conflict; two people on one seat is allowed.
  */
 @Component
 public class TimesheetDailyCalculator {
@@ -63,7 +63,7 @@ public class TimesheetDailyCalculator {
 
     /**
      * Computes Daily org tables, checks the file-name date, and filters
-     * positions by RST-applicable PL3 codes.
+     * positions by RST-applicable Production + Productive rows.
      *
      * @param runId Daily run
      * @param rows parsed rows
@@ -96,7 +96,7 @@ public class TimesheetDailyCalculator {
                     row.empEmail(),
                     row.center(),
                     row.empPositionId());
-            if (!processes.applies(row.pl3Code())) {
+            if (!processes.applies(row.pl3Code()) || !TimesheetRowValidator.isProductionLine(row)) {
                 continue;
             }
             rememberPerson(
