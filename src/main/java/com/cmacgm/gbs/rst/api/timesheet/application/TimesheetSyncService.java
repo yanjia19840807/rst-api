@@ -26,7 +26,6 @@ import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSourceResolver.Sour
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetAssignmentRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
@@ -51,7 +50,6 @@ public class TimesheetSyncService {
     private final TimesheetPersonRepository people;
     private final TimesheetPositionRepository positions;
     private final TimesheetScopeRepository scopes;
-    private final TimesheetAssignmentRepository assignments;
     private final TimesheetKpiRepository kpis;
     private final TimesheetSyncIssueRepository issues;
     private final TransactionTemplate transactionTemplate;
@@ -68,7 +66,6 @@ public class TimesheetSyncService {
      * @param people person repository
      * @param positions position repository
      * @param scopes scope repository
-     * @param assignments assignment repository
      * @param kpis KPI repository
      * @param issues issue repository
      * @param transactionManager cutover transactions
@@ -85,7 +82,6 @@ public class TimesheetSyncService {
             TimesheetPersonRepository people,
             TimesheetPositionRepository positions,
             TimesheetScopeRepository scopes,
-            TimesheetAssignmentRepository assignments,
             TimesheetKpiRepository kpis,
             TimesheetSyncIssueRepository issues,
             PlatformTransactionManager transactionManager,
@@ -100,7 +96,6 @@ public class TimesheetSyncService {
         this.people = people;
         this.positions = positions;
         this.scopes = scopes;
-        this.assignments = assignments;
         this.kpis = kpis;
         this.issues = issues;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -247,7 +242,6 @@ public class TimesheetSyncService {
                     monthlyCalculator.compute(run.getId(), rows, now, source.filenameDate(), catalog);
             return activateOrFail(run, rows.size(), hash, computed.issues(), () -> {
                 scopes.saveAll(computed.scopes());
-                assignments.saveAll(computed.assignments());
                 kpis.saveAll(computed.kpis());
             });
         } catch (RuntimeException ex) {
@@ -349,13 +343,11 @@ public class TimesheetSyncService {
             return;
         }
         int scopesDropped = scopes.deleteBySyncRunIdNot(keepRunId);
-        int assignmentsDropped = assignments.deleteBySyncRunIdNot(keepRunId);
         int kpisDropped = kpis.deleteBySyncRunIdNot(keepRunId);
         log.info(
-                "Timesheet MONTHLY kept computed rows for {}; dropped scopes={} assignments={} kpis={}",
+                "Timesheet MONTHLY kept computed rows for {}; dropped scopes={} kpis={}",
                 keepRunId,
                 scopesDropped,
-                assignmentsDropped,
                 kpisDropped);
     }
 

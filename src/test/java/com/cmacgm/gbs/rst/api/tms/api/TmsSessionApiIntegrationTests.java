@@ -74,7 +74,6 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update("delete from rst_exercise");
         jdbcTemplate.update("delete from timesheet_sync_issue");
         jdbcTemplate.update("delete from timesheet_kpi");
-        jdbcTemplate.update("delete from timesheet_assignment");
         jdbcTemplate.update("delete from timesheet_scope");
         jdbcTemplate.update("delete from timesheet_position");
         jdbcTemplate.update("delete from timesheet_person");
@@ -139,8 +138,8 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into timesheet_sync_run
-                    (id, kind, sync_date, attempt_no, status, row_count, started_at, completed_at)
-                values (?, 'DAILY', current_date, 1, 'ACTIVE', 1, ?, ?)
+                    (id, kind, center, sync_date, attempt_no, status, row_count, started_at, completed_at)
+                values (?, 'DAILY', 'Kuala Lumpur', current_date, 1, 'ACTIVE', 1, ?, ?)
                 """,
                 dailyRunId,
                 now,
@@ -148,8 +147,8 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into timesheet_sync_run
-                    (id, kind, sync_date, attempt_no, status, row_count, started_at, completed_at)
-                values (?, 'MONTHLY', current_date, 1, 'ACTIVE', 1, ?, ?)
+                    (id, kind, center, sync_date, attempt_no, status, row_count, started_at, completed_at)
+                values (?, 'MONTHLY', 'Kuala Lumpur', current_date, 1, 'ACTIVE', 1, ?, ?)
                 """,
                 monthlyRunId,
                 now,
@@ -180,18 +179,18 @@ class TmsSessionApiIntegrationTests {
                 dailyRunId);
         jdbcTemplate.update(
                 """
+                insert into timesheet_position
+                    (sync_run_id, position_id, role_type, parent_position_id, center)
+                values (?, 'POS-AGENT-001', 'AGENT', 'POS-SUP-001', 'Kuala Lumpur')
+                """,
+                dailyRunId);
+        jdbcTemplate.update(
+                """
                 insert into timesheet_scope
                     (sync_run_id, supervisor_position_id, pl3_code, pl3_name,
                      center, domain, pl1, pl2)
                 values (?, 'POS-SUP-001', 'BANK_REC', 'Bank Reconciliation',
                         'Kuala Lumpur', 'Finance', 'Accounting', 'Record to Report')
-                """,
-                monthlyRunId);
-        jdbcTemplate.update(
-                """
-                insert into timesheet_assignment
-                    (sync_run_id, emp_position_id, supervisor_position_id, pl3_code, center)
-                values (?, 'POS-AGENT-001', 'POS-SUP-001', 'BANK_REC', 'Kuala Lumpur')
                 """,
                 monthlyRunId);
         jdbcTemplate.update(

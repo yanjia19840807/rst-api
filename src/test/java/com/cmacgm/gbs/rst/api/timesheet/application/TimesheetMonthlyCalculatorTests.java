@@ -10,7 +10,6 @@ import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.HcValue;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetAssignment;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
@@ -23,7 +22,7 @@ class TimesheetMonthlyCalculatorTests {
     private final TimesheetMonthlyCalculator calculator = new TimesheetMonthlyCalculator();
 
     @Test
-    void buildsAssignmentScopeAndKpiFromMonthlyRows() {
+    void buildsScopeAndKpiFromMonthlyRows() {
         UUID runId = UUID.randomUUID();
         TimesheetMonthlyCalculator.Result result = calculator.compute(
                 runId,
@@ -35,13 +34,6 @@ class TimesheetMonthlyCalculatorTests {
                 RST_YES);
 
         assertThat(result.issues()).isEmpty();
-        assertThat(result.assignments())
-                .extracting(
-                        TimesheetAssignment::getEmpPositionId,
-                        TimesheetAssignment::getSupervisorPositionId,
-                        TimesheetAssignment::getPl3Code,
-                        TimesheetAssignment::getCenter)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("EMP-1", "POS-SUP-1", "PL3", "Kuala Lumpur"));
         assertThat(result.scopes())
                 .extracting(TimesheetScope::getSupervisorPositionId, TimesheetScope::getCenter, TimesheetScope::getPl3Code)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "Kuala Lumpur", "PL3"));
@@ -51,7 +43,7 @@ class TimesheetMonthlyCalculatorTests {
     }
 
     @Test
-    void flagsEmployeeAssignedToMultipleSupervisors() {
+    void keepsBothSupervisorScopesOnTheSamePl3() {
         UUID runId = UUID.randomUUID();
         TimesheetMonthlyCalculator.Result result = calculator.compute(
                 runId,
@@ -62,40 +54,10 @@ class TimesheetMonthlyCalculatorTests {
                 null,
                 RST_YES);
 
-        assertThat(result.issues())
-                .extracting(issue -> issue.getCode())
-                .contains("ASSIGNMENT_CONFLICT");
-        assertThat(result.assignments())
-                .extracting(TimesheetAssignment::getSupervisorPositionId)
+        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("ASSIGNMENT_CONFLICT");
+        assertThat(result.scopes())
+                .extracting(TimesheetScope::getSupervisorPositionId)
                 .containsExactly("POS-SUP-1", "POS-SUP-2");
-    }
-
-    @Test
-    void allowsSameSeatUnderDifferentSupervisorsOnDifferentPl3() {
-        UUID runId = UUID.randomUUID();
-        TimesheetMonthlyCalculator.Result result = calculator.compute(
-                runId,
-                List.of(
-                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3-A", "Kuala Lumpur", "1"),
-                        row(
-                                "S00000001",
-                                "EMP-1",
-                                "POS-SUP-2",
-                                "PL3-B",
-                                "Kuala Lumpur",
-                                "1",
-                                "management",
-                                "non-productive")),
-                Instant.parse("2026-08-24T00:00:00Z"),
-                null,
-                RST_YES);
-
-        assertThat(result.issues()).isEmpty();
-        assertThat(result.assignments())
-                .extracting(TimesheetAssignment::getEmpPositionId, TimesheetAssignment::getSupervisorPositionId)
-                .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple("EMP-1", "POS-SUP-1"),
-                        org.assertj.core.groups.Tuple.tuple("EMP-1", "POS-SUP-2"));
     }
 
     @Test
@@ -113,9 +75,9 @@ class TimesheetMonthlyCalculatorTests {
         assertThat(result.issues())
                 .extracting(TimesheetSyncIssue::getMessage)
                 .contains("Missing pl3_code.");
-        assertThat(result.assignments())
-                .extracting(TimesheetAssignment::getEmpPositionId)
-                .containsExactly("EMP-1");
+        assertThat(result.scopes())
+                .extracting(TimesheetScope::getSupervisorPositionId)
+                .containsExactly("POS-SUP-1");
     }
 
     @Test
@@ -134,7 +96,7 @@ class TimesheetMonthlyCalculatorTests {
     }
 
     @Test
-    void persistsScopeAssignmentAndKpiFromEveryCompleteRow() {
+    void mapsScopeAndKpiFromEveryCompleteRow() {
         UUID runId = UUID.randomUUID();
         TimesheetMonthlyCalculator.Result result = calculator.compute(
                 runId,
@@ -163,12 +125,6 @@ class TimesheetMonthlyCalculatorTests {
                 RST_YES);
 
         assertThat(result.issues()).isEmpty();
-        assertThat(result.assignments())
-                .extracting(TimesheetAssignment::getEmpPositionId, TimesheetAssignment::getSupervisorPositionId)
-                .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple("EMP-1", "POS-SUP-1"),
-                        org.assertj.core.groups.Tuple.tuple("EMP-2", "POS-SUP-2"),
-                        org.assertj.core.groups.Tuple.tuple("EMP-3", "182894"));
         assertThat(result.scopes())
                 .extracting(TimesheetScope::getSupervisorPositionId, TimesheetScope::getPl3Code)
                 .containsExactly(
@@ -196,9 +152,6 @@ class TimesheetMonthlyCalculatorTests {
                 RST_YES);
 
         assertThat(result.issues()).isEmpty();
-        assertThat(result.assignments())
-                .extracting(TimesheetAssignment::getEmpPositionId, TimesheetAssignment::getPl3Code)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("EMP-1", "PL3"));
         assertThat(result.scopes()).extracting(TimesheetScope::getPl3Code).containsExactly("PL3");
         assertThat(result.kpis()).extracting(TimesheetKpi::getPl3Code).containsExactly("PL3");
     }

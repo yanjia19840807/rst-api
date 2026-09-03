@@ -5,23 +5,22 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Component;
 
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetAssignment;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 
 /**
- * Builds Monthly scope, assignment and Delivery HC from every complete row.
+ * Builds Monthly scope and Delivery HC from every complete RST-applicable
+ * row. Agent access is derived at read time from Daily positions and these
+ * scopes.
  */
 @Component
 public class TimesheetMonthlyCalculator {
@@ -32,13 +31,12 @@ public class TimesheetMonthlyCalculator {
     public record Result(
             LocalDate syncDate,
             List<TimesheetScope> scopes,
-            List<TimesheetAssignment> assignments,
             List<TimesheetKpi> kpis,
             List<TimesheetSyncIssue> issues) {
     }
 
     /**
-     * Aggregates assignment, scope and Delivery HC for a Monthly run.
+     * Aggregates scope and Delivery HC for a Monthly run.
      *
      * @param runId Monthly run
      * @param rows parsed rows
@@ -63,7 +61,7 @@ public class TimesheetMonthlyCalculator {
     }
 
     /**
-     * Aggregates Monthly tables for RST-applicable PL3 codes.
+     * Aggregates Monthly scope and Delivery HC for RST-applicable PL3 codes.
      *
      * @param runId Monthly run
      * @param rows parsed rows
@@ -78,8 +76,6 @@ public class TimesheetMonthlyCalculator {
         List<TimesheetSyncIssue> issues = new ArrayList<>(
                 TimesheetRowValidator.validate(runId, "MONTHLY", expectedDate, rows, now, processes));
         Map<String, ScopeDraft> scopes = new LinkedHashMap<>();
-        Map<String, AssignmentDraft> assignments = new LinkedHashMap<>();
-        Map<String, Set<String>> assignmentSupervisors = new LinkedHashMap<>();
         Map<String, KpiDraft> totals = new LinkedHashMap<>();
         LocalDate syncDate = expectedDate;
         for (ReportRow row : rows) {
@@ -99,18 +95,6 @@ public class TimesheetMonthlyCalculator {
                             row.domain(),
                             row.pl1(),
                             row.pl2()));
-            assignments.putIfAbsent(
-                    key(row.empPositionId(), row.supervisorPositionId(), row.pl3Code(), row.center()),
-                    new AssignmentDraft(
-                            row.empPositionId(),
-                            row.supervisorPositionId(),
-                            row.pl3Code(),
-                            row.center()));
-            assignmentSupervisors
-                    .computeIfAbsent(
-                            key(row.empPositionId(), row.pl3Code(), row.center()),
-                            ignored -> new LinkedHashSet<>())
-                    .add(row.supervisorPositionId());
             if (row.hc() == null || row.hc().value() == null) {
                 continue;
             }
@@ -141,27 +125,6 @@ public class TimesheetMonthlyCalculator {
                             left.customerCountry,
                             left.hc.add(right.hc)));
         }
-        for (Map.Entry<String, Set<String>> entry : assignmentSupervisors.entrySet()) {
-            if (entry.getValue().size() > 1) {
-                String[] parts = entry.getKey().split("\\|", 3);
-                String empPositionId = parts.length > 0 ? parts[0] : entry.getKey();
-                String pl3Code = parts.length > 1 ? parts[1] : null;
-                issues.add(TimesheetSyncIssue.error(
-                        runId,
-                        TimesheetSyncErrorCode.ASSIGNMENT_CONFLICT,
-                        "emp_position_id " + empPositionId
-                                + " maps to multiple supervisor_position_id on "
-                                + entry.getKey()
-                                + ": "
-                                + String.join(", ", entry.getValue()),
-                        null,
-                        null,
-                        empPositionId,
-                        pl3Code,
-                        null,
-                        now));
-            }
-        }
         if (syncDate == null) {
             issues.add(TimesheetSyncIssue.error(
                     runId,
@@ -174,11 +137,11 @@ public class TimesheetMonthlyCalculator {
                     null,
                     now));
         }
-        if (scopes.isEmpty() && assignments.isEmpty() && totals.isEmpty() && issues.isEmpty()) {
+        if (scopes.isEmpty() && totals.isEmpty() && issues.isEmpty()) {
             issues.add(TimesheetSyncIssue.error(
                     runId,
                     TimesheetSyncErrorCode.EMPTY_FILE,
-                    "Monthly file produced no assignment, scope or KPI rows.",
+                    "Monthly file produced no scope or KPI rows.",
                     null,
                     null,
                     null,
@@ -198,14 +161,6 @@ public class TimesheetMonthlyCalculator {
                                 draft.domain,
                                 draft.pl1,
                                 draft.pl2))
-                        .toList(),
-                assignments.values().stream()
-                        .map(draft -> TimesheetAssignment.create(
-                                runId,
-                                draft.empPositionId,
-                                draft.supervisorPositionId,
-                                draft.pl3Code,
-                                draft.center))
                         .toList(),
                 totals.values().stream()
                         .map(draft -> TimesheetKpi.create(
@@ -233,10 +188,6 @@ public class TimesheetMonthlyCalculator {
             String domain,
             String pl1,
             String pl2) {
-    }
-
-    private record AssignmentDraft(
-            String empPositionId, String supervisorPositionId, String pl3Code, String center) {
     }
 
     private record KpiDraft(

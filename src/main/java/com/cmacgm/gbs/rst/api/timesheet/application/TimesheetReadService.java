@@ -10,12 +10,10 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetAssignment;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPosition;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetAssignmentRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
@@ -28,7 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Read model over ACTIVE Daily org and Monthly assignment / scope / KPI snapshots.
+ * Read model over ACTIVE Daily org and Monthly scope / KPI snapshots.
  */
 @Service
 public class TimesheetReadService {
@@ -37,7 +35,6 @@ public class TimesheetReadService {
     private final TimesheetPersonRepository people;
     private final TimesheetPositionRepository positions;
     private final TimesheetScopeRepository scopes;
-    private final TimesheetAssignmentRepository assignments;
     private final TimesheetKpiRepository kpis;
 
     /**
@@ -45,7 +42,6 @@ public class TimesheetReadService {
      * @param people Daily people
      * @param positions Daily positions
      * @param scopes Monthly scopes
-     * @param assignments Monthly assignments
      * @param kpis Monthly KPIs
      */
     public TimesheetReadService(
@@ -53,13 +49,11 @@ public class TimesheetReadService {
             TimesheetPersonRepository people,
             TimesheetPositionRepository positions,
             TimesheetScopeRepository scopes,
-            TimesheetAssignmentRepository assignments,
             TimesheetKpiRepository kpis) {
         this.syncRuns = syncRuns;
         this.people = people;
         this.positions = positions;
         this.scopes = scopes;
-        this.assignments = assignments;
         this.kpis = kpis;
     }
 
@@ -196,12 +190,13 @@ public class TimesheetReadService {
      * @param ccgid agent
      * @param supervisorPositionId toolkit supervisor position
      * @param pl3Code toolkit PL3
-     * @return true when Monthly assignment exists
+     * @return true when the Daily seat reports to this Supervisor and Monthly
+     *     scope owns the PL3
      */
     @Transactional(readOnly = true)
     public boolean agentCanUse(
             String ccgid, String supervisorPositionId, String pl3Code) {
-        return assignments.existsActiveForAgent(ccgid, supervisorPositionId, pl3Code);
+        return scopes.existsActiveForAgent(ccgid, supervisorPositionId, pl3Code);
     }
 
     /**
@@ -213,12 +208,10 @@ public class TimesheetReadService {
     @Transactional(readOnly = true)
     public List<TeamAgent> teamAgents(String supervisorCcgid) {
         LinkedHashMap<String, TeamAgent> unique = new LinkedHashMap<>();
-        for (TimesheetAssignment assignment : assignments.findActiveBySupervisorCcgid(supervisorCcgid)) {
-            for (TimesheetPerson person : people.findActiveByPositionId(assignment.getEmpPositionId())) {
-                unique.computeIfAbsent(
-                        person.getCcgid(),
-                        ccgid -> new TeamAgent(ccgid, person.getName() == null ? ccgid : person.getName()));
-            }
+        for (TimesheetPerson person : people.findActiveReportsBySupervisorCcgid(supervisorCcgid)) {
+            unique.computeIfAbsent(
+                    person.getCcgid(),
+                    ccgid -> new TeamAgent(ccgid, person.getName() == null ? ccgid : person.getName()));
         }
         return List.copyOf(unique.values());
     }
@@ -256,7 +249,7 @@ public class TimesheetReadService {
      * Position occupied by a person for a role.
      *
      * @param ccgid occupant
-     * @param roleType SUPERVISOR / SR_MANAGER / DOMAIN_HEAD
+     * @param roleType SUPERVISOR / SR_MANAGER
      * @return position ids
      */
     @Transactional(readOnly = true)

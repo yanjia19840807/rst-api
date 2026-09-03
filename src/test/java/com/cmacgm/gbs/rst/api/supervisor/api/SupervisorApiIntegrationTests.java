@@ -101,7 +101,6 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update("delete from toolkit");
         jdbcTemplate.update("delete from timesheet_sync_issue");
         jdbcTemplate.update("delete from timesheet_kpi");
-        jdbcTemplate.update("delete from timesheet_assignment");
         jdbcTemplate.update("delete from timesheet_scope");
         jdbcTemplate.update("delete from timesheet_position");
         jdbcTemplate.update("delete from timesheet_person");
@@ -116,10 +115,10 @@ class SupervisorApiIntegrationTests {
         insertPosition(DAILY_RUN_ID, SUPERVISOR_POSITION_ID, "SUPERVISOR", "POS-SRM-001");
         insertPosition(DAILY_RUN_ID, "POS-SRM-001", "SR_MANAGER", "POS-DH-001");
         insertPosition(DAILY_RUN_ID, "POS-DH-001", "DOMAIN_HEAD", null);
+        insertPosition(DAILY_RUN_ID, "AGENT010", "AGENT", SUPERVISOR_POSITION_ID);
+        insertPosition(DAILY_RUN_ID, "AGENT011", "AGENT", SUPERVISOR_POSITION_ID);
+        insertPosition(DAILY_RUN_ID, "AGENT012", "AGENT", SUPERVISOR_POSITION_ID);
         insertScope(MONTHLY_RUN_ID);
-        insertAssignment(MONTHLY_RUN_ID, "AGENT010");
-        insertAssignment(MONTHLY_RUN_ID, "AGENT011");
-        insertAssignment(MONTHLY_RUN_ID, "AGENT012");
         insertKpi(MONTHLY_RUN_ID, "Carrier A", "Kuala Lumpur", "Australia", "2.000000");
         insertKpi(MONTHLY_RUN_ID, "Carrier B", "Singapore", "Germany", "3.000000");
     }
@@ -1112,8 +1111,8 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into timesheet_sync_run
-                    (id, kind, sync_date, attempt_no, status, row_count, started_at, completed_at)
-                values (?, ?, date '2026-08-05', 1, 'ACTIVE', ?, ?, ?)
+                    (id, kind, center, sync_date, attempt_no, status, row_count, started_at, completed_at)
+                values (?, ?, 'Kuala Lumpur', date '2026-08-05', 1, 'ACTIVE', ?, ?, ?)
                 """,
                 id,
                 kind,
@@ -1162,20 +1161,6 @@ class SupervisorApiIntegrationTests {
                 "Finance",
                 "Accounting",
                 "Record to Report");
-    }
-
-    private void insertAssignment(UUID runId, String empPositionId) {
-        jdbcTemplate.update(
-                """
-                insert into timesheet_assignment
-                    (sync_run_id, emp_position_id, supervisor_position_id, pl3_code, center)
-                values (?, ?, ?, ?, ?)
-                """,
-                runId,
-                empPositionId,
-                SUPERVISOR_POSITION_ID,
-                PL3_CODE,
-                "Kuala Lumpur");
     }
 
     private void insertKpi(UUID runId, String carrier, String site, String country, String hc) {

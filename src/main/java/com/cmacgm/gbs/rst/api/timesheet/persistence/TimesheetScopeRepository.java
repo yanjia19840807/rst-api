@@ -85,6 +85,38 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
             @Param("positionId") String positionId, @Param("pl3Code") String pl3Code);
 
     /**
+     * Whether the Agent's Daily seat reports to this Supervisor and the
+     * Supervisor owns the PL3 in ACTIVE Monthly scope.
+     *
+     * @param ccgid employee
+     * @param positionId supervisor position
+     * @param pl3Code PL3
+     * @return true when the Agent can use the Toolkit
+     */
+    @Query("""
+            select count(s) > 0
+            from TimesheetPerson p, TimesheetPosition pos, TimesheetScope s,
+                 TimesheetSyncRun daily, TimesheetSyncRun monthly
+            where p.id.syncRunId = daily.id
+              and pos.id.syncRunId = daily.id
+              and pos.id.positionId = p.positionId
+              and daily.kind = 'DAILY'
+              and daily.status = 'ACTIVE'
+              and s.id.syncRunId = monthly.id
+              and monthly.kind = 'MONTHLY'
+              and monthly.status = 'ACTIVE'
+              and upper(p.id.ccgid) = upper(:ccgid)
+              and pos.roleType = 'AGENT'
+              and pos.parentPositionId = :positionId
+              and s.id.supervisorPositionId = pos.parentPositionId
+              and s.id.pl3Code = :pl3Code
+            """)
+    boolean existsActiveForAgent(
+            @Param("ccgid") String ccgid,
+            @Param("positionId") String positionId,
+            @Param("pl3Code") String pl3Code);
+
+    /**
      * Dashboard obligations: Center × Supervisor position × PL3.
      *
      * @return scope rows

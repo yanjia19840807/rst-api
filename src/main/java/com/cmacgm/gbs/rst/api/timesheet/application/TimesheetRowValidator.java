@@ -62,10 +62,6 @@ final class TimesheetRowValidator {
                 require(issues, runId, now, row, "sr_manager_ccgid", hasText(row.srManagerCcgid()));
                 require(issues, runId, now, row, "sr_manager_name", hasText(row.srManagerName()));
                 require(issues, runId, now, row, "sr_manager_position_id", hasText(row.srManagerPositionId()));
-                require(issues, runId, now, row, "domain_head_emp_id", hasText(row.domainHeadId()));
-                require(issues, runId, now, row, "domain_head_ccgid", hasText(row.domainHeadCcgid()));
-                require(issues, runId, now, row, "domain_head_name", hasText(row.domainHeadName()));
-                require(issues, runId, now, row, "domain_head_position_id", hasText(row.domainHeadPositionId()));
                 require(issues, runId, now, row, "center", hasText(row.center()));
                 if (expectedDate != null && row.date() != null && !expectedDate.equals(row.date())) {
                     issues.add(mismatch(runId, now, row, expectedDate, row.date()));
@@ -141,8 +137,8 @@ final class TimesheetRowValidator {
     }
 
     /**
-     * {@code MISSING_FIELD} and {@code ASSIGNMENT_CONFLICT} are recorded but
-     * do not fail the run.
+     * {@code MISSING_FIELD} is recorded but does not fail the run.
+     * Historical {@code ASSIGNMENT_CONFLICT} rows stay advisory.
      *
      * @param issue persisted or computed issue
      * @return true when the code is advisory

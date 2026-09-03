@@ -40,7 +40,6 @@ class DelegationApiIntegrationTests {
         jdbcTemplate.update("delete from rst_delegation");
         jdbcTemplate.update("delete from timesheet_sync_issue");
         jdbcTemplate.update("delete from timesheet_kpi");
-        jdbcTemplate.update("delete from timesheet_assignment");
         jdbcTemplate.update("delete from timesheet_scope");
         jdbcTemplate.update("delete from timesheet_position");
         jdbcTemplate.update("delete from timesheet_person");
@@ -49,8 +48,8 @@ class DelegationApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into timesheet_sync_run
-                    (id, kind, sync_date, attempt_no, status, row_count, started_at, completed_at)
-                values (?, 'DAILY', date '2026-08-05', 1, 'ACTIVE', 2, ?, ?)
+                    (id, kind, center, sync_date, attempt_no, status, row_count, started_at, completed_at)
+                values (?, 'DAILY', 'Kuala Lumpur', date '2026-08-05', 1, 'ACTIVE', 2, ?, ?)
                 """,
                 DAILY_RUN_ID,
                 NOW,

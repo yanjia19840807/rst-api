@@ -15,21 +15,21 @@ public interface ToolkitRepository extends JpaRepository<Toolkit, UUID> {
     @EntityGraph(attributePaths = "subtasks")
     @Query("""
             select distinct toolkit
-            from Toolkit toolkit
-            join TimesheetAssignment assignment
-              on assignment.id.supervisorPositionId = toolkit.supervisorPositionId
-             and assignment.id.pl3Code = toolkit.primaryPl3Code
-            join TimesheetSyncRun monthly
-              on assignment.id.syncRunId = monthly.id
-            join TimesheetPerson person
-              on person.positionId = assignment.id.empPositionId
-            join TimesheetSyncRun daily
-              on person.id.syncRunId = daily.id
-            where upper(person.id.ccgid) = upper(:ccgid)
+            from Toolkit toolkit, TimesheetPerson person, TimesheetPosition seat,
+                 TimesheetScope scope, TimesheetSyncRun daily, TimesheetSyncRun monthly
+            where person.id.syncRunId = daily.id
+              and seat.id.syncRunId = daily.id
+              and seat.id.positionId = person.positionId
+              and scope.id.syncRunId = monthly.id
               and daily.kind = 'DAILY'
               and daily.status = 'ACTIVE'
               and monthly.kind = 'MONTHLY'
               and monthly.status = 'ACTIVE'
+              and upper(person.id.ccgid) = upper(:ccgid)
+              and seat.roleType = 'AGENT'
+              and seat.parentPositionId = toolkit.supervisorPositionId
+              and scope.id.supervisorPositionId = seat.parentPositionId
+              and scope.id.pl3Code = toolkit.primaryPl3Code
               and toolkit.deletedAt is null
             order by toolkit.name
             """)

@@ -20,8 +20,9 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 
 /**
  * Daily People come from every complete identity on the file. The position
- * tree is built from RST-applicable Production + Productive rows. One person
- * on two seats is a blocking conflict; two people on one seat is allowed.
+ * tree is built from RST-applicable Production + Productive rows. Person-to-seat
+ * and parent-chain conflicts are checked on that filtered set only. Two people
+ * on one seat is allowed.
  */
 @Component
 public class TimesheetDailyCalculator {
@@ -62,8 +63,9 @@ public class TimesheetDailyCalculator {
     }
 
     /**
-     * Computes Daily org tables, checks the file-name date, and filters
-     * positions by RST-applicable Production + Productive rows.
+     * Computes Daily org tables, checks the file-name date, and builds the
+     * position tree from RST-applicable Production + Productive rows. Seat and
+     * parent-chain conflicts are validated on that filtered set.
      *
      * @param runId Daily run
      * @param rows parsed rows
@@ -89,7 +91,7 @@ public class TimesheetDailyCalculator {
             }
             rememberPerson(
                     people,
-                    personToPosition,
+                    null,
                     row.empCcgid(),
                     row.empId(),
                     row.empName(),
@@ -99,6 +101,15 @@ public class TimesheetDailyCalculator {
             if (!processes.applies(row.pl3Code()) || !TimesheetRowValidator.isProductionLine(row)) {
                 continue;
             }
+            rememberPerson(
+                    people,
+                    personToPosition,
+                    row.empCcgid(),
+                    row.empId(),
+                    row.empName(),
+                    row.empEmail(),
+                    row.center(),
+                    row.empPositionId());
             rememberPerson(
                     people,
                     personToPosition,
@@ -117,15 +128,6 @@ public class TimesheetDailyCalculator {
                     null,
                     null,
                     row.srManagerPositionId());
-            rememberPerson(
-                    people,
-                    personToPosition,
-                    row.domainHeadCcgid(),
-                    row.domainHeadId(),
-                    row.domainHeadName(),
-                    null,
-                    null,
-                    row.domainHeadPositionId());
             addPosition(
                     positions,
                     childToParent,
@@ -145,10 +147,8 @@ public class TimesheetDailyCalculator {
                     childToParent,
                     row.srManagerPositionId(),
                     "SR_MANAGER",
-                    row.domainHeadPositionId(),
+                    null,
                     row.center());
-            addPosition(
-                    positions, childToParent, row.domainHeadPositionId(), "DOMAIN_HEAD", null, row.center());
         }
 
         dropPeopleOnMultipleSeats(issues, runId, now, people, personToPosition);
@@ -210,7 +210,9 @@ public class TimesheetDailyCalculator {
             return;
         }
         String key = ccgid.trim().toUpperCase();
-        personToPosition.computeIfAbsent(key, ignored -> new LinkedHashSet<>()).add(positionId);
+        if (personToPosition != null) {
+            personToPosition.computeIfAbsent(key, ignored -> new LinkedHashSet<>()).add(positionId);
+        }
         PersonDraft incoming = new PersonDraft(key, empId, name, email, center, positionId);
         PersonDraft existing = people.get(key);
         if (existing == null) {

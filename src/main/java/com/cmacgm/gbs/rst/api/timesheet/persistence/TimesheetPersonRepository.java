@@ -84,6 +84,30 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
     List<TimesheetPerson> findActiveByPositionId(@Param("positionId") String positionId);
 
     /**
+     * Daily Agents whose seat reports to this Supervisor occupant.
+     *
+     * @param supervisorCcgid supervisor
+     * @return agents
+     */
+    @Query("""
+            select agent
+            from TimesheetPerson supervisor, TimesheetPosition child, TimesheetPerson agent,
+                 TimesheetSyncRun daily
+            where supervisor.id.syncRunId = daily.id
+              and child.id.syncRunId = daily.id
+              and agent.id.syncRunId = daily.id
+              and daily.kind = 'DAILY'
+              and daily.status = 'ACTIVE'
+              and upper(supervisor.id.ccgid) = upper(:supervisorCcgid)
+              and child.parentPositionId = supervisor.positionId
+              and child.roleType = 'AGENT'
+              and agent.positionId = child.id.positionId
+            order by agent.name, agent.id.ccgid
+            """)
+    List<TimesheetPerson> findActiveReportsBySupervisorCcgid(
+            @Param("supervisorCcgid") String supervisorCcgid);
+
+    /**
      * Occupants of bindable positions in the ACTIVE Daily snapshot.
      *
      * @param positionIds occupied positions
@@ -104,7 +128,7 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
      * Position occupied by this person when it has the given role.
      *
      * @param ccgid occupant
-     * @param roleType SUPERVISOR / SR_MANAGER / DOMAIN_HEAD
+     * @param roleType SUPERVISOR / SR_MANAGER
      * @return position id when present
      */
     @Query("""

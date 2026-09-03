@@ -10,11 +10,9 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetAssignment;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetAssignmentRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
@@ -29,7 +27,6 @@ class TimesheetSnapshotBrowseServiceTests {
     private TimesheetPersonRepository people;
     private TimesheetPositionRepository positions;
     private TimesheetScopeRepository scopes;
-    private TimesheetAssignmentRepository assignments;
     private TimesheetKpiRepository kpis;
     private TimesheetSnapshotBrowseService service;
 
@@ -38,9 +35,8 @@ class TimesheetSnapshotBrowseServiceTests {
         people = mock(TimesheetPersonRepository.class);
         positions = mock(TimesheetPositionRepository.class);
         scopes = mock(TimesheetScopeRepository.class);
-        assignments = mock(TimesheetAssignmentRepository.class);
         kpis = mock(TimesheetKpiRepository.class);
-        service = new TimesheetSnapshotBrowseService(people, positions, scopes, assignments, kpis);
+        service = new TimesheetSnapshotBrowseService(people, positions, scopes, kpis);
     }
 
     @Test
@@ -85,11 +81,6 @@ class TimesheetSnapshotBrowseServiceTests {
                             }
 
                             @Override
-                            public String getDomainHeadPositionId() {
-                                return "174200";
-                            }
-
-                            @Override
                             public String getCenter() {
                                 return "GBS CHINA";
                             }
@@ -113,8 +104,6 @@ class TimesheetSnapshotBrowseServiceTests {
                         TimesheetSnapshotBrowseService.PositionView::supervisorName,
                         TimesheetSnapshotBrowseService.PositionView::srManagerPositionId,
                         TimesheetSnapshotBrowseService.PositionView::srManagerName,
-                        TimesheetSnapshotBrowseService.PositionView::domainHeadPositionId,
-                        TimesheetSnapshotBrowseService.PositionView::domainHeadName,
                         TimesheetSnapshotBrowseService.PositionView::center)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple(
                         "172545",
@@ -122,8 +111,6 @@ class TimesheetSnapshotBrowseServiceTests {
                         "174055",
                         "TANG Lavender",
                         "174100",
-                        null,
-                        "174200",
                         null,
                         "GBS CHINA"));
     }
@@ -137,9 +124,9 @@ class TimesheetSnapshotBrowseServiceTests {
                                 runId, "POS-SUP-1", "PL3", "GBS CHINA", "PL3 Name", "Finance", "PL1", "PL2")),
                         PageRequest.of(0, 10),
                         1));
-        when(assignments.searchActive(eq("GBS CHINA"), eq(""), eq("POS-SUP-1"), eq("PL3"), any()))
+        when(positions.searchActiveAssignments(eq("GBS CHINA"), eq(""), eq("POS-SUP-1"), eq("PL3"), any()))
                 .thenReturn(new PageImpl<>(
-                        List.of(TimesheetAssignment.create(runId, "172545", "POS-SUP-1", "PL3", "GBS CHINA")),
+                        List.of(derived("172545", "POS-SUP-1", "PL3", "PL3 Name", "GBS CHINA")),
                         PageRequest.of(0, 10),
                         1));
         when(scopes.findActiveBySupervisorPositionIdIn(any()))
@@ -179,5 +166,39 @@ class TimesheetSnapshotBrowseServiceTests {
                         TimesheetSnapshotBrowseService.KpiView::hc)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple(
                         "TANG Lavender", "GBS CHINA", "PL3 Name", new BigDecimal("1.5")));
+    }
+
+    private static TimesheetPositionRepository.DerivedAssignment derived(
+            String agentPositionId,
+            String supervisorPositionId,
+            String pl3Code,
+            String pl3Name,
+            String center) {
+        return new TimesheetPositionRepository.DerivedAssignment() {
+            @Override
+            public String getAgentPositionId() {
+                return agentPositionId;
+            }
+
+            @Override
+            public String getSupervisorPositionId() {
+                return supervisorPositionId;
+            }
+
+            @Override
+            public String getPl3Code() {
+                return pl3Code;
+            }
+
+            @Override
+            public String getPl3Name() {
+                return pl3Name;
+            }
+
+            @Override
+            public String getCenter() {
+                return center;
+            }
+        };
     }
 }

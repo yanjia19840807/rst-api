@@ -13,11 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetAssignment;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetAssignmentRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
@@ -32,26 +30,22 @@ public class TimesheetSnapshotBrowseService {
     private final TimesheetPersonRepository people;
     private final TimesheetPositionRepository positions;
     private final TimesheetScopeRepository scopes;
-    private final TimesheetAssignmentRepository assignments;
     private final TimesheetKpiRepository kpis;
 
     /**
      * @param people Daily people
      * @param positions Daily positions
      * @param scopes Monthly scopes
-     * @param assignments Monthly assignments
      * @param kpis Monthly Delivery HC
      */
     public TimesheetSnapshotBrowseService(
             TimesheetPersonRepository people,
             TimesheetPositionRepository positions,
             TimesheetScopeRepository scopes,
-            TimesheetAssignmentRepository assignments,
             TimesheetKpiRepository kpis) {
         this.people = people;
         this.positions = positions;
         this.scopes = scopes;
-        this.assignments = assignments;
         this.kpis = kpis;
     }
 
@@ -80,7 +74,7 @@ public class TimesheetSnapshotBrowseService {
 
     /**
      * @param center exact Agent-seat center
-     * @param q position id or occupant name on any of the four levels
+     * @param q position id or occupant name on Agent, Supervisor or SR Manager
      * @param page 1-based page
      * @param pageSize page size
      * @return one row per AGENT position with the parent chain
@@ -93,7 +87,6 @@ public class TimesheetSnapshotBrowseService {
             addPositionId(ids, row.getAgentPositionId());
             addPositionId(ids, row.getSupervisorPositionId());
             addPositionId(ids, row.getSrManagerPositionId());
-            addPositionId(ids, row.getDomainHeadPositionId());
         }
         Map<String, String> names = occupantNames(ids);
         return PageResponse.from(rows, row -> toPosition(row, names));
@@ -125,12 +118,12 @@ public class TimesheetSnapshotBrowseService {
      * @param pl3Code PL3 code or name fragment
      * @param page 1-based page
      * @param pageSize page size
-     * @return assignments page
+     * @return assignments page derived from Daily seats × Monthly scopes
      */
     @Transactional(readOnly = true)
     public PageResponse<AssignmentView> assignments(
             String center, String agent, String supervisor, String pl3Code, int page, int pageSize) {
-        var rows = assignments.searchActive(
+        var rows = positions.searchActiveAssignments(
                 blank(center), blank(agent), blank(supervisor), blank(pl3Code), pageOf(page, pageSize));
         return PageResponse.from(rows, row -> toAssignment(row, assignmentLookups(rows.getContent())));
     }
@@ -163,8 +156,6 @@ public class TimesheetSnapshotBrowseService {
                 names.get(row.getSupervisorPositionId()),
                 row.getSrManagerPositionId(),
                 names.get(row.getSrManagerPositionId()),
-                row.getDomainHeadPositionId(),
-                names.get(row.getDomainHeadPositionId()),
                 row.getCenter());
     }
 
@@ -207,11 +198,12 @@ public class TimesheetSnapshotBrowseService {
                 row.getPl3Name());
     }
 
-    private AssignmentLookups assignmentLookups(List<TimesheetAssignment> rows) {
+    private AssignmentLookups assignmentLookups(
+            List<TimesheetPositionRepository.DerivedAssignment> rows) {
         Set<String> positionIds = new LinkedHashSet<>();
         Set<String> supervisorIds = new LinkedHashSet<>();
-        for (TimesheetAssignment row : rows) {
-            addPositionId(positionIds, row.getEmpPositionId());
+        for (TimesheetPositionRepository.DerivedAssignment row : rows) {
+            addPositionId(positionIds, row.getAgentPositionId());
             addPositionId(supervisorIds, row.getSupervisorPositionId());
         }
         Map<String, String> names = occupantNames(union(positionIds, supervisorIds));
@@ -227,15 +219,20 @@ public class TimesheetSnapshotBrowseService {
         return new AssignmentLookups(names, pl3Names);
     }
 
-    private AssignmentView toAssignment(TimesheetAssignment row, AssignmentLookups lookups) {
+    private AssignmentView toAssignment(
+            TimesheetPositionRepository.DerivedAssignment row, AssignmentLookups lookups) {
+        String pl3Name = row.getPl3Name();
+        if (pl3Name == null || pl3Name.isBlank()) {
+            pl3Name = lookups.pl3Names()
+                    .get(scopeKey(row.getSupervisorPositionId(), row.getPl3Code(), row.getCenter()));
+        }
         return new AssignmentView(
-                row.getEmpPositionId(),
-                lookups.names().get(row.getEmpPositionId()),
+                row.getAgentPositionId(),
+                lookups.names().get(row.getAgentPositionId()),
                 row.getSupervisorPositionId(),
                 lookups.names().get(row.getSupervisorPositionId()),
                 row.getPl3Code(),
-                lookups.pl3Names()
-                        .get(scopeKey(row.getSupervisorPositionId(), row.getPl3Code(), row.getCenter())),
+                pl3Name,
                 row.getCenter());
     }
 
@@ -319,8 +316,6 @@ public class TimesheetSnapshotBrowseService {
             String supervisorName,
             String srManagerPositionId,
             String srManagerName,
-            String domainHeadPositionId,
-            String domainHeadName,
             String center) {
     }
 
@@ -339,7 +334,7 @@ public class TimesheetSnapshotBrowseService {
     }
 
     /**
-     * Monthly assignment row.
+     * Agent seat × Supervisor Monthly PL3, derived from Daily positions.
      */
     public record AssignmentView(
             String agentPositionId,

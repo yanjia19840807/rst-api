@@ -25,12 +25,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.graph.RstSharePointProperties;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSourceResolver.Source;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetAssignment;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetAssignmentRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
@@ -51,7 +49,6 @@ class TimesheetSyncServiceTests {
 
     private final Map<UUID, TimesheetSyncRun> runStore = new LinkedHashMap<>();
     private final List<TimesheetScope> savedScopes = new ArrayList<>();
-    private final List<TimesheetAssignment> savedAssignments = new ArrayList<>();
     private final List<TimesheetKpi> savedKpis = new ArrayList<>();
     private TimesheetSyncService service;
 
@@ -70,8 +67,6 @@ class TimesheetSyncServiceTests {
                     default -> unsupported(method);
                 });
         TimesheetScopeRepository scopes = capturingRepository(TimesheetScopeRepository.class, savedScopes);
-        TimesheetAssignmentRepository assignments =
-                capturingRepository(TimesheetAssignmentRepository.class, savedAssignments);
         TimesheetKpiRepository kpis = capturingRepository(TimesheetKpiRepository.class, savedKpis);
         TimesheetSyncIssueRepository issues = proxy(TimesheetSyncIssueRepository.class, (proxy, method, args) -> {
             throw new AssertionError("Monthly happy path must not persist issues: " + method.getName());
@@ -98,7 +93,6 @@ class TimesheetSyncServiceTests {
                 people,
                 positions,
                 scopes,
-                assignments,
                 kpis,
                 issues,
                 noOpTransactions(),
@@ -131,18 +125,12 @@ class TimesheetSyncServiceTests {
                         TimesheetScope::getDomain)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple(
                         "POS-SUP-1", "PL3", "Kuala Lumpur", "Finance"));
-        assertThat(savedAssignments)
-                .extracting(TimesheetAssignment::getEmpPositionId, TimesheetAssignment::getPl3Code)
-                .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple("EMP-POS-1", "PL3"),
-                        org.assertj.core.groups.Tuple.tuple("EMP-POS-2", "PL3"));
         assertThat(savedKpis)
                 .extracting(TimesheetKpi::getSite, TimesheetKpi::getCustomerCountry, TimesheetKpi::getHc)
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple("Site A", "MY", new BigDecimal("2.000000")),
                         org.assertj.core.groups.Tuple.tuple("Site B", "SG", new BigDecimal("1.000000")));
         assertThat(savedScopes).allMatch(scope -> scope.getSyncRunId().equals(result.id()));
-        assertThat(savedAssignments).allMatch(assignment -> assignment.getSyncRunId().equals(result.id()));
         assertThat(savedKpis).allMatch(kpi -> kpi.getSyncRunId().equals(result.id()));
     }
 
@@ -192,7 +180,6 @@ class TimesheetSyncServiceTests {
                 unusedRepository(TimesheetPersonRepository.class),
                 unusedRepository(TimesheetPositionRepository.class),
                 capturingRepository(TimesheetScopeRepository.class, savedScopes),
-                capturingRepository(TimesheetAssignmentRepository.class, savedAssignments),
                 capturingRepository(TimesheetKpiRepository.class, savedKpis),
                 proxy(TimesheetSyncIssueRepository.class, (proxy, method, args) -> {
                     throw new AssertionError("Replacement Monthly must not persist issues: " + method.getName());
@@ -207,7 +194,6 @@ class TimesheetSyncServiceTests {
         assertThat(runStore.get(firstId).getStatus()).isEqualTo("ARCHIVED");
         assertThat(runStore.get(second.id()).getStatus()).isEqualTo("ACTIVE");
         assertThat(savedScopes).isNotEmpty().allMatch(scope -> scope.getSyncRunId().equals(second.id()));
-        assertThat(savedAssignments).isNotEmpty().allMatch(row -> row.getSyncRunId().equals(second.id()));
         assertThat(savedKpis).isNotEmpty().allMatch(row -> row.getSyncRunId().equals(second.id()));
         assertThat(savedKpis).extracting(TimesheetKpi::getHc).containsExactly(new BigDecimal("3.000000"));
     }
@@ -259,7 +245,6 @@ class TimesheetSyncServiceTests {
                 unusedRepository(TimesheetPersonRepository.class),
                 unusedRepository(TimesheetPositionRepository.class),
                 capturingRepository(TimesheetScopeRepository.class, savedScopes),
-                capturingRepository(TimesheetAssignmentRepository.class, savedAssignments),
                 capturingRepository(TimesheetKpiRepository.class, savedKpis),
                 proxy(TimesheetSyncIssueRepository.class, (proxy, method, args) -> {
                     throw new AssertionError("Manual older Monthly must not persist issues: " + method.getName());
@@ -342,7 +327,6 @@ class TimesheetSyncServiceTests {
                 unusedRepository(TimesheetPersonRepository.class),
                 unusedRepository(TimesheetPositionRepository.class),
                 capturingRepository(TimesheetScopeRepository.class, savedScopes),
-                capturingRepository(TimesheetAssignmentRepository.class, savedAssignments),
                 capturingRepository(TimesheetKpiRepository.class, savedKpis),
                 issues,
                 noOpTransactions(),
@@ -404,7 +388,6 @@ class TimesheetSyncServiceTests {
                 unusedRepository(TimesheetPersonRepository.class),
                 unusedRepository(TimesheetPositionRepository.class),
                 capturingRepository(TimesheetScopeRepository.class, savedScopes),
-                capturingRepository(TimesheetAssignmentRepository.class, savedAssignments),
                 capturingRepository(TimesheetKpiRepository.class, savedKpis),
                 proxy(TimesheetSyncIssueRepository.class, (proxy, method, args) ->
                         switch (method.getName()) {
@@ -425,9 +408,7 @@ class TimesheetSyncServiceTests {
         assertThat(result.status()).isEqualTo("ACTIVE");
         assertThat(mails.get()).isZero();
         assertThat(savedIssues).extracting(TimesheetSyncIssue::getCode).containsExactly("MISSING_FIELD");
-        assertThat(savedAssignments)
-                .extracting(TimesheetAssignment::getEmpPositionId)
-                .containsExactly("EMP-POS-1");
+        assertThat(savedScopes).extracting(TimesheetScope::getSupervisorPositionId).containsExactly("POS-SUP-1");
     }
 
     private TimesheetSyncRun store(TimesheetSyncRun run) {
@@ -487,7 +468,6 @@ class TimesheetSyncServiceTests {
     private static UUID syncRunIdOf(Object row) {
         return switch (row) {
             case TimesheetScope scope -> scope.getSyncRunId();
-            case TimesheetAssignment assignment -> assignment.getSyncRunId();
             case TimesheetKpi kpi -> kpi.getSyncRunId();
             default -> throw new AssertionError("Unexpected computed row: " + row);
         };
