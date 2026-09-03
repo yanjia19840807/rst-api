@@ -317,6 +317,46 @@ class TmsSessionApiIntegrationTests {
     }
 
     @Test
+    void defaultsMissingVolumeAndAcceptsEditsOnEnd() throws Exception {
+        String response = mockMvc.perform(post("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolkitId": "%s",
+                                  "reference": "INV-DRAFT"
+                                }
+                                """.formatted(TOOLKIT_ID)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("running"))
+                .andExpect(jsonPath("$.processedVolume").value(1))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String sessionId = JsonPath.read(response, "$.id");
+
+        mockMvc.perform(post("/api/v1/tms/sessions/{id}/end", sessionId)
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "subtaskId": "%s",
+                                  "processedVolume": 8,
+                                  "reference": "INV-200",
+                                  "remarks": "filled before end"
+                                }
+                                """.formatted(SUBTASK_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("completed"))
+                .andExpect(jsonPath("$.processedVolume").value(8))
+                .andExpect(jsonPath("$.reference").value("INV-200"))
+                .andExpect(jsonPath("$.remarks").value("filled before end"))
+                .andExpect(jsonPath("$.subtaskId").value(SUBTASK_ID.toString()));
+    }
+
+    @Test
     void publishesTheTmsOpenApiContract() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())

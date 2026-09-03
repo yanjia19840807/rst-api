@@ -211,7 +211,10 @@ public class TimesheetReadService {
         for (TimesheetPerson person : people.findActiveReportsBySupervisorCcgid(supervisorCcgid)) {
             unique.computeIfAbsent(
                     person.getCcgid(),
-                    ccgid -> new TeamAgent(ccgid, person.getName() == null ? ccgid : person.getName()));
+                    ccgid -> new TeamAgent(
+                            ccgid,
+                            person.getName() == null ? ccgid : person.getName(),
+                            person.getEmail()));
         }
         return List.copyOf(unique.values());
     }
@@ -355,7 +358,8 @@ public class TimesheetReadService {
         String needle = name == null ? "" : name.trim();
         return PageResponse.from(
                 people.findActiveByCenter(center.trim(), needle, PageRequest.of(safePage - 1, safePageSize)),
-                person -> new CenterPerson(person.getCcgid(), person.getName(), person.getPositionId()));
+                person -> new CenterPerson(
+                        person.getCcgid(), person.getName(), person.getPositionId(), person.getEmail()));
     }
 
     /**
@@ -488,7 +492,7 @@ public class TimesheetReadService {
     public record ActiveSnapshot(UUID id, String kind, LocalDate syncDate, int rowCount) {
     }
 
-    public record TeamAgent(String ccgid, String name) {
+    public record TeamAgent(String ccgid, String name, String email) {
     }
 
     public record HierarchyCandidate(
@@ -508,7 +512,7 @@ public class TimesheetReadService {
     public record Occupant(String positionId, String ccgid, String name) {
     }
 
-    public record CenterPerson(String ccgid, String name, String positionId) {
+    public record CenterPerson(String ccgid, String name, String positionId, String email) {
     }
 
     public record ListedPerson(String ccgid, String name, String center) {

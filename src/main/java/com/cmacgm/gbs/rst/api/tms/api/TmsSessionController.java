@@ -9,6 +9,7 @@ import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.tms.api.dto.DiscardTmsSessionRequest;
 import com.cmacgm.gbs.rst.api.tms.api.dto.StartTmsSessionRequest;
 import com.cmacgm.gbs.rst.api.tms.api.dto.TmsSessionResponse;
+import com.cmacgm.gbs.rst.api.tms.api.dto.UpdateTmsSessionRequest;
 import com.cmacgm.gbs.rst.api.tms.api.dto.TmsSummaryResponse;
 import com.cmacgm.gbs.rst.api.tms.application.TmsSessionCommandService;
 import com.cmacgm.gbs.rst.api.tms.application.TmsSessionQueryService;
@@ -94,8 +95,9 @@ public class TmsSessionController {
     @PostMapping("/sessions/{id}/pause")
     public TmsSessionResponse pause(
             @AuthenticationPrincipal RstPrincipal principal,
-            @PathVariable String id) {
-        return commandService.pause(principal.ccgid(), id);
+            @PathVariable String id,
+            @Valid @RequestBody(required = false) UpdateTmsSessionRequest request) {
+        return commandService.pause(principal.ccgid(), id, request);
     }
 
     @PostMapping("/sessions/{id}/resume")
@@ -108,8 +110,9 @@ public class TmsSessionController {
     @PostMapping("/sessions/{id}/end")
     public TmsSessionResponse end(
             @AuthenticationPrincipal RstPrincipal principal,
-            @PathVariable String id) {
-        return commandService.end(principal.ccgid(), id);
+            @PathVariable String id,
+            @Valid @RequestBody(required = false) UpdateTmsSessionRequest request) {
+        return commandService.end(principal.ccgid(), id, request);
     }
 
     @PostMapping("/sessions/{id}/discard")

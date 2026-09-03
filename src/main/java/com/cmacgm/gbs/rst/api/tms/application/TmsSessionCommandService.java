@@ -12,11 +12,13 @@ import java.util.UUID;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.tms.api.dto.StartTmsSessionRequest;
 import com.cmacgm.gbs.rst.api.tms.api.dto.TmsSessionResponse;
+import com.cmacgm.gbs.rst.api.tms.api.dto.UpdateTmsSessionRequest;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSession;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSessionStatus;
 import com.cmacgm.gbs.rst.api.tms.persistence.TmsSessionRepository;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.toolkit.domain.Toolkit;
+import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitSubtask;
 import com.cmacgm.gbs.rst.api.toolkit.persistence.ToolkitRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -58,16 +60,7 @@ public class TmsSessionCommandService {
                     "toolkit-out-of-scope",
                     "The Agent is not currently assigned to the Toolkit scope by Timesheet.");
         }
-        var subtask = request.subtaskId() == null
-                ? null
-                : toolkit.getSubtasks().stream()
-                        .filter(item -> item.getId().equals(request.subtaskId()))
-                        .filter(item -> item.getDeletedAt() == null)
-                        .findFirst()
-                        .orElseThrow(() -> new ApiException(
-                                HttpStatus.UNPROCESSABLE_ENTITY,
-                                "invalid-subtask",
-                                "The selected active Subtask does not belong to the Toolkit."));
+        var subtask = resolveSubtask(toolkit, request.subtaskId());
 
         var now = clock.instant();
         TmsSession session = TmsSession.start(
@@ -83,9 +76,11 @@ public class TmsSessionCommandService {
     }
 
     @Transactional
-    public TmsSessionResponse pause(String agentCcgid, String sessionNo) {
+    public TmsSessionResponse pause(
+            String agentCcgid, String sessionNo, UpdateTmsSessionRequest request) {
         TmsSession session = ownedSession(agentCcgid, sessionNo);
         var now = clock.instant();
+        applyDetails(session, request, now);
         session.pause(now);
         return toResponse(session, now);
     }
@@ -101,9 +96,11 @@ public class TmsSessionCommandService {
     }
 
     @Transactional
-    public TmsSessionResponse end(String agentCcgid, String sessionNo) {
+    public TmsSessionResponse end(
+            String agentCcgid, String sessionNo, UpdateTmsSessionRequest request) {
         TmsSession session = ownedSession(agentCcgid, sessionNo);
         var now = clock.instant();
+        applyDetails(session, request, now);
         session.end(now);
         return toResponse(session, now);
     }
@@ -114,6 +111,37 @@ public class TmsSessionCommandService {
         var now = clock.instant();
         session.discard(reason == null ? "" : reason.trim(), now);
         return toResponse(session, now);
+    }
+
+    private void applyDetails(TmsSession session, UpdateTmsSessionRequest request, Instant now) {
+        if (request == null) {
+            return;
+        }
+        Toolkit toolkit = toolkitRepository.findActiveById(session.getToolkit().getId())
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        "toolkit-not-found",
+                        "The Toolkit was not found."));
+        session.updateDetails(
+                resolveSubtask(toolkit, request.subtaskId()),
+                request.processedVolume(),
+                normalize(request.reference()),
+                normalize(request.remarks()),
+                now);
+    }
+
+    private ToolkitSubtask resolveSubtask(Toolkit toolkit, UUID subtaskId) {
+        if (subtaskId == null) {
+            return null;
+        }
+        return toolkit.getSubtasks().stream()
+                .filter(item -> item.getId().equals(subtaskId))
+                .filter(item -> item.getDeletedAt() == null)
+                .findFirst()
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "invalid-subtask",
+                        "The selected active Subtask does not belong to the Toolkit."));
     }
 
     private TmsSession ownedSession(String agentCcgid, String sessionNo) {

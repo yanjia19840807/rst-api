@@ -218,7 +218,8 @@ public class DelegationService {
         PageResponse<TimesheetReadService.CenterPerson> source = timesheet.peopleInCenter(center, q, page, pageSize);
         List<DelegationCandidateView> items = source.items().stream()
                 .filter(person -> !self.equalsIgnoreCase(person.ccgid()))
-                .map(person -> new DelegationCandidateView(person.ccgid(), person.name(), center))
+                .map(person -> new DelegationCandidateView(
+                        person.ccgid(), person.name(), center, person.email()))
                 .toList();
         return new PageResponse<>(items, source.page(), source.pageSize(), source.total(), source.totalPages());
     }

@@ -55,6 +55,7 @@ import com.cmacgm.gbs.rst.api.timesheet.api.dto.TimesheetAlignmentView;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetAlignment;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
+import com.cmacgm.gbs.rst.api.toolkit.persistence.ToolkitRepository;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
 import com.cmacgm.gbs.rst.api.workflow.domain.ExerciseLifecycle;
 import com.cmacgm.gbs.rst.api.workflow.domain.ProcessInstance;
@@ -76,7 +77,7 @@ public class ExerciseService {
 
     private final RstExerciseRepository exercises;
     private final ExerciseAccess access;
-    private final ExerciseFreezeResolver freezeResolver;
+    private final ToolkitRepository toolkits;
     private final TimesheetReadService timesheet;
     private final TimesheetSyncRunRepository syncRuns;
     private final ExerciseTeamSetupRepository teamSetups;
@@ -95,7 +96,7 @@ public class ExerciseService {
     public ExerciseService(
             RstExerciseRepository exercises,
             ExerciseAccess access,
-            ExerciseFreezeResolver freezeResolver,
+            ToolkitRepository toolkits,
             TimesheetReadService timesheet,
             TimesheetSyncRunRepository syncRuns,
             ExerciseTeamSetupRepository teamSetups,
@@ -109,7 +110,7 @@ public class ExerciseService {
             Clock clock) {
         this.exercises = exercises;
         this.access = access;
-        this.freezeResolver = freezeResolver;
+        this.toolkits = toolkits;
         this.timesheet = timesheet;
         this.syncRuns = syncRuns;
         this.teamSetups = teamSetups;
@@ -136,7 +137,7 @@ public class ExerciseService {
     public CreateExerciseResult create(String ownerCcgid, CreateExerciseRequest request) {
         // Resolve under repeatable-read so an ACTIVE switch cannot mix snapshots.
         validatePeriods(request.sizingMonth(), request.tmsFrom(), request.tmsTo());
-        ExerciseFreeze freeze = freezeResolver.resolve(ownerCcgid, request.toolkitId());
+        ExerciseFreeze freeze = ExerciseFreeze.resolve(toolkits, timesheet, ownerCcgid, request.toolkitId());
 
         Instant now = clock.instant();
         UUID exerciseId = UUID.randomUUID();

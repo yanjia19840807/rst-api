@@ -110,7 +110,7 @@ public class TmsSession {
         session.agentCcgid = agentCcgid;
         session.toolkit = toolkit;
         session.toolkitSubtask = subtask;
-        session.processedVolume = processedVolume;
+        session.processedVolume = defaultVolume(processedVolume);
         session.reference = reference;
         session.remarks = remarks;
         session.status = TmsSessionStatus.RUNNING;
@@ -122,8 +122,25 @@ public class TmsSession {
         return session;
     }
 
+    public void updateDetails(
+            ToolkitSubtask subtask,
+            BigDecimal processedVolume,
+            String reference,
+            String remarks,
+            Instant now) {
+        if (status != TmsSessionStatus.RUNNING && status != TmsSessionStatus.PAUSED) {
+            throw new TmsStateException("Only an open session can be updated.");
+        }
+        toolkitSubtask = subtask;
+        this.processedVolume = defaultVolume(processedVolume);
+        this.reference = reference;
+        this.remarks = remarks;
+        updatedAt = now;
+    }
+
     public void pause(Instant now) {
         requireStatus(TmsSessionStatus.RUNNING, "Only a running session can be paused.");
+        processedVolume = defaultVolume(processedVolume);
         netDurationSeconds += secondsSinceRunning(now);
         runningSince = null;
         pausedAt = now;
@@ -147,6 +164,7 @@ public class TmsSession {
 
     public void end(Instant now) {
         requireStatus(TmsSessionStatus.RUNNING, "Only a running session can be ended.");
+        processedVolume = defaultVolume(processedVolume);
         netDurationSeconds += secondsSinceRunning(now);
         runningSince = null;
         endedAt = now;
@@ -191,6 +209,10 @@ public class TmsSession {
         if (status != required) {
             throw new TmsStateException(message);
         }
+    }
+
+    private static BigDecimal defaultVolume(BigDecimal volume) {
+        return volume == null ? BigDecimal.ONE : volume;
     }
 
     public UUID getId() {

@@ -31,6 +31,35 @@ class TmsSessionTests {
     }
 
     @Test
+    void defaultsMissingVolumeToOneAndAllowsEditsBeforeEnd() {
+        Toolkit toolkit = Toolkit.create(
+                "Bank Reconciliation", null, "POS-SUP-1", "Center", "Finance",
+                "Accounting", "Record to Report", "BANK_REC", "Bank Reconciliation",
+                false, "AGENT001", START);
+        ToolkitSubtask subtask = toolkit.addSubtask("Manual match", null, 1, START);
+        TmsSession session = TmsSession.start(
+                "TMS-AGENT001-20260805-0002",
+                "AGENT001",
+                toolkit,
+                null,
+                null,
+                "",
+                "",
+                START);
+
+        assertThat(session.getProcessedVolume()).isEqualByComparingTo(BigDecimal.ONE);
+
+        session.updateDetails(subtask, BigDecimal.valueOf(8), "INV-200", "filled before end", START.plusSeconds(5));
+        session.end(START.plusSeconds(10));
+
+        assertThat(session.getToolkitSubtask()).isEqualTo(subtask);
+        assertThat(session.getProcessedVolume()).isEqualByComparingTo(BigDecimal.valueOf(8));
+        assertThat(session.getReference()).isEqualTo("INV-200");
+        assertThat(session.getRemarks()).isEqualTo("filled before end");
+        assertThat(session.getStatus()).isEqualTo(TmsSessionStatus.COMPLETED);
+    }
+
+    @Test
     void rejectsInvalidStateTransitions() {
         TmsSession session = newSession();
 
