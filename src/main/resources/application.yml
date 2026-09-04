@@ -74,7 +74,8 @@ rst:
     lth-position-id: ${RST_WORKFLOW_LTH_POSITION_ID:LTH}
   sharepoint:
     # RST-owned root in the Timesheet library. Daily / Monthly / Template / Process hang off this.
-    root: ${RST_SHAREPOINT_ROOT:2.UAT/Data Output/RST}
+    # Dev / UAT: 4.RST/2.UAT. Production overrides this in application-prod.yml.
+    root: ${RST_SHAREPOINT_ROOT:4.RST/2.UAT}
 
 timesheet:
   process:

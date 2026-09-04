@@ -132,7 +132,7 @@ public class MicrosoftGraphService {
      * Creates or replaces a file under a folder path in the Timesheet library.
      *
      * @param folderPath folder relative to the library root, for example
-     *        {@code 2.UAT/Data Output/RST}
+     *        {@code 4.RST/2.UAT}
      * @param fileName file name
      * @param content file bytes
      * @param contentType unused; Graph simple upload is octet-stream

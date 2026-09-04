@@ -32,9 +32,9 @@ class MicrosoftGraphPathsTest {
     @Test
     void encodeDrivePath_encodesUatRstOutputFolder() {
         assertEquals(
-                "2.UAT/Data%20Output/RST/rst-graph-write-probe.txt",
+                "4.RST/2.UAT/rst-graph-write-probe.txt",
                 MicrosoftGraphPaths.encodeDrivePath(
-                        MicrosoftGraphPaths.folderPath("2.UAT/Data Output/RST", "rst-graph-write-probe.txt")));
+                        MicrosoftGraphPaths.folderPath("4.RST/2.UAT", "rst-graph-write-probe.txt")));
     }
 
     @Test

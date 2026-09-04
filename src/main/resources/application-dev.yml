@@ -8,7 +8,7 @@ app:
 microsoft:
   graph:
     enabled: true
-    client-id: ${MS_GRAPH_CLIENT_ID:5282c4c7-7d9a-4ddc-b8bb-955921a0adf7}
+    client-id: ${MS_GRAPH_CLIENT_ID:2b5ec0be-1344-4161-80f5-b7674d74f019}
     client-secret: ${MS_GRAPH_CLIENT_SECRET:}
 
 # Log SQL with parameters substituted into '?' (dev only). p6spy does this natively.

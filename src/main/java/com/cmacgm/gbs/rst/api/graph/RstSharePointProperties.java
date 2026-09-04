@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * RST-owned folders in the Timesheet SharePoint library. Daily / Monthly reports
  * and import templates all live under {@code root}.
  *
- * @param root library-relative path, for example {@code 2.UAT/Data Output/RST}
+ * @param root library-relative path, for example {@code 4.RST/2.UAT}
  */
 @ConfigurationProperties(prefix = "rst.sharepoint")
 public record RstSharePointProperties(String root) {
@@ -16,7 +16,7 @@ public record RstSharePointProperties(String root) {
      */
     public RstSharePointProperties {
         if (root == null || root.isBlank()) {
-            root = "2.UAT/Data Output/RST";
+            root = "4.RST/2.UAT";
         } else {
             root = stripSlashes(root);
         }

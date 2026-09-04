@@ -162,7 +162,7 @@ Cron is system configuration only.
 
 | Property | Default | Purpose |
 | --- | --- | --- |
-| `rst.sharepoint.root` | `2.UAT/Data Output/RST` | RST folder (`Daily`, `Monthly`, `Manual`, `Template`, `Process`) |
+| `rst.sharepoint.root` | `4.RST/2.UAT` (UAT) / `4.RST/3.Production` (prod) | RST folder (`Daily`, `Monthly`, `Manual`, `Template`, `Process`) |
 | `timesheet.process.source` | `classpath` | GBS Process catalog (`classpath` mock; `sharepoint` reserved) |
 | `timesheet.process.classpath-location` | `GBS Process.csv` | Classpath CSV used while SharePoint is not wired |
 | `timesheet.sync.schedule.enabled` | `false` | Register Quartz jobs from application config |

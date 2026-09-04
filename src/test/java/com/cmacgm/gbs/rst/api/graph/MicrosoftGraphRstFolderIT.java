@@ -24,13 +24,13 @@ import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphModels.GraphDriveItem;
  * Live Graph write into the UAT RST output folders. Skips when tenant/secret are absent.
  *
  * <p>SharePoint:
- * {@code /sites/CMA-SharedKPIAutomation/Timesheet/2.UAT/Data Output/RST}
+ * {@code /sites/CMA-SharedKPIAutomation/Timesheet/4.RST/2.UAT}
  */
 class MicrosoftGraphRstFolderIT {
 
-    static final String DAILY_FOLDER = "2.UAT/Data Output/RST/Daily";
-    static final String MONTHLY_FOLDER = "2.UAT/Data Output/RST/Monthly";
-    static final String TEMPLATE_FOLDER = "2.UAT/Data Output/RST/Template";
+    static final String DAILY_FOLDER = "4.RST/2.UAT/Daily";
+    static final String MONTHLY_FOLDER = "4.RST/2.UAT/Monthly";
+    static final String TEMPLATE_FOLDER = "4.RST/2.UAT/Template";
     static final String DAILY_FILE = "Daily Report of 20260727(GBS CHINA).xlsx";
     static final String MONTHLY_FILE = "Monthly Report of 202606(GBS CHINA).xlsx";
     static final MediaType XLSX = MediaType.parseMediaType(
@@ -141,7 +141,7 @@ class MicrosoftGraphRstFolderIT {
                 true,
                 envOr("MS_GRAPH_SECRET_NAME", "timesheet-prd-microsoft-graph-credentials"),
                 envOr("MS_GRAPH_TENANT_ID", env("AZURE_TENANT_ID")),
-                envOr("MS_GRAPH_CLIENT_ID", "5282c4c7-7d9a-4ddc-b8bb-955921a0adf7"),
+                envOr("MS_GRAPH_CLIENT_ID", "2b5ec0be-1344-4161-80f5-b7674d74f019"),
                 env("MS_GRAPH_CLIENT_SECRET"),
                 envOr("MS_GRAPH_SHAREPOINT_SITE", "https://cmacgmgroup.sharepoint.com/sites/CMA-SharedKPIAutomation"),
                 envOr("MS_GRAPH_LIST_NAME", "Timesheet"),
