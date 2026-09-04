@@ -40,7 +40,7 @@ public final class SizingMath {
     }
 
     /**
-     * Nominal HC without overtime (RoundUp to integer).
+     * Nominal HC without overtime (fractional HC, 6 decimal places).
      */
     public static BigDecimal nominalHcWithoutOt(
             BigDecimal manualVolume,
@@ -60,11 +60,11 @@ public final class SizingMath {
                 .multiply(cycleTimeSeconds, MC)
                 .divide(SECONDS_PER_HOUR, MC)
                 .divide(denominator, MC);
-        return raw.setScale(0, RoundingMode.UP);
+        return raw.setScale(6, RoundingMode.HALF_UP);
     }
 
     /**
-     * Nominal HC with overtime (RoundUp to integer).
+     * Nominal HC with overtime (fractional HC, 6 decimal places).
      */
     public static BigDecimal nominalHcWithOt(
             BigDecimal manualVolume,
@@ -93,7 +93,7 @@ public final class SizingMath {
         if (raw.signum() < 0) {
             raw = BigDecimal.ZERO;
         }
-        return raw.setScale(0, RoundingMode.UP);
+        return raw.setScale(6, RoundingMode.HALF_UP);
     }
 
     /**

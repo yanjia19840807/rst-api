@@ -10,6 +10,9 @@ import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.TeamAge
 import com.cmacgm.gbs.rst.api.tms.api.dto.TmsSessionResponse;
 import com.cmacgm.gbs.rst.api.tms.application.TmsSessionQueryService;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -96,6 +99,42 @@ public class TmsTeamController {
                 dateTo,
                 page,
                 pageSize);
+    }
+
+    /**
+     * Exports team TMS sessions matching the current filters, without pagination.
+     */
+    @GetMapping("/sessions/export")
+    public ResponseEntity<byte[]> exportSessions(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @RequestParam(required = false) String agentCcgid,
+            @RequestParam(required = false) UUID toolkitId,
+            @RequestParam(required = false) String pl3Code,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String sessionNo,
+            @RequestParam(required = false) String reference,
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate dateFrom,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate dateTo) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"tms-team-sessions.xlsx\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(queryService.exportSessionsForTeam(
+                        principal.ccgid(),
+                        agentCcgid,
+                        toolkitId,
+                        pl3Code,
+                        status,
+                        sessionNo,
+                        reference,
+                        query,
+                        dateFrom,
+                        dateTo));
     }
 
     /**

@@ -38,16 +38,19 @@ public class TmsSessionQueryService {
     private final TmsSessionRepository sessionRepository;
     private final ToolkitService toolkits;
     private final TimesheetReadService timesheet;
+    private final TmsSessionExcelService excel;
     private final Clock clock;
 
     public TmsSessionQueryService(
             TmsSessionRepository sessionRepository,
             ToolkitService toolkits,
             TimesheetReadService timesheet,
+            TmsSessionExcelService excel,
             Clock clock) {
         this.sessionRepository = sessionRepository;
         this.toolkits = toolkits;
         this.timesheet = timesheet;
+        this.excel = excel;
         this.clock = clock;
     }
 
@@ -139,42 +142,70 @@ public class TmsSessionQueryService {
             LocalDate dateTo,
             int page,
             int pageSize) {
-        Set<UUID> scopedToolkitIds = scopedToolkitIds(ccgid);
-        if (toolkitId != null && !scopedToolkitIds.contains(toolkitId)) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    "toolkit-out-of-scope",
-                    "The Toolkit is outside the current Timesheet scope.");
-        }
+        return pageSessions(teamFilter(
+                ccgid,
+                agentCcgid,
+                toolkitId,
+                pl3Code,
+                status,
+                sessionNo,
+                reference,
+                query,
+                dateFrom,
+                dateTo), page, pageSize);
+    }
 
-        String filterAgentCcgid = null;
-        if (agentCcgid != null && !agentCcgid.isBlank()) {
-            String trimmed = agentCcgid.trim();
-            boolean onTeam = timesheet.teamAgents(ccgid).stream()
-                    .anyMatch(agent -> agent.ccgid().equalsIgnoreCase(trimmed));
-            if (!onTeam) {
-                throw new ApiException(
-                        HttpStatus.FORBIDDEN,
-                        "agent-out-of-scope",
-                        "The Agent is outside the current Timesheet team.");
-            }
-            filterAgentCcgid = trimmed;
-        }
+    /**
+     * Exports the agent's filtered TMS sessions without pagination.
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportSessions(
+            String agentCcgid,
+            String status,
+            String sessionNo,
+            String reference,
+            String query,
+            LocalDate dateFrom,
+            LocalDate dateTo) {
+        return excel.export(listSessions(new Filter(
+                agentCcgid,
+                null,
+                null,
+                null,
+                parseStatus(status),
+                sessionNo,
+                reference,
+                query,
+                dateFrom,
+                dateTo)));
+    }
 
-        return pageSessions(
-                new Filter(
-                        filterAgentCcgid,
-                        scopedToolkitIds,
-                        toolkitId,
-                        pl3Code,
-                        parseStatus(status),
-                        sessionNo,
-                        reference,
-                        query,
-                        dateFrom,
-                        dateTo),
-                page,
-                pageSize);
+    /**
+     * Exports team-scoped filtered TMS sessions without pagination.
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportSessionsForTeam(
+            String ccgid,
+            String agentCcgid,
+            UUID toolkitId,
+            String pl3Code,
+            String status,
+            String sessionNo,
+            String reference,
+            String query,
+            LocalDate dateFrom,
+            LocalDate dateTo) {
+        return excel.export(listSessions(teamFilter(
+                ccgid,
+                agentCcgid,
+                toolkitId,
+                pl3Code,
+                status,
+                sessionNo,
+                reference,
+                query,
+                dateFrom,
+                dateTo)));
     }
 
     /**
@@ -204,15 +235,54 @@ public class TmsSessionQueryService {
                 sessionRepository.countByAgentCcgidAndStatus(agentCcgid, TmsSessionStatus.PAUSED));
     }
 
-    private PageResponse<TmsSessionResponse> pageSessions(Filter filter, int page, int pageSize) {
-        if (filter.dateFrom() != null
-                && filter.dateTo() != null
-                && filter.dateFrom().isAfter(filter.dateTo())) {
+    private Filter teamFilter(
+            String ccgid,
+            String agentCcgid,
+            UUID toolkitId,
+            String pl3Code,
+            String status,
+            String sessionNo,
+            String reference,
+            String query,
+            LocalDate dateFrom,
+            LocalDate dateTo) {
+        Set<UUID> scopedToolkitIds = scopedToolkitIds(ccgid);
+        if (toolkitId != null && !scopedToolkitIds.contains(toolkitId)) {
             throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY,
-                    "invalid-date-range",
-                    "dateFrom cannot be after dateTo.");
+                    HttpStatus.FORBIDDEN,
+                    "toolkit-out-of-scope",
+                    "The Toolkit is outside the current Timesheet scope.");
         }
+
+        String filterAgentCcgid = null;
+        if (agentCcgid != null && !agentCcgid.isBlank()) {
+            String trimmed = agentCcgid.trim();
+            boolean onTeam = timesheet.teamAgents(ccgid).stream()
+                    .anyMatch(agent -> agent.ccgid().equalsIgnoreCase(trimmed));
+            if (!onTeam) {
+                throw new ApiException(
+                        HttpStatus.FORBIDDEN,
+                        "agent-out-of-scope",
+                        "The Agent is outside the current Timesheet team.");
+            }
+            filterAgentCcgid = trimmed;
+        }
+
+        return new Filter(
+                filterAgentCcgid,
+                scopedToolkitIds,
+                toolkitId,
+                pl3Code,
+                parseStatus(status),
+                sessionNo,
+                reference,
+                query,
+                dateFrom,
+                dateTo);
+    }
+
+    private PageResponse<TmsSessionResponse> pageSessions(Filter filter, int page, int pageSize) {
+        validateDateRange(filter);
         int safePage = Math.max(1, page);
         int safePageSize = Math.min(100, Math.max(1, pageSize));
         var pageable = PageRequest.of(
@@ -223,6 +293,28 @@ public class TmsSessionQueryService {
         var now = clock.instant();
         Map<String, String> names = new HashMap<>();
         return PageResponse.from(result, session -> toResponse(session, now, names));
+    }
+
+    private List<TmsSessionResponse> listSessions(Filter filter) {
+        validateDateRange(filter);
+        var now = clock.instant();
+        Map<String, String> names = new HashMap<>();
+        return sessionRepository
+                .findAll(TmsSessionSpecification.filtered(filter), Sort.by(Sort.Direction.DESC, "startedAt"))
+                .stream()
+                .map(session -> toResponse(session, now, names))
+                .toList();
+    }
+
+    private static void validateDateRange(Filter filter) {
+        if (filter.dateFrom() != null
+                && filter.dateTo() != null
+                && filter.dateFrom().isAfter(filter.dateTo())) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "invalid-date-range",
+                    "dateFrom cannot be after dateTo.");
+        }
     }
 
     private TmsSessionResponse toResponse(TmsSession session, Instant now) {

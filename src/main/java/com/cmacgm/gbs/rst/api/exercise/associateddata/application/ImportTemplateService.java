@@ -19,7 +19,8 @@ public class ImportTemplateService {
         CALENDAR("calendar-template.xlsx"),
         VOLUME_MONTHLY("volume-monthly-template.xlsx"),
         VOLUME_DAILY("volume-daily-template.xlsx"),
-        VOLUME_SLOT("volume-slot-template.xlsx");
+        VOLUME_SLOT("volume-slot-template.xlsx"),
+        SUPPORT("support-template.xlsx");
 
         private final String fileName;
 
@@ -40,6 +41,7 @@ public class ImportTemplateService {
     private final MicrosoftGraphService graph;
     private final HolidayExcelService holidayExcel;
     private final VolumeExcelService volumeExcel;
+    private final SupportExcelService supportExcel;
 
     /**
      * @param sharePoint RST SharePoint folders
@@ -47,18 +49,21 @@ public class ImportTemplateService {
      * @param graph Graph client
      * @param holidayExcel local holiday blank used when Graph is off
      * @param volumeExcel local volume blanks used when Graph is off
+     * @param supportExcel local support blank used when Graph is off
      */
     public ImportTemplateService(
             RstSharePointProperties sharePoint,
             MicrosoftGraphProperties graphProperties,
             MicrosoftGraphService graph,
             HolidayExcelService holidayExcel,
-            VolumeExcelService volumeExcel) {
+            VolumeExcelService volumeExcel,
+            SupportExcelService supportExcel) {
         this.sharePoint = sharePoint;
         this.graphProperties = graphProperties;
         this.graph = graph;
         this.holidayExcel = holidayExcel;
         this.volumeExcel = volumeExcel;
+        this.supportExcel = supportExcel;
     }
 
     /**
@@ -75,7 +80,7 @@ public class ImportTemplateService {
     }
 
     /**
-     * Builds the four blank workbooks used to seed SharePoint.
+     * Builds the blank workbooks used to seed SharePoint.
      *
      * @param kind template kind
      * @return xlsx bytes
@@ -86,6 +91,7 @@ public class ImportTemplateService {
             case VOLUME_MONTHLY -> volumeExcel.exportMonthlyBlank();
             case VOLUME_DAILY -> volumeExcel.exportDailyBlank();
             case VOLUME_SLOT -> volumeExcel.exportSlotBlank();
+            case SUPPORT -> supportExcel.exportBlank();
         };
     }
 }

@@ -88,7 +88,7 @@ class SizingMathTests {
     }
 
     @Test
-    void nominalHcWithoutOtRoundsUp() {
+    void nominalHcWithoutOtKeepsFractionalHc() {
         BigDecimal hc = SizingMath.nominalHcWithoutOt(
                 new BigDecimal("945"),
                 new BigDecimal("120"),
@@ -96,7 +96,7 @@ class SizingMathTests {
                 new BigDecimal("8"),
                 new BigDecimal("0.85"),
                 new BigDecimal("0.90"));
-        assertThat(hc).isEqualByComparingTo("1");
+        assertThat(hc).isEqualByComparingTo("0.233957");
     }
 
     @Test

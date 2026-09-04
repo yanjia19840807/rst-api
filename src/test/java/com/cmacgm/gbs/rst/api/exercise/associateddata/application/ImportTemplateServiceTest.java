@@ -20,7 +20,8 @@ class ImportTemplateServiceTest {
                 graphOff,
                 new MicrosoftGraphService(graphOff),
                 new HolidayExcelService(),
-                new VolumeExcelService());
+                new VolumeExcelService(),
+                new SupportExcelService());
 
         for (Kind kind : Kind.values()) {
             byte[] body = templates.download(kind);

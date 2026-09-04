@@ -151,6 +151,31 @@ public class ExerciseAssociatedDataController {
         service.deleteSupport(principal.ccgid(), exerciseId, itemId);
     }
 
+    @GetMapping("/production-support/export-template")
+    public ResponseEntity<byte[]> exportSupportTemplate(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return excelResponse(
+                service.exportSupportTemplate(principal.ccgid(), exerciseId),
+                "support-template.xlsx");
+    }
+
+    @GetMapping("/production-support/export")
+    public ResponseEntity<byte[]> exportSupport(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
+        return excelResponse(
+                service.exportSupportExcel(principal.ccgid(), exerciseId),
+                "production-support.xlsx");
+    }
+
+    @PostMapping(value = "/production-support/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public List<SupportItemView> importSupport(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @RequestParam("file") MultipartFile file) throws Exception {
+        return service.importSupportExcel(
+                principal.ccgid(), exerciseId, file.getInputStream(), file.getOriginalFilename());
+    }
+
     /**
      * Returns calendar and holidays.
      *

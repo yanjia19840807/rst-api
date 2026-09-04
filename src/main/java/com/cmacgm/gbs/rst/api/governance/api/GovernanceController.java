@@ -14,10 +14,14 @@ import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationWorkflowQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationWorkflowView;
 import com.cmacgm.gbs.rst.api.governance.application.BenchmarkingService;
 import com.cmacgm.gbs.rst.api.governance.application.DashboardService;
+import com.cmacgm.gbs.rst.api.governance.application.GovernanceExcelService;
 import com.cmacgm.gbs.rst.api.governance.application.RstRepositoryService;
 import com.cmacgm.gbs.rst.api.governance.application.SupportRepositoryService;
 import com.cmacgm.gbs.rst.api.governance.application.ValidationWorkflowService;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -36,6 +40,7 @@ public class GovernanceController {
     private final SupportRepositoryService supportRepositoryService;
     private final ValidationWorkflowService validationWorkflowService;
     private final BenchmarkingService benchmarkingService;
+    private final GovernanceExcelService excel;
 
     /**
      * Creates the governance controller.
@@ -51,12 +56,14 @@ public class GovernanceController {
             RstRepositoryService rstRepository,
             SupportRepositoryService supportRepositoryService,
             ValidationWorkflowService validationWorkflowService,
-            BenchmarkingService benchmarkingService) {
+            BenchmarkingService benchmarkingService,
+            GovernanceExcelService excel) {
         this.dashboardService = dashboardService;
         this.rstRepository = rstRepository;
         this.supportRepositoryService = supportRepositoryService;
         this.validationWorkflowService = validationWorkflowService;
         this.benchmarkingService = benchmarkingService;
+        this.excel = excel;
     }
 
     /**
@@ -114,6 +121,36 @@ public class GovernanceController {
     }
 
     /**
+     * Exports filtered RST Repository rows as Excel.
+     */
+    @GetMapping("/repository/export")
+    @PreAuthorize("hasAnyRole('LTH','HO','ADMIN')")
+    public ResponseEntity<byte[]> exportRepository(
+            @RequestParam(required = false) String exerciseCode,
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String domain,
+            @RequestParam(required = false) String pl3Name,
+            @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedFrom,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedTo) {
+        return excelResponse(
+                excel.exportRepository(rstRepository.listApprovedAll(
+                        new RepositoryListQuery(
+                                exerciseCode,
+                                center,
+                                domain,
+                                pl3Name,
+                                toolkitName,
+                                submittedFrom,
+                                submittedTo))),
+                "rst-repository.xlsx");
+    }
+
+    /**
      * Support repository activity rows for APPROVED Exercises, filtered on the server.
      * Totals and category mix follow the filtered rows; dropdown options do not shrink.
      *
@@ -152,6 +189,32 @@ public class GovernanceController {
     }
 
     /**
+     * Exports filtered Support Repository rows as Excel.
+     */
+    @GetMapping("/support-repository/export")
+    @PreAuthorize("hasAnyRole('LTH','HO','ADMIN')")
+    public ResponseEntity<byte[]> exportSupportRepository(
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) UUID categoryId,
+            @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedFrom,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedTo) {
+        return excelResponse(
+                excel.exportSupportRepository(supportRepositoryService.listApprovedAll(
+                        new SupportRepositoryQuery(
+                                center,
+                                categoryId,
+                                toolkitName,
+                                submittedFrom,
+                                submittedTo))),
+                "support-repository.xlsx");
+    }
+
+    /**
      * Same-PL3 benchmarking for APPROVED Shared KPI lines. Cards follow all filtered
      * matches; dropdown options do not shrink. Rows require {@code pl3Code}.
      *
@@ -186,6 +249,30 @@ public class GovernanceController {
                 new BenchmarkingQuery(center, domain, pl1, pl2, pl3Code, submittedFrom, submittedTo),
                 page,
                 pageSize);
+    }
+
+    /**
+     * Exports filtered Benchmarking rows as Excel.
+     */
+    @GetMapping("/benchmarking/export")
+    @PreAuthorize("hasAnyRole('LTH','HO','ADMIN')")
+    public ResponseEntity<byte[]> exportBenchmarking(
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String domain,
+            @RequestParam(required = false) String pl1,
+            @RequestParam(required = false) String pl2,
+            @RequestParam(required = false) String pl3Code,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedFrom,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate submittedTo) {
+        return excelResponse(
+                excel.exportBenchmarking(benchmarkingService.listApprovedAll(
+                        new BenchmarkingQuery(
+                                center, domain, pl1, pl2, pl3Code, submittedFrom, submittedTo))),
+                "benchmarking.xlsx");
     }
 
     /**
@@ -233,5 +320,13 @@ public class GovernanceController {
                         submittedTo),
                 page,
                 pageSize);
+    }
+
+    private static ResponseEntity<byte[]> excelResponse(byte[] body, String filename) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(body);
     }
 }

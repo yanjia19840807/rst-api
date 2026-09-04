@@ -73,9 +73,35 @@ public class RstRepositoryService {
      */
     @Transactional(readOnly = true)
     public RepositoryListView listApproved(RepositoryListQuery query, int page, int pageSize) {
+        FilteredRepository rows = filteredRows(query);
+        if (rows.source().isEmpty()) {
+            return pagedView(List.of(), page, pageSize, List.of(), List.of(), List.of(), List.of());
+        }
+        return pagedView(
+                rows.items(),
+                page,
+                pageSize,
+                RepositoryRowFilters.distinct(rows.source(), RepositoryRow::country),
+                RepositoryRowFilters.distinct(rows.source(), RepositoryRow::domain),
+                RepositoryRowFilters.distinct(rows.source(), RepositoryRow::pl3),
+                RepositoryRowFilters.distinct(rows.source(), RepositoryRow::toolkit));
+    }
+
+    /**
+     * Returns every filtered RST Repository row, ignoring pagination.
+     *
+     * @param query field filters
+     * @return filtered rows
+     */
+    @Transactional(readOnly = true)
+    public List<RepositoryRow> listApprovedAll(RepositoryListQuery query) {
+        return filteredRows(query).items();
+    }
+
+    private FilteredRepository filteredRows(RepositoryListQuery query) {
         List<RstExercise> approved = exercises.findApprovedRepositoryExercises();
         if (approved.isEmpty()) {
-            return pagedView(List.of(), page, pageSize, List.of(), List.of(), List.of(), List.of());
+            return new FilteredRepository(List.of(), List.of());
         }
         Map<UUID, BigDecimal> rightSizingByExercise = rightSizingByExercise(approved);
         Map<UUID, BigDecimal> supportByExercise = supportByExercise(approved);
@@ -93,14 +119,10 @@ public class RstRepositoryService {
         List<RepositoryRow> items = source.stream()
                 .filter(row -> RepositoryRowFilters.matches(row, query))
                 .toList();
-        return pagedView(
-                items,
-                page,
-                pageSize,
-                RepositoryRowFilters.distinct(source, RepositoryRow::country),
-                RepositoryRowFilters.distinct(source, RepositoryRow::domain),
-                RepositoryRowFilters.distinct(source, RepositoryRow::pl3),
-                RepositoryRowFilters.distinct(source, RepositoryRow::toolkit));
+        return new FilteredRepository(source, items);
+    }
+
+    private record FilteredRepository(List<RepositoryRow> source, List<RepositoryRow> items) {
     }
 
     private static RepositoryListView pagedView(

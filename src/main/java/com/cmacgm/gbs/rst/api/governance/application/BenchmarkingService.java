@@ -82,9 +82,49 @@ public class BenchmarkingService {
      */
     @Transactional(readOnly = true)
     public BenchmarkingView listApproved(BenchmarkingQuery query, int page, int pageSize) {
+        FilteredBenchmarking rows = filteredRows(query);
+        if (rows.source().isEmpty()) {
+            return emptyView(page, pageSize);
+        }
+        List<BenchmarkRow> source = rows.source();
+        List<BenchmarkRow> items = rows.items();
+        List<BenchmarkPl3Option> pl3Options = rows.pl3Options();
+        String selectedPl3 = selectedPl3Name(query, pl3Options);
+        BenchmarkingMath.Summary summary = BenchmarkingMath.summarize(selectedPl3, items);
+        PageResponse<BenchmarkRow> paged = PageResponse.ofList(items, page, pageSize);
+        return new BenchmarkingView(
+                summary.selectedPl3(),
+                summary.bestDailyCapacity(),
+                summary.bestDailyCapacityHint(),
+                summary.medianCycleTimeSeconds(),
+                summary.productionSupportRatioPct(),
+                paged.items(),
+                paged.page(),
+                paged.pageSize(),
+                paged.total(),
+                paged.totalPages(),
+                BenchmarkingFilters.distinct(source, BenchmarkRow::gbs),
+                BenchmarkingFilters.distinct(source, BenchmarkRow::domain),
+                BenchmarkingFilters.distinct(source, BenchmarkRow::pl1),
+                BenchmarkingFilters.distinct(source, BenchmarkRow::pl2),
+                pl3Options);
+    }
+
+    /**
+     * Returns every filtered Benchmarking row, ignoring pagination.
+     *
+     * @param query field filters
+     * @return filtered rows
+     */
+    @Transactional(readOnly = true)
+    public List<BenchmarkRow> listApprovedAll(BenchmarkingQuery query) {
+        return filteredRows(query).items();
+    }
+
+    private FilteredBenchmarking filteredRows(BenchmarkingQuery query) {
         List<RstExercise> approved = exercises.findApprovedRepositoryExercises();
         if (approved.isEmpty()) {
-            return emptyView(page, pageSize);
+            return new FilteredBenchmarking(List.of(), List.of(), List.of());
         }
         Map<UUID, BigDecimal> rightSizingByExercise = rightSizingByExercise(approved);
         Map<UUID, BigDecimal> supportByExercise = supportByExercise(approved);
@@ -108,25 +148,13 @@ public class BenchmarkingService {
         List<BenchmarkRow> items = source.stream()
                 .filter(row -> BenchmarkingFilters.matches(row, query))
                 .toList();
-        String selectedPl3 = selectedPl3Name(query, pl3Options);
-        BenchmarkingMath.Summary summary = BenchmarkingMath.summarize(selectedPl3, items);
-        PageResponse<BenchmarkRow> paged = PageResponse.ofList(items, page, pageSize);
-        return new BenchmarkingView(
-                summary.selectedPl3(),
-                summary.bestDailyCapacity(),
-                summary.bestDailyCapacityHint(),
-                summary.medianCycleTimeSeconds(),
-                summary.productionSupportRatioPct(),
-                paged.items(),
-                paged.page(),
-                paged.pageSize(),
-                paged.total(),
-                paged.totalPages(),
-                BenchmarkingFilters.distinct(source, BenchmarkRow::gbs),
-                BenchmarkingFilters.distinct(source, BenchmarkRow::domain),
-                BenchmarkingFilters.distinct(source, BenchmarkRow::pl1),
-                BenchmarkingFilters.distinct(source, BenchmarkRow::pl2),
-                pl3Options);
+        return new FilteredBenchmarking(source, items, pl3Options);
+    }
+
+    private record FilteredBenchmarking(
+            List<BenchmarkRow> source,
+            List<BenchmarkRow> items,
+            List<BenchmarkPl3Option> pl3Options) {
     }
 
     private List<BenchmarkRow> rowsFor(

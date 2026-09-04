@@ -16,6 +16,7 @@ import org.springframework.http.MediaType;
 
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.HolidayExcelService;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.ImportTemplateService;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.application.SupportExcelService;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.VolumeExcelService;
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphModels.GraphDriveItem;
 
@@ -107,12 +108,14 @@ class MicrosoftGraphRstFolderIT {
 
         HolidayExcelService holidays = new HolidayExcelService();
         VolumeExcelService volumes = new VolumeExcelService();
+        SupportExcelService support = new SupportExcelService();
         for (ImportTemplateService.Kind kind : ImportTemplateService.Kind.values()) {
             byte[] body = switch (kind) {
                 case CALENDAR -> holidays.exportBlank();
                 case VOLUME_MONTHLY -> volumes.exportMonthlyBlank();
                 case VOLUME_DAILY -> volumes.exportDailyBlank();
                 case VOLUME_SLOT -> volumes.exportSlotBlank();
+                case SUPPORT -> support.exportBlank();
             };
             GraphDriveItem uploaded = graph.putDriveItemContent(
                     TEMPLATE_FOLDER, kind.fileName(), body, XLSX);
@@ -126,7 +129,8 @@ class MicrosoftGraphRstFolderIT {
                         ImportTemplateService.Kind.CALENDAR.fileName(),
                         ImportTemplateService.Kind.VOLUME_MONTHLY.fileName(),
                         ImportTemplateService.Kind.VOLUME_DAILY.fileName(),
-                        ImportTemplateService.Kind.VOLUME_SLOT.fileName());
+                        ImportTemplateService.Kind.VOLUME_SLOT.fileName(),
+                        ImportTemplateService.Kind.SUPPORT.fileName());
     }
 
     private static MicrosoftGraphService liveGraph() {

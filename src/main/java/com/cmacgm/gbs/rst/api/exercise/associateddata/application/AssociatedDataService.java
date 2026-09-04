@@ -87,6 +87,7 @@ public class AssociatedDataService {
     private final VolumeInputValidator volumeValidator;
     private final VolumeExcelService volumeExcel;
     private final HolidayExcelService holidayExcel;
+    private final SupportExcelService supportExcel;
     private final ImportTemplateService importTemplates;
     private final ToolkitVolumeService toolkitVolumes;
     private final FileArtifactRepository fileArtifacts;
@@ -110,6 +111,7 @@ public class AssociatedDataService {
             VolumeInputValidator volumeValidator,
             VolumeExcelService volumeExcel,
             HolidayExcelService holidayExcel,
+            SupportExcelService supportExcel,
             ImportTemplateService importTemplates,
             ToolkitVolumeService toolkitVolumes,
             FileArtifactRepository fileArtifacts,
@@ -128,6 +130,7 @@ public class AssociatedDataService {
         this.volumeValidator = volumeValidator;
         this.volumeExcel = volumeExcel;
         this.holidayExcel = holidayExcel;
+        this.supportExcel = supportExcel;
         this.importTemplates = importTemplates;
         this.toolkitVolumes = toolkitVolumes;
         this.fileArtifacts = fileArtifacts;
@@ -258,6 +261,107 @@ public class AssociatedDataService {
                         HttpStatus.NOT_FOUND, "support-item-not-found", "The support item was not found."));
         item.softDelete(ownerCcgid, clock.instant());
         supportItems.save(item);
+    }
+
+    /**
+     * Downloads the Production Support Excel template.
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportSupportTemplate(String ownerCcgid, UUID exerciseId) {
+        exercises.requireOwned(ownerCcgid, exerciseId);
+        return importTemplates.download(ImportTemplateService.Kind.SUPPORT);
+    }
+
+    /**
+     * Exports the current Production Support registry as Excel.
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportSupportExcel(String ownerCcgid, UUID exerciseId) {
+        return supportExcel.export(listSupport(ownerCcgid, exerciseId));
+    }
+
+    /**
+     * Upserts Production Support rows from Excel. Existing rows not in the file are kept.
+     */
+    @Transactional
+    public List<SupportItemView> importSupportExcel(
+            String ownerCcgid, UUID exerciseId, InputStream input, String fileName) {
+        editable(ownerCcgid, exerciseId);
+        List<SupportExcelService.ParsedRow> parsed = supportExcel.parse(input);
+        if (parsed.isEmpty()) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-excel", "No support rows found.");
+        }
+        Instant now = clock.instant();
+        Map<String, ExerciseProductionSupportItem> existingByKey = new LinkedHashMap<>();
+        for (ExerciseProductionSupportItem item :
+                supportItems.findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(exerciseId)) {
+            existingByKey.putIfAbsent(
+                    itemKey(item.getCategoryId(), item.getActivity(), item.getFrequencyCode()),
+                    item);
+        }
+        int accepted = 0;
+        for (SupportExcelService.ParsedRow row : parsed) {
+            ResolvedCategory category;
+            try {
+                category = supportCategories.resolveActiveByName(row.categoryName());
+            } catch (ApiException ex) {
+                throw new ApiException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "invalid-excel",
+                        "Row " + row.displayRow() + ": " + ex.getMessage());
+            }
+            String key = itemKey(category.categoryId(), row.activity(), row.frequencyCode());
+            ExerciseProductionSupportItem existing = existingByKey.get(key);
+            if (existing == null) {
+                ExerciseProductionSupportItem created = ExerciseProductionSupportItem.create(
+                        exerciseId,
+                        category.categoryId(),
+                        category.categoryName(),
+                        row.activity(),
+                        row.frequencyCode(),
+                        row.volume(),
+                        row.unitOfMeasure(),
+                        row.workloadPerUnitMinutes(),
+                        blankToNull(row.comments()),
+                        ownerCcgid,
+                        now);
+                supportItems.save(created);
+                existingByKey.put(key, created);
+            } else {
+                existing.update(
+                        category.categoryId(),
+                        category.categoryName(),
+                        row.activity(),
+                        row.frequencyCode(),
+                        row.volume(),
+                        row.unitOfMeasure(),
+                        row.workloadPerUnitMinutes(),
+                        blankToNull(row.comments()),
+                        ownerCcgid,
+                        now);
+                supportItems.save(existing);
+            }
+            accepted += 1;
+        }
+        recordImportBatch(
+                ownerCcgid,
+                exerciseId,
+                "SUPPORT",
+                fileName,
+                accepted,
+                "SUPPORT_IMPORT",
+                "support-import.xlsx");
+        return listSupport(ownerCcgid, exerciseId);
+    }
+
+    private static String itemKey(UUID categoryId, String activity, String frequencyCode) {
+        String category = categoryId == null ? "" : categoryId.toString();
+        return SupportExcelService.upsertKey(category, activity, frequencyCode);
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     /**

@@ -76,6 +76,27 @@ public class SupportCategoryService {
     }
 
     /**
+     * Resolves an active Category by display name for Excel import.
+     *
+     * @param name catalog name
+     * @return id plus live catalog name
+     */
+    @Transactional(readOnly = true)
+    public ResolvedCategory resolveActiveByName(String name) {
+        String normalized = name == null ? "" : name.trim();
+        if (normalized.isEmpty()) {
+            throw unprocessable("invalid-category", "Category is required.");
+        }
+        SupportCategory category = categories.findByDeletedAtIsNullAndNameIgnoreCase(normalized)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND, "category-not-found", "Unknown Category: " + normalized + "."));
+        if (!category.isActive()) {
+            throw unprocessable("inactive-category", "Category is not active: " + category.getName() + ".");
+        }
+        return new ResolvedCategory(category.getId(), category.getName());
+    }
+
+    /**
      * All non-deleted categories, including INACTIVE, for Admin maintenance.
      */
     @Transactional(readOnly = true)

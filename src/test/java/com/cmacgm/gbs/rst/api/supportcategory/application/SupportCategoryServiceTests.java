@@ -144,6 +144,25 @@ class SupportCategoryServiceTests {
                 .hasMessageContaining("not found");
     }
 
+    @Test
+    void resolveActiveByNameRejectsUnknownAndInactive() {
+        List<SupportCategory> store = new ArrayList<>();
+        SupportCategory active = SupportCategory.create("Training", 1, "S1", NOW);
+        SupportCategory inactive = SupportCategory.create("Meetings", 2, "S1", NOW);
+        inactive.setStatus(SupportCategory.STATUS_INACTIVE, "S1", NOW);
+        store.add(active);
+        store.add(inactive);
+        SupportCategoryService service = service(store);
+
+        assertThat(service.resolveActiveByName(" training ").categoryName()).isEqualTo("Training");
+        assertThatThrownBy(() -> service.resolveActiveByName("Meetings"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("not active");
+        assertThatThrownBy(() -> service.resolveActiveByName("Unknown"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("Unknown Category");
+    }
+
     private static SupportCategoryService service(List<SupportCategory> store) {
         return new SupportCategoryService(repo(store), Clock.fixed(NOW, ZoneOffset.UTC));
     }

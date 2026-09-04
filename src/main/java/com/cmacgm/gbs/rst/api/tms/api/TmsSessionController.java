@@ -14,7 +14,10 @@ import com.cmacgm.gbs.rst.api.tms.api.dto.TmsSummaryResponse;
 import com.cmacgm.gbs.rst.api.tms.application.TmsSessionCommandService;
 import com.cmacgm.gbs.rst.api.tms.application.TmsSessionQueryService;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -49,6 +52,31 @@ public class TmsSessionController {
     @GetMapping("/sessions/current")
     public TmsSessionResponse current(@AuthenticationPrincipal RstPrincipal principal) {
         return queryService.current(principal.ccgid());
+    }
+
+    @GetMapping("/sessions/export")
+    public ResponseEntity<byte[]> exportSessions(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String sessionNo,
+            @RequestParam(required = false) String reference,
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate dateFrom,
+            @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate dateTo) {
+        return excelResponse(
+                queryService.exportSessions(
+                        principal.ccgid(),
+                        status,
+                        sessionNo,
+                        reference,
+                        query,
+                        dateFrom,
+                        dateTo),
+                "tms-sessions.xlsx");
     }
 
     @GetMapping("/sessions/{id}")
@@ -122,5 +150,13 @@ public class TmsSessionController {
             @RequestBody(required = false) DiscardTmsSessionRequest request) {
         String reason = request == null ? null : request.reason();
         return commandService.discard(principal.ccgid(), id, reason);
+    }
+
+    private static ResponseEntity<byte[]> excelResponse(byte[] body, String filename) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(body);
     }
 }

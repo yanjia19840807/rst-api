@@ -114,16 +114,20 @@ public class TmsSessionCommandService {
     }
 
     private void applyDetails(TmsSession session, UpdateTmsSessionRequest request, Instant now) {
-        if (request == null) {
-            return;
-        }
         Toolkit toolkit = toolkitRepository.findActiveById(session.getToolkit().getId())
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
                         "toolkit-not-found",
                         "The Toolkit was not found."));
+        UUID requestedSubtaskId = request == null
+                ? (session.getToolkitSubtask() == null ? null : session.getToolkitSubtask().getId())
+                : request.subtaskId();
+        ToolkitSubtask subtask = resolveSubtask(toolkit, requestedSubtaskId);
+        if (request == null) {
+            return;
+        }
         session.updateDetails(
-                resolveSubtask(toolkit, request.subtaskId()),
+                subtask,
                 request.processedVolume(),
                 normalize(request.reference()),
                 normalize(request.remarks()),
@@ -131,7 +135,15 @@ public class TmsSessionCommandService {
     }
 
     private ToolkitSubtask resolveSubtask(Toolkit toolkit, UUID subtaskId) {
+        boolean hasActiveSubtasks = toolkit.getSubtasks().stream()
+                .anyMatch(item -> item.getDeletedAt() == null);
         if (subtaskId == null) {
+            if (hasActiveSubtasks) {
+                throw new ApiException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "subtask-required",
+                        "Select a TASK. This Toolkit has at least one TASK.");
+            }
             return null;
         }
         return toolkit.getSubtasks().stream()

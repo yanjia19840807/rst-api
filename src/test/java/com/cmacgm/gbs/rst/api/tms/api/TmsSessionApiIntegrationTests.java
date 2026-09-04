@@ -317,6 +317,23 @@ class TmsSessionApiIntegrationTests {
     }
 
     @Test
+    void rejectsStartWhenToolkitHasATaskAndSubtaskIsMissing() throws Exception {
+        mockMvc.perform(post("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolkitId": "%s",
+                                  "processedVolume": 1
+                                }
+                                """.formatted(TOOLKIT_ID)))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.type")
+                        .value("https://rst.cmacgm.com/problems/subtask-required"));
+    }
+
+    @Test
     void defaultsMissingVolumeAndAcceptsEditsOnEnd() throws Exception {
         String response = mockMvc.perform(post("/api/v1/tms/sessions")
                         .header("X-Dev-Ccgid", "AGENT001")
@@ -325,9 +342,10 @@ class TmsSessionApiIntegrationTests {
                         .content("""
                                 {
                                   "toolkitId": "%s",
+                                  "subtaskId": "%s",
                                   "reference": "INV-DRAFT"
                                 }
-                                """.formatted(TOOLKIT_ID)))
+                                """.formatted(TOOLKIT_ID, SUBTASK_ID)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("running"))
                 .andExpect(jsonPath("$.processedVolume").value(1))

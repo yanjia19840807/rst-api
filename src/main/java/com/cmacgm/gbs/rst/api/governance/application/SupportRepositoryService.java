@@ -71,9 +71,45 @@ public class SupportRepositoryService {
      */
     @Transactional(readOnly = true)
     public SupportRepositoryView listApproved(SupportRepositoryQuery query, int page, int pageSize) {
+        FilteredSupport rows = filteredRows(query);
+        if (rows.source().isEmpty()) {
+            return emptyView(page, pageSize);
+        }
+        List<SupportRepositoryRow> source = rows.source();
+        List<SupportRepositoryRow> items = rows.items();
+        SupportRepositoryMath.Summary summary = SupportRepositoryMath.summarize(items);
+        PageResponse<SupportRepositoryRow> paged = PageResponse.ofList(items, page, pageSize);
+        List<SupportCategoryOption> categoryOptions = supportCategories.listActive();
+        return new SupportRepositoryView(
+                summary.totalSupportFte(),
+                summary.topCategory(),
+                summary.topCategoryFte(),
+                summary.categorySummaries(),
+                paged.items(),
+                paged.page(),
+                paged.pageSize(),
+                paged.total(),
+                paged.totalPages(),
+                SupportRepositoryFilters.distinct(source, SupportRepositoryRow::center),
+                categoryOptions,
+                SupportRepositoryFilters.distinct(source, SupportRepositoryRow::toolkit));
+    }
+
+    /**
+     * Returns every filtered Support Repository row, ignoring pagination.
+     *
+     * @param query field filters
+     * @return filtered rows
+     */
+    @Transactional(readOnly = true)
+    public List<SupportRepositoryRow> listApprovedAll(SupportRepositoryQuery query) {
+        return filteredRows(query).items();
+    }
+
+    private FilteredSupport filteredRows(SupportRepositoryQuery query) {
         List<RstExercise> approved = exercises.findApprovedSupportRepositoryExercises();
         if (approved.isEmpty()) {
-            return emptyView(page, pageSize);
+            return new FilteredSupport(List.of(), List.of());
         }
         Map<UUID, List<ExerciseProductionSupportItem>> itemsByExercise = itemsByExercise(approved);
         Map<UUID, ExerciseTeamSetup> setups = setupsByExercise(approved);
@@ -92,22 +128,10 @@ public class SupportRepositoryService {
         List<SupportRepositoryRow> items = source.stream()
                 .filter(row -> SupportRepositoryFilters.matches(row, query))
                 .toList();
-        SupportRepositoryMath.Summary summary = SupportRepositoryMath.summarize(items);
-        PageResponse<SupportRepositoryRow> paged = PageResponse.ofList(items, page, pageSize);
-        List<SupportCategoryOption> categoryOptions = supportCategories.listActive();
-        return new SupportRepositoryView(
-                summary.totalSupportFte(),
-                summary.topCategory(),
-                summary.topCategoryFte(),
-                summary.categorySummaries(),
-                paged.items(),
-                paged.page(),
-                paged.pageSize(),
-                paged.total(),
-                paged.totalPages(),
-                SupportRepositoryFilters.distinct(source, SupportRepositoryRow::center),
-                categoryOptions,
-                SupportRepositoryFilters.distinct(source, SupportRepositoryRow::toolkit));
+        return new FilteredSupport(source, items);
+    }
+
+    private record FilteredSupport(List<SupportRepositoryRow> source, List<SupportRepositoryRow> items) {
     }
 
     private List<SupportRepositoryRow> rowsFor(
