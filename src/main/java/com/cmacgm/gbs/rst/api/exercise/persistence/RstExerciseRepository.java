@@ -74,6 +74,29 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
     List<RstExercise> findApprovedRepositoryExercises();
 
     /**
+     * One APPROVED Exercise for RST Repository Toolkit Info.
+     * Loads Toolkit snapshot only; Subtasks / Shared KPI lines are fetched lazily.
+     *
+     * @param id Exercise id
+     * @return approved exercise, or empty
+     */
+    @EntityGraph(attributePaths = {"toolkitSnapshot"})
+    @Query("""
+            select e from RstExercise e
+            where e.id = :id
+              and e.deletedAt is null
+              and exists (
+                  select 1 from ProcessInstance w
+                  join w.tasks t
+                  where w.exerciseId = e.id
+                    and w.status = com.cmacgm.gbs.rst.api.workflow.domain.ProcessStatus.FINISHED
+                    and t.node = com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LTH
+                    and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.APPROVED
+              )
+            """)
+    Optional<RstExercise> findApprovedRepositoryExerciseById(UUID id);
+
+    /**
      * APPROVED Exercises for Support Repository, with Toolkit snapshot only.
      *
      * @return approved exercises

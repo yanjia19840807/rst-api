@@ -16,6 +16,11 @@ import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseProductionSupportItemRepository;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
+import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseKpiView;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseSnapshot;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseSubtaskView;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseToolkitView;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
@@ -27,6 +32,7 @@ import com.cmacgm.gbs.rst.api.exercise.associateddata.application.WorkingDaysSer
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -98,6 +104,56 @@ public class RstRepositoryService {
         return filteredRows(query).items();
     }
 
+    /**
+     * Frozen Toolkit snapshot for an APPROVED Exercise (HO / LTH / ADMIN).
+     *
+     * @param exerciseId Exercise id
+     * @return toolkit, subtasks, and Shared KPI lines at freeze time
+     */
+    @Transactional(readOnly = true)
+    public ExerciseSnapshot toolkitInfo(UUID exerciseId) {
+        RstExercise exercise = exercises.findApprovedRepositoryExerciseById(exerciseId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND, "exercise-not-found", "The Exercise was not found."));
+        ExerciseToolkitSnapshot snapshot = exercise.getToolkitSnapshot();
+        if (snapshot == null) {
+            throw new ApiException(
+                    HttpStatus.NOT_FOUND, "exercise-not-found", "The Exercise was not found.");
+        }
+        return new ExerciseSnapshot(
+                new ExerciseToolkitView(
+                        snapshot.getSourceToolkitId(),
+                        snapshot.getToolkitName(),
+                        snapshot.getCenter(),
+                        snapshot.getDomain(),
+                        snapshot.getPl1(),
+                        snapshot.getPl2(),
+                        snapshot.getPl3Code(),
+                        snapshot.getPl3Name(),
+                        snapshot.isCombineSubtasksTime(),
+                        snapshot.getSourceToolkitVersion()),
+                exercise.getSubtasks().stream()
+                        .map(item -> new ExerciseSubtaskView(
+                                item.getId(),
+                                item.getSourceToolkitSubtaskId(),
+                                item.getName(),
+                                item.getDescription(),
+                                item.getDisplayOrder(),
+                                null))
+                        .toList(),
+                exercise.getSharedKpiLines().stream()
+                        .map(item -> new ExerciseKpiView(
+                                item.getId(),
+                                item.getToolkitSharedKpiSelectionId(),
+                                item.getCarrier(),
+                                item.getSite(),
+                                item.getCustomerCountry(),
+                                item.getDeliveryHc(),
+                                true))
+                        .toList(),
+                null);
+    }
+
     private FilteredRepository filteredRows(RepositoryListQuery query) {
         List<RstExercise> approved = exercises.findApprovedRepositoryExercises();
         if (approved.isEmpty()) {
@@ -167,6 +223,7 @@ public class RstRepositoryService {
                     line.getDeliveryHc(), totalDelivery, actualHc, rightSizingHc, productionSupport);
             rows.add(new RepositoryRow(
                     exercise.getExerciseCode(),
+                    exercise.getId(),
                     line.getCarrier(),
                     line.getSite(),
                     line.getCenter(),

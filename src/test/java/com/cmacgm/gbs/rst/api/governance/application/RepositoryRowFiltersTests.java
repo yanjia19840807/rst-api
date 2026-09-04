@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryListQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryRow;
@@ -89,6 +90,7 @@ class RepositoryRowFiltersTests {
             String submittedDate) {
         return new RepositoryRow(
                 exerciseId,
+                UUID.fromString("00000000-0000-0000-0000-000000000001"),
                 "CMA",
                 "SITE",
                 country,

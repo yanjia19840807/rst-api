@@ -3,6 +3,7 @@ package com.cmacgm.gbs.rst.api.governance.api;
 import java.time.LocalDate;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseSnapshot;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingView;
 import com.cmacgm.gbs.rst.api.governance.api.dto.DashboardView;
@@ -24,6 +25,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -148,6 +150,18 @@ public class GovernanceController {
                                 submittedFrom,
                                 submittedTo))),
                 "rst-repository.xlsx");
+    }
+
+    /**
+     * Frozen Toolkit snapshot for an APPROVED Exercise in RST Repository.
+     *
+     * @param exerciseId Exercise id
+     * @return toolkit, subtasks, and Shared KPI lines at freeze time
+     */
+    @GetMapping("/repository/{exerciseId}/toolkit-info")
+    @PreAuthorize("hasAnyRole('LTH','HO','ADMIN')")
+    public ExerciseSnapshot repositoryToolkitInfo(@PathVariable UUID exerciseId) {
+        return rstRepository.toolkitInfo(exerciseId);
     }
 
     /**
