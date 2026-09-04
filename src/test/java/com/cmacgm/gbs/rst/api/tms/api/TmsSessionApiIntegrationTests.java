@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.tms.api;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -317,6 +318,51 @@ class TmsSessionApiIntegrationTests {
     }
 
     @Test
+    void findsPausedSessionByToolkitAndReference() throws Exception {
+        String response = mockMvc.perform(post("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolkitId": "%s",
+                                  "subtaskId": "%s",
+                                  "processedVolume": 2,
+                                  "reference": "INV-100"
+                                }
+                                """.formatted(TOOLKIT_ID, SUBTASK_ID)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String sessionId = JsonPath.read(response, "$.id");
+
+        mockMvc.perform(post("/api/v1/tms/sessions/{id}/pause", sessionId)
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/tms/sessions/paused-match")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .queryParam("toolkitId", TOOLKIT_ID.toString())
+                        .queryParam("reference", "inv-100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.matchCount").value(1))
+                .andExpect(jsonPath("$.latest.id").value(sessionId))
+                .andExpect(jsonPath("$.latest.reference").value("INV-100"));
+
+        mockMvc.perform(get("/api/v1/tms/sessions/paused-match")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .queryParam("toolkitId", TOOLKIT_ID.toString())
+                        .queryParam("reference", "INV-999"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.matchCount").value(0))
+                .andExpect(jsonPath("$.latest").value(nullValue()));
+    }
+
+    @Test
     void rejectsStartWhenToolkitHasATaskAndSubtaskIsMissing() throws Exception {
         mockMvc.perform(post("/api/v1/tms/sessions")
                         .header("X-Dev-Ccgid", "AGENT001")
@@ -372,6 +418,42 @@ class TmsSessionApiIntegrationTests {
                 .andExpect(jsonPath("$.reference").value("INV-200"))
                 .andExpect(jsonPath("$.remarks").value("filled before end"))
                 .andExpect(jsonPath("$.subtaskId").value(SUBTASK_ID.toString()));
+    }
+
+    @Test
+    void rejectsFractionalSessionVolume() throws Exception {
+        mockMvc.perform(post("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolkitId": "%s",
+                                  "subtaskId": "%s",
+                                  "processedVolume": 1.5
+                                }
+                                """.formatted(TOOLKIT_ID, SUBTASK_ID)))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.type")
+                        .value("https://rst.cmacgm.com/problems/invalid-volume"));
+    }
+
+    @Test
+    void rejectsVolumeBelowOne() throws Exception {
+        mockMvc.perform(post("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolkitId": "%s",
+                                  "subtaskId": "%s",
+                                  "processedVolume": 0
+                                }
+                                """.formatted(TOOLKIT_ID, SUBTASK_ID)))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.type")
+                        .value("https://rst.cmacgm.com/problems/validation-error"));
     }
 
     @Test

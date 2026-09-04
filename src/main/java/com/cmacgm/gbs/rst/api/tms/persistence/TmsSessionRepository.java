@@ -37,6 +37,13 @@ public interface TmsSessionRepository
             String agentCcgid, Collection<TmsSessionStatus> statuses);
 
     @EntityGraph(attributePaths = {"toolkit", "toolkitSubtask", "pauseIntervals"})
+    List<TmsSession> findByAgentCcgidAndStatusAndToolkit_IdAndReferenceIgnoreCaseOrderByPausedAtDescStartedAtDesc(
+            String agentCcgid,
+            TmsSessionStatus status,
+            UUID toolkitId,
+            String reference);
+
+    @EntityGraph(attributePaths = {"toolkit", "toolkitSubtask", "pauseIntervals"})
     Optional<TmsSession> findBySessionNoAndAgentCcgid(String sessionNo, String agentCcgid);
 
     @EntityGraph(attributePaths = {"toolkit", "toolkitSubtask", "pauseIntervals"})

@@ -211,8 +211,20 @@ public class TmsSession {
         }
     }
 
+    public static boolean isWholeAtLeastOne(BigDecimal volume) {
+        return volume != null
+                && volume.compareTo(BigDecimal.ONE) >= 0
+                && volume.stripTrailingZeros().scale() <= 0;
+    }
+
     private static BigDecimal defaultVolume(BigDecimal volume) {
-        return volume == null ? BigDecimal.ONE : volume;
+        if (volume == null) {
+            return BigDecimal.ONE;
+        }
+        if (!isWholeAtLeastOne(volume)) {
+            throw new IllegalArgumentException("Volume must be a whole number of at least 1.");
+        }
+        return volume;
     }
 
     public UUID getId() {

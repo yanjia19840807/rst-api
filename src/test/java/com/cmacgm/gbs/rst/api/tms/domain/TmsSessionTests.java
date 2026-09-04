@@ -60,6 +60,33 @@ class TmsSessionTests {
     }
 
     @Test
+    void rejectsFractionalOrSubUnitVolume() {
+        Toolkit toolkit = Toolkit.create(
+                "Bank Reconciliation", null, "POS-SUP-1", "Center", "Finance",
+                "Accounting", "Record to Report", "BANK_REC", "Bank Reconciliation",
+                false, "AGENT001", START);
+        ToolkitSubtask subtask = toolkit.addSubtask("Manual match", null, 1, START);
+
+        assertThatThrownBy(() -> TmsSession.start(
+                "TMS-AGENT001-20260805-0003",
+                "AGENT001",
+                toolkit,
+                subtask,
+                new BigDecimal("1.5"),
+                "INV-1",
+                "",
+                START))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Volume must be a whole number of at least 1.");
+
+        TmsSession session = newSession();
+        assertThatThrownBy(() ->
+                session.updateDetails(subtask, new BigDecimal("0.5"), "INV-1", "", START.plusSeconds(1)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Volume must be a whole number of at least 1.");
+    }
+
+    @Test
     void rejectsInvalidStateTransitions() {
         TmsSession session = newSession();
 

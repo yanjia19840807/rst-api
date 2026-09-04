@@ -1,12 +1,15 @@
 package com.cmacgm.gbs.rst.api.tms.api;
 
 import java.time.LocalDate;
+import java.util.UUID;
 
 import jakarta.validation.Valid;
 
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
+
 import com.cmacgm.gbs.rst.api.tms.api.dto.DiscardTmsSessionRequest;
+import com.cmacgm.gbs.rst.api.tms.api.dto.PausedSessionMatchView;
 import com.cmacgm.gbs.rst.api.tms.api.dto.StartTmsSessionRequest;
 import com.cmacgm.gbs.rst.api.tms.api.dto.TmsSessionResponse;
 import com.cmacgm.gbs.rst.api.tms.api.dto.UpdateTmsSessionRequest;
@@ -52,6 +55,14 @@ public class TmsSessionController {
     @GetMapping("/sessions/current")
     public TmsSessionResponse current(@AuthenticationPrincipal RstPrincipal principal) {
         return queryService.current(principal.ccgid());
+    }
+
+    @GetMapping("/sessions/paused-match")
+    public PausedSessionMatchView pausedMatch(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @RequestParam UUID toolkitId,
+            @RequestParam(required = false) String reference) {
+        return queryService.pausedMatch(principal.ccgid(), toolkitId, reference);
     }
 
     @GetMapping("/sessions/export")

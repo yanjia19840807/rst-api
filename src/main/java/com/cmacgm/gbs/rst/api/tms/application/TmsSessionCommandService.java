@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.tms.application;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -61,6 +62,7 @@ public class TmsSessionCommandService {
                     "The Agent is not currently assigned to the Toolkit scope by Timesheet.");
         }
         var subtask = resolveSubtask(toolkit, request.subtaskId());
+        requireWholeVolume(request.processedVolume());
 
         var now = clock.instant();
         TmsSession session = TmsSession.start(
@@ -126,6 +128,7 @@ public class TmsSessionCommandService {
         if (request == null) {
             return;
         }
+        requireWholeVolume(request.processedVolume());
         session.updateDetails(
                 subtask,
                 request.processedVolume(),
@@ -195,6 +198,15 @@ public class TmsSessionCommandService {
 
     private static String normalize(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private static void requireWholeVolume(BigDecimal volume) {
+        if (volume != null && !TmsSession.isWholeAtLeastOne(volume)) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "invalid-volume",
+                    "Volume must be a whole number of at least 1.");
+        }
     }
 
     private TmsSessionResponse toResponse(TmsSession session, Instant now) {

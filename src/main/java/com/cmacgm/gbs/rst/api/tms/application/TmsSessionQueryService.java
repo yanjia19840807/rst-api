@@ -17,6 +17,7 @@ import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.TeamAgent;
+import com.cmacgm.gbs.rst.api.tms.api.dto.PausedSessionMatchView;
 import com.cmacgm.gbs.rst.api.tms.api.dto.TmsSessionResponse;
 import com.cmacgm.gbs.rst.api.tms.api.dto.TmsSummaryResponse;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSession;
@@ -52,6 +53,31 @@ public class TmsSessionQueryService {
         this.timesheet = timesheet;
         this.excel = excel;
         this.clock = clock;
+    }
+
+    /**
+     * Finds paused sessions for the same agent, Toolkit, and exact reference.
+     * Blank references are ignored so empty invoices do not collide.
+     *
+     * @param agentCcgid current agent
+     * @param toolkitId selected Toolkit
+     * @param reference trimmed invoice / case id
+     * @return latest match and how many paused rows share the key
+     */
+    @Transactional(readOnly = true)
+    public PausedSessionMatchView pausedMatch(String agentCcgid, UUID toolkitId, String reference) {
+        String trimmed = reference == null ? "" : reference.trim();
+        if (toolkitId == null || trimmed.isEmpty()) {
+            return new PausedSessionMatchView(null, 0);
+        }
+        List<TmsSession> matches =
+                sessionRepository
+                        .findByAgentCcgidAndStatusAndToolkit_IdAndReferenceIgnoreCaseOrderByPausedAtDescStartedAtDesc(
+                                agentCcgid, TmsSessionStatus.PAUSED, toolkitId, trimmed);
+        if (matches.isEmpty()) {
+            return new PausedSessionMatchView(null, 0);
+        }
+        return new PausedSessionMatchView(toResponse(matches.get(0), clock.instant()), matches.size());
     }
 
     @Transactional(readOnly = true)
