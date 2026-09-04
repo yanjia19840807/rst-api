@@ -189,7 +189,7 @@ public class ToolkitExportService {
             Row row = sheet.createRow(rowIdx++);
             cell(row, 0, date(item.getHolidayDate()));
             cell(row, 1, item.getHolidayName());
-            cell(row, 2, item.getHolidayType());
+            cell(row, 2, item.getHolidayType() == null ? "" : item.getHolidayType().name());
         }
         autosize(sheet, 3);
     }

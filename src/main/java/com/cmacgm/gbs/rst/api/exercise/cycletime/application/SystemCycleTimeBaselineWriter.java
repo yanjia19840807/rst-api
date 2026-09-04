@@ -87,8 +87,8 @@ public final class SystemCycleTimeBaselineWriter {
      * SYSTEM Cycle Time from included TMS rows.
      *
      * <p>Aligned with Demo Cycle Time {@code MEDIANX} of {@code INTERVAL_SECONDS}: each included
-     * session is one sample. Blank volume is treated as one unit (raw duration). Positive volume
-     * converts the sample to seconds per unit. When {@code combineSubtasksTime} is false, the
+     * session is one sample: duration divided by the saved volume (whole number ≥ 1). Sessions
+     * without a positive volume are skipped. When {@code combineSubtasksTime} is false, the
      * result is the median of every included sample. When true, each subtask is medianed
      * separately and those medians are summed. Sample count is the number of included sessions.
      */
@@ -157,7 +157,7 @@ public final class SystemCycleTimeBaselineWriter {
 
     public static Double secondsPerUnit(BigDecimal volume, long netDurationSeconds) {
         if (volume == null || volume.signum() <= 0) {
-            return (double) netDurationSeconds;
+            return null;
         }
         return netDurationSeconds / volume.doubleValue();
     }

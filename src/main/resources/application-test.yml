@@ -26,6 +26,9 @@ rst:
     confidence-level: 0.95
   workflow:
     lth-position-id: LTH
+  mail:
+    workflow-enabled: false
+    redirect-to:
 
 microsoft:
   graph:

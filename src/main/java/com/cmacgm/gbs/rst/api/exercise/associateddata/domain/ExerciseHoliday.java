@@ -4,8 +4,11 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.common.workingdays.HolidayDayKind;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
@@ -27,8 +30,9 @@ public class ExerciseHoliday {
     @Column(name = "holiday_name", nullable = false, length = 200)
     private String holidayName;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "holiday_type", nullable = false, length = 20)
-    private String holidayType;
+    private HolidayDayKind holidayType;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -60,7 +64,7 @@ public class ExerciseHoliday {
      * @param exerciseId owning Exercise
      * @param holidayDate calendar date
      * @param holidayName display name
-     * @param holidayType HOLIDAY, WEEKEND, or NORMAL
+     * @param holidayType Holiday, Weekend, or Normal
      * @param actorCcgid creating Supervisor
      * @param now creation timestamp
      * @return new holiday entity
@@ -69,9 +73,12 @@ public class ExerciseHoliday {
             UUID exerciseId,
             LocalDate holidayDate,
             String holidayName,
-            String holidayType,
+            HolidayDayKind holidayType,
             String actorCcgid,
             Instant now) {
+        if (holidayType == null) {
+            throw new IllegalArgumentException("Holiday type is required.");
+        }
         ExerciseHoliday holiday = new ExerciseHoliday();
         holiday.id = UUID.randomUUID();
         holiday.exerciseId = exerciseId;
@@ -102,6 +109,6 @@ public class ExerciseHoliday {
     public UUID getExerciseId() { return exerciseId; }
     public LocalDate getHolidayDate() { return holidayDate; }
     public String getHolidayName() { return holidayName; }
-    public String getHolidayType() { return holidayType; }
+    public HolidayDayKind getHolidayType() { return holidayType; }
     public Instant getDeletedAt() { return deletedAt; }
 }

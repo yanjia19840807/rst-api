@@ -166,7 +166,7 @@ public class CycleTimeService {
      * Returns the active Cycle Time baseline for an Exercise.
      *
      * <p>When none exists, rebuilds a SYSTEM median from included TMS sessions (Demo-aligned
-     * {@code INTERVAL_SECONDS} median, treating blank volume as one unit).
+     * {@code INTERVAL_SECONDS} median of duration / volume).
      *
      * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id

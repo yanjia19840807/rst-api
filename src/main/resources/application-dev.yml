@@ -5,6 +5,11 @@ app:
     dev-identity:
       override-enabled: true
 
+rst:
+  mail:
+    workflow-enabled: ${RST_MAIL_WORKFLOW_ENABLED:true}
+    redirect-to: ${RST_MAIL_REDIRECT_TO:yanjiafelix@gmail.com}
+
 microsoft:
   graph:
     enabled: true

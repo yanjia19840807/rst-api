@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.HolidayRequest;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.common.workingdays.HolidayDayKind;
 
 class HolidayExcelServiceTest {
 
@@ -45,10 +46,10 @@ class HolidayExcelServiceTest {
         List<HolidayRequest> rows = service.parse(new ByteArrayInputStream(bytes));
         assertEquals(2, rows.size());
         assertEquals(LocalDate.of(2026, 1, 1), rows.get(0).holidayDate());
-        assertEquals("HOLIDAY", rows.get(0).holidayType());
+        assertEquals(HolidayDayKind.HOLIDAY, rows.get(0).holidayType());
         assertEquals("New Year", rows.get(0).holidayName());
         assertEquals(LocalDate.of(2026, 1, 4), rows.get(1).holidayDate());
-        assertEquals("NORMAL", rows.get(1).holidayType());
+        assertEquals(HolidayDayKind.NORMAL, rows.get(1).holidayType());
     }
 
     @Test
@@ -76,7 +77,7 @@ class HolidayExcelServiceTest {
     @Test
     void export_roundTripsCurrentRows() {
         List<HolidayRequest> source = List.of(
-                new HolidayRequest(LocalDate.of(2026, 2, 17), "Lunar NY", "HOLIDAY"));
+                new HolidayRequest(LocalDate.of(2026, 2, 17), "Lunar NY", HolidayDayKind.HOLIDAY));
         List<HolidayRequest> parsed = service.parse(new ByteArrayInputStream(service.export(source)));
         assertEquals(1, parsed.size());
         assertEquals(source.get(0), parsed.get(0));

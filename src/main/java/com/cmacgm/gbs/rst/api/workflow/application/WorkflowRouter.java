@@ -123,27 +123,28 @@ public class WorkflowRouter {
      * @param supervisorPositionId toolkit supervisor position
      * @param center toolkit center
      * @param domain toolkit domain
-     * @return next step label and current occupant name of that position
+     * @return next step, Timesheet position, and current occupant when known
      */
     public NextHop previewNext(String currentRole, String supervisorPositionId, String center, String domain) {
         if (currentRole == null || currentRole.isBlank()) {
-            return new NextHop(null, null);
+            return NextHop.empty();
         }
         return switch (currentRole) {
             case "MANAGER" -> {
-                Occupant occupant = null;
-                String positionId = domainHeads.configuredPositionId(center, domain);
-                if (hasText(positionId)) {
-                    occupant = timesheet.occupant(positionId);
-                }
-                String name = occupant == null ? null : occupant.name();
-                yield new NextHop(
-                        "Center Delivery Head Review",
-                        hasText(name) ? name : null);
+                String positionId = blankToNull(domainHeads.configuredPositionId(center, domain));
+                Occupant occupant = hasText(positionId) ? timesheet.occupant(positionId) : null;
+                yield NextHop.of("Center Delivery Head Review", positionId, occupant);
             }
-            case "CDH" -> new NextHop("Local Transformation Head Review", null);
-            case "LTH" -> new NextHop("Archive", null);
-            default -> new NextHop(null, null);
+            case "CDH" -> {
+                RoutedStep lth = resolveLth();
+                yield new NextHop(
+                        "Local Transformation Head Review",
+                        lth.positionId(),
+                        lth.occupantName(),
+                        lth.assigneeCcgid());
+            }
+            case "LTH" -> new NextHop("Archive", null, null, null);
+            default -> NextHop.empty();
         };
     }
 
@@ -151,9 +152,27 @@ public class WorkflowRouter {
      * Next workflow hop for the Approval Step panel.
      *
      * @param stepLabel next step name
-     * @param reviewerName current occupant of the next position, if known
+     * @param positionId Timesheet position of that hop, if known
+     * @param reviewerName current occupant name, if known
+     * @param reviewerCcgid current occupant CCGID, if known
      */
-    public record NextHop(String stepLabel, String reviewerName) {
+    public record NextHop(
+            String stepLabel, String positionId, String reviewerName, String reviewerCcgid) {
+
+        static NextHop empty() {
+            return new NextHop(null, null, null, null);
+        }
+
+        static NextHop of(String stepLabel, String positionId, Occupant occupant) {
+            if (occupant == null) {
+                return new NextHop(stepLabel, positionId, null, null);
+            }
+            return new NextHop(
+                    stepLabel,
+                    positionId,
+                    blankToNull(occupant.name()),
+                    blankToNull(occupant.ccgid()));
+        }
     }
 
     /**

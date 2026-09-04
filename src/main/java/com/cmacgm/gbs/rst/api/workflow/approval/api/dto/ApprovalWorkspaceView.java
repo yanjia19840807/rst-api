@@ -12,7 +12,9 @@ import java.util.UUID;
  * @param statusBar where the submission is now
  * @param currentHop the hop being decided; null in {@code COMPLETED}
  * @param nextStep hop after Approve; null in {@code COMPLETED}
- * @param nextReviewer occupant of that hop, if known
+ * @param nextPositionId Timesheet position of that hop, if known
+ * @param nextReviewer occupant name of that hop, if known
+ * @param nextHandlerCcgid occupant CCGID of that hop, if known
  * @param history already-occurred Submit / Approve / Return / Withdraw rows
  */
 public record ApprovalWorkspaceView(
@@ -20,7 +22,9 @@ public record ApprovalWorkspaceView(
         ApprovalStatusBar statusBar,
         ApprovalCurrentHop currentHop,
         String nextStep,
+        String nextPositionId,
         String nextReviewer,
+        String nextHandlerCcgid,
         List<ApprovalHistoryRow> history) {
 
     /** Status strip: In progress / Now / Archived / Returned / Withdrawn. */

@@ -31,13 +31,14 @@ class TmsSessionTests {
     }
 
     @Test
-    void defaultsMissingVolumeToOneAndAllowsEditsBeforeEnd() {
+    void rejectsMissingVolumeAndAllowsEditsBeforeEnd() {
         Toolkit toolkit = Toolkit.create(
                 "Bank Reconciliation", null, "POS-SUP-1", "Center", "Finance",
                 "Accounting", "Record to Report", "BANK_REC", "Bank Reconciliation",
                 false, "AGENT001", START);
         ToolkitSubtask subtask = toolkit.addSubtask("Manual match", null, 1, START);
-        TmsSession session = TmsSession.start(
+
+        assertThatThrownBy(() -> TmsSession.start(
                 "TMS-AGENT001-20260805-0002",
                 "AGENT001",
                 toolkit,
@@ -45,9 +46,19 @@ class TmsSessionTests {
                 null,
                 "",
                 "",
-                START);
+                START))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Volume must be a whole number of at least 1.");
 
-        assertThat(session.getProcessedVolume()).isEqualByComparingTo(BigDecimal.ONE);
+        TmsSession session = TmsSession.start(
+                "TMS-AGENT001-20260805-0002",
+                "AGENT001",
+                toolkit,
+                null,
+                BigDecimal.ONE,
+                "",
+                "",
+                START);
 
         session.updateDetails(subtask, BigDecimal.valueOf(8), "INV-200", "filled before end", START.plusSeconds(5));
         session.end(START.plusSeconds(10));

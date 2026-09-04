@@ -137,16 +137,6 @@ public final class SizingMath {
     }
 
     /**
-     * Right Sizing HC that represents a completed sizing. Null or non-positive means no result.
-     */
-    public static BigDecimal measuredRightSizingHc(BigDecimal rightSizingHc) {
-        if (rightSizingHc == null || rightSizingHc.signum() <= 0) {
-            return null;
-        }
-        return rightSizingHc;
-    }
-
-    /**
      * Capacity creation: Actual HC (TotalAgent) − RS HC − Support.
      * Null Support FTE means it could not be computed — do not treat it as zero.
      */

@@ -72,6 +72,11 @@ rst:
   workflow:
     # Timesheet has no LTH column yet; LTH steps share this position until IAM provides one.
     lth-position-id: ${RST_WORKFLOW_LTH_POSITION_ID:LTH}
+  mail:
+    # Approval-requested and submission-outcome mail only. Timesheet sync alerts stay separate.
+    workflow-enabled: ${RST_MAIL_WORKFLOW_ENABLED:false}
+    # When set, every workflow mail is sent here instead of the Timesheet occupant.
+    redirect-to: ${RST_MAIL_REDIRECT_TO:}
   sharepoint:
     # RST-owned root in the Timesheet library. Daily / Monthly / Template / Process hang off this.
     # Dev / UAT: 4.RST/2.UAT. Production overrides this in application-prod.yml.

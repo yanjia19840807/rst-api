@@ -48,7 +48,7 @@ public class TmsSession {
     @JoinColumn(name = "toolkit_subtask_id")
     private ToolkitSubtask toolkitSubtask;
 
-    @Column(name = "processed_volume", precision = 18, scale = 6)
+    @Column(name = "processed_volume", nullable = false, precision = 18, scale = 6)
     private BigDecimal processedVolume;
 
     @Column(nullable = false, length = 100)
@@ -110,7 +110,7 @@ public class TmsSession {
         session.agentCcgid = agentCcgid;
         session.toolkit = toolkit;
         session.toolkitSubtask = subtask;
-        session.processedVolume = defaultVolume(processedVolume);
+        session.processedVolume = requireVolume(processedVolume);
         session.reference = reference;
         session.remarks = remarks;
         session.status = TmsSessionStatus.RUNNING;
@@ -132,7 +132,7 @@ public class TmsSession {
             throw new TmsStateException("Only an open session can be updated.");
         }
         toolkitSubtask = subtask;
-        this.processedVolume = defaultVolume(processedVolume);
+        this.processedVolume = requireVolume(processedVolume);
         this.reference = reference;
         this.remarks = remarks;
         updatedAt = now;
@@ -140,7 +140,7 @@ public class TmsSession {
 
     public void pause(Instant now) {
         requireStatus(TmsSessionStatus.RUNNING, "Only a running session can be paused.");
-        processedVolume = defaultVolume(processedVolume);
+        processedVolume = requireVolume(processedVolume);
         netDurationSeconds += secondsSinceRunning(now);
         runningSince = null;
         pausedAt = now;
@@ -164,7 +164,7 @@ public class TmsSession {
 
     public void end(Instant now) {
         requireStatus(TmsSessionStatus.RUNNING, "Only a running session can be ended.");
-        processedVolume = defaultVolume(processedVolume);
+        processedVolume = requireVolume(processedVolume);
         netDurationSeconds += secondsSinceRunning(now);
         runningSince = null;
         endedAt = now;
@@ -217,10 +217,7 @@ public class TmsSession {
                 && volume.stripTrailingZeros().scale() <= 0;
     }
 
-    private static BigDecimal defaultVolume(BigDecimal volume) {
-        if (volume == null) {
-            return BigDecimal.ONE;
-        }
+    private static BigDecimal requireVolume(BigDecimal volume) {
         if (!isWholeAtLeastOne(volume)) {
             throw new IllegalArgumentException("Volume must be a whole number of at least 1.");
         }

@@ -124,13 +124,18 @@ public class SubmissionService {
         UUID scenarioId = scenarioService.requireOfficialScenarioId(exercise);
         List<ValidationFinding> findings = List.of(toFinding(evaluateDailyVsMonthly(exercise, ownerCcgid)));
         TimesheetAlignmentView alignment = align(exercise);
+        WorkflowRouter.RoutedStep manager = managerHop(exercise);
         return new SubmitPreviewView(
                 scenarioId,
                 findings,
                 remarksRequired(findings),
                 submitBlocked(findings),
                 alignment,
-                alignment.structuralDrift());
+                alignment.structuralDrift(),
+                "Manager Review",
+                manager == null ? null : manager.positionId(),
+                manager == null ? null : manager.occupantName(),
+                manager == null ? null : manager.assigneeCcgid());
     }
 
     /**
@@ -245,6 +250,17 @@ public class SubmissionService {
         exerciseRepository.save(exercise);
         mail.notifyApprovalRequested(managerCcgid, exercise);
         return toDetails(exercise, workflow);
+    }
+
+    private WorkflowRouter.RoutedStep managerHop(RstExercise exercise) {
+        String supervisorPositionId = exercise.getToolkitSnapshot() == null
+                ? null
+                : exercise.getToolkitSnapshot().getSupervisorPositionId();
+        try {
+            return workflowRouter.resolveManager(supervisorPositionId);
+        } catch (ApiException ex) {
+            return null;
+        }
     }
 
     private String openManager(ProcessInstance workflow, RstExercise exercise, Instant now) {

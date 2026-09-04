@@ -2,6 +2,9 @@ package com.cmacgm.gbs.rst.api.common.workingdays;
 
 import java.util.Locale;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+
 /**
  * Excel PH Dates {@code Type}: Holiday (official rest), Weekend (extra rest in a
  * holiday block), Normal (makeup working day).
@@ -37,6 +40,11 @@ public enum HolidayDayKind {
         };
     }
 
+    @JsonValue
+    public String toJson() {
+        return name();
+    }
+
     /**
      * Validates a write payload. Only Excel types are accepted.
      *
@@ -44,6 +52,7 @@ public enum HolidayDayKind {
      * @return kind
      * @throws IllegalArgumentException when the type is not Holiday / Weekend / Normal
      */
+    @JsonCreator
     public static HolidayDayKind require(String raw) {
         if (raw == null || raw.isBlank()) {
             throw new IllegalArgumentException("Holiday type is required.");

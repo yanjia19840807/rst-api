@@ -80,26 +80,25 @@ class SystemCycleTimeBaselineWriterTests {
     }
 
     @Test
-    void usesRawDurationWhenVolumeIsBlankMatchingDemoMedianx() {
+    void skipsSessionsWithoutAPositiveVolume() {
         SystemBaseline baseline = SystemCycleTimeBaselineWriter.computeSystemBaseline(
                 List.of(
                         row(true, "Match", null, 10),
-                        row(true, "Match", null, 30),
-                        row(true, "Match", null, 50)),
+                        row(true, "Match", "0", 40),
+                        row(true, "Match", "1", 30)),
                 false).orElseThrow();
 
-        assertThat(baseline.sampleCount()).isEqualTo(3);
+        assertThat(baseline.sampleCount()).isEqualTo(1);
         assertThat(baseline.seconds()).isEqualByComparingTo("30.000000");
     }
 
     @Test
-    void usesRawDurationWhenVolumeIsZero() {
-        SystemBaseline baseline = SystemCycleTimeBaselineWriter.computeSystemBaseline(
-                List.of(row(true, "Match", "0", 40), row(true, "Update", "1", 10)),
-                true).orElseThrow();
-
-        assertThat(baseline.sampleCount()).isEqualTo(2);
-        assertThat(baseline.seconds()).isEqualByComparingTo("50.000000");
+    void ignoresBlankAndNonPositiveVolumeWhenAllSamplesAreInvalid() {
+        assertThat(SystemCycleTimeBaselineWriter.computeSystemBaseline(
+                List.of(
+                        row(true, "Match", null, 10),
+                        row(true, "Update", "0", 40)),
+                true)).isEmpty();
     }
 
     @Test

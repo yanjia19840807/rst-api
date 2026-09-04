@@ -29,22 +29,26 @@ public class MailNotificationService {
     private final MailPreferenceService preferences;
     private final MailAddressLookup addresses;
     private final MicrosoftGraphService graph;
+    private final RstMailProperties mailSettings;
 
     /**
      * @param profiles LTH / ADMIN directory
      * @param preferences switches
      * @param addresses Timesheet emp_email
      * @param graph sendMail
+     * @param mailSettings workflow enable / redirect
      */
     public MailNotificationService(
             SsoProfileRepository profiles,
             MailPreferenceService preferences,
             MailAddressLookup addresses,
-            MicrosoftGraphService graph) {
+            MicrosoftGraphService graph,
+            RstMailProperties mailSettings) {
         this.profiles = profiles;
         this.preferences = preferences;
         this.addresses = addresses;
         this.graph = graph;
+        this.mailSettings = mailSettings;
     }
 
     /**
@@ -54,6 +58,10 @@ public class MailNotificationService {
      * @param exercise case
      */
     public void notifyApprovalRequested(String ccgid, RstExercise exercise) {
+        if (ccgid == null || ccgid.isBlank()) {
+            log.info("Approval mail skipped: no occupant CCGID");
+            return;
+        }
         sendToCcgids(
                 MailType.APPROVAL_REQUESTED,
                 List.of(ccgid),
@@ -152,12 +160,31 @@ public class MailNotificationService {
         if (type == null || ccgids == null || ccgids.isEmpty()) {
             return;
         }
+        if (mailSettings == null || !mailSettings.workflowEnabled()) {
+            log.info("Workflow mail skipped: rst.mail.workflow-enabled is false");
+            return;
+        }
+        List<String> intended = new ArrayList<>();
         Set<String> emails = new LinkedHashSet<>();
         for (String raw : ccgids) {
             if (raw == null || raw.isBlank()) {
                 continue;
             }
-            addIfSendable(emails, type, raw.trim().toUpperCase(Locale.ROOT));
+            String ccgid = raw.trim().toUpperCase(Locale.ROOT);
+            intended.add(ccgid);
+            if (mailSettings.redirectEnabled()) {
+                String email = addresses.emailOf(ccgid);
+                if (email != null && !email.isBlank()) {
+                    emails.add(email.trim());
+                }
+            } else {
+                addIfSendable(emails, type, ccgid);
+            }
+        }
+        if (mailSettings.redirectEnabled()) {
+            String label = emails.isEmpty() ? String.join(", ", intended) : String.join(", ", emails);
+            dispatch(subject + " [intended: " + label + "]", html, List.of(mailSettings.redirectTo()));
+            return;
         }
         dispatch(subject, html, List.copyOf(emails));
     }

@@ -56,7 +56,7 @@ public class HolidayExcelService {
         for (HolidayRequest row : rows) {
             body.add(List.of(
                     row.holidayDate() == null ? "" : row.holidayDate().toString(),
-                    row.holidayType() == null ? "" : row.holidayType(),
+                    row.holidayType() == null ? "" : row.holidayType().name(),
                     row.holidayName() == null ? "" : row.holidayName()));
         }
         return writeSheet("Holidays", HEADERS, body);
@@ -92,7 +92,7 @@ public class HolidayExcelService {
                 String description = headers.containsKey("description")
                         ? cell(excelRow, headers.get("description"))
                         : "";
-                out.add(new HolidayRequest(date, description, kind.name()));
+                out.add(new HolidayRequest(date, description, kind));
             }
             return out;
         } catch (ApiException ex) {

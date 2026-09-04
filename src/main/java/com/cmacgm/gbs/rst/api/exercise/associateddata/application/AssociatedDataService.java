@@ -43,7 +43,6 @@ import com.cmacgm.gbs.rst.api.exercise.cycletime.persistence.CycleTimeBaselineRe
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
-import com.cmacgm.gbs.rst.api.common.workingdays.HolidayDayKind;
 import com.cmacgm.gbs.rst.api.common.workingdays.WeekendCode;
 import com.cmacgm.gbs.rst.api.supportcategory.application.SupportCategoryService;
 import com.cmacgm.gbs.rst.api.supportcategory.application.SupportCategoryService.ResolvedCategory;
@@ -403,12 +402,11 @@ public class AssociatedDataService {
         if (request.holidays() != null) {
             Set<LocalDate> seen = new HashSet<>();
             for (HolidayRequest holiday : request.holidays()) {
-                HolidayDayKind kind;
-                try {
-                    kind = HolidayDayKind.require(holiday.holidayType());
-                } catch (IllegalArgumentException ex) {
+                if (holiday.holidayType() == null) {
                     throw new ApiException(
-                            HttpStatus.UNPROCESSABLE_ENTITY, "invalid-holiday-type", ex.getMessage());
+                            HttpStatus.UNPROCESSABLE_ENTITY,
+                            "invalid-holiday-type",
+                            "Holiday type is required.");
                 }
                 if (holiday.holidayDate() == null || !seen.add(holiday.holidayDate())) {
                     throw new ApiException(
@@ -419,7 +417,7 @@ public class AssociatedDataService {
                 String name = holiday.holidayName() == null ? "" : holiday.holidayName().trim();
                 holidays.save(ExerciseHoliday.create(
                         exerciseId, holiday.holidayDate(), name,
-                        kind.name(), ownerCcgid, now));
+                        holiday.holidayType(), ownerCcgid, now));
             }
         }
         return getCalendar(ownerCcgid, exerciseId);

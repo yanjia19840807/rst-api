@@ -23,7 +23,6 @@ import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.CreateScenarioRequest;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ScenarioView;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ShiftView;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.UpdateScenarioRequest;
-import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
 
 /**
  * Scenario CRUD and Official promotion for Supervisor Exercises.
@@ -267,7 +266,7 @@ public class ScenarioService {
                 scenario.getName(),
                 scenario.getDescription(),
                 scenario.getStatus(),
-                SizingMath.measuredRightSizingHc(scenario.getRightSizingHc()),
+                scenario.getRightSizingHc(),
                 scenario.getVersion(),
                 shifts);
     }

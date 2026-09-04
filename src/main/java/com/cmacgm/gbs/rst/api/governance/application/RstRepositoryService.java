@@ -257,7 +257,7 @@ public class RstRepositoryService {
     }
 
     private static BigDecimal rightSizingHc(Scenario scenario) {
-        return SizingMath.measuredRightSizingHc(scenario.getRightSizingHc());
+        return scenario.getRightSizingHc();
     }
 
     private static BigDecimal productionSupport(

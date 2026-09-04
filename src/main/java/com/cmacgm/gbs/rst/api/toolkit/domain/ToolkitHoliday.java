@@ -4,9 +4,12 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.common.workingdays.HolidayDayKind;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseHoliday;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
@@ -30,8 +33,9 @@ public class ToolkitHoliday {
     @Column(name = "holiday_name", nullable = false, length = 200)
     private String holidayName;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "holiday_type", nullable = false, length = 20)
-    private String holidayType;
+    private HolidayDayKind holidayType;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -76,5 +80,5 @@ public class ToolkitHoliday {
     public UUID getSourceExerciseId() { return sourceExerciseId; }
     public LocalDate getHolidayDate() { return holidayDate; }
     public String getHolidayName() { return holidayName; }
-    public String getHolidayType() { return holidayType; }
+    public HolidayDayKind getHolidayType() { return holidayType; }
 }

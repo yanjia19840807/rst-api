@@ -59,8 +59,10 @@ public class TmsSessionExcelService {
 
     private static String cycleTime(TmsSessionResponse session) {
         BigDecimal volume = session.processedVolume();
-        double divisor = volume == null || volume.signum() <= 0 ? 1.0 : volume.doubleValue();
-        return String.valueOf(Math.round(session.netDurationSeconds() / divisor));
+        if (volume == null || volume.signum() <= 0) {
+            return "";
+        }
+        return String.valueOf(Math.round(session.netDurationSeconds() / volume.doubleValue()));
     }
 
     private static String formatVolume(BigDecimal volume) {

@@ -201,7 +201,7 @@ public class TmsSessionCommandService {
     }
 
     private static void requireWholeVolume(BigDecimal volume) {
-        if (volume != null && !TmsSession.isWholeAtLeastOne(volume)) {
+        if (!TmsSession.isWholeAtLeastOne(volume)) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "invalid-volume",

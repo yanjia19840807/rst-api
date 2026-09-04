@@ -64,7 +64,9 @@ public class ApprovalWorkspaceAssembler {
                         "IN_PROGRESS", "In progress", waiting.step(), waiting.reviewer()),
                 new ApprovalCurrentHop(waiting.step(), waiting.reviewer()),
                 next.stepLabel(),
+                next.positionId(),
                 next.reviewerName(),
+                next.reviewerCcgid(),
                 history(workflow, displayNames, null));
     }
 
@@ -87,6 +89,8 @@ public class ApprovalWorkspaceAssembler {
         return new ApprovalWorkspaceView(
                 MODE_COMPLETED,
                 completedStatusBar(workflow, waiting),
+                null,
+                null,
                 null,
                 null,
                 null,

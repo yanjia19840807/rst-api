@@ -32,7 +32,7 @@ public final class HolidayDays {
             if (holiday == null || holiday.getHolidayDate() == null) {
                 continue;
             }
-            map.put(holiday.getHolidayDate(), HolidayDayKind.parse(holiday.getHolidayType()));
+            map.put(holiday.getHolidayDate(), holiday.getHolidayType());
         }
         return map;
     }

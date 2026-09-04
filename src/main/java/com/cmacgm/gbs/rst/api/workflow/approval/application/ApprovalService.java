@@ -696,7 +696,7 @@ public class ApprovalService {
         if (scenario == null) {
             return null;
         }
-        return SizingMath.measuredRightSizingHc(scenario.getRightSizingHc());
+        return scenario.getRightSizingHc();
     }
 
     private BigDecimal productionSupport(UUID exerciseId) {

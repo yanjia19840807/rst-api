@@ -19,15 +19,6 @@ class SizingMathTests {
     }
 
     @Test
-    void measuredRightSizingHcTreatsMissingOrZeroAsNoResult() {
-        assertThat(SizingMath.measuredRightSizingHc(null)).isNull();
-        assertThat(SizingMath.measuredRightSizingHc(BigDecimal.ZERO)).isNull();
-        assertThat(SizingMath.measuredRightSizingHc(new BigDecimal("-1"))).isNull();
-        assertThat(SizingMath.measuredRightSizingHc(new BigDecimal("12.50")))
-                .isEqualByComparingTo("12.50");
-    }
-
-    @Test
     void capacityCreationUsesActualHeadcount() {
         assertThat(SizingMath.capacityCreation(
                 new BigDecimal("12.6"), new BigDecimal("12.50"), new BigDecimal("2.055343")))

@@ -10,6 +10,7 @@ import jakarta.validation.constraints.Size;
 public record StartTmsSessionRequest(
         @NotNull UUID toolkitId,
         UUID subtaskId,
+        @NotNull(message = "Volume must be a whole number of at least 1.")
         @DecimalMin(value = "1", message = "Volume must be a whole number of at least 1.")
         BigDecimal processedVolume,
         @Size(max = 100) String reference,

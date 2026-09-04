@@ -30,7 +30,9 @@ class MicrosoftGraphRstFolderIT {
 
     static final String DAILY_FOLDER = "4.RST/2.UAT/Daily";
     static final String MONTHLY_FOLDER = "4.RST/2.UAT/Monthly";
-    static final String TEMPLATE_FOLDER = "4.RST/2.UAT/Template";
+    static final String UAT_TEMPLATE_FOLDER = "4.RST/2.UAT/Template";
+    static final String PROD_TEMPLATE_FOLDER = "4.RST/3.Production/Template";
+    static final List<String> TEMPLATE_FOLDERS = List.of(UAT_TEMPLATE_FOLDER, PROD_TEMPLATE_FOLDER);
     static final String DAILY_FILE = "Daily Report of 20260727(GBS CHINA).xlsx";
     static final String MONTHLY_FILE = "Monthly Report of 202606(GBS CHINA).xlsx";
     static final MediaType XLSX = MediaType.parseMediaType(
@@ -103,34 +105,38 @@ class MicrosoftGraphRstFolderIT {
         MicrosoftGraphService graph = liveGraph();
         assumeTrue(graph != null, "Microsoft Graph credentials are incomplete.");
 
-        GraphDriveItem folder = graph.ensureFolder(TEMPLATE_FOLDER);
-        assertThat(folder.isFolder()).as("Template path must be a folder").isTrue();
-
         HolidayExcelService holidays = new HolidayExcelService();
         VolumeExcelService volumes = new VolumeExcelService();
         SupportExcelService support = new SupportExcelService();
+        Map<ImportTemplateService.Kind, byte[]> templates = new HashMap<>();
         for (ImportTemplateService.Kind kind : ImportTemplateService.Kind.values()) {
-            byte[] body = switch (kind) {
+            templates.put(kind, switch (kind) {
                 case CALENDAR -> holidays.exportBlank();
                 case VOLUME_MONTHLY -> volumes.exportMonthlyBlank();
                 case VOLUME_DAILY -> volumes.exportDailyBlank();
                 case VOLUME_SLOT -> volumes.exportSlotBlank();
                 case SUPPORT -> support.exportBlank();
-            };
-            GraphDriveItem uploaded = graph.putDriveItemContent(
-                    TEMPLATE_FOLDER, kind.fileName(), body, XLSX);
-            assertThat(uploaded.name()).isEqualTo(kind.fileName());
-            assertThat(uploaded.isFile()).isTrue();
+            });
         }
 
-        assertThat(graph.getChildrenByFolderPath(TEMPLATE_FOLDER))
-                .extracting(GraphDriveItem::name)
-                .contains(
-                        ImportTemplateService.Kind.CALENDAR.fileName(),
-                        ImportTemplateService.Kind.VOLUME_MONTHLY.fileName(),
-                        ImportTemplateService.Kind.VOLUME_DAILY.fileName(),
-                        ImportTemplateService.Kind.VOLUME_SLOT.fileName(),
-                        ImportTemplateService.Kind.SUPPORT.fileName());
+        for (String folderPath : TEMPLATE_FOLDERS) {
+            GraphDriveItem folder = graph.ensureFolder(folderPath);
+            assertThat(folder.isFolder()).as(folderPath + " must be a folder").isTrue();
+            for (ImportTemplateService.Kind kind : ImportTemplateService.Kind.values()) {
+                GraphDriveItem uploaded = graph.putDriveItemContent(
+                        folderPath, kind.fileName(), templates.get(kind), XLSX);
+                assertThat(uploaded.name()).isEqualTo(kind.fileName());
+                assertThat(uploaded.isFile()).isTrue();
+            }
+            assertThat(graph.getChildrenByFolderPath(folderPath))
+                    .extracting(GraphDriveItem::name)
+                    .contains(
+                            ImportTemplateService.Kind.CALENDAR.fileName(),
+                            ImportTemplateService.Kind.VOLUME_MONTHLY.fileName(),
+                            ImportTemplateService.Kind.VOLUME_DAILY.fileName(),
+                            ImportTemplateService.Kind.VOLUME_SLOT.fileName(),
+                            ImportTemplateService.Kind.SUPPORT.fileName());
+        }
     }
 
     private static MicrosoftGraphService liveGraph() {

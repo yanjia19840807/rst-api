@@ -39,7 +39,6 @@ import com.cmacgm.gbs.rst.api.exercise.cycletime.application.SystemCycleTimeBase
 import com.cmacgm.gbs.rst.api.exercise.cycletime.domain.ExerciseTmsSession;
 import com.cmacgm.gbs.rst.api.exercise.cycletime.persistence.ExerciseTmsSessionRepository;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
-import com.cmacgm.gbs.rst.api.common.workingdays.HolidayDayKind;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSession;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSessionStatus;
 import com.cmacgm.gbs.rst.api.tms.persistence.TmsSessionRepository;
@@ -233,7 +232,7 @@ public class ExerciseInitializationService {
                     targetId,
                     date,
                     holiday.getHolidayName(),
-                    HolidayDayKind.parse(holiday.getHolidayType()).name(),
+                    holiday.getHolidayType(),
                     actorCcgid,
                     now));
         }
