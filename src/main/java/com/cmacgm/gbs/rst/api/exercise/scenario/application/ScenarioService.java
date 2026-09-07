@@ -209,8 +209,7 @@ public class ScenarioService {
      *
      * <p>Official is only {@code rst_exercise.official_scenario_id}. The selected row stays
      * Draft and can be switched again before Submit. Requires an active Cycle Time baseline,
-     * a positive Right Sizing HC, and committed monthly/daily sizing (slot when a Slot Period
-     * is set).
+     * a positive Right Sizing HC, and committed monthly/daily sizing. Slot Simulation is optional.
      */
     @Transactional
     public ScenarioView markOfficial(String ownerCcgid, UUID exerciseId, UUID scenarioId) {

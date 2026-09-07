@@ -1,16 +1,22 @@
 package com.cmacgm.gbs.rst.api.exercise.associateddata.application;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -73,26 +79,71 @@ public class VolumeInputValidator {
         }
         requireActualVolumes(request);
         requireContinuousMonths(months);
-        rejectMonthsAfterSizing(request, sizingMonth);
+        rejectMonthsOutsideHistory(request, sizingMonth);
     }
 
     /**
-     * File-only monthly checks (partial import allowed). Rejects forecast-period months.
+     * Monthly Excel: non-empty, every actual filled, months continuous, inside the 36-month window.
      */
     public void validateMonthlyImportRows(List<MonthlyVolumeRequest> request, LocalDate sizingMonth) {
-        validateMonthlyShape(request);
-        if (request == null) {
-            return;
+        if (request == null || request.isEmpty()) {
+            fail("volume-month-required", "The file has no monthly rows.");
         }
-        rejectMonthsAfterSizing(request, sizingMonth);
+        List<YearMonth> months = validateMonthlyShape(request);
+        requireActualVolumes(request);
+        requireContinuousMonths(months);
+        rejectMonthsOutsideHistory(request, sizingMonth);
     }
 
-    private static void rejectMonthsAfterSizing(List<MonthlyVolumeRequest> request, LocalDate sizingMonth) {
+    /**
+     * File ∪ Toolkit months (≤ Sizing Month) must be a single continuous block.
+     */
+    public void requireContinuousMonthUnion(
+            Collection<YearMonth> fileMonths, Collection<YearMonth> toolkitMonths) {
+        TreeSet<YearMonth> union = new TreeSet<>();
+        if (fileMonths != null) {
+            union.addAll(fileMonths);
+        }
+        if (toolkitMonths != null) {
+            union.addAll(toolkitMonths);
+        }
+        if (union.size() < 2) {
+            return;
+        }
+        YearMonth previous = null;
+        for (YearMonth month : union) {
+            if (previous != null && !previous.plusMonths(1).equals(month)) {
+                fail(
+                        "volume-month-toolkit-gap",
+                        "Import must overlap or adjoin existing Toolkit months. Gap between "
+                                + previous
+                                + " and "
+                                + month
+                                + ".");
+            }
+            previous = month;
+        }
+    }
+
+    private static void rejectMonthsOutsideHistory(
+            List<MonthlyVolumeRequest> request, LocalDate sizingMonth) {
         YearMonth cutoff = YearMonth.from(sizingMonth);
+        YearMonth floor = VolumeTrainWindows.monthlyHistoryFloor(sizingMonth);
         for (MonthlyVolumeRequest row : request) {
             YearMonth ym = YearMonth.parse(row.month().trim());
             if (ym.isAfter(cutoff)) {
                 fail("volume-month-after-sizing", "Month " + ym + " is after the sizing month and cannot have Actual Volume.");
+            }
+            if (ym.isBefore(floor)) {
+                fail(
+                        "volume-month-before-history",
+                        "Month "
+                                + ym
+                                + " is more than "
+                                + VolumeTrainWindows.MAX_VOLUME_HISTORY_MONTHS
+                                + " months before the sizing month. Earliest allowed month is "
+                                + floor
+                                + ".");
             }
         }
     }
@@ -161,25 +212,71 @@ public class VolumeInputValidator {
         }
         requireDailyActualVolumes(request);
         requireContinuousDates(dates);
-        rejectDatesAfterSizing(request, sizingMonth);
+        rejectDatesOutsideHistory(request, sizingMonth);
     }
 
     /**
-     * File-only daily checks (partial import allowed).
+     * Daily Excel: non-empty, every actual filled, dates continuous, inside the 36-month window.
      */
     public void validateDailyImportRows(List<DailyVolumeRequest> request, LocalDate sizingMonth) {
-        validateDailyShape(request);
-        if (request == null) {
-            return;
+        if (request == null || request.isEmpty()) {
+            fail("volume-date-required", "The file has no daily rows.");
         }
-        rejectDatesAfterSizing(request, sizingMonth);
+        List<LocalDate> dates = validateDailyShape(request);
+        requireDailyActualVolumes(request);
+        requireContinuousDates(dates);
+        rejectDatesOutsideHistory(request, sizingMonth);
     }
 
-    private static void rejectDatesAfterSizing(List<DailyVolumeRequest> request, LocalDate sizingMonth) {
+    /**
+     * File ∪ Toolkit dates (≤ Sizing Month) must be a single continuous block.
+     */
+    public void requireContinuousDateUnion(
+            Collection<LocalDate> fileDates, Collection<LocalDate> toolkitDates) {
+        TreeSet<LocalDate> union = new TreeSet<>();
+        if (fileDates != null) {
+            union.addAll(fileDates);
+        }
+        if (toolkitDates != null) {
+            union.addAll(toolkitDates);
+        }
+        if (union.size() < 2) {
+            return;
+        }
+        LocalDate previous = null;
+        for (LocalDate date : union) {
+            if (previous != null && !previous.plusDays(1).equals(date)) {
+                fail(
+                        "volume-date-toolkit-gap",
+                        "Import must overlap or adjoin existing Toolkit dates. Gap between "
+                                + previous
+                                + " and "
+                                + date
+                                + ".");
+            }
+            previous = date;
+        }
+    }
+
+    private static void rejectDatesOutsideHistory(
+            List<DailyVolumeRequest> request, LocalDate sizingMonth) {
         LocalDate cutoff = YearMonth.from(sizingMonth).atEndOfMonth();
+        LocalDate floor = VolumeTrainWindows.dailyHistoryFloor(sizingMonth);
         for (DailyVolumeRequest row : request) {
-            if (row.volumeDate().isAfter(cutoff)) {
-                fail("volume-date-after-sizing", "Date " + row.volumeDate() + " is after the sizing month and cannot have Actual Volume.");
+            LocalDate date = row.volumeDate();
+            if (date.isAfter(cutoff)) {
+                fail("volume-date-after-sizing", "Date " + date + " is after the sizing month and cannot have Actual Volume.");
+            }
+            if (date.isBefore(floor)) {
+                fail(
+                        "volume-date-before-history",
+                        "Date "
+                                + date
+                                + " is more than "
+                                + VolumeTrainWindows.MAX_VOLUME_HISTORY_MONTHS
+                                + " months before the sizing month. Earliest allowed date is "
+                                + floor
+                                + ".");
             }
         }
     }
@@ -250,9 +347,91 @@ public class VolumeInputValidator {
             if (prevDay.equals(nextDay) && !prev.slotEndAt().equals(next.slotStartAt())) {
                 fail(
                         "volume-slot-gap",
-                        "Slots on " + prevDay + " must be continuous without gaps.");
+                        "Slots on " + prevDay
+                                + " must be continuous without gaps (missing "
+                                + prev.slotEndAt().atZone(ZoneOffset.UTC).toLocalTime()
+                                        .truncatedTo(ChronoUnit.MINUTES)
+                                + ").");
             }
         }
+    }
+
+    /**
+     * Validates an imported slot sheet, infers Start date / Weeks, and pads the grid.
+     * File days must be continuous and each present day must be a full 09:00–22:00 grid.
+     */
+    public SlotImportPlan planSlotImport(List<SlotVolumeRequest> request) {
+        if (request == null || request.isEmpty()) {
+            fail("volume-slot-required", "The file has no slot rows.");
+        }
+        validateSlot(request);
+        TreeSet<LocalDate> days = new TreeSet<>();
+        Map<Instant, SlotVolumeRequest> byStart = new HashMap<>();
+        for (int i = 0; i < request.size(); i++) {
+            SlotVolumeRequest row = request.get(i);
+            LocalDate day = LocalDate.ofInstant(row.slotStartAt(), ZoneOffset.UTC);
+            LocalTime time = row.slotStartAt().atZone(ZoneOffset.UTC).toLocalTime();
+            if (time.getSecond() != 0 || time.getNano() != 0 || time.getMinute() % 30 != 0) {
+                fail(
+                        "volume-slot-alignment",
+                        "Row " + (i + 1) + ": slot_start must be on the hour or half-hour.");
+            }
+            int minutes = time.getHour() * 60 + time.getMinute();
+            if (minutes < 9 * 60 || minutes >= 22 * 60) {
+                fail(
+                        "volume-slot-window",
+                        "Row " + (i + 1) + ": slot_start must be between 09:00 and 21:30.");
+            }
+            days.add(day);
+            byStart.put(row.slotStartAt(), row);
+        }
+        LocalDate startDate = days.first();
+        LocalDate lastDate = days.last();
+        LocalDate cursor = startDate;
+        LocalDate previous = null;
+        while (!cursor.isAfter(lastDate)) {
+            if (!days.contains(cursor)) {
+                fail(
+                        "volume-slot-gap",
+                        "Dates must be continuous. Gap between " + previous + " and " + cursor + ".");
+            }
+            List<VolumeTrainWindows.SlotBound> expected = VolumeTrainWindows.dayBounds(cursor);
+            for (VolumeTrainWindows.SlotBound bound : expected) {
+                if (!byStart.containsKey(bound.start())) {
+                    fail(
+                            "volume-slot-gap",
+                            "Slots on " + cursor
+                                    + " must be continuous without gaps (missing "
+                                    + bound.start().atZone(ZoneOffset.UTC).toLocalTime().truncatedTo(
+                                            ChronoUnit.MINUTES)
+                                    + ").");
+                }
+            }
+            previous = cursor;
+            cursor = cursor.plusDays(1);
+        }
+        long spanDays = ChronoUnit.DAYS.between(startDate, lastDate) + 1;
+        int weeks = (int) Math.ceil(spanDays / 7.0);
+        if (weeks < 1) {
+            weeks = 1;
+        }
+        if (weeks > VolumeTrainWindows.MAX_SLOT_WEEKS) {
+            fail(
+                    "volume-slot-weeks",
+                    "Slot period cannot exceed " + VolumeTrainWindows.MAX_SLOT_WEEKS
+                            + " weeks (file spans " + weeks + " weeks from "
+                            + startDate + " to " + lastDate + ").");
+        }
+        List<SlotVolumeRequest> grid = new ArrayList<>();
+        for (VolumeTrainWindows.SlotBound bound :
+                VolumeTrainWindows.slotTrainBounds(startDate, (short) weeks)) {
+            SlotVolumeRequest fileRow = byStart.get(bound.start());
+            grid.add(new SlotVolumeRequest(
+                    bound.start(),
+                    bound.end(),
+                    fileRow == null ? null : fileRow.actualVolume()));
+        }
+        return new SlotImportPlan(startDate, (short) weeks, request.size(), grid);
     }
 
     /**

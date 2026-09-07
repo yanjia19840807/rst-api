@@ -263,6 +263,8 @@ public class ExerciseService {
                     "Exercise periods can only be changed during Supervisor Sizing.");
         }
         boolean periodsChanged = periodsChanged(exercise, request);
+        boolean sizingChanged = !MonthKeys.parseMonthStart(request.sizingMonth())
+                .equals(exercise.getSizingMonth());
         exercise.updatePeriods(
                 MonthKeys.parseMonthStart(request.sizingMonth()),
                 request.tmsFrom(),
@@ -272,8 +274,12 @@ public class ExerciseService {
         exercises.saveAndFlush(exercise);
 
         List<String> notices = new ArrayList<>();
-        initialization.ensureTrainVolumeGrids(exercise, ownerCcgid);
-        notices.add("Volume Input grids refreshed for the updated training windows.");
+        if (sizingChanged) {
+            initialization.replaceTrainVolumeGridsFromToolkit(exercise, ownerCcgid);
+            notices.add(
+                    "Monthly and Daily Volume were reset from Toolkit for the new Sizing Month. "
+                            + "Volume edits on this Exercise were discarded.");
+        }
         notices.add(initialization.syncTmsPopulation(exercise, ownerCcgid));
         if (periodsChanged) {
             int cleared = scenarioCommits.clearResultsForExercise(exerciseId);

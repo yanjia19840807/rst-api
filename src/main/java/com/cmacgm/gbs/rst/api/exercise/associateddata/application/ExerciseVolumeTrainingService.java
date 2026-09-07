@@ -60,11 +60,11 @@ public class ExerciseVolumeTrainingService {
      */
     @Transactional(readOnly = true)
     public List<TrainingPoint> assembleMonthly(RstExercise exercise) {
-        YearMonth cutoff = YearMonth.from(exercise.getSizingMonth());
         Map<LocalDate, TrainingPoint> byMonth = new LinkedHashMap<>();
         for (ToolkitVolumeMonthly row : toolkitVolumes.listMonthly(exercise.getToolkitId())) {
             YearMonth month = YearMonth.from(row.getMonth());
-            if (month.isAfter(cutoff) || row.getActualVolume() == null) {
+            if (!VolumeTrainWindows.monthlyInHistoryWindow(month, exercise.getSizingMonth())
+                    || row.getActualVolume() == null) {
                 continue;
             }
             byMonth.put(row.getMonth(), new TrainingPoint(
@@ -75,7 +75,8 @@ public class ExerciseVolumeTrainingService {
         }
         for (ExerciseVolumeMonthlyInput row : exerciseMonthly.findByExerciseIdOrderByMonthAsc(exercise.getId())) {
             YearMonth month = YearMonth.from(row.getMonth());
-            if (month.isAfter(cutoff) || row.getActualVolume() == null) {
+            if (!VolumeTrainWindows.monthlyInHistoryWindow(month, exercise.getSizingMonth())
+                    || row.getActualVolume() == null) {
                 continue;
             }
             byMonth.put(row.getMonth(), new TrainingPoint(
@@ -94,10 +95,10 @@ public class ExerciseVolumeTrainingService {
      */
     @Transactional(readOnly = true)
     public List<TrainingPoint> assembleDaily(RstExercise exercise) {
-        LocalDate cutoff = YearMonth.from(exercise.getSizingMonth()).atEndOfMonth();
         Map<LocalDate, TrainingPoint> byDate = new LinkedHashMap<>();
         for (ToolkitVolumeDaily row : toolkitVolumes.listDaily(exercise.getToolkitId())) {
-            if (row.getVolumeDate().isAfter(cutoff) || row.getActualVolume() == null) {
+            if (!VolumeTrainWindows.dailyInHistoryWindow(row.getVolumeDate(), exercise.getSizingMonth())
+                    || row.getActualVolume() == null) {
                 continue;
             }
             byDate.put(row.getVolumeDate(), new TrainingPoint(
@@ -107,7 +108,8 @@ public class ExerciseVolumeTrainingService {
                     row.getSourceExerciseId()));
         }
         for (ExerciseVolumeDailyInput row : exerciseDaily.findByExerciseIdOrderByVolumeDateAsc(exercise.getId())) {
-            if (row.getVolumeDate().isAfter(cutoff) || row.getActualVolume() == null) {
+            if (!VolumeTrainWindows.dailyInHistoryWindow(row.getVolumeDate(), exercise.getSizingMonth())
+                    || row.getActualVolume() == null) {
                 continue;
             }
             byDate.put(row.getVolumeDate(), new TrainingPoint(

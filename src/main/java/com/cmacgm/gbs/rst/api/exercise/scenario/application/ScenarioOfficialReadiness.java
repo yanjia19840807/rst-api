@@ -39,17 +39,17 @@ public class ScenarioOfficialReadiness {
 
     /**
      * Ensures the scenario has a positive Right Sizing HC and matching committed
-     * monthly / daily sizing. Slot is required only when the Exercise has a Slot Period.
+     * monthly / daily sizing. Slot Simulation is optional even when a Slot Period is set.
      *
-     * @param exercise owning Exercise (slot period)
+     * @param exercise owning Exercise
      * @param scenario candidate Official scenario
      * @param gate {@code Official} or {@code Submit}
      */
     public void requireReady(RstExercise exercise, Scenario scenario, String gate) {
-        requireReady(scenario, exercise.hasSlotPeriod(), gate);
+        requireReady(scenario, gate);
     }
 
-    void requireReady(Scenario scenario, boolean slotPeriodSet, String gate) {
+    void requireReady(Scenario scenario, String gate) {
         BigDecimal hc = scenario.getRightSizingHc();
         if (hc == null || hc.signum() <= 0) {
             throw unprocessable(
@@ -79,11 +79,6 @@ public class ScenarioOfficialReadiness {
                         "Saved sizing results do not match the current Right Sizing HC. "
                                 + "Re-run Preview / Save sizing before " + gate + ".");
             }
-        }
-        if (slotPeriodSet && accepted(scenario.getId(), "SLOT") == null) {
-            throw unprocessable(
-                    "slot-simulation-required",
-                    "A Slot Period is set. Save Slot Simulation before " + gate + ".");
         }
     }
 

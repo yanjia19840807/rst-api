@@ -43,6 +43,8 @@ import com.cmacgm.gbs.rst.api.exercise.cycletime.persistence.CycleTimeBaselineRe
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
+import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
+import com.cmacgm.gbs.rst.api.exercise.scenario.application.ScenarioCommitService;
 import com.cmacgm.gbs.rst.api.common.workingdays.WeekendCode;
 import com.cmacgm.gbs.rst.api.supportcategory.application.SupportCategoryService;
 import com.cmacgm.gbs.rst.api.supportcategory.application.SupportCategoryService.ResolvedCategory;
@@ -57,7 +59,10 @@ import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.HolidayRequest;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.HolidayView;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.MonthlyVolumeRequest;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.MonthlyVolumeView;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.SlotImportPreviewView;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.SlotImportResult;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.SlotVolumeRequest;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.VolumeSeriesImportPreviewView;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.SlotVolumeView;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.SupportItemRequest;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.SupportItemView;
@@ -91,6 +96,8 @@ public class AssociatedDataService {
     private final ToolkitVolumeService toolkitVolumes;
     private final FileArtifactRepository fileArtifacts;
     private final DataImportBatchRepository importBatches;
+    private final RstExerciseRepository exerciseRepository;
+    private final ScenarioCommitService scenarioCommits;
     private final Clock clock;
 
     /**
@@ -115,6 +122,8 @@ public class AssociatedDataService {
             ToolkitVolumeService toolkitVolumes,
             FileArtifactRepository fileArtifacts,
             DataImportBatchRepository importBatches,
+            RstExerciseRepository exerciseRepository,
+            ScenarioCommitService scenarioCommits,
             Clock clock) {
         this.exercises = exercises;
         this.teamSetups = teamSetups;
@@ -134,6 +143,8 @@ public class AssociatedDataService {
         this.toolkitVolumes = toolkitVolumes;
         this.fileArtifacts = fileArtifacts;
         this.importBatches = importBatches;
+        this.exerciseRepository = exerciseRepository;
+        this.scenarioCommits = scenarioCommits;
         this.clock = clock;
     }
 
@@ -547,18 +558,26 @@ public class AssociatedDataService {
     }
 
     /**
-     * Imports monthly volumes from Excel (replace).
+     * Dry-run monthly Excel: validate, reset-from-Toolkit plan, no writes.
+     */
+    @Transactional(readOnly = true)
+    public VolumeSeriesImportPreviewView previewMonthlyExcel(
+            String ownerCcgid, UUID exerciseId, InputStream input) {
+        RstExercise exercise = editable(ownerCcgid, exerciseId);
+        return planMonthlyImport(exercise, volumeExcel.parseMonthly(input)).preview();
+    }
+
+    /**
+     * Imports monthly volumes: reset Exercise grid from Toolkit, then merge the file.
      */
     @Transactional
     public List<MonthlyVolumeView> importMonthlyExcel(
             String ownerCcgid, UUID exerciseId, InputStream input, String fileName) {
-        editable(ownerCcgid, exerciseId);
+        RstExercise exercise = editable(ownerCcgid, exerciseId);
         List<MonthlyVolumeRequest> parsed = volumeExcel.parseMonthly(input);
-        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
-        volumeValidator.validateMonthlyImportRows(parsed, exercise.getSizingMonth());
+        MonthlyImportPlan plan = planMonthlyImport(exercise, parsed);
         UUID batchId = recordImportBatch(ownerCcgid, exerciseId, "MONTHLY_VOLUME", fileName, parsed.size());
-        List<MonthlyVolumeRequest> merged = mergeMonthly(exercise, parsed);
-        return replaceMonthlyVolumes(ownerCcgid, exerciseId, merged, "IMPORT", batchId);
+        return replaceMonthlyVolumes(ownerCcgid, exerciseId, plan.merged(), "IMPORT", batchId);
     }
 
     /**
@@ -619,18 +638,26 @@ public class AssociatedDataService {
     }
 
     /**
-     * Imports daily volumes from Excel (replace).
+     * Dry-run daily Excel: validate, reset-from-Toolkit plan, no writes.
+     */
+    @Transactional(readOnly = true)
+    public VolumeSeriesImportPreviewView previewDailyExcel(
+            String ownerCcgid, UUID exerciseId, InputStream input) {
+        RstExercise exercise = editable(ownerCcgid, exerciseId);
+        return planDailyImport(exercise, volumeExcel.parseDaily(input)).preview();
+    }
+
+    /**
+     * Imports daily volumes: reset Exercise grid from Toolkit, then merge the file.
      */
     @Transactional
     public List<DailyVolumeView> importDailyExcel(
             String ownerCcgid, UUID exerciseId, InputStream input, String fileName) {
-        editable(ownerCcgid, exerciseId);
+        RstExercise exercise = editable(ownerCcgid, exerciseId);
         List<DailyVolumeRequest> parsed = volumeExcel.parseDaily(input);
-        RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
-        volumeValidator.validateDailyImportRows(parsed, exercise.getSizingMonth());
+        DailyImportPlan plan = planDailyImport(exercise, parsed);
         UUID batchId = recordImportBatch(ownerCcgid, exerciseId, "DAILY_VOLUME", fileName, parsed.size());
-        List<DailyVolumeRequest> merged = mergeDaily(exercise, parsed);
-        return replaceDailyVolumes(ownerCcgid, exerciseId, merged, "IMPORT", batchId);
+        return replaceDailyVolumes(ownerCcgid, exerciseId, plan.merged(), "IMPORT", batchId);
     }
 
     /**
@@ -698,16 +725,62 @@ public class AssociatedDataService {
     }
 
     /**
-     * Imports slot volumes from Excel (replace).
+     * Parses a Per-slot Excel file and infers Slot Period without writing.
+     */
+    @Transactional(readOnly = true)
+    public SlotImportPreviewView previewSlotExcel(
+            String ownerCcgid, UUID exerciseId, InputStream input) {
+        RstExercise exercise = editable(ownerCcgid, exerciseId);
+        SlotImportPlan plan = volumeValidator.planSlotImport(volumeExcel.parseSlot(input));
+        return new SlotImportPreviewView(
+                plan.startDate(),
+                plan.weeks(),
+                plan.fileRowCount(),
+                plan.paddedCount(),
+                plan.totalSlots(),
+                exercise.getSlotStartDate(),
+                exercise.getSlotWeeks());
+    }
+
+    /**
+     * Imports Per-slot Excel: infers Slot Period, replaces the grid, clears Slot Simulation only.
      */
     @Transactional
-    public List<SlotVolumeView> importSlotExcel(
+    public SlotImportResult importSlotExcel(
             String ownerCcgid, UUID exerciseId, InputStream input, String fileName) {
-        editable(ownerCcgid, exerciseId);
-        List<SlotVolumeRequest> parsed = volumeExcel.parseSlot(input);
-        volumeValidator.validateSlot(parsed);
-        UUID batchId = recordImportBatch(ownerCcgid, exerciseId, "SLOT_VOLUME", fileName, parsed.size());
-        return replaceSlotVolumes(ownerCcgid, exerciseId, parsed, "IMPORT", batchId);
+        RstExercise exercise = editable(ownerCcgid, exerciseId);
+        SlotImportPlan plan = volumeValidator.planSlotImport(volumeExcel.parseSlot(input));
+        Instant now = clock.instant();
+        exercise.updateSlotPeriod(plan.startDate(), plan.weeks(), ownerCcgid, now);
+        exerciseRepository.saveAndFlush(exercise);
+        UUID batchId = recordImportBatch(ownerCcgid, exerciseId, "SLOT_VOLUME", fileName, plan.fileRowCount());
+        List<SlotVolumeView> volumes = replaceSlotVolumes(
+                ownerCcgid, exerciseId, plan.grid(), "IMPORT", batchId);
+        int cleared = scenarioCommits.clearSlotResultsForExercise(exerciseId);
+        List<String> notices = new ArrayList<>();
+        LocalDate end = VolumeTrainWindows.slotTrainEnd(plan.startDate(), plan.weeks());
+        notices.add(
+                "Per-slot Volume imported for "
+                        + plan.startDate()
+                        + " – "
+                        + end
+                        + " ("
+                        + plan.weeks()
+                        + (plan.weeks() == 1 ? " week)." : " weeks)."));
+        if (plan.paddedCount() > 0) {
+            notices.add("Filled " + plan.paddedCount() + " empty slots to complete the period.");
+        }
+        if (cleared > 0) {
+            notices.add("Cleared saved Slot Simulation results for " + cleared + " scenario(s).");
+        }
+        return new SlotImportResult(
+                plan.startDate(),
+                plan.weeks(),
+                plan.fileRowCount(),
+                plan.paddedCount(),
+                plan.totalSlots(),
+                volumes,
+                notices);
     }
 
     private List<MonthlyVolumeView> replaceMonthlyVolumes(
@@ -794,114 +867,126 @@ public class AssociatedDataService {
         return getSlotVolumes(ownerCcgid, exerciseId);
     }
 
-    private List<MonthlyVolumeRequest> mergeMonthly(
+    private MonthlyImportPlan planMonthlyImport(
             RstExercise exercise, List<MonthlyVolumeRequest> parsed) {
-        Map<String, MonthlyVolumeRequest> byMonth = new LinkedHashMap<>();
-        for (ExerciseVolumeMonthlyInput row : monthlyVolumes.findByExerciseIdOrderByMonthAsc(exercise.getId())) {
-            String key = MonthKeys.formatYearMonth(row.getMonth());
-            byMonth.put(key, new MonthlyVolumeRequest(key, row.getActualVolume(), row.getCommercialRatio()));
-        }
+        LocalDate sizingMonth = exercise.getSizingMonth();
+        volumeValidator.validateMonthlyImportRows(parsed, sizingMonth);
         Map<LocalDate, ToolkitVolumeService.VolumeSeed> seed =
                 toolkitVolumes.monthlySeedByMonth(exercise.getToolkitId());
+        List<YearMonth> toolkitMonths = new ArrayList<>();
+        for (LocalDate month : seed.keySet()) {
+            YearMonth ym = YearMonth.from(month);
+            if (VolumeTrainWindows.monthlyInHistoryWindow(ym, sizingMonth)) {
+                toolkitMonths.add(ym);
+            }
+        }
+        List<YearMonth> fileMonths = parsed.stream()
+                .map(row -> YearMonth.parse(row.month().trim()))
+                .toList();
+        volumeValidator.requireContinuousMonthUnion(fileMonths, toolkitMonths);
+        Set<String> fileKeys = new HashSet<>();
+        for (YearMonth month : fileMonths) {
+            fileKeys.add(month.toString());
+        }
+        Set<String> toolkitKeys = new HashSet<>();
+        for (YearMonth month : toolkitMonths) {
+            toolkitKeys.add(month.toString());
+        }
+        return new MonthlyImportPlan(
+                classifyKeys(fileKeys, toolkitKeys),
+                mergeOntoToolkitGrid(parsed, ToolkitVolumeGrid.monthlyOverlay(seed, sizingMonth)),
+                parsed.size());
+    }
+
+    private DailyImportPlan planDailyImport(
+            RstExercise exercise, List<DailyVolumeRequest> parsed) {
+        LocalDate sizingMonth = exercise.getSizingMonth();
+        volumeValidator.validateDailyImportRows(parsed, sizingMonth);
+        Map<LocalDate, ToolkitVolumeService.VolumeSeed> seed =
+                toolkitVolumes.dailySeedByDate(exercise.getToolkitId());
+        List<LocalDate> toolkitDates = seed.keySet().stream()
+                .filter(date -> VolumeTrainWindows.dailyInHistoryWindow(date, sizingMonth))
+                .toList();
+        List<LocalDate> fileDates = parsed.stream().map(DailyVolumeRequest::volumeDate).toList();
+        volumeValidator.requireContinuousDateUnion(fileDates, toolkitDates);
+        Set<String> fileKeys = new HashSet<>();
+        for (LocalDate date : fileDates) {
+            fileKeys.add(date.toString());
+        }
+        Set<String> toolkitKeys = new HashSet<>();
+        for (LocalDate date : toolkitDates) {
+            toolkitKeys.add(date.toString());
+        }
+        return new DailyImportPlan(
+                classifyKeys(fileKeys, toolkitKeys),
+                mergeOntoToolkitDailyGrid(parsed, ToolkitVolumeGrid.dailyOverlay(seed, sizingMonth)),
+                parsed.size());
+    }
+
+    private static OverlayKeys classifyKeys(Set<String> fileKeys, Set<String> toolkitKeys) {
+        List<String> overwritten = fileKeys.stream().filter(toolkitKeys::contains).sorted().toList();
+        List<String> added = fileKeys.stream().filter(key -> !toolkitKeys.contains(key)).sorted().toList();
+        List<String> kept = toolkitKeys.stream().filter(key -> !fileKeys.contains(key)).sorted().toList();
+        return new OverlayKeys(overwritten, added, kept);
+    }
+
+    private static List<MonthlyVolumeRequest> mergeOntoToolkitGrid(
+            List<MonthlyVolumeRequest> parsed, List<MonthlyVolumeRequest> toolkitGrid) {
+        Map<String, MonthlyVolumeRequest> byMonth = new LinkedHashMap<>();
+        for (MonthlyVolumeRequest row : toolkitGrid) {
+            byMonth.put(row.month(), row);
+        }
         for (MonthlyVolumeRequest row : parsed) {
             String key = row.month().trim();
-            BigDecimal volume = row.actualVolume();
-            BigDecimal commercial = row.commercialRatio();
             MonthlyVolumeRequest existing = byMonth.get(key);
-            if (!byMonth.containsKey(key) && volume == null) {
-                ToolkitVolumeService.VolumeSeed point = seed.get(YearMonth.parse(key).atDay(1));
-                volume = point == null ? null : point.actualVolume();
-            }
-            if (commercial == null && existing != null) {
-                commercial = existing.commercialRatio();
-            }
-            byMonth.put(key, new MonthlyVolumeRequest(key, volume, commercial));
+            BigDecimal commercial = row.commercialRatio() != null
+                    ? row.commercialRatio()
+                    : existing == null ? null : existing.commercialRatio();
+            byMonth.put(key, new MonthlyVolumeRequest(key, row.actualVolume(), commercial));
         }
-        YearMonth cutoff = YearMonth.from(exercise.getSizingMonth());
-        fillMonthlyGaps(byMonth, seed, cutoff);
         return byMonth.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
                 .map(Map.Entry::getValue)
                 .toList();
     }
 
-    private List<DailyVolumeRequest> mergeDaily(
-            RstExercise exercise, List<DailyVolumeRequest> parsed) {
+    private static List<DailyVolumeRequest> mergeOntoToolkitDailyGrid(
+            List<DailyVolumeRequest> parsed, List<DailyVolumeRequest> toolkitGrid) {
         Map<LocalDate, DailyVolumeRequest> byDate = new LinkedHashMap<>();
-        for (ExerciseVolumeDailyInput row : dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(exercise.getId())) {
-            byDate.put(
-                    row.getVolumeDate(),
-                    new DailyVolumeRequest(
-                            row.getVolumeDate(), row.getActualVolume(), row.getDailyAdjustmentRatio()));
+        for (DailyVolumeRequest row : toolkitGrid) {
+            byDate.put(row.volumeDate(), row);
         }
-        Map<LocalDate, ToolkitVolumeService.VolumeSeed> seed =
-                toolkitVolumes.dailySeedByDate(exercise.getToolkitId());
         for (DailyVolumeRequest row : parsed) {
-            BigDecimal volume = row.actualVolume();
-            BigDecimal adjustment = row.dailyAdjustmentRatio();
             DailyVolumeRequest existing = byDate.get(row.volumeDate());
-            if (!byDate.containsKey(row.volumeDate()) && volume == null) {
-                ToolkitVolumeService.VolumeSeed point = seed.get(row.volumeDate());
-                volume = point == null ? null : point.actualVolume();
-            }
-            if (adjustment == null && existing != null) {
-                adjustment = existing.dailyAdjustmentRatio();
-            }
-            byDate.put(row.volumeDate(), new DailyVolumeRequest(row.volumeDate(), volume, adjustment));
+            BigDecimal adjustment = row.dailyAdjustmentRatio() != null
+                    ? row.dailyAdjustmentRatio()
+                    : existing == null ? null : existing.dailyAdjustmentRatio();
+            byDate.put(
+                    row.volumeDate(),
+                    new DailyVolumeRequest(row.volumeDate(), row.actualVolume(), adjustment));
         }
-        LocalDate cutoff = YearMonth.from(exercise.getSizingMonth()).atEndOfMonth();
-        fillDailyGaps(byDate, seed, cutoff);
         return byDate.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
                 .map(Map.Entry::getValue)
                 .toList();
     }
 
-    private static void fillMonthlyGaps(
-            Map<String, MonthlyVolumeRequest> byMonth,
-            Map<LocalDate, ToolkitVolumeService.VolumeSeed> seed,
-            YearMonth cutoff) {
-        if (byMonth.isEmpty()) {
-            return;
-        }
-        YearMonth min = byMonth.keySet().stream().map(YearMonth::parse).min(YearMonth::compareTo).orElse(cutoff);
-        YearMonth max = byMonth.keySet().stream().map(YearMonth::parse).max(YearMonth::compareTo).orElse(cutoff);
-        if (max.isAfter(cutoff)) {
-            max = cutoff;
-        }
-        for (YearMonth ym = min; !ym.isAfter(max); ym = ym.plusMonths(1)) {
-            String key = ym.toString();
-            LocalDate monthStart = ym.atDay(1);
-            ToolkitVolumeService.VolumeSeed point = seed.get(monthStart);
-            byMonth.putIfAbsent(
-                    key,
-                    new MonthlyVolumeRequest(
-                            key,
-                            point == null ? null : point.actualVolume(),
-                            point == null ? null : point.ratio()));
+    private record OverlayKeys(List<String> overwritten, List<String> added, List<String> kept) {
+    }
+
+    private record MonthlyImportPlan(
+            OverlayKeys keys, List<MonthlyVolumeRequest> merged, int fileRowCount) {
+        VolumeSeriesImportPreviewView preview() {
+            return new VolumeSeriesImportPreviewView(
+                    "MONTHLY", fileRowCount, keys.overwritten(), keys.added(), keys.kept());
         }
     }
 
-    private static void fillDailyGaps(
-            Map<LocalDate, DailyVolumeRequest> byDate,
-            Map<LocalDate, ToolkitVolumeService.VolumeSeed> seed,
-            LocalDate cutoff) {
-        if (byDate.isEmpty()) {
-            return;
-        }
-        LocalDate min = byDate.keySet().stream().min(LocalDate::compareTo).orElse(cutoff);
-        LocalDate max = byDate.keySet().stream().max(LocalDate::compareTo).orElse(cutoff);
-        if (max.isAfter(cutoff)) {
-            max = cutoff;
-        }
-        for (LocalDate date = min; !date.isAfter(max); date = date.plusDays(1)) {
-            ToolkitVolumeService.VolumeSeed point = seed.get(date);
-            byDate.putIfAbsent(
-                    date,
-                    new DailyVolumeRequest(
-                            date,
-                            point == null ? null : point.actualVolume(),
-                            point == null ? null : point.ratio()));
+    private record DailyImportPlan(
+            OverlayKeys keys, List<DailyVolumeRequest> merged, int fileRowCount) {
+        VolumeSeriesImportPreviewView preview() {
+            return new VolumeSeriesImportPreviewView(
+                    "DAILY", fileRowCount, keys.overwritten(), keys.added(), keys.kept());
         }
     }
 

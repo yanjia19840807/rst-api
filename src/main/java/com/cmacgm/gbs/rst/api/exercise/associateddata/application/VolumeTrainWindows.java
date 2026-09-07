@@ -25,8 +25,37 @@ public final class VolumeTrainWindows {
     private static final int SLOT_DAY_START_MINUTES = 9 * 60;
     /** Exclusive end of the last slot each day (22:00 → last slot 21:30–22:00). */
     private static final int SLOT_DAY_END_MINUTES = 22 * 60;
+    /** Apply Period and import share this cap. */
+    public static final int MAX_SLOT_WEEKS = 12;
+    /**
+     * Inclusive months pulled from Toolkit into an Exercise, ending at Sizing Month.
+     * Example: sizing 2026-09 → 2023-10 … 2026-09.
+     */
+    public static final int MAX_VOLUME_HISTORY_MONTHS = 36;
 
     private VolumeTrainWindows() {
+    }
+
+    /** Earliest month included in Toolkit → Exercise volume seed (inclusive). */
+    public static YearMonth monthlyHistoryFloor(LocalDate sizingMonth) {
+        return YearMonth.from(sizingMonth).minusMonths(MAX_VOLUME_HISTORY_MONTHS - 1L);
+    }
+
+    /** Earliest date included in Toolkit → Exercise daily seed (inclusive). */
+    public static LocalDate dailyHistoryFloor(LocalDate sizingMonth) {
+        return monthlyHistoryFloor(sizingMonth).atDay(1);
+    }
+
+    /** Month is on or after the 36-month floor and on or before Sizing Month. */
+    public static boolean monthlyInHistoryWindow(YearMonth month, LocalDate sizingMonth) {
+        YearMonth sizing = YearMonth.from(sizingMonth);
+        return !month.isBefore(monthlyHistoryFloor(sizingMonth)) && !month.isAfter(sizing);
+    }
+
+    /** Date is inside the 36-month window ending at the last day of Sizing Month. */
+    public static boolean dailyInHistoryWindow(LocalDate date, LocalDate sizingMonth) {
+        return !date.isBefore(dailyHistoryFloor(sizingMonth))
+                && !date.isAfter(YearMonth.from(sizingMonth).atEndOfMonth());
     }
 
     /** Chart history months: sizingMonth-2 … sizingMonth (month-start DATE). */
@@ -74,13 +103,20 @@ public final class VolumeTrainWindows {
         List<SlotBound> bounds = new ArrayList<>();
         LocalDate cursor = slotStartDate;
         while (!cursor.isAfter(endDate)) {
-            Instant dayStart = cursor.atStartOfDay().toInstant(ZoneOffset.UTC);
-            for (int minutes = SLOT_DAY_START_MINUTES; minutes < SLOT_DAY_END_MINUTES; minutes += SLOT_MINUTES) {
-                Instant start = dayStart.plusSeconds(minutes * 60L);
-                Instant end = start.plusSeconds(SLOT_MINUTES * 60L);
-                bounds.add(new SlotBound(start, end));
-            }
+            bounds.addAll(dayBounds(cursor));
             cursor = cursor.plusDays(1);
+        }
+        return bounds;
+    }
+
+    /** 30-minute bounds for one UTC calendar day (09:00–22:00). */
+    public static List<SlotBound> dayBounds(LocalDate day) {
+        Instant dayStart = day.atStartOfDay().toInstant(ZoneOffset.UTC);
+        List<SlotBound> bounds = new ArrayList<>();
+        for (int minutes = SLOT_DAY_START_MINUTES; minutes < SLOT_DAY_END_MINUTES; minutes += SLOT_MINUTES) {
+            Instant start = dayStart.plusSeconds(minutes * 60L);
+            Instant end = start.plusSeconds(SLOT_MINUTES * 60L);
+            bounds.add(new SlotBound(start, end));
         }
         return bounds;
     }

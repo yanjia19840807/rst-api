@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -17,7 +16,8 @@ import java.util.stream.Collectors;
 
 import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitAssociatedDataService;
 import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitVolumeService;
-import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitVolumeService.VolumeSeed;
+import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.application.ToolkitVolumeGrid;
 import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitHoliday;
 import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitTeamSetup;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.VolumeTrainWindows;
@@ -113,7 +113,7 @@ public class ExerciseInitializationService {
                             + "Associated Data starts empty. Add holiday dates in Calendar if needed.");
         }
 
-        syncVolumeGrids(exercise, actorCcgid);
+        replaceTrainVolumeGridsFromToolkit(exercise, actorCcgid);
         notices.add("Volume Input pre-filled from Toolkit volume when available.");
 
         notices.add(syncTmsPopulation(exercise, actorCcgid));
@@ -121,11 +121,14 @@ public class ExerciseInitializationService {
     }
 
     /**
-     * Reconciles Volume Input grids after Exercise period changes (does not re-seed AD snapshots).
+     * Replaces Monthly / Daily Volume with the Toolkit overlay for the current Sizing Month.
+     * Exercise edits are discarded. Slot Volume is not touched.
      */
     @Transactional
-    public void ensureTrainVolumeGrids(RstExercise exercise, String actorCcgid) {
-        syncVolumeGrids(exercise, actorCcgid);
+    public void replaceTrainVolumeGridsFromToolkit(RstExercise exercise, String actorCcgid) {
+        Instant now = clock.instant();
+        replaceMonthlyFromToolkit(exercise, actorCcgid, now);
+        replaceDailyFromToolkit(exercise, actorCcgid, now);
     }
 
     /**
@@ -238,10 +241,50 @@ public class ExerciseInitializationService {
         holidays.saveAll(copies);
     }
 
-    private void syncVolumeGrids(RstExercise exercise, String actorCcgid) {
-        Instant now = clock.instant();
-        syncMonthly(exercise, actorCcgid, now);
-        syncDaily(exercise, actorCcgid, now);
+    private void replaceMonthlyFromToolkit(RstExercise exercise, String actorCcgid, Instant now) {
+        UUID targetId = exercise.getId();
+        monthlyVolumes.deleteByExerciseId(targetId);
+        monthlyVolumes.flush();
+        List<ExerciseVolumeMonthlyInput> rows = new ArrayList<>();
+        for (var request : ToolkitVolumeGrid.monthlyOverlay(
+                toolkitVolumes.monthlySeedByMonth(exercise.getToolkitId()),
+                exercise.getSizingMonth())) {
+            BigDecimal actual = request.actualVolume();
+            rows.add(ExerciseVolumeMonthlyInput.create(
+                    targetId,
+                    MonthKeys.parseMonthStart(request.month()),
+                    actual,
+                    request.commercialRatio(),
+                    actual != null ? "TOOLKIT" : "MANUAL",
+                    null,
+                    actorCcgid,
+                    now));
+        }
+        monthlyVolumes.saveAll(rows);
+        monthlyVolumes.flush();
+    }
+
+    private void replaceDailyFromToolkit(RstExercise exercise, String actorCcgid, Instant now) {
+        UUID targetId = exercise.getId();
+        dailyVolumes.deleteByExerciseId(targetId);
+        dailyVolumes.flush();
+        List<ExerciseVolumeDailyInput> rows = new ArrayList<>();
+        for (var request : ToolkitVolumeGrid.dailyOverlay(
+                toolkitVolumes.dailySeedByDate(exercise.getToolkitId()),
+                exercise.getSizingMonth())) {
+            BigDecimal actual = request.actualVolume();
+            rows.add(ExerciseVolumeDailyInput.create(
+                    targetId,
+                    request.volumeDate(),
+                    actual,
+                    request.dailyAdjustmentRatio(),
+                    actual != null ? "TOOLKIT" : "MANUAL",
+                    null,
+                    actorCcgid,
+                    now));
+        }
+        dailyVolumes.saveAll(rows);
+        dailyVolumes.flush();
     }
 
     /**
@@ -288,123 +331,6 @@ public class ExerciseInitializationService {
     public void clearSlotGrid(UUID exerciseId) {
         slotVolumes.deleteByExerciseId(exerciseId);
         slotVolumes.flush();
-    }
-
-    private void syncMonthly(RstExercise exercise, String actorCcgid, Instant now) {
-        UUID targetId = exercise.getId();
-        YearMonth sizingYm = YearMonth.from(exercise.getSizingMonth());
-        List<ExerciseVolumeMonthlyInput> targetRows =
-                monthlyVolumes.findByExerciseIdOrderByMonthAsc(targetId);
-        Map<LocalDate, ExerciseVolumeMonthlyInput> targetByKey = new HashMap<>();
-        targetRows.forEach(row -> targetByKey.put(row.getMonth(), row));
-        Map<LocalDate, VolumeSeed> seed = toolkitVolumes.monthlySeedByMonth(exercise.getToolkitId());
-        YearMonth min = null;
-        YearMonth max = null;
-        for (LocalDate month : targetByKey.keySet()) {
-            YearMonth ym = YearMonth.from(month);
-            if (ym.isAfter(sizingYm)) {
-                continue;
-            }
-            if (min == null || ym.isBefore(min)) {
-                min = ym;
-            }
-            if (max == null || ym.isAfter(max)) {
-                max = ym;
-            }
-        }
-        for (LocalDate month : seed.keySet()) {
-            YearMonth ym = YearMonth.from(month);
-            if (ym.isAfter(sizingYm)) {
-                continue;
-            }
-            if (min == null || ym.isBefore(min)) {
-                min = ym;
-            }
-            if (max == null || ym.isAfter(max)) {
-                max = ym;
-            }
-        }
-        List<ExerciseVolumeMonthlyInput> missing = new ArrayList<>();
-        if (min != null && max != null) {
-            for (YearMonth ym = min; !ym.isAfter(max); ym = ym.plusMonths(1)) {
-                LocalDate month = ym.atDay(1);
-                if (targetByKey.containsKey(month)) {
-                    continue;
-                }
-                VolumeSeed point = seed.get(month);
-                BigDecimal actual = point == null ? null : point.actualVolume();
-                missing.add(ExerciseVolumeMonthlyInput.create(
-                        targetId,
-                        month,
-                        actual,
-                        point == null ? null : point.ratio(),
-                        actual != null ? "TOOLKIT" : "MANUAL",
-                        null,
-                        actorCcgid,
-                        now));
-            }
-        }
-        monthlyVolumes.deleteAllInBatch(targetRows.stream()
-                .filter(row -> YearMonth.from(row.getMonth()).isAfter(sizingYm))
-                .toList());
-        monthlyVolumes.saveAll(missing);
-    }
-
-    private void syncDaily(RstExercise exercise, String actorCcgid, Instant now) {
-        UUID targetId = exercise.getId();
-        LocalDate cutoff = YearMonth.from(exercise.getSizingMonth()).atEndOfMonth();
-        List<ExerciseVolumeDailyInput> targetRows =
-                dailyVolumes.findByExerciseIdOrderByVolumeDateAsc(targetId);
-        Map<LocalDate, ExerciseVolumeDailyInput> targetByKey = new HashMap<>();
-        targetRows.forEach(row -> targetByKey.put(row.getVolumeDate(), row));
-        Map<LocalDate, VolumeSeed> seed = toolkitVolumes.dailySeedByDate(exercise.getToolkitId());
-        LocalDate min = null;
-        LocalDate max = null;
-        for (LocalDate date : targetByKey.keySet()) {
-            if (date.isAfter(cutoff)) {
-                continue;
-            }
-            if (min == null || date.isBefore(min)) {
-                min = date;
-            }
-            if (max == null || date.isAfter(max)) {
-                max = date;
-            }
-        }
-        for (LocalDate date : seed.keySet()) {
-            if (date.isAfter(cutoff)) {
-                continue;
-            }
-            if (min == null || date.isBefore(min)) {
-                min = date;
-            }
-            if (max == null || date.isAfter(max)) {
-                max = date;
-            }
-        }
-        List<ExerciseVolumeDailyInput> missing = new ArrayList<>();
-        if (min != null && max != null) {
-            for (LocalDate date = min; !date.isAfter(max); date = date.plusDays(1)) {
-                if (targetByKey.containsKey(date)) {
-                    continue;
-                }
-                VolumeSeed point = seed.get(date);
-                BigDecimal actual = point == null ? null : point.actualVolume();
-                missing.add(ExerciseVolumeDailyInput.create(
-                        targetId,
-                        date,
-                        actual,
-                        point == null ? null : point.ratio(),
-                        actual != null ? "TOOLKIT" : "MANUAL",
-                        null,
-                        actorCcgid,
-                        now));
-            }
-        }
-        dailyVolumes.deleteAllInBatch(targetRows.stream()
-                .filter(row -> row.getVolumeDate().isAfter(cutoff))
-                .toList());
-        dailyVolumes.saveAll(missing);
     }
 
     private static ApiException initializationConflict(String code, String message) {

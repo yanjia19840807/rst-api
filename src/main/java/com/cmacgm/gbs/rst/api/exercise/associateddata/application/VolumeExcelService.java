@@ -177,10 +177,7 @@ public class VolumeExcelService {
                 Instant endAt = startAt.plusSeconds(SLOT_MINUTES * 60L);
                 BigDecimal volume = parseDecimal(
                         cell(excelRow, headers.get("actual_volume")), i - 1, "actual_volume");
-                out.add(new SlotVolumeRequest(
-                        startAt,
-                        endAt,
-                        volume == null ? BigDecimal.ZERO : volume));
+                out.add(new SlotVolumeRequest(startAt, endAt, volume));
             }
             return out;
         } catch (ApiException ex) {

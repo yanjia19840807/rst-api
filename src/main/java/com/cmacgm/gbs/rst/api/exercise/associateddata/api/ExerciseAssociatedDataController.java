@@ -12,7 +12,10 @@ import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.DailyVolumeRequest
 import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.DailyVolumeView;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.MonthlyVolumeRequest;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.MonthlyVolumeView;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.SlotImportPreviewView;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.SlotImportResult;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.SlotVolumeRequest;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.VolumeSeriesImportPreviewView;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.SlotVolumeView;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.SupportItemRequest;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.SupportItemView;
@@ -351,6 +354,14 @@ public class ExerciseAssociatedDataController {
                 "volume-monthly.xlsx");
     }
 
+    @PostMapping(value = "/volumes/monthly/import-preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public VolumeSeriesImportPreviewView previewMonthlyImport(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @RequestParam("file") MultipartFile file) throws Exception {
+        return service.previewMonthlyExcel(principal.ccgid(), exerciseId, file.getInputStream());
+    }
+
     @PostMapping(value = "/volumes/monthly/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public List<MonthlyVolumeView> importMonthly(
             @AuthenticationPrincipal RstPrincipal principal,
@@ -374,6 +385,14 @@ public class ExerciseAssociatedDataController {
         return excelResponse(
                 service.exportDailyExcel(principal.ccgid(), exerciseId),
                 "volume-daily.xlsx");
+    }
+
+    @PostMapping(value = "/volumes/daily/import-preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public VolumeSeriesImportPreviewView previewDailyImport(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @RequestParam("file") MultipartFile file) throws Exception {
+        return service.previewDailyExcel(principal.ccgid(), exerciseId, file.getInputStream());
     }
 
     @PostMapping(value = "/volumes/daily/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -401,8 +420,16 @@ public class ExerciseAssociatedDataController {
                 "volume-slot.xlsx");
     }
 
+    @PostMapping(value = "/volumes/slot/import-preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public SlotImportPreviewView previewSlotImport(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @RequestParam("file") MultipartFile file) throws Exception {
+        return service.previewSlotExcel(principal.ccgid(), exerciseId, file.getInputStream());
+    }
+
     @PostMapping(value = "/volumes/slot/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public List<SlotVolumeView> importSlot(
+    public SlotImportResult importSlot(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @RequestParam("file") MultipartFile file) throws Exception {

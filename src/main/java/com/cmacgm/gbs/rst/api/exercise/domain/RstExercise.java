@@ -177,6 +177,9 @@ public class RstExercise {
             short slotWeeks,
             String actorCcgid,
             Instant now) {
+        if (slotWeeks < 1 || slotWeeks > 12) {
+            throw new IllegalArgumentException("Slot weeks must be between 1 and 12.");
+        }
         this.slotStartDate = slotStartDate;
         this.slotWeeks = slotWeeks;
         this.updatedAt = now;

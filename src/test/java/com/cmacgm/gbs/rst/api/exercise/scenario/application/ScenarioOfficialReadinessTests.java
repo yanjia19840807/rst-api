@@ -43,7 +43,7 @@ class ScenarioOfficialReadinessTests {
     void rejectsMissingRightSizingHc() {
         Scenario scenario = draft(null);
 
-        assertThatThrownBy(() -> readiness.requireReady(scenario, false, "Official"))
+        assertThatThrownBy(() -> readiness.requireReady(scenario, "Official"))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("Right Sizing HC");
     }
@@ -52,7 +52,7 @@ class ScenarioOfficialReadinessTests {
     void rejectsMissingSizingRuns() {
         Scenario scenario = draft(new BigDecimal("12"));
 
-        assertThatThrownBy(() -> readiness.requireReady(scenario, false, "Official"))
+        assertThatThrownBy(() -> readiness.requireReady(scenario, "Official"))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("Forecast and Sizing");
     }
@@ -62,38 +62,28 @@ class ScenarioOfficialReadinessTests {
         Scenario scenario = draft(new BigDecimal("12"));
         stubSizing(scenario.getId(), new BigDecimal("8"));
 
-        assertThatThrownBy(() -> readiness.requireReady(scenario, false, "Submit"))
+        assertThatThrownBy(() -> readiness.requireReady(scenario, "Submit"))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("do not match");
     }
 
     @Test
-    void rejectsMissingSlotWhenPeriodSet() {
+    void acceptsCommittedSizingWithoutSlotSimulation() {
         Scenario scenario = draft(new BigDecimal("12"));
         stubSizing(scenario.getId(), new BigDecimal("12"));
 
-        assertThatThrownBy(() -> readiness.requireReady(scenario, true, "Official"))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("Slot Simulation");
+        readiness.requireReady(scenario, "Official");
     }
 
     @Test
-    void acceptsCommittedSizingWithoutSlotPeriod() {
-        Scenario scenario = draft(new BigDecimal("12"));
-        stubSizing(scenario.getId(), new BigDecimal("12"));
-
-        readiness.requireReady(scenario, false, "Official");
-    }
-
-    @Test
-    void acceptsCommittedSizingAndSlot() {
+    void acceptsCommittedSizingWhenSlotSimulationAlsoPresent() {
         Scenario scenario = draft(new BigDecimal("12"));
         stubSizing(scenario.getId(), new BigDecimal("12"));
         when(simulationRuns.findFirstByScenarioIdAndRunTypeAndStatusOrderByRunNoDesc(
                 scenario.getId(), "SLOT", "ACCEPTED"))
                 .thenReturn(Optional.of(run(scenario.getId(), "SLOT")));
 
-        readiness.requireReady(scenario, true, "Submit");
+        readiness.requireReady(scenario, "Submit");
     }
 
     private static Scenario draft(BigDecimal hc) {
