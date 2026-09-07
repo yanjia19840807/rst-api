@@ -3,6 +3,9 @@ package com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -91,16 +94,29 @@ public final class SlotMath {
                 || rangesOverlap(slotStart, slotEnd, shiftFrom - 24 * 60, shiftTo - 24 * 60);
     }
 
-    /** Headcount contributed by one shift when it covers the slot (else 0). */
+    /**
+     * Excel Volume per Slot: {@code INT(slotDateTime − shiftStartTime)}.
+     * Overnight slots use the calendar day of that difference for Team Weekend.
+     */
+    public static LocalDate shiftDay(LocalDateTime slotStart, LocalTime shiftStart) {
+        if (slotStart == null) {
+            return null;
+        }
+        if (shiftStart == null) {
+            return slotStart.toLocalDate();
+        }
+        return slotStart.minus(Duration.between(LocalTime.MIDNIGHT, shiftStart)).toLocalDate();
+    }
+
+    /**
+     * Headcount when the slot is inside the shift and the shift-day is a workday
+     * for that shift's Team Weekend code; otherwise 0.
+     */
     public static BigDecimal shiftContribution(
             boolean weekendDay,
-            boolean worksOnWeekend,
             boolean coversSlot,
             BigDecimal headcount) {
-        if (!coversSlot) {
-            return BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
-        }
-        if (weekendDay && !worksOnWeekend) {
+        if (!coversSlot || weekendDay) {
             return BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
         }
         return nz(headcount).setScale(6, RoundingMode.HALF_UP);

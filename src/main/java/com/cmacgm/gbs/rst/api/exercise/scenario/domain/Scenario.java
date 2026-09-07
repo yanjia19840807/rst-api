@@ -23,6 +23,9 @@ import jakarta.persistence.Version;
 @Table(name = "scenario")
 public class Scenario {
 
+    /** Slot Simulation allows at most five concurrent shifts. */
+    public static final int MAX_SHIFTS = 5;
+
     @Id
     private UUID id;
 

@@ -190,7 +190,6 @@ public class ExerciseInitializationService {
         copyTeamSetup(sourceTeam.get(), target.getId(), actorCcgid, now);
         copySupport(target, actorCcgid, now);
         copyHolidays(target.getToolkitId(), target.getId(), actorCcgid, now);
-        target.markInitializedFrom(sourceTeam.get().getSourceExerciseId(), actorCcgid, now);
         return true;
     }
 
@@ -280,6 +279,15 @@ public class ExerciseInitializationService {
         slotVolumes.saveAll(rows);
         slotVolumes.flush();
         return slotVolumes.findByExerciseIdOrderBySlotStartAtAsc(targetId);
+    }
+
+    /**
+     * Deletes all Per-slot Volume rows when the Slot Period is cleared.
+     */
+    @Transactional
+    public void clearSlotGrid(UUID exerciseId) {
+        slotVolumes.deleteByExerciseId(exerciseId);
+        slotVolumes.flush();
     }
 
     private void syncMonthly(RstExercise exercise, String actorCcgid, Instant now) {

@@ -50,8 +50,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ForecastBundleView;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ForecastPointView;
-import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ForecastTrainingBundleView;
-import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ForecastTrainingBundleView.ForecastTrainingObservationView;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ForecastView;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.PersistedForecastIds;
 import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitVolumeService;
@@ -315,43 +313,6 @@ public class ForecastOrchestrationService {
                         "forecast-not-found",
                         "No ACCEPTED " + forecastLevel + " forecast run exists for this scenario."));
         return toView(run);
-    }
-
-    /**
-     * Frozen training actuals for a scenario (empty until the Exercise is APPROVED).
-     */
-    @Transactional(readOnly = true)
-    public ForecastTrainingBundleView getTrainingObservations(
-            String ownerCcgid, UUID exerciseId, UUID scenarioId) {
-        exercises.requireReadable(ownerCcgid, exerciseId);
-        scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
-        ForecastRun monthly = forecastRuns
-                .findFirstByScenarioIdAndForecastLevelAndStatusOrderByRunNoDesc(
-                        scenarioId, "MONTHLY", "ACCEPTED")
-                .orElse(null);
-        ForecastRun daily = forecastRuns
-                .findFirstByScenarioIdAndForecastLevelAndStatusOrderByRunNoDesc(
-                        scenarioId, "DAILY", "ACCEPTED")
-                .orElse(null);
-        return new ForecastTrainingBundleView(
-                monthly == null ? List.of() : toObservationViews(monthly),
-                daily == null ? List.of() : toObservationViews(daily));
-    }
-
-    private List<ForecastTrainingObservationView> toObservationViews(ForecastRun run) {
-        String grain = "DAILY".equals(run.getForecastLevel())
-                ? ToolkitVolumeService.GRAIN_DAY
-                : ToolkitVolumeService.GRAIN_MONTH;
-        return run.getTrainingObservations().stream()
-                .map(row -> new ForecastTrainingObservationView(
-                        grain,
-                        row.periodStart(),
-                        row.actualVolume(),
-                        row.source(),
-                        row.sourceExerciseId()))
-                .toList();
     }
 
     private static ForecastView toView(ForecastRun run) {

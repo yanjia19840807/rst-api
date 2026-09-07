@@ -135,7 +135,7 @@ public class ExerciseController {
     }
 
     /**
-     * Creates an Exercise and seeds Associated Data (archive-first copy).
+     * Creates an Exercise and seeds Associated Data from Toolkit latest state.
      *
      * @param principal authenticated owner
      * @param request create payload
@@ -207,6 +207,16 @@ public class ExerciseController {
             @PathVariable UUID id,
             @Valid @RequestBody UpdateSlotPeriodRequest request) {
         return service.updateSlotPeriod(principal.ccgid(), id, request);
+    }
+
+    /**
+     * Clears Slot Period, the Per-slot Volume grid, and Slot Simulation only.
+     */
+    @DeleteMapping("/{id}/slot-period")
+    @PreAuthorize("hasRole('SUPERVISOR')")
+    public UpdateSlotPeriodResult clearSlotPeriod(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID id) {
+        return service.clearSlotPeriod(principal.ccgid(), id);
     }
 
     /**

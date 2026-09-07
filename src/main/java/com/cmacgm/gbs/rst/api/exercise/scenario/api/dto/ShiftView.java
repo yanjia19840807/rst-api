@@ -13,5 +13,5 @@ public record ShiftView(
         LocalTime startTime,
         BigDecimal durationMinutes,
         BigDecimal headcount,
-        boolean worksOnWeekend) {
+        String weekendCode) {
 }

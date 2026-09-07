@@ -45,13 +45,10 @@ import com.cmacgm.gbs.rst.api.common.workingdays.WorkingDaysCalculator.MonthDayC
 import com.cmacgm.gbs.rst.api.common.workingdays.WorkingDaysCalculator.VolumeDayFlags;
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.DailySimulationResult;
-import com.cmacgm.gbs.rst.api.exercise.scenario.domain.ForecastPoint;
-import com.cmacgm.gbs.rst.api.exercise.scenario.domain.ForecastRun;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.MonthlySizingResult;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.SimulationRun;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.DailySimulationResultRepository;
-import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ForecastRunRepository;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.MonthlySizingResultRepository;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.SimulationRunRepository;
@@ -83,7 +80,6 @@ public class SizingSimulationService {
     private final ExerciseAccess exercises;
     private final ScenarioRepository scenarios;
     private final ForecastOrchestrationService forecasts;
-    private final ForecastRunRepository forecastRuns;
     private final SimulationRunRepository simulationRuns;
     private final MonthlySizingResultRepository monthlyResults;
     private final DailySimulationResultRepository dailyResults;
@@ -100,7 +96,6 @@ public class SizingSimulationService {
             ExerciseAccess exercises,
             ScenarioRepository scenarios,
             ForecastOrchestrationService forecasts,
-            ForecastRunRepository forecastRuns,
             SimulationRunRepository simulationRuns,
             MonthlySizingResultRepository monthlyResults,
             DailySimulationResultRepository dailyResults,
@@ -115,7 +110,6 @@ public class SizingSimulationService {
         this.exercises = exercises;
         this.scenarios = scenarios;
         this.forecasts = forecasts;
-        this.forecastRuns = forecastRuns;
         this.simulationRuns = simulationRuns;
         this.monthlyResults = monthlyResults;
         this.dailyResults = dailyResults;
@@ -147,26 +141,6 @@ public class SizingSimulationService {
         MonthlySizingView monthly = computeMonthlyView(ownerCcgid, scenarioId, ctx, forecast.monthly());
         DailySizingView daily = computeDailyView(ownerCcgid, scenarioId, ctx, forecast.daily());
         return new SizingPreviewBundle(forecast, monthly, daily);
-    }
-
-    /**
-     * @deprecated Prefer {@link #previewSizing}; no longer persists.
-     */
-    @Transactional(readOnly = true)
-    public MonthlySizingView runMonthly(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
-        Context ctx = loadContext(ownerCcgid, exerciseId, scenarioId, null);
-        ForecastRun forecast = requireForecast(scenarioId, "MONTHLY");
-        return computeMonthlyFromEntity(ownerCcgid, scenarioId, ctx, forecast);
-    }
-
-    /**
-     * @deprecated Prefer {@link #previewSizing}; no longer persists.
-     */
-    @Transactional(readOnly = true)
-    public DailySizingView runDaily(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
-        Context ctx = loadContext(ownerCcgid, exerciseId, scenarioId, null);
-        ForecastRun forecast = requireForecast(scenarioId, "DAILY");
-        return computeDailyFromEntity(ownerCcgid, scenarioId, ctx, forecast);
     }
 
     /**
@@ -410,64 +384,6 @@ public class SizingSimulationService {
         return toDailyView(run, rows);
     }
 
-    private MonthlySizingView computeMonthlyFromEntity(
-            String ownerCcgid, UUID scenarioId, Context ctx, ForecastRun forecast) {
-        List<ForecastPointView> points = sortedPoints(forecast).stream()
-                .map(point -> new ForecastPointView(
-                        point.getId(),
-                        point.getPeriodStart(),
-                        point.getPeriodEnd(),
-                        point.getForecastMean(),
-                        point.getLowerBound(),
-                        point.getUpperBound(),
-                        point.getAcceptedValue()))
-                .toList();
-        ForecastView view = new ForecastView(
-                forecast.getId(),
-                forecast.getRunNo(),
-                forecast.getMethod(),
-                forecast.getMethodVersion(),
-                forecast.getStatus(),
-                forecast.getForecastLevel(),
-                forecast.getTrainingFrom(),
-                forecast.getTrainingTo(),
-                forecast.getFeatureMetadata(),
-                forecast.getInputHash(),
-                forecast.getStartedAt(),
-                forecast.getCompletedAt(),
-                points);
-        return computeMonthlyView(ownerCcgid, scenarioId, ctx, view);
-    }
-
-    private DailySizingView computeDailyFromEntity(
-            String ownerCcgid, UUID scenarioId, Context ctx, ForecastRun forecast) {
-        List<ForecastPointView> points = sortedPoints(forecast).stream()
-                .map(point -> new ForecastPointView(
-                        point.getId(),
-                        point.getPeriodStart(),
-                        point.getPeriodEnd(),
-                        point.getForecastMean(),
-                        point.getLowerBound(),
-                        point.getUpperBound(),
-                        point.getAcceptedValue()))
-                .toList();
-        ForecastView view = new ForecastView(
-                forecast.getId(),
-                forecast.getRunNo(),
-                forecast.getMethod(),
-                forecast.getMethodVersion(),
-                forecast.getStatus(),
-                forecast.getForecastLevel(),
-                forecast.getTrainingFrom(),
-                forecast.getTrainingTo(),
-                forecast.getFeatureMetadata(),
-                forecast.getInputHash(),
-                forecast.getStartedAt(),
-                forecast.getCompletedAt(),
-                points);
-        return computeDailyView(ownerCcgid, scenarioId, ctx, view);
-    }
-
     private static void validateMonthlyHc(MonthlySizingView monthly, BigDecimal rightSizingHc) {
         if (monthly.rows() == null || monthly.rows().isEmpty()) {
             throw new ApiException(
@@ -695,29 +611,6 @@ public class SizingSimulationService {
         return scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
-    }
-
-    private ForecastRun requireForecast(UUID scenarioId, String level) {
-        return forecastRuns
-                .findFirstByScenarioIdAndForecastLevelAndStatusOrderByRunNoDesc(
-                        scenarioId, level, "ACCEPTED")
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.UNPROCESSABLE_ENTITY,
-                        "forecast-required",
-                        "Run an ACCEPTED " + level + " forecast before sizing."));
-    }
-
-    private static List<ForecastPoint> sortedPoints(ForecastRun forecast) {
-        return forecast.getPoints().stream()
-                .sorted(Comparator.comparing(ForecastPoint::getPeriodStart))
-                .toList();
-    }
-
-    private static BigDecimal acceptedVolume(ForecastPoint point) {
-        if (point.getAcceptedValue() != null) {
-            return point.getAcceptedValue();
-        }
-        return point.getForecastMean();
     }
 
     private static BigDecimal acceptedVolume(ForecastPointView point) {

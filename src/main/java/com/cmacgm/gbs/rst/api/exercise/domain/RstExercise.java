@@ -57,9 +57,6 @@ public class RstExercise {
     @Column(name = "official_scenario_id")
     private UUID officialScenarioId;
 
-    @Column(name = "initialized_from_exercise_id")
-    private UUID initializedFromExerciseId;
-
     @Column(name = "submitted_at")
     private Instant submittedAt;
 
@@ -186,6 +183,16 @@ public class RstExercise {
         this.updatedBy = actorCcgid;
     }
 
+    /**
+     * Clears the Slot Period so Per-slot Volume is no longer generated.
+     */
+    public void clearSlotPeriod(String actorCcgid, Instant now) {
+        this.slotStartDate = null;
+        this.slotWeeks = null;
+        this.updatedAt = now;
+        this.updatedBy = actorCcgid;
+    }
+
     public boolean hasSlotPeriod() {
         return slotStartDate != null && slotWeeks != null && slotWeeks >= 1;
     }
@@ -285,15 +292,6 @@ public class RstExercise {
      * @param now reject time
      */
     public void markRejected(String actorCcgid, Instant now) {
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
-    }
-
-    /**
-     * Records that Associated Data was initialized from another Exercise.
-     */
-    public void markInitializedFrom(UUID sourceExerciseId, String actorCcgid, Instant now) {
-        this.initializedFromExerciseId = sourceExerciseId;
         this.updatedAt = now;
         this.updatedBy = actorCcgid;
     }
@@ -420,10 +418,6 @@ public class RstExercise {
 
     public UUID getOfficialScenarioId() {
         return officialScenarioId;
-    }
-
-    public UUID getInitializedFromExerciseId() {
-        return initializedFromExerciseId;
     }
 
     public Instant getSubmittedAt() {

@@ -9,6 +9,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -99,6 +100,12 @@ public class SlotSimulationService {
                     "shifts-required",
                     "At least one shift is required before slot simulation.");
         }
+        if (request.shifts().size() > Scenario.MAX_SHIFTS) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "shift-limit-exceeded",
+                    "A scenario can have at most " + Scenario.MAX_SHIFTS + " shifts.");
+        }
         List<SlotShift> draftShifts = toSlotShifts(request.shifts());
         Context ctx = loadContext(ownerCcgid, exerciseId, scenarioId, draftShifts);
         Instant now = clock.instant();
@@ -187,7 +194,7 @@ public class SlotSimulationService {
                     request.startTime(),
                     request.durationMinutes(),
                     request.headcount(),
-                    request.worksOnWeekend()));
+                    requireWeekend(request.weekendCode())));
         }
         draft.sort(Comparator.comparing(SlotShift::shiftNo));
         return draft;
@@ -201,7 +208,7 @@ public class SlotSimulationService {
                         shift.getStartTime(),
                         shift.getDurationMinutes(),
                         shift.getHeadcount(),
-                        shift.isWorksOnWeekend()))
+                        requireWeekend(shift.getWeekendCode())))
                 .toList();
     }
 
@@ -254,14 +261,7 @@ public class SlotSimulationService {
 
         List<SlotShift> shiftRows = toSlotShifts(scenario);
         ExerciseTeamSetup team = teamSetups.findById(exerciseId).orElse(null);
-        String weekendCode;
-        try {
-            weekendCode = WeekendCode.storedValue(team != null ? team.getWeekendCode() : null);
-        } catch (IllegalArgumentException ex) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-weekend-code", ex.getMessage());
-        }
-        Map<String, List<BigDecimal>> shiftSeries = rebuildShiftSeries(rows, shiftRows, weekendCode);
+        Map<String, List<BigDecimal>> shiftSeries = rebuildShiftSeries(rows, shiftRows);
         boolean applicability = team != null
                 && SlotMath.applicabilityOn(team.getSlaType(), team.getSlaTurnaroundMinutes());
         BigDecimal slaTarget = team == null ? null : team.getSlaTargetRatio();
@@ -285,8 +285,7 @@ public class SlotSimulationService {
 
     private Map<String, List<BigDecimal>> rebuildShiftSeries(
             List<SlotSimulationResult> rows,
-            List<SlotShift> shiftRows,
-            String weekendCode) {
+            List<SlotShift> shiftRows) {
         Map<String, List<BigDecimal>> series = new LinkedHashMap<>();
         if (shiftRows.isEmpty()) {
             series.put("total", rows.stream().map(r -> nz(r.getShiftFte())).toList());
@@ -295,22 +294,14 @@ public class SlotSimulationService {
         for (SlotShift shift : shiftRows) {
             series.put("shift" + shift.shiftNo(), new ArrayList<>(rows.size()));
         }
-        WeekendCode weekend = WeekendCode.parse(weekendCode);
         for (SlotSimulationResult row : rows) {
             ZoneOffset zone = ZoneOffset.UTC;
-            LocalDate day = row.getSlotStartAt().atZone(zone).toLocalDate();
-            LocalTime slotStartLocal = row.getSlotStartAt().atZone(zone).toLocalTime();
+            LocalDateTime slotStart = row.getSlotStartAt().atZone(zone).toLocalDateTime();
+            LocalTime slotStartLocal = slotStart.toLocalTime();
             LocalTime slotEndLocal = row.getSlotEndAt().atZone(zone).toLocalTime();
-            boolean weekendDay = weekend.days().contains(day.getDayOfWeek());
             for (SlotShift shift : shiftRows) {
-                boolean covers = SlotMath.withinShift(
-                        slotStartLocal,
-                        slotEndLocal,
-                        shift.startTime(),
-                        shift.durationMinutes());
-                BigDecimal contrib = SlotMath.shiftContribution(
-                        weekendDay, shift.worksOnWeekend(), covers, shift.headcount());
-                series.get("shift" + shift.shiftNo()).add(contrib);
+                series.get("shift" + shift.shiftNo()).add(
+                        contribution(shift, slotStart, slotStartLocal, slotEndLocal));
             }
         }
         return series;
@@ -342,14 +333,12 @@ public class SlotSimulationService {
             perShift.put(shift.shiftNo(), new ArrayList<>(volumes.size()));
         }
 
-        WeekendCode weekend = WeekendCode.parse(ctx.weekendCode());
         int index = 0;
         for (ExerciseVolumeSlotInput volume : volumes) {
             ZoneOffset zone = ZoneOffset.UTC;
-            LocalDate day = volume.getSlotStartAt().atZone(zone).toLocalDate();
-            LocalTime slotStartLocal = volume.getSlotStartAt().atZone(zone).toLocalTime();
+            LocalDateTime slotStart = volume.getSlotStartAt().atZone(zone).toLocalDateTime();
+            LocalTime slotStartLocal = slotStart.toLocalTime();
             LocalTime slotEndLocal = volume.getSlotEndAt().atZone(zone).toLocalTime();
-            boolean weekendDay = weekend.days().contains(day.getDayOfWeek());
 
             int slotMinutes = (int) Duration.between(volume.getSlotStartAt(), volume.getSlotEndAt())
                     .toMinutes();
@@ -368,13 +357,7 @@ public class SlotSimulationService {
 
             BigDecimal shiftTotal = BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
             for (SlotShift shift : ctx.shifts()) {
-                boolean covers = SlotMath.withinShift(
-                        slotStartLocal,
-                        slotEndLocal,
-                        shift.startTime(),
-                        shift.durationMinutes());
-                BigDecimal contrib = SlotMath.shiftContribution(
-                        weekendDay, shift.worksOnWeekend(), covers, shift.headcount());
+                BigDecimal contrib = contribution(shift, slotStart, slotStartLocal, slotEndLocal);
                 perShift.get(shift.shiftNo()).add(contrib);
                 shiftTotal = shiftTotal.add(contrib);
             }
@@ -474,13 +457,6 @@ public class SlotSimulationService {
         BigDecimal automation = team.getAutomationRatio() != null
                 ? team.getAutomationRatio() : BigDecimal.ZERO;
         BigDecimal cycleTime = requirePositive(baseline.getMedianSeconds(), "Cycle time");
-        String weekendCode;
-        try {
-            weekendCode = WeekendCode.storedValue(team.getWeekendCode());
-        } catch (IllegalArgumentException ex) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-weekend-code", ex.getMessage());
-        }
         BigDecimal slaMinutes = team.getSlaTurnaroundMinutes() != null
                 ? team.getSlaTurnaroundMinutes() : BigDecimal.ZERO;
 
@@ -490,7 +466,6 @@ public class SlotSimulationService {
                 automation,
                 availability,
                 cycleTime,
-                weekendCode,
                 team.getSlaType(),
                 slaMinutes,
                 team.getSlaTargetRatio());
@@ -534,6 +509,30 @@ public class SlotSimulationService {
                 row.getSlaResult());
     }
 
+    private static BigDecimal contribution(
+            SlotShift shift,
+            LocalDateTime slotStart,
+            LocalTime slotStartLocal,
+            LocalTime slotEndLocal) {
+        boolean covers = SlotMath.withinShift(
+                slotStartLocal,
+                slotEndLocal,
+                shift.startTime(),
+                shift.durationMinutes());
+        LocalDate shiftDay = SlotMath.shiftDay(slotStart, shift.startTime());
+        boolean weekendDay = shiftDay != null && shift.weekend().days().contains(shiftDay.getDayOfWeek());
+        return SlotMath.shiftContribution(weekendDay, covers, shift.headcount());
+    }
+
+    private static WeekendCode requireWeekend(String raw) {
+        try {
+            return WeekendCode.parse(raw);
+        } catch (IllegalArgumentException ex) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-weekend-code", ex.getMessage());
+        }
+    }
+
     private static BigDecimal requirePositive(BigDecimal value, String label) {
         if (value == null || value.signum() <= 0) {
             throw new ApiException(
@@ -564,7 +563,6 @@ public class SlotSimulationService {
             BigDecimal automationRatio,
             BigDecimal availabilityRatio,
             BigDecimal cycleTimeSeconds,
-            String weekendCode,
             String slaType,
             BigDecimal slaTurnaroundMinutes,
             BigDecimal slaTargetRatio) {
@@ -575,7 +573,7 @@ public class SlotSimulationService {
             LocalTime startTime,
             BigDecimal durationMinutes,
             BigDecimal headcount,
-            boolean worksOnWeekend) {
+            WeekendCode weekend) {
     }
 
     private record Computed(

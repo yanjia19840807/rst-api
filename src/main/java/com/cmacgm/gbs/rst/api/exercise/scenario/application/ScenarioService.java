@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.common.workingdays.WeekendCode;
 import com.cmacgm.gbs.rst.api.exercise.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
@@ -34,6 +35,7 @@ public class ScenarioService {
     private final RstExerciseRepository exerciseRepository;
     private final ScenarioRepository scenarios;
     private final CycleTimeBaselineRepository baselines;
+    private final ScenarioOfficialReadiness officialReadiness;
     private final Clock clock;
 
     /**
@@ -44,11 +46,13 @@ public class ScenarioService {
             RstExerciseRepository exerciseRepository,
             ScenarioRepository scenarios,
             CycleTimeBaselineRepository baselines,
+            ScenarioOfficialReadiness officialReadiness,
             Clock clock) {
         this.exercises = exercises;
         this.exerciseRepository = exerciseRepository;
         this.scenarios = scenarios;
         this.baselines = baselines;
+        this.officialReadiness = officialReadiness;
         this.clock = clock;
     }
 
@@ -168,6 +172,12 @@ public class ScenarioService {
         Scenario scenario = requireScenario(exerciseId, scenarioId);
         requireWorking(scenario);
         Instant now = clock.instant();
+        if (requests != null && requests.size() > Scenario.MAX_SHIFTS) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "shift-limit-exceeded",
+                    "A scenario can have at most " + Scenario.MAX_SHIFTS + " shifts.");
+        }
         scenario.replaceShifts(toShifts(requests, ownerCcgid, now), ownerCcgid, now);
         return toView(scenarios.save(scenario));
     }
@@ -198,7 +208,9 @@ public class ScenarioService {
      * Points the Exercise at a live scenario as Official. Does not create a scenario.
      *
      * <p>Official is only {@code rst_exercise.official_scenario_id}. The selected row stays
-     * Draft and can be switched again before Submit. Requires an active Cycle Time baseline.
+     * Draft and can be switched again before Submit. Requires an active Cycle Time baseline,
+     * a positive Right Sizing HC, and committed monthly/daily sizing (slot when a Slot Period
+     * is set).
      */
     @Transactional
     public ScenarioView markOfficial(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
@@ -215,6 +227,7 @@ public class ScenarioService {
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "cycle-time-required",
                         "An active Cycle Time baseline is required before Official."));
+        officialReadiness.requireReady(exercise, scenario, "Official");
 
         exercise.setOfficialScenario(scenario.getId(), ownerCcgid, clock.instant());
         exerciseRepository.save(exercise);
@@ -258,7 +271,7 @@ public class ScenarioService {
                 .sorted(Comparator.comparing(ScenarioShift::getShiftNo))
                 .map(s -> new ShiftView(
                         s.getId(), s.getShiftNo(), s.getStartTime(), s.getDurationMinutes(),
-                        s.getHeadcount(), s.isWorksOnWeekend()))
+                        s.getHeadcount(), s.getWeekendCode()))
                 .toList();
         return new ScenarioView(
                 scenario.getId(),
@@ -285,10 +298,19 @@ public class ScenarioService {
                     request.startTime(),
                     request.durationMinutes(),
                     request.headcount(),
-                    request.worksOnWeekend(),
+                    requireWeekendCode(request.weekendCode()),
                     actorCcgid,
                     now));
         }
         return shifts;
+    }
+
+    private static String requireWeekendCode(String raw) {
+        try {
+            return WeekendCode.storedValue(raw);
+        } catch (IllegalArgumentException ex) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-weekend-code", ex.getMessage());
+        }
     }
 }

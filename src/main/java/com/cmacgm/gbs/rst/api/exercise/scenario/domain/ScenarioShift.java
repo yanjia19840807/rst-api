@@ -38,8 +38,8 @@ public class ScenarioShift {
     @Column(nullable = false, precision = 18, scale = 6)
     private BigDecimal headcount;
 
-    @Column(name = "works_on_weekend", nullable = false)
-    private boolean worksOnWeekend;
+    @Column(name = "weekend_code", nullable = false, length = 40)
+    private String weekendCode;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -67,7 +67,7 @@ public class ScenarioShift {
             LocalTime startTime,
             BigDecimal durationMinutes,
             BigDecimal headcount,
-            boolean worksOnWeekend,
+            String weekendCode,
             String actorCcgid,
             Instant now) {
         ScenarioShift shift = new ScenarioShift();
@@ -76,7 +76,7 @@ public class ScenarioShift {
         shift.startTime = startTime;
         shift.durationMinutes = durationMinutes;
         shift.headcount = headcount;
-        shift.worksOnWeekend = worksOnWeekend;
+        shift.weekendCode = weekendCode;
         shift.createdAt = now;
         shift.createdBy = actorCcgid;
         shift.updatedAt = now;
@@ -96,7 +96,7 @@ public class ScenarioShift {
         this.startTime = source.startTime;
         this.durationMinutes = source.durationMinutes;
         this.headcount = source.headcount;
-        this.worksOnWeekend = source.worksOnWeekend;
+        this.weekendCode = source.weekendCode;
         this.updatedAt = now;
         this.updatedBy = actorCcgid;
     }
@@ -106,5 +106,5 @@ public class ScenarioShift {
     public LocalTime getStartTime() { return startTime; }
     public BigDecimal getDurationMinutes() { return durationMinutes; }
     public BigDecimal getHeadcount() { return headcount; }
-    public boolean isWorksOnWeekend() { return worksOnWeekend; }
+    public String getWeekendCode() { return weekendCode; }
 }

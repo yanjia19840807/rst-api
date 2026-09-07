@@ -6,15 +6,12 @@ import java.util.UUID;
 import jakarta.validation.Valid;
 
 import com.cmacgm.gbs.rst.api.forecast.ForecastOrchestrationService;
-import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ForecastBundleView;
-import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ForecastTrainingBundleView;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ForecastView;
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.ScenarioCommitService;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.CommitScenarioRequest;
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.ScenarioService;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.CreateScenarioRequest;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ScenarioView;
-import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.UpdateScenarioRequest;
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.SizingSimulationService;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.DailySizingView;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.MonthlySizingView;
@@ -115,24 +112,6 @@ public class ScenarioController {
     }
 
     /**
-     * Updates a DRAFT scenario.
-     *
-     * @param principal authenticated Supervisor
-     * @param exerciseId Exercise id
-     * @param scenarioId Scenario id
-     * @param request update payload
-     * @return updated scenario
-     */
-    @PutMapping("/{scenarioId}")
-    public ScenarioView update(
-            @AuthenticationPrincipal RstPrincipal principal,
-            @PathVariable UUID exerciseId,
-            @PathVariable UUID scenarioId,
-            @Valid @RequestBody UpdateScenarioRequest request) {
-        return scenarios.update(principal.ccgid(), exerciseId, scenarioId, request);
-    }
-
-    /**
      * Saves scenario header, Right Sizing HC, shifts and replaces the committed simulation snapshot.
      * Omit {@code results} to clear previously saved forecast/sizing/slot data.
      */
@@ -163,6 +142,7 @@ public class ScenarioController {
 
     /**
      * Points the Exercise at this scenario as Official. Does not create a scenario.
+     * Requires Cycle Time, a positive Right Sizing HC, and committed sizing results.
      *
      * @param principal authenticated Supervisor
      * @param exerciseId Exercise id
@@ -175,17 +155,6 @@ public class ScenarioController {
             @PathVariable UUID exerciseId,
             @PathVariable UUID scenarioId) {
         return scenarios.markOfficial(principal.ccgid(), exerciseId, scenarioId);
-    }
-
-    /**
-     * Previews monthly and daily forecast without persisting.
-     */
-    @PostMapping("/{scenarioId}/forecast:run")
-    public ForecastBundleView runForecast(
-            @AuthenticationPrincipal RstPrincipal principal,
-            @PathVariable UUID exerciseId,
-            @PathVariable UUID scenarioId) {
-        return forecasts.previewMonthlyAndDailyForecast(principal.ccgid(), exerciseId, scenarioId);
     }
 
     /**
@@ -215,28 +184,6 @@ public class ScenarioController {
     }
 
     /**
-     * Frozen training actuals for this scenario (populated when the Exercise is APPROVED).
-     */
-    @GetMapping("/{scenarioId}/forecast/training")
-    public ForecastTrainingBundleView getForecastTraining(
-            @AuthenticationPrincipal RstPrincipal principal,
-            @PathVariable UUID exerciseId,
-            @PathVariable UUID scenarioId) {
-        return forecasts.getTrainingObservations(principal.ccgid(), exerciseId, scenarioId);
-    }
-
-    /**
-     * Prefers {@code sizing:preview}. Kept for compatibility; does not persist.
-     */
-    @PostMapping("/{scenarioId}/simulations/monthly")
-    public MonthlySizingView runMonthly(
-            @AuthenticationPrincipal RstPrincipal principal,
-            @PathVariable UUID exerciseId,
-            @PathVariable UUID scenarioId) {
-        return sizing.runMonthly(principal.ccgid(), exerciseId, scenarioId);
-    }
-
-    /**
      * Returns the latest ACCEPTED monthly sizing results.
      */
     @GetMapping("/{scenarioId}/simulations/monthly/latest")
@@ -245,17 +192,6 @@ public class ScenarioController {
             @PathVariable UUID exerciseId,
             @PathVariable UUID scenarioId) {
         return sizing.getLatestMonthly(principal.ccgid(), exerciseId, scenarioId);
-    }
-
-    /**
-     * Prefers {@code sizing:preview}. Kept for compatibility; does not persist.
-     */
-    @PostMapping("/{scenarioId}/simulations/daily")
-    public DailySizingView runDaily(
-            @AuthenticationPrincipal RstPrincipal principal,
-            @PathVariable UUID exerciseId,
-            @PathVariable UUID scenarioId) {
-        return sizing.runDaily(principal.ccgid(), exerciseId, scenarioId);
     }
 
     /**

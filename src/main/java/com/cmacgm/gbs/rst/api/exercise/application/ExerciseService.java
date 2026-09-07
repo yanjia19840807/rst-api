@@ -126,7 +126,7 @@ public class ExerciseService {
 
     /**
      * Creates an Exercise, freezes Toolkit/KPI snapshots, and seeds Associated Data
-     * (archive-first copy of Team Setup, Support, and holidays).
+     * from Toolkit latest state (Team Setup, Support, and holidays).
      * Does not start a workflow instance; that happens on the first Submit.
      *
      * @param ownerCcgid Supervisor CCGID
@@ -329,6 +329,35 @@ public class ExerciseService {
                 .toList();
         return new UpdateSlotPeriodResult(
                 toResponse(reloaded, null, processOf(reloaded.getId())), volumes, notices);
+    }
+
+    /**
+     * Clears Slot Period, deletes the Per-slot grid, and clears Slot Simulation only.
+     */
+    @Transactional
+    public UpdateSlotPeriodResult clearSlotPeriod(String ownerCcgid, UUID exerciseId) {
+        RstExercise exercise = access.requireOwned(ownerCcgid, exerciseId);
+        if (!ExerciseLifecycle.canEdit(processOf(exercise.getId()))) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "exercise-not-editable",
+                    "Slot Period can only be changed during Supervisor Sizing.");
+        }
+        exercise.clearSlotPeriod(ownerCcgid, clock.instant());
+        exercises.saveAndFlush(exercise);
+        initialization.clearSlotGrid(exerciseId);
+        int cleared = scenarioCommits.clearSlotResultsForExercise(exerciseId);
+        List<String> notices = new ArrayList<>();
+        notices.add("Slot Period cleared.");
+        if (cleared > 0) {
+            notices.add(
+                    "Cleared saved Slot Simulation results for "
+                            + cleared
+                            + " scenario(s).");
+        }
+        RstExercise reloaded = access.requireOwned(ownerCcgid, exerciseId);
+        return new UpdateSlotPeriodResult(
+                toResponse(reloaded, null, processOf(reloaded.getId())), List.of(), notices);
     }
 
     /**

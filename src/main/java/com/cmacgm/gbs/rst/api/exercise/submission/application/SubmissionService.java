@@ -19,7 +19,9 @@ import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
+import com.cmacgm.gbs.rst.api.exercise.scenario.application.ScenarioOfficialReadiness;
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.ScenarioService;
+import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.DailyMonthlyVolumeMath;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseVolumeDailyInputRepository;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseVolumeMonthlyInputRepository;
@@ -62,6 +64,7 @@ public class SubmissionService {
     private final ExerciseAccess exercises;
     private final RstExerciseRepository exerciseRepository;
     private final ScenarioService scenarioService;
+    private final ScenarioOfficialReadiness officialReadiness;
     private final ValidationResultRepository validations;
     private final ScenarioRepository scenarios;
     private final ExerciseVolumeMonthlyInputRepository monthlyVolumes;
@@ -81,6 +84,7 @@ public class SubmissionService {
             ExerciseAccess exercises,
             RstExerciseRepository exerciseRepository,
             ScenarioService scenarioService,
+            ScenarioOfficialReadiness officialReadiness,
             ValidationResultRepository validations,
             ScenarioRepository scenarios,
             ExerciseVolumeMonthlyInputRepository monthlyVolumes,
@@ -95,6 +99,7 @@ public class SubmissionService {
         this.exercises = exercises;
         this.exerciseRepository = exerciseRepository;
         this.scenarioService = scenarioService;
+        this.officialReadiness = officialReadiness;
         this.validations = validations;
         this.scenarios = scenarios;
         this.monthlyVolumes = monthlyVolumes;
@@ -121,7 +126,7 @@ public class SubmissionService {
                     "exercise-not-submittable",
                     "Exercise must have an Official Scenario and be editable to submit.");
         }
-        UUID scenarioId = scenarioService.requireOfficialScenarioId(exercise);
+        UUID scenarioId = requireOfficialPackage(exercise);
         List<ValidationFinding> findings = List.of(toFinding(evaluateDailyVsMonthly(exercise, ownerCcgid)));
         TimesheetAlignmentView alignment = align(exercise);
         WorkflowRouter.RoutedStep manager = managerHop(exercise);
@@ -172,7 +177,7 @@ public class SubmissionService {
                     "exercise-not-submittable",
                     "Exercise must have an Official Scenario and be editable to submit.");
         }
-        scenarioService.requireOfficialScenarioId(exercise);
+        requireOfficialPackage(exercise);
         Instant now = clock.instant();
         UUID requestId = request.requestId() == null ? UUID.randomUUID() : request.requestId();
         ValidationResult finding = evaluateDailyVsMonthly(exercise, ownerCcgid);
@@ -400,6 +405,17 @@ public class SubmissionService {
             names.put(ccgid, timesheet.displayNameByCcgid(ccgid));
         }
         return names;
+    }
+
+    private UUID requireOfficialPackage(RstExercise exercise) {
+        UUID scenarioId = scenarioService.requireOfficialScenarioId(exercise);
+        Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exercise.getId())
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "official-scenario-required",
+                        "An Official Scenario is required before Submit."));
+        officialReadiness.requireReady(exercise, scenario, "Submit");
+        return scenarioId;
     }
 
     private ProcessInstance processOf(UUID exerciseId) {

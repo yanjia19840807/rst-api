@@ -468,12 +468,6 @@ class SupervisorApiIntegrationTests {
         UUID targetExerciseId = UUID.fromString(targetId);
 
         org.junit.jupiter.api.Assertions.assertEquals(
-                sourceExerciseId,
-                jdbcTemplate.queryForObject(
-                        "select initialized_from_exercise_id from rst_exercise where id = ?",
-                        UUID.class,
-                        targetExerciseId));
-        org.junit.jupiter.api.Assertions.assertEquals(
                 Integer.valueOf(1),
                 jdbcTemplate.queryForObject(
                         """
@@ -584,6 +578,29 @@ class SupervisorApiIntegrationTests {
                 .andExpect(jsonPath("$.exercise.slotWeeks").value(1))
                 .andExpect(jsonPath("$.volumes.length()").value(182))
                 .andExpect(jsonPath("$.volumes[0].actualVolume").isEmpty());
+    }
+
+    @Test
+    void clearsSlotPeriodAndEmptiesGrid() throws Exception {
+        String toolkitId = JsonPath.read(createToolkit("Clear Slot Period Toolkit"), "$.id");
+        String exerciseId = JsonPath.read(createExercise(toolkitId), "$.exercise.id");
+        mockMvc.perform(put("/api/v1/exercises/{id}/slot-period", exerciseId)
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "slotStartDate": "2026-09-07",
+                                  "slotWeeks": 1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.volumes.length()").value(182));
+        mockMvc.perform(delete("/api/v1/exercises/{id}/slot-period", exerciseId)
+                        .header("X-Dev-Role", "SUPERVISOR"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.exercise.slotStartDate").isEmpty())
+                .andExpect(jsonPath("$.exercise.slotWeeks").isEmpty())
+                .andExpect(jsonPath("$.volumes.length()").value(0));
     }
 
     @Test
