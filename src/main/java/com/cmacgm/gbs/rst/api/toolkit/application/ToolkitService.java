@@ -2,6 +2,7 @@ package com.cmacgm.gbs.rst.api.toolkit.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -12,10 +13,10 @@ import java.util.stream.Collectors;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
-import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.timesheet.api.dto.TimesheetAlignmentView;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetAlignment;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.tms.domain.TmsSessionStatus;
 import com.cmacgm.gbs.rst.api.tms.persistence.TmsSessionRepository;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.CreateToolkitRequest;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.SharedKpiSelectionRequest;
@@ -24,6 +25,7 @@ import com.cmacgm.gbs.rst.api.toolkit.api.dto.ToolkitResponse;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.UpdateToolkitRequest;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.UpdateToolkitRequest.EditableSubtask;
 import com.cmacgm.gbs.rst.api.toolkit.domain.Toolkit;
+import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitSubtask;
 import com.cmacgm.gbs.rst.api.toolkit.persistence.ToolkitRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -35,19 +37,16 @@ public class ToolkitService {
     private final ToolkitRepository toolkits;
     private final TimesheetReadService timesheet;
     private final TmsSessionRepository tmsSessions;
-    private final RstExerciseRepository exercises;
     private final Clock clock;
 
     public ToolkitService(
             ToolkitRepository toolkits,
             TimesheetReadService timesheet,
             TmsSessionRepository tmsSessions,
-            RstExerciseRepository exercises,
             Clock clock) {
         this.toolkits = toolkits;
         this.timesheet = timesheet;
         this.tmsSessions = tmsSessions;
-        this.exercises = exercises;
         this.clock = clock;
     }
 
@@ -150,6 +149,7 @@ public class ToolkitService {
         toolkit.update(
                 name, request.description(), request.combineSubtasksTime(),
                 ccgid, now);
+        ensureSubtasksUnfinishedFree(toolkit, request.subtasks());
         syncSubtasks(toolkit, request.subtasks(), now);
         toolkit.getSharedKpiSelections().stream()
                 .filter(selection -> selection.getDeletedAt() == null)
@@ -163,10 +163,7 @@ public class ToolkitService {
     @Transactional
     public void delete(String ccgid, UUID toolkitId) {
         Toolkit toolkit = ownedToolkit(ccgid, toolkitId);
-        if (tmsSessions.existsByToolkit_Id(toolkitId) || exercises.existsByToolkitId(toolkitId)) {
-            throw conflict("toolkit-referenced",
-                    "A Toolkit referenced by TMS or Exercise history cannot be deleted.");
-        }
+        ensureToolkitUnfinishedFree(toolkitId);
         toolkit.softDelete(clock.instant());
     }
 
@@ -184,6 +181,49 @@ public class ToolkitService {
                         toolkit.getSupervisorPositionId(),
                         toolkit.getPrimaryPl3Code()))
                 .toList();
+    }
+
+    private void ensureToolkitUnfinishedFree(UUID toolkitId) {
+        long running = tmsSessions.countByToolkit_IdAndStatus(toolkitId, TmsSessionStatus.RUNNING);
+        long paused = tmsSessions.countByToolkit_IdAndStatus(toolkitId, TmsSessionStatus.PAUSED);
+        if (running + paused > 0) {
+            throw conflict("toolkit-in-use", unfinishedMessage("This Toolkit", running, paused));
+        }
+    }
+
+    private void ensureSubtasksUnfinishedFree(Toolkit toolkit, List<EditableSubtask> requested) {
+        Set<UUID> keepActiveIds = requested == null
+                ? Set.of()
+                : requested.stream()
+                        .filter(item -> item.id() != null && item.deletedAt() == null)
+                        .map(EditableSubtask::id)
+                        .collect(Collectors.toSet());
+        for (ToolkitSubtask item : toolkit.getAllSubtasks()) {
+            if (item.getDeletedAt() != null || keepActiveIds.contains(item.getId())) {
+                continue;
+            }
+            long running = tmsSessions.countByToolkitSubtask_IdAndStatus(
+                    item.getId(), TmsSessionStatus.RUNNING);
+            long paused = tmsSessions.countByToolkitSubtask_IdAndStatus(
+                    item.getId(), TmsSessionStatus.PAUSED);
+            if (running + paused > 0) {
+                throw conflict(
+                        "subtask-in-use",
+                        unfinishedMessage("Subtask \"" + item.getName() + "\"", running, paused));
+            }
+        }
+    }
+
+    private static String unfinishedMessage(String subject, long running, long paused) {
+        List<String> parts = new ArrayList<>();
+        if (running > 0) {
+            parts.add(running + (running == 1 ? " running session" : " running sessions"));
+        }
+        if (paused > 0) {
+            parts.add(paused + (paused == 1 ? " paused session" : " paused sessions"));
+        }
+        return subject + " still has " + String.join(" and ", parts)
+                + ". End or discard them before deleting.";
     }
 
     private void syncSubtasks(Toolkit toolkit, List<EditableSubtask> requested, Instant now) {

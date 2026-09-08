@@ -232,6 +232,136 @@ class SupervisorApiIntegrationTests {
     }
 
     @Test
+    void deletesToolkitWhenOnlyFinishedSessionsOrExerciseExist() throws Exception {
+        String created = createToolkit("History Toolkit");
+        String toolkitId = JsonPath.read(created, "$.id");
+        UUID toolkitUuid = UUID.fromString(toolkitId);
+        insertTmsSession(
+                UUID.fromString("61000000-0000-0000-0000-000000000001"),
+                "TMS-HISTORY-COMPLETED",
+                "AGENT010",
+                toolkitUuid,
+                "COMPLETED",
+                Instant.parse("2026-08-10T10:00:00Z"));
+        insertTmsSession(
+                UUID.fromString("61000000-0000-0000-0000-000000000002"),
+                "TMS-HISTORY-DISCARDED",
+                "AGENT011",
+                toolkitUuid,
+                "DISCARDED",
+                Instant.parse("2026-08-11T10:00:00Z"));
+        createExercise(toolkitId);
+
+        mockMvc.perform(delete("/api/v1/toolkits/{id}", toolkitId)
+                        .header("X-Dev-Role", "SUPERVISOR"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void rejectsDeleteWhenToolkitHasUnfinishedSessions() throws Exception {
+        String created = createToolkit("Busy Toolkit");
+        String toolkitId = JsonPath.read(created, "$.id");
+        UUID toolkitUuid = UUID.fromString(toolkitId);
+        insertTmsSession(
+                UUID.fromString("62000000-0000-0000-0000-000000000001"),
+                "TMS-BUSY-RUNNING",
+                "AGENT010",
+                toolkitUuid,
+                "RUNNING",
+                Instant.parse("2026-08-12T10:00:00Z"));
+        insertTmsSession(
+                UUID.fromString("62000000-0000-0000-0000-000000000002"),
+                "TMS-BUSY-PAUSED-1",
+                "AGENT011",
+                toolkitUuid,
+                "PAUSED",
+                Instant.parse("2026-08-12T11:00:00Z"));
+        insertTmsSession(
+                UUID.fromString("62000000-0000-0000-0000-000000000003"),
+                "TMS-BUSY-PAUSED-2",
+                "AGENT012",
+                toolkitUuid,
+                "PAUSED",
+                Instant.parse("2026-08-12T12:00:00Z"));
+
+        mockMvc.perform(delete("/api/v1/toolkits/{id}", toolkitId)
+                        .header("X-Dev-Role", "SUPERVISOR"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type")
+                        .value("https://rst.cmacgm.com/problems/toolkit-in-use"))
+                .andExpect(jsonPath("$.detail").value(
+                        "This Toolkit still has 1 running session and 2 paused sessions. "
+                                + "End or discard them before deleting."));
+    }
+
+    @Test
+    void rejectsSubtaskDeleteWhenTaskHasUnfinishedSessions() throws Exception {
+        String created = createToolkit("Busy Subtask Toolkit");
+        String toolkitId = JsonPath.read(created, "$.id");
+        String oldSubtaskId = JsonPath.read(created, "$.subtasks[0].id");
+        Number version = JsonPath.read(created, "$.version");
+        insertTmsSession(
+                UUID.fromString("63000000-0000-0000-0000-000000000001"),
+                "TMS-TASK-RUNNING",
+                "AGENT010",
+                UUID.fromString(toolkitId),
+                UUID.fromString(oldSubtaskId),
+                "RUNNING",
+                Instant.parse("2026-08-13T10:00:00Z"));
+        insertTmsSession(
+                UUID.fromString("63000000-0000-0000-0000-000000000002"),
+                "TMS-TASK-PAUSED-1",
+                "AGENT011",
+                UUID.fromString(toolkitId),
+                UUID.fromString(oldSubtaskId),
+                "PAUSED",
+                Instant.parse("2026-08-13T11:00:00Z"));
+        insertTmsSession(
+                UUID.fromString("63000000-0000-0000-0000-000000000003"),
+                "TMS-TASK-PAUSED-2",
+                "AGENT012",
+                UUID.fromString(toolkitId),
+                UUID.fromString(oldSubtaskId),
+                "PAUSED",
+                Instant.parse("2026-08-13T12:00:00Z"));
+
+        mockMvc.perform(put("/api/v1/toolkits/{id}", toolkitId)
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateToolkitWithoutSubtask(version.longValue())))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type")
+                        .value("https://rst.cmacgm.com/problems/subtask-in-use"))
+                .andExpect(jsonPath("$.detail").value(
+                        "Subtask \"Manual match\" still has 1 running session and 2 paused sessions. "
+                                + "End or discard them before deleting."));
+    }
+
+    @Test
+    void allowsSubtaskDeleteWhenOnlyFinishedSessionsExist() throws Exception {
+        String created = createToolkit("Finished Subtask Toolkit");
+        String toolkitId = JsonPath.read(created, "$.id");
+        String oldSubtaskId = JsonPath.read(created, "$.subtasks[0].id");
+        Number version = JsonPath.read(created, "$.version");
+        insertTmsSession(
+                UUID.fromString("64000000-0000-0000-0000-000000000001"),
+                "TMS-TASK-COMPLETED",
+                "AGENT010",
+                UUID.fromString(toolkitId),
+                UUID.fromString(oldSubtaskId),
+                "COMPLETED",
+                Instant.parse("2026-08-14T10:00:00Z"));
+
+        mockMvc.perform(put("/api/v1/toolkits/{id}", toolkitId)
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateToolkitWithoutSubtask(version.longValue())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.subtasks[0].deletedAt").exists())
+                .andExpect(jsonPath("$.subtasks[1].name").value("Replacement task"));
+    }
+
+    @Test
     void atomicallyUpdatesToolkitChildrenAndRejectsStaleVersion() throws Exception {
         String created = createToolkit("Original Toolkit");
         String toolkitId = JsonPath.read(created, "$.id");
@@ -1090,6 +1220,31 @@ class SupervisorApiIntegrationTests {
                 """.formatted(toolkitId);
     }
 
+    private String updateToolkitWithoutSubtask(long version) {
+        return """
+                {
+                  "name": "Updated Toolkit",
+                  "description": "Replace the original TASK",
+                  "combineSubtasksTime": false,
+                  "version": %d,
+                  "subtasks": [
+                    {
+                      "name": "Replacement task",
+                      "description": "New active subtask",
+                      "displayOrder": 1
+                    }
+                  ],
+                  "sharedKpiSelections": [
+                    {
+                      "carrier": "Carrier A",
+                      "site": "Kuala Lumpur",
+                      "customerCountry": "Australia"
+                    }
+                  ]
+                }
+                """.formatted(version);
+    }
+
     private void insertCompletedTmsSession(
             UUID id, String sessionNo, String agentCcgid, UUID toolkitId, Instant startedAt) {
         insertTmsSession(id, sessionNo, agentCcgid, toolkitId, "COMPLETED", startedAt);
@@ -1102,14 +1257,26 @@ class SupervisorApiIntegrationTests {
             UUID toolkitId,
             String status,
             Instant startedAt) {
+        insertTmsSession(id, sessionNo, agentCcgid, toolkitId, null, status, startedAt);
+    }
+
+    private void insertTmsSession(
+            UUID id,
+            String sessionNo,
+            String agentCcgid,
+            UUID toolkitId,
+            UUID toolkitSubtaskId,
+            String status,
+            Instant startedAt) {
+        boolean unfinished = "RUNNING".equals(status) || "PAUSED".equals(status);
         jdbcTemplate.update(
                 """
                 insert into tms_session
-                    (id, session_no, agent_ccgid, toolkit_id, processed_volume,
+                    (id, session_no, agent_ccgid, toolkit_id, toolkit_subtask_id, processed_volume,
                      reference, remarks, status, started_at, ended_at,
                      net_duration_seconds,
                      created_at, updated_at, version)
-                values (?, ?, ?, ?, 10, 'REF', '', ?, ?, ?,
+                values (?, ?, ?, ?, ?, 10, 'REF', '', ?, ?, ?,
                         600,
                         ?, ?, 0)
                 """,
@@ -1117,9 +1284,10 @@ class SupervisorApiIntegrationTests {
                 sessionNo,
                 agentCcgid,
                 toolkitId,
+                toolkitSubtaskId,
                 status,
                 startedAt,
-                startedAt.plusSeconds(600),
+                unfinished ? null : startedAt.plusSeconds(600),
                 NOW,
                 NOW);
     }

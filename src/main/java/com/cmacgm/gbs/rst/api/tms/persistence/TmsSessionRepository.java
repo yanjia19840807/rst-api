@@ -25,6 +25,10 @@ public interface TmsSessionRepository
 
     boolean existsByToolkit_Id(UUID toolkitId);
 
+    long countByToolkit_IdAndStatus(UUID toolkitId, TmsSessionStatus status);
+
+    long countByToolkitSubtask_IdAndStatus(UUID toolkitSubtaskId, TmsSessionStatus status);
+
     @EntityGraph(attributePaths = {"toolkit", "toolkitSubtask"})
     List<TmsSession> findByToolkit_IdAndStatusOrderByStartedAtAsc(
             UUID toolkitId, TmsSessionStatus status);
