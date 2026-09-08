@@ -249,6 +249,41 @@ public class TimesheetReadService {
     }
 
     /**
+     * GBS Center for an ACTIVE Daily identity. Uses the person row first, then
+     * the occupied position when the person Center is blank.
+     *
+     * @param ccgid identity
+     * @return center when present
+     */
+    @Transactional(readOnly = true)
+    public Optional<String> findActiveCenter(String ccgid) {
+        if (ccgid == null || ccgid.isBlank()) {
+            return Optional.empty();
+        }
+        return people.findActiveByCcgid(ccgid.trim()).flatMap(person -> {
+            String fromPerson = trimToNull(person.getCenter());
+            if (fromPerson != null) {
+                return Optional.of(fromPerson);
+            }
+            String positionId = person.getPositionId();
+            if (positionId == null || positionId.isBlank()) {
+                return Optional.empty();
+            }
+            return positions.findActiveByPositionId(positionId.trim())
+                    .map(TimesheetPosition::getCenter)
+                    .map(this::trimToNull);
+        });
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /**
      * Position occupied by a person for a role.
      *
      * @param ccgid occupant

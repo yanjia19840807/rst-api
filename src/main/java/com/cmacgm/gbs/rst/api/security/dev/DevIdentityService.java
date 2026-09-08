@@ -37,7 +37,7 @@ public class DevIdentityService {
      *
      * @param ccgid corporate identity from config or header
      * @param roles role codes attached to the principal
-     * @param center GBS Center from config or {@code X-Dev-Center}
+     * @param center GBS Center from config or {@code X-Dev-Center}; blank falls back to Timesheet
      * @return resolved principal
      */
     public RstPrincipal resolve(String ccgid, Set<String> roles, String center) {
@@ -63,7 +63,15 @@ public class DevIdentityService {
                     ccgid);
         }
         String email = ccgid.toLowerCase(Locale.ROOT) + "@dev.local";
-        log.info("Dev identity ready: ccgid={} name={} roles={} center={}", ccgid, displayName, roles, center);
-        return new RstPrincipal(ccgid, displayName, email, roles, Set.of("TIMESHEET", "SELF"), center);
+        String resolvedCenter = center == null || center.isBlank()
+                ? timesheet.findActiveCenter(ccgid).orElse(null)
+                : center;
+        log.info(
+                "Dev identity ready: ccgid={} name={} roles={} center={}",
+                ccgid,
+                displayName,
+                roles,
+                resolvedCenter);
+        return new RstPrincipal(ccgid, displayName, email, roles, Set.of("TIMESHEET", "SELF"), resolvedCenter);
     }
 }

@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.delegation.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -7,8 +8,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Set;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
+import com.cmacgm.gbs.rst.api.delegation.api.dto.DelegationCandidateView;
+import com.cmacgm.gbs.rst.api.delegation.application.DelegationService;
+import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +41,9 @@ class DelegationApiIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private DelegationService delegations;
+
     @BeforeEach
     void seed() {
         jdbcTemplate.update("delete from rst_delegation");
@@ -55,6 +64,8 @@ class DelegationApiIntegrationTests {
                 NOW,
                 NOW);
         insertPerson("SUPERVISOR001", "Test Supervisor", "POS-SUP-001", "Kuala Lumpur");
+        insertPerson("SUPERVISOR002", "No Center Supervisor", "POS-SUP-002", "");
+        insertPosition("POS-SUP-002", "SUPERVISOR", "Kuala Lumpur");
         insertPerson("AGENT010", "Test Agent AGENT010", "POS-AGT-010", "Kuala Lumpur");
         insertPerson("AGENT011", "Test Agent AGENT011", "POS-AGT-011", "Kuala Lumpur");
         insertPerson("AGENT099", "Other Center Agent", "POS-AGT-099", "GBS CHINA");
@@ -221,6 +232,22 @@ class DelegationApiIntegrationTests {
                         .value("https://rst.cmacgm.com/problems/delegate-center-mismatch"));
     }
 
+    @Test
+    void candidatesUsePositionCenterWhenPersonAndPrincipalHaveNone() {
+        RstPrincipal principal = new RstPrincipal(
+                "SUPERVISOR002",
+                "No Center Supervisor",
+                "supervisor002@dev.local",
+                Set.of("SUPERVISOR"),
+                Set.of("SELF"),
+                null);
+        PageResponse<DelegationCandidateView> page = delegations.candidates(principal, "", 1, 20);
+        assertThat(page.items())
+                .extracting(DelegationCandidateView::ccgid)
+                .contains("AGENT010")
+                .doesNotContain("SUPERVISOR002", "AGENT099");
+    }
+
     private void insertPerson(String ccgid, String name, String positionId, String center) {
         jdbcTemplate.update(
                 """
@@ -233,6 +260,19 @@ class DelegationApiIntegrationTests {
                 ccgid,
                 name,
                 positionId,
+                center);
+    }
+
+    private void insertPosition(String positionId, String roleType, String center) {
+        jdbcTemplate.update(
+                """
+                insert into timesheet_position
+                    (sync_run_id, position_id, role_type, parent_position_id, center)
+                values (?, ?, ?, null, ?)
+                """,
+                DAILY_RUN_ID,
+                positionId,
+                roleType,
                 center);
     }
 }

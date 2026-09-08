@@ -224,15 +224,16 @@ public class DelegationService {
         return new PageResponse<>(items, source.page(), source.pageSize(), source.total(), source.totalPages());
     }
 
-    private static String requireCenter(RstPrincipal principal) {
+    private String requireCenter(RstPrincipal principal) {
         String center = principal.center();
-        if (center == null || center.isBlank()) {
-            throw new ApiException(
-                    HttpStatus.CONFLICT,
-                    "identity-center-missing",
-                    "Current identity has no Center.");
+        if (center != null && !center.isBlank()) {
+            return center.trim();
         }
-        return center.trim();
+        return timesheet.findActiveCenter(principal.realCcgid())
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.CONFLICT,
+                        "identity-center-missing",
+                        "Current identity has no Center."));
     }
 
     private boolean hasOpenReceived(String ccgid, Instant now) {
