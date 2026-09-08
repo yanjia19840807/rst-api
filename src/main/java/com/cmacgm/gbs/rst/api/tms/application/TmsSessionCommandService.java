@@ -63,6 +63,12 @@ public class TmsSessionCommandService {
         }
         var subtask = resolveSubtask(toolkit, request.subtaskId());
         requireWholeVolume(request.processedVolume());
+        ensureDocumentKeyAvailable(
+                agentCcgid,
+                toolkit.getId(),
+                subtask == null ? null : subtask.getId(),
+                normalize(request.reference()),
+                null);
 
         var now = clock.instant();
         TmsSession session = TmsSession.start(
@@ -125,6 +131,13 @@ public class TmsSessionCommandService {
                 ? (session.getToolkitSubtask() == null ? null : session.getToolkitSubtask().getId())
                 : request.subtaskId();
         ToolkitSubtask subtask = resolveSubtask(toolkit, requestedSubtaskId);
+        String reference = request == null ? session.getReference() : normalize(request.reference());
+        ensureDocumentKeyAvailable(
+                session.getAgentCcgid(),
+                toolkit.getId(),
+                subtask == null ? null : subtask.getId(),
+                reference,
+                session.getSessionNo());
         if (request == null) {
             return;
         }
@@ -132,9 +145,49 @@ public class TmsSessionCommandService {
         session.updateDetails(
                 subtask,
                 request.processedVolume(),
-                normalize(request.reference()),
+                reference,
                 normalize(request.remarks()),
                 now);
+    }
+
+    private void ensureDocumentKeyAvailable(
+            String agentCcgid,
+            UUID toolkitId,
+            UUID subtaskId,
+            String reference,
+            String excludeSessionNo) {
+        String trimmed = normalize(reference);
+        if (trimmed.isEmpty()) {
+            return;
+        }
+        sessionRepository
+                .findOccupyingDocumentKey(
+                        agentCcgid, toolkitId, subtaskId, trimmed, TmsSessionStatus.DISCARDED)
+                .stream()
+                .filter(session -> excludeSessionNo == null || !session.getSessionNo().equals(excludeSessionNo))
+                .findFirst()
+                .ifPresent(existing -> {
+                    throw documentKeyConflict(existing);
+                });
+    }
+
+    private static ApiException documentKeyConflict(TmsSession existing) {
+        if (existing.getStatus() == TmsSessionStatus.PAUSED) {
+            return new ApiException(
+                    HttpStatus.CONFLICT,
+                    "document-session-exists",
+                    "A paused session already exists for this Toolkit, TASK and Reference. Resume it, or delete it from Paused Sessions.");
+        }
+        if (existing.getStatus() == TmsSessionStatus.COMPLETED) {
+            return new ApiException(
+                    HttpStatus.CONFLICT,
+                    "document-session-exists",
+                    "A completed session already exists for this Toolkit, TASK and Reference.");
+        }
+        return new ApiException(
+                HttpStatus.CONFLICT,
+                "document-session-exists",
+                "Another session already exists for this Toolkit, TASK and Reference.");
     }
 
     private ToolkitSubtask resolveSubtask(Toolkit toolkit, UUID subtaskId) {

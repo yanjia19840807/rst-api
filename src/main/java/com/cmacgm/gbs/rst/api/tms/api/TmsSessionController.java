@@ -61,8 +61,9 @@ public class TmsSessionController {
     public PausedSessionMatchView pausedMatch(
             @AuthenticationPrincipal RstPrincipal principal,
             @RequestParam UUID toolkitId,
+            @RequestParam(required = false) UUID subtaskId,
             @RequestParam(required = false) String reference) {
-        return queryService.pausedMatch(principal.ccgid(), toolkitId, reference);
+        return queryService.pausedMatch(principal.ccgid(), toolkitId, subtaskId, reference);
     }
 
     @GetMapping("/sessions/export")

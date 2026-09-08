@@ -37,11 +37,25 @@ public interface TmsSessionRepository
             String agentCcgid, Collection<TmsSessionStatus> statuses);
 
     @EntityGraph(attributePaths = {"toolkit", "toolkitSubtask", "pauseIntervals"})
-    List<TmsSession> findByAgentCcgidAndStatusAndToolkit_IdAndReferenceIgnoreCaseOrderByPausedAtDescStartedAtDesc(
-            String agentCcgid,
-            TmsSessionStatus status,
-            UUID toolkitId,
-            String reference);
+    @Query("""
+            select session
+            from TmsSession session
+            where session.agentCcgid = :agentCcgid
+              and session.toolkit.id = :toolkitId
+              and lower(session.reference) = lower(:reference)
+              and session.status <> :discarded
+              and (
+                    (:subtaskId is null and session.toolkitSubtask is null)
+                 or (:subtaskId is not null and session.toolkitSubtask.id = :subtaskId)
+              )
+            order by session.pausedAt desc, session.startedAt desc
+            """)
+    List<TmsSession> findOccupyingDocumentKey(
+            @Param("agentCcgid") String agentCcgid,
+            @Param("toolkitId") UUID toolkitId,
+            @Param("subtaskId") UUID subtaskId,
+            @Param("reference") String reference,
+            @Param("discarded") TmsSessionStatus discarded);
 
     @EntityGraph(attributePaths = {"toolkit", "toolkitSubtask", "pauseIntervals"})
     Optional<TmsSession> findBySessionNoAndAgentCcgid(String sessionNo, String agentCcgid);

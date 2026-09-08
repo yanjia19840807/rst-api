@@ -56,24 +56,28 @@ public class TmsSessionQueryService {
     }
 
     /**
-     * Finds paused sessions for the same agent, Toolkit, and exact reference.
+     * Finds paused sessions for the same agent, Toolkit, TASK, and exact reference.
      * Blank references are ignored so empty invoices do not collide.
      *
      * @param agentCcgid current agent
      * @param toolkitId selected Toolkit
+     * @param subtaskId selected TASK, or null when the Toolkit has none
      * @param reference trimmed invoice / case id
-     * @return latest match and how many paused rows share the key
+     * @return latest paused match and how many paused rows share the key
      */
     @Transactional(readOnly = true)
-    public PausedSessionMatchView pausedMatch(String agentCcgid, UUID toolkitId, String reference) {
+    public PausedSessionMatchView pausedMatch(
+            String agentCcgid, UUID toolkitId, UUID subtaskId, String reference) {
         String trimmed = reference == null ? "" : reference.trim();
         if (toolkitId == null || trimmed.isEmpty()) {
             return new PausedSessionMatchView(null, 0);
         }
-        List<TmsSession> matches =
-                sessionRepository
-                        .findByAgentCcgidAndStatusAndToolkit_IdAndReferenceIgnoreCaseOrderByPausedAtDescStartedAtDesc(
-                                agentCcgid, TmsSessionStatus.PAUSED, toolkitId, trimmed);
+        List<TmsSession> matches = sessionRepository
+                .findOccupyingDocumentKey(
+                        agentCcgid, toolkitId, subtaskId, trimmed, TmsSessionStatus.DISCARDED)
+                .stream()
+                .filter(session -> session.getStatus() == TmsSessionStatus.PAUSED)
+                .toList();
         if (matches.isEmpty()) {
             return new PausedSessionMatchView(null, 0);
         }

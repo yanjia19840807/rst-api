@@ -28,6 +28,7 @@ class TmsSessionApiIntegrationTests {
 
     private static final UUID TOOLKIT_ID = UUID.fromString("10000000-0000-0000-0000-000000000001");
     private static final UUID SUBTASK_ID = UUID.fromString("20000000-0000-0000-0000-000000000001");
+    private static final UUID SUBTASK_ID_2 = UUID.fromString("20000000-0000-0000-0000-000000000002");
 
     @Autowired
     private MockMvc mockMvc;
@@ -116,6 +117,19 @@ class TmsSessionApiIntegrationTests {
                 TOOLKIT_ID,
                 "Manual match",
                 1,
+                now,
+                now,
+                0);
+        jdbcTemplate.update(
+                """
+                insert into toolkit_subtask
+                    (id, toolkit_id, name, display_order, created_at, updated_at, version)
+                values (?, ?, ?, ?, ?, ?, ?)
+                """,
+                SUBTASK_ID_2,
+                TOOLKIT_ID,
+                "Exception handling",
+                2,
                 now,
                 now,
                 0);
@@ -346,6 +360,7 @@ class TmsSessionApiIntegrationTests {
                         .header("X-Dev-Ccgid", "AGENT001")
                         .header("X-Dev-Role", "AGENT")
                         .queryParam("toolkitId", TOOLKIT_ID.toString())
+                        .queryParam("subtaskId", SUBTASK_ID.toString())
                         .queryParam("reference", "inv-100"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.matchCount").value(1))
@@ -356,10 +371,152 @@ class TmsSessionApiIntegrationTests {
                         .header("X-Dev-Ccgid", "AGENT001")
                         .header("X-Dev-Role", "AGENT")
                         .queryParam("toolkitId", TOOLKIT_ID.toString())
+                        .queryParam("subtaskId", SUBTASK_ID_2.toString())
+                        .queryParam("reference", "INV-100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.matchCount").value(0))
+                .andExpect(jsonPath("$.latest").value(nullValue()));
+
+        mockMvc.perform(get("/api/v1/tms/sessions/paused-match")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .queryParam("toolkitId", TOOLKIT_ID.toString())
+                        .queryParam("subtaskId", SUBTASK_ID.toString())
                         .queryParam("reference", "INV-999"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.matchCount").value(0))
                 .andExpect(jsonPath("$.latest").value(nullValue()));
+    }
+
+    @Test
+    void rejectsStartWhenPausedDocumentKeyExists() throws Exception {
+        String response = mockMvc.perform(post("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolkitId": "%s",
+                                  "subtaskId": "%s",
+                                  "processedVolume": 2,
+                                  "reference": "INV-100"
+                                }
+                                """.formatted(TOOLKIT_ID, SUBTASK_ID)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String sessionId = JsonPath.read(response, "$.id");
+
+        mockMvc.perform(post("/api/v1/tms/sessions/{id}/pause", sessionId)
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolkitId": "%s",
+                                  "subtaskId": "%s",
+                                  "processedVolume": 1,
+                                  "reference": "inv-100"
+                                }
+                                """.formatted(TOOLKIT_ID, SUBTASK_ID)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type")
+                        .value("https://rst.cmacgm.com/problems/document-session-exists"));
+
+        mockMvc.perform(post("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolkitId": "%s",
+                                  "subtaskId": "%s",
+                                  "processedVolume": 1,
+                                  "reference": "INV-100"
+                                }
+                                """.formatted(TOOLKIT_ID, SUBTASK_ID_2)))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void rejectsStartAndEndWhenCompletedDocumentKeyExists() throws Exception {
+        String first = mockMvc.perform(post("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolkitId": "%s",
+                                  "subtaskId": "%s",
+                                  "processedVolume": 2,
+                                  "reference": "INV-100"
+                                }
+                                """.formatted(TOOLKIT_ID, SUBTASK_ID)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String firstId = JsonPath.read(first, "$.id");
+
+        mockMvc.perform(post("/api/v1/tms/sessions/{id}/end", firstId)
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolkitId": "%s",
+                                  "subtaskId": "%s",
+                                  "processedVolume": 1,
+                                  "reference": "INV-100"
+                                }
+                                """.formatted(TOOLKIT_ID, SUBTASK_ID)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type")
+                        .value("https://rst.cmacgm.com/problems/document-session-exists"));
+
+        String second = mockMvc.perform(post("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolkitId": "%s",
+                                  "subtaskId": "%s",
+                                  "processedVolume": 1,
+                                  "reference": "INV-OTHER"
+                                }
+                                """.formatted(TOOLKIT_ID, SUBTASK_ID)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String secondId = JsonPath.read(second, "$.id");
+
+        mockMvc.perform(post("/api/v1/tms/sessions/{id}/end", secondId)
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "subtaskId": "%s",
+                                  "processedVolume": 1,
+                                  "reference": "INV-100"
+                                }
+                                """.formatted(SUBTASK_ID)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type")
+                        .value("https://rst.cmacgm.com/problems/document-session-exists"));
     }
 
     @Test
