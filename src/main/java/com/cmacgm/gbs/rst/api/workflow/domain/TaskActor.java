@@ -176,17 +176,6 @@ public class TaskActor {
     }
 
     /**
-     * Records Reject: ends the process with no resubmit.
-     *
-     * @param comments required comments
-     * @param requestId idempotency key
-     * @param now decision time
-     */
-    public void refuse(String comments, UUID requestId, Instant now) {
-        decide(ActorStatus.REJECTED, comments, requestId, now);
-    }
-
-    /**
      * Records Supervisor Withdraw on the current review task.
      *
      * @param ccgid supervisor

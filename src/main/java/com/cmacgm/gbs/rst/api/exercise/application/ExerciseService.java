@@ -234,14 +234,19 @@ public class ExerciseService {
     @Transactional
     public void softDelete(String ownerCcgid, UUID exerciseId) {
         RstExercise exercise = access.requireOwned(ownerCcgid, exerciseId);
-        if (!ExerciseLifecycle.canDelete(processOf(exercise.getId()))) {
+        ProcessInstance process = processOf(exercise.getId());
+        if (!ExerciseLifecycle.canDelete(process)) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
                     "exercise-not-deletable",
-                    "Only unsubmitted Exercises can be deleted.");
+                    "The Exercise can be deleted only while it is unsubmitted, returned, or withdrawn.");
         }
         exercise.softDelete(ownerCcgid, clock.instant());
         exercises.save(exercise);
+        if (process != null) {
+            process.closeAfterExerciseDeleted();
+            workflows.save(process);
+        }
     }
 
     /**
@@ -468,7 +473,7 @@ public class ExerciseService {
 
     private static Set<String> tabStatuses(String tab) {
         if ("ARCHIVED".equalsIgnoreCase(tab)) {
-            return Set.of("APPROVED", "REJECTED");
+            return Set.of("APPROVED");
         }
         return Set.of("IN_PROGRESS", "UNDER_REVIEW");
     }
@@ -830,9 +835,6 @@ public class ExerciseService {
     private static Instant archivedAt(RstExercise exercise, ProcessInstance process) {
         if (ExerciseLifecycle.isApproved(process)) {
             return exercise.getValidatedAt();
-        }
-        if (ExerciseLifecycle.isRejected(process)) {
-            return exercise.getUpdatedAt();
         }
         return null;
     }

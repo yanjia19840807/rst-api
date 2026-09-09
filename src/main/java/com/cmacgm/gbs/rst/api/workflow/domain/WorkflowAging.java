@@ -50,7 +50,7 @@ public final class WorkflowAging {
      * Latest Return actor, if any.
      *
      * @param instance current process
-     * @return last reject, or null
+     * @return last return, or null
      */
     public static TaskActor lastReturn(ProcessInstance instance) {
         if (instance == null) {

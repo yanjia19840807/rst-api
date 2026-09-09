@@ -53,7 +53,6 @@ import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.QueueMetrics;
 import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.QueueQuery;
 import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.ReturnRequest;
 import com.cmacgm.gbs.rst.api.workflow.domain.ActorStatus;
-import com.cmacgm.gbs.rst.api.workflow.domain.ActorType;
 import com.cmacgm.gbs.rst.api.workflow.domain.ExerciseLifecycle;
 import com.cmacgm.gbs.rst.api.workflow.domain.ProcessInstance;
 import com.cmacgm.gbs.rst.api.workflow.domain.ProcessStatus;
@@ -130,8 +129,9 @@ public class ApprovalService {
      * Lists submissions for the Approver queue, applying the given filters on the server.
      *
      * <p>Awaiting Review only includes submissions whose current pending actor is assigned
-     * to a Timesheet position the caller occupies. Completed Task includes submissions
-     * where that position has already Approved or Returned.
+     * to a Timesheet position the caller occupies. Completed Task is one row per finished
+     * review visit (Approve / Return) for that position, including earlier cycles after a
+     * resubmit.
      *
      * @param principal current approver
      * @param query tab, status, and field filters
@@ -182,15 +182,21 @@ public class ApprovalService {
             if (exercise == null || exercise.getDeletedAt() != null) {
                 continue;
             }
-            boolean awaitingMe = isAwaitingMyPosition(workflow, myPositions);
-            TaskActor mine = positionDecision(workflow, myPositions);
-            if (awaitingOnly && !awaitingMe) {
+            if (awaitingOnly) {
+                if (!isAwaitingMyPosition(workflow, myPositions)) {
+                    continue;
+                }
+                items.add(toQueueItem(workflow, exercise, names, positionDecision(workflow, myPositions)));
                 continue;
             }
-            if (!awaitingOnly && (mine == null || awaitingMe)) {
-                continue;
+            for (TaskActor mine : workflow.completedReviewActorsForPositions(myPositions)) {
+                items.add(toQueueItem(
+                        workflow,
+                        exercise,
+                        names,
+                        mine,
+                        workflow.submittedAtFor(mine.getTask())));
             }
-            items.add(toQueueItem(workflow, exercise, names, mine));
         }
         if (byAging) {
             items.sort(Comparator.comparing(
@@ -414,52 +420,16 @@ public class ApprovalService {
                 loaded.exercise().getOwnerCcgid(),
                 loaded.exercise(),
                 request.comments());
-        return toDetail(loaded, principal);
-    }
-
-    /**
-     * Rejects the submission and ends the process. The Exercise is not reopened.
-     *
-     * @param principal acting approver
-     * @param submissionId submission id
-     * @param request reject payload (comments required)
-     * @return updated review detail
-     */
-    @Transactional
-    public ApprovalDetailView reject(RstPrincipal principal, UUID submissionId, ReturnRequest request) {
-        if (request.comments() == null || request.comments().isBlank()) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY,
-                    "comments-required",
-                    "Reject comments are required.");
+        Set<String> exclude = new HashSet<>();
+        exclude.add(loaded.exercise().getOwnerCcgid());
+        if (actor.getCcgid() != null) {
+            exclude.add(actor.getCcgid());
         }
-        Loaded loaded = load(submissionId);
-        if (!loaded.workflow().isAwaitingReview()) {
-            throw new ApiException(
-                    HttpStatus.CONFLICT,
-                    "submission-not-awaiting",
-                    "Submission is not awaiting approval.");
+        if (actor.getActedByCcgid() != null) {
+            exclude.add(actor.getActedByCcgid());
         }
-        UUID requestId = request.requestId() == null ? UUID.randomUUID() : request.requestId();
-        if (loaded.workflow().findActorByRequestId(requestId).isPresent()) {
-            return toDetail(loaded, principal);
-        }
-
-        ProcessTask current = loaded.workflow().findCurrentPendingTask()
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.CONFLICT,
-                        "workflow-step-not-ready",
-                        "Current workflow step is not READY."));
-        TaskActor actor = requirePendingActor(principal, current);
-        forbidSelfApproval(principal, loaded.exercise());
-        actor.applyHandler(Handler.from(principal));
-        Instant now = clock.instant();
-        loaded.workflow().refuse(actor, request.comments(), requestId, now);
-        loaded.exercise().markRejected(principal.ccgid(), now);
-        persist(loaded);
-        mail.notifyOwner(
-                OwnerOutcome.REJECTED,
-                loaded.exercise().getOwnerCcgid(),
+        mail.notifyPriorApproversReturned(
+                loaded.workflow().priorApproverCcgids(exclude),
                 loaded.exercise(),
                 request.comments());
         return toDetail(loaded, principal);
@@ -592,6 +562,15 @@ public class ApprovalService {
             RstExercise exercise,
             Map<String, String> names,
             TaskActor mine) {
+        return toQueueItem(workflow, exercise, names, mine, workflow.getSubmittedAt());
+    }
+
+    private ApprovalQueueItem toQueueItem(
+            ProcessInstance workflow,
+            RstExercise exercise,
+            Map<String, String> names,
+            TaskActor mine,
+            Instant submittedAt) {
         var snapshot = exercise.getToolkitSnapshot();
         String toolkitName = snapshot != null ? snapshot.getToolkitName() : "";
         String pl3Name = snapshot != null ? snapshot.getPl3Name() : "";
@@ -634,6 +613,7 @@ public class ApprovalService {
 
         return new ApprovalQueueItem(
                 workflow.getId(),
+                mine == null ? null : mine.getId(),
                 exercise.getId(),
                 exercise.getExerciseCode(),
                 center,
@@ -650,7 +630,7 @@ public class ApprovalService {
                 previousStepAt,
                 agingDays,
                 exercise.getCreatedAt(),
-                workflow.getSubmittedAt(),
+                submittedAt,
                 archivedAt,
                 finalStatus(workflow.submissionStatus()),
                 reviewDurationDays,
@@ -725,7 +705,6 @@ public class ApprovalService {
             Instant fromAction = workflow.getTasks().stream()
                     .flatMap(task -> task.getActors().stream())
                     .filter(actor -> actor.getStatus() == ActorStatus.RETURNED
-                            || actor.getStatus() == ActorStatus.REJECTED
                             || actor.getStatus() == ActorStatus.WITHDRAWN)
                     .map(TaskActor::getActedAt)
                     .max(Instant::compareTo)
@@ -739,10 +718,11 @@ public class ApprovalService {
         if ("APPROVED".equals(submissionStatus)) {
             return "Approved";
         }
-        if ("RETURNED".equals(submissionStatus)
-                || "WITHDRAWN".equals(submissionStatus)
-                || "REJECTED".equals(submissionStatus)) {
-            return "Rejected";
+        if ("RETURNED".equals(submissionStatus)) {
+            return "Returned";
+        }
+        if ("WITHDRAWN".equals(submissionStatus)) {
+            return "Withdrawn";
         }
         return null;
     }
@@ -831,18 +811,11 @@ public class ApprovalService {
     }
 
     private TaskActor positionDecision(ProcessInstance workflow, Set<String> myPositions) {
-        if (workflow == null || myPositions == null || myPositions.isEmpty()) {
+        if (workflow == null) {
             return null;
         }
-        return workflow.getTasks().stream()
-                .flatMap(task -> task.getActors().stream())
-                .filter(actor -> actor.getActorType() != ActorType.INITIATOR)
-                .filter(actor -> actor.getStatus() == ActorStatus.APPROVED
-                        || actor.getStatus() == ActorStatus.RETURNED
-                        || actor.getStatus() == ActorStatus.REJECTED)
-                .filter(actor -> actor.getPositionId() != null && myPositions.contains(actor.getPositionId()))
-                .max(Comparator.comparing(TaskActor::getActedAt, Comparator.nullsLast(Comparator.naturalOrder())))
-                .orElse(null);
+        List<TaskActor> actors = workflow.completedReviewActorsForPositions(myPositions);
+        return actors.isEmpty() ? null : actors.get(actors.size() - 1);
     }
 
     private static String toolkitCenter(RstExercise exercise) {
@@ -863,7 +836,6 @@ public class ApprovalService {
         return switch (status) {
             case APPROVED -> "Approved";
             case RETURNED -> "Returned";
-            case REJECTED -> "Rejected";
             default -> null;
         };
     }

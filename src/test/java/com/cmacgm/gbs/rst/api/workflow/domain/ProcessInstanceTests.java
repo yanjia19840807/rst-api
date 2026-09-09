@@ -76,24 +76,39 @@ class ProcessInstanceTests {
         assertThat(instance.submissionStatus()).isEqualTo("RETURNED");
         assertThat(instance.isResubmittable()).isTrue();
         assertThat(ExerciseLifecycle.canEdit(instance)).isTrue();
+        assertThat(ExerciseLifecycle.canDelete(instance)).isTrue();
         assertThat(ExerciseLifecycle.canWithdraw(instance)).isFalse();
         assertThat(actor.getStatus()).isEqualTo(ActorStatus.RETURNED);
         assertThat(instance.findCurrentPendingTask()).isEmpty();
     }
 
     @Test
-    void refuseFinishesProcessAndBlocksResubmit() {
+    void priorApproversAreApprovedReviewersInCurrentCycle() {
+        ProcessInstance instance = openAtManager();
+        TaskActor manager = instance.findCurrentPendingTask().orElseThrow()
+                .findAnyPendingActor().orElseThrow();
+        instance.approve(manager, "ok", UUID.randomUUID(), T1);
+        instance.openReview(TaskNode.CDH, List.of(new ProcessInstance.Assignee("P-C", "cdh1")), T1);
+        TaskActor cdh = instance.findCurrentPendingTask().orElseThrow()
+                .findAnyPendingActor().orElseThrow();
+        instance.returnToSupervisor(cdh, "fix", UUID.randomUUID(), T1);
+
+        assertThat(instance.priorApproverCcgids(Set.of("cdh1", "sup1"))).containsExactly("mgr1");
+        assertThat(instance.priorApproverCcgids(Set.of())).containsExactly("mgr1");
+    }
+
+    @Test
+    void closeAfterDeleteFinishesOpenReturnedProcess() {
         ProcessInstance instance = openAtManager();
         TaskActor actor = instance.findCurrentPendingTask().orElseThrow()
                 .findAnyPendingActor().orElseThrow();
+        instance.returnToSupervisor(actor, "fix", UUID.randomUUID(), T1);
 
-        instance.refuse(actor, "out of scope", UUID.randomUUID(), T1);
+        instance.closeAfterExerciseDeleted();
 
         assertThat(instance.getStatus()).isEqualTo(ProcessStatus.FINISHED);
-        assertThat(instance.documentStatus()).isEqualTo(ExerciseLifecycle.REJECTED);
-        assertThat(instance.submissionStatus()).isEqualTo("REJECTED");
-        assertThat(instance.isResubmittable()).isFalse();
-        assertThat(actor.getStatus()).isEqualTo(ActorStatus.REJECTED);
+        assertThat(instance.getCurrentStep()).isNull();
+        assertThat(instance.submissionStatus()).isEqualTo("RETURNED");
     }
 
     @Test
@@ -108,6 +123,7 @@ class ProcessInstanceTests {
         assertThat(instance.submissionStatus()).isEqualTo("WITHDRAWN");
         assertThat(instance.isResubmittable()).isTrue();
         assertThat(ExerciseLifecycle.canEdit(instance)).isTrue();
+        assertThat(ExerciseLifecycle.canDelete(instance)).isTrue();
         assertThat(ExerciseLifecycle.canWithdraw(instance)).isFalse();
         ProcessTask manager = instance.getTasks().stream()
                 .filter(task -> task.getNode() == TaskNode.MANAGER)
@@ -117,6 +133,28 @@ class ProcessInstanceTests {
         assertThat(manager.getActors())
                 .extracting(TaskActor::getStatus)
                 .contains(ActorStatus.WITHDRAWN, ActorStatus.CANCELLED);
+    }
+
+    @Test
+    void completedReviewActorsKeepEachVisitForAPosition() {
+        Instant t2 = Instant.parse("2026-01-03T00:00:00Z");
+        Instant t3 = Instant.parse("2026-01-04T00:00:00Z");
+        ProcessInstance instance = openAtManager();
+        TaskActor first = instance.findCurrentPendingTask().orElseThrow()
+                .findAnyPendingActor().orElseThrow();
+        instance.returnToSupervisor(first, "fix", UUID.randomUUID(), T1);
+        instance.recordSubmit("sup1", "again", UUID.randomUUID(), t2);
+        instance.openReview(TaskNode.MANAGER, List.of(new ProcessInstance.Assignee("P-M", "mgr1")), t2);
+        TaskActor second = instance.findCurrentPendingTask().orElseThrow()
+                .findAnyPendingActor().orElseThrow();
+        instance.approve(second, "ok", UUID.randomUUID(), t3);
+
+        List<TaskActor> mine = instance.completedReviewActorsForPositions(Set.of("P-M"));
+        assertThat(mine).extracting(TaskActor::getStatus)
+                .containsExactly(ActorStatus.RETURNED, ActorStatus.APPROVED);
+        assertThat(instance.submittedAtFor(mine.get(0).getTask())).isEqualTo(T0);
+        assertThat(instance.submittedAtFor(mine.get(1).getTask())).isEqualTo(t2);
+        assertThat(instance.completedReviewActorsForPositions(Set.of("P-C"))).isEmpty();
     }
 
     @Test

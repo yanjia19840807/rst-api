@@ -8,7 +8,6 @@ public final class ExerciseLifecycle {
     public static final String IN_PROGRESS = "IN_PROGRESS";
     public static final String UNDER_REVIEW = "UNDER_REVIEW";
     public static final String APPROVED = "APPROVED";
-    public static final String REJECTED = "REJECTED";
 
     private ExerciseLifecycle() {
     }
@@ -17,7 +16,7 @@ public final class ExerciseLifecycle {
      * List / permission bucket.
      *
      * @param process current process, or null when never submitted
-     * @return IN_PROGRESS / UNDER_REVIEW / APPROVED / REJECTED
+     * @return IN_PROGRESS / UNDER_REVIEW / APPROVED
      */
     public static String workflowStatus(ProcessInstance process) {
         if (process == null) {
@@ -30,7 +29,7 @@ public final class ExerciseLifecycle {
      * Last process outcome for the public submissionStatus field.
      *
      * @param process current process, or null when never submitted
-     * @return OPEN / APPROVED / RETURNED / REJECTED / WITHDRAWN, or null
+     * @return OPEN / APPROVED / RETURNED / WITHDRAWN, or null
      */
     public static String submissionStatus(ProcessInstance process) {
         if (process == null) {
@@ -63,11 +62,7 @@ public final class ExerciseLifecycle {
         return APPROVED.equals(workflowStatus(process));
     }
 
-    public static boolean isRejected(ProcessInstance process) {
-        return REJECTED.equals(workflowStatus(process));
-    }
-
     public static boolean isArchived(ProcessInstance process) {
-        return isApproved(process) || isRejected(process);
+        return isApproved(process);
     }
 }

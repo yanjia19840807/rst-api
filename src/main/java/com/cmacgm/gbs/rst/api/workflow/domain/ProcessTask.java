@@ -135,10 +135,6 @@ public class ProcessTask {
             complete(TaskStatus.RETURNED, now);
             return;
         }
-        if (actor.getStatus() == ActorStatus.REJECTED) {
-            complete(TaskStatus.REJECTED, now);
-            return;
-        }
         if (actor.getStatus() != ActorStatus.APPROVED) {
             return;
         }

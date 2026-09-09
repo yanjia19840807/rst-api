@@ -45,7 +45,7 @@ public class MailPreferenceService {
         Map<String, Boolean> saved = saved(ccgid);
         List<TypeView> types = new ArrayList<>();
         for (MailType type : MailType.forRole(role)) {
-            types.add(new TypeView(type.id(), type.label(), saved.getOrDefault(type.id(), true)));
+            types.add(new TypeView(type.id(), type.label(), enabledIn(saved, type)));
         }
         String email = addresses.emailOf(ccgid);
         if (email == null) {
@@ -98,9 +98,23 @@ public class MailPreferenceService {
         if (ccgid == null || type == null) {
             return false;
         }
-        return preferences.findById(new MailPreference.Pk(ccgid.trim().toUpperCase(Locale.ROOT), type.id()))
-                .map(MailPreference::isEnabled)
-                .orElse(true);
+        return enabledIn(saved(ccgid), type);
+    }
+
+    private static boolean enabledIn(Map<String, Boolean> saved, MailType type) {
+        if (type == MailType.WORKFLOW) {
+            Boolean unified = saved.get(MailType.WORKFLOW.id());
+            if (unified != null) {
+                return unified;
+            }
+            for (String legacyId : MailType.legacyWorkflowIds()) {
+                if (Boolean.FALSE.equals(saved.get(legacyId))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return saved.getOrDefault(type.id(), true);
     }
 
     private Map<String, Boolean> saved(String ccgid) {

@@ -63,7 +63,7 @@ public class MailNotificationService {
             return;
         }
         sendToCcgids(
-                MailType.APPROVAL_REQUESTED,
+                MailType.WORKFLOW,
                 List.of(ccgid),
                 subject("RST approval needed", exercise),
                 body("An Exercise is waiting for your approval.", exercise, null));
@@ -82,16 +82,34 @@ public class MailNotificationService {
             return;
         }
         sendToCcgids(
-                MailType.APPROVAL_REQUESTED,
+                MailType.WORKFLOW,
                 List.of(lth.getCcgid()),
                 subject("RST approval needed", exercise),
                 body("An Exercise is waiting for your approval.", exercise, null));
     }
 
     /**
-     * Returned / rejected / approved mail. One preference switch covers all three.
+     * Tells prior approvers that a case they already approved was returned.
      *
-     * @param outcome returned / rejected / approved
+     * @param ccgids approvers from the current submit cycle
+     * @param exercise case
+     * @param comments return comments
+     */
+    public void notifyPriorApproversReturned(List<String> ccgids, RstExercise exercise, String comments) {
+        if (ccgids == null || ccgids.isEmpty()) {
+            return;
+        }
+        sendToCcgids(
+                MailType.WORKFLOW,
+                ccgids,
+                subject("RST Exercise returned", exercise),
+                body("An Exercise you approved was returned to the Supervisor.", exercise, comments));
+    }
+
+    /**
+     * Returned / approved mail. One preference switch covers all workflow mail.
+     *
+     * @param outcome returned / approved
      * @param ownerCcgid supervisor
      * @param exercise case
      * @param comments decision comments
@@ -101,18 +119,17 @@ public class MailNotificationService {
             return;
         }
         sendToCcgids(
-                MailType.SUBMISSION_OUTCOME,
+                MailType.WORKFLOW,
                 List.of(ownerCcgid),
                 subject(outcome.subject(), exercise),
                 body(outcome.headline(), exercise, comments));
     }
 
     /**
-     * Supervisor outcome copy. Preference is always {@link MailType#SUBMISSION_OUTCOME}.
+     * Supervisor outcome copy. Preference is always {@link MailType#WORKFLOW}.
      */
     public enum OwnerOutcome {
         RETURNED("RST Exercise returned", "Your Exercise was returned."),
-        REJECTED("RST Exercise rejected", "Your Exercise was rejected."),
         APPROVED("RST Exercise approved", "Your Exercise was approved.");
 
         private final String subject;

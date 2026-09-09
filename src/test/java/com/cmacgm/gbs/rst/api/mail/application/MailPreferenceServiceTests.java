@@ -22,15 +22,23 @@ class MailPreferenceServiceTests {
     void missingRowMeansEnabled() {
         MailPreferenceService service = new MailPreferenceService(emptyRepo(), ccgid -> null);
 
-        assertThat(service.isEnabled("S1", MailType.APPROVAL_REQUESTED)).isTrue();
+        assertThat(service.isEnabled("S1", MailType.WORKFLOW)).isTrue();
     }
 
     @Test
     void savedOffIsHonored() {
-        MailPreference row = MailPreference.of("S1", MailType.APPROVAL_REQUESTED.id(), false);
+        MailPreference row = MailPreference.of("S1", MailType.WORKFLOW.id(), false);
         MailPreferenceService service = new MailPreferenceService(repoWith(row), ccgid -> "s1@timesheet.local");
 
-        assertThat(service.isEnabled("s1", MailType.APPROVAL_REQUESTED)).isFalse();
+        assertThat(service.isEnabled("s1", MailType.WORKFLOW)).isFalse();
+    }
+
+    @Test
+    void legacyWorkflowOffMapsToUnifiedSwitch() {
+        MailPreference row = MailPreference.of("S1", "approval.requested", false);
+        MailPreferenceService service = new MailPreferenceService(repoWith(row), ccgid -> "s1@timesheet.local");
+
+        assertThat(service.isEnabled("S1", MailType.WORKFLOW)).isFalse();
     }
 
     @Test
@@ -45,7 +53,7 @@ class MailPreferenceServiceTests {
         assertThat(view.emailMissing()).isFalse();
         assertThat(view.types()).extracting(MailPreferenceService.TypeView::enabled).containsOnly(true);
         assertThat(view.types()).extracting(MailPreferenceService.TypeView::id)
-                .containsExactly("submission.outcome");
+                .containsExactly("workflow.notification");
     }
 
     @Test

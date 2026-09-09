@@ -7,7 +7,6 @@ public enum TaskStatus {
     PENDING,
     APPROVED,
     RETURNED,
-    REJECTED,
     WITHDRAWN;
 
     /**

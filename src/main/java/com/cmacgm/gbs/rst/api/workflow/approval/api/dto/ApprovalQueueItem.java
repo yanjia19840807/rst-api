@@ -5,10 +5,12 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Approver queue row.
+ * Approver queue row. {@code completedTaskId} is the finished review visit
+ * on Completed Task; Awaiting Review leaves it null.
  */
 public record ApprovalQueueItem(
         UUID submissionId,
+        UUID completedTaskId,
         UUID exerciseId,
         String exerciseCode,
         String center,

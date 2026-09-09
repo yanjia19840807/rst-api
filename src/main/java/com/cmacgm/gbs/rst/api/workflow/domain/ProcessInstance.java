@@ -3,8 +3,11 @@ package com.cmacgm.gbs.rst.api.workflow.domain;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import jakarta.persistence.CascadeType;
@@ -221,17 +224,95 @@ public class ProcessInstance {
     }
 
     /**
-     * Rejects and ends the process. Exercise is not reopened.
-     *
-     * @param actor deciding actor
-     * @param comments required comments
-     * @param requestId idempotency key
-     * @param now decision time
+     * Closes the process after the Exercise is deleted. History rows stay.
      */
-    public void refuse(TaskActor actor, String comments, UUID requestId, Instant now) {
-        actor.refuse(comments, requestId, now);
-        actor.getTask().applyDecision(actor, now);
+    public void closeAfterExerciseDeleted() {
         this.status = ProcessStatus.FINISHED;
+        this.currentStep = null;
+    }
+
+    /**
+     * CCGIDs who approved a review hop in the current submit cycle.
+     *
+     * @param exclude CCGIDs not to notify (owner, current returner)
+     * @return distinct approver CCGIDs, possibly empty
+     */
+    public List<String> priorApproverCcgids(Set<String> exclude) {
+        int lastSubmit = -1;
+        for (int i = 0; i < tasks.size(); i++) {
+            if (tasks.get(i).getNode() == TaskNode.SUBMIT) {
+                lastSubmit = i;
+            }
+        }
+        LinkedHashSet<String> ccgids = new LinkedHashSet<>();
+        Set<String> skip = exclude == null ? Set.of() : exclude;
+        for (int i = lastSubmit + 1; i < tasks.size(); i++) {
+            ProcessTask task = tasks.get(i);
+            if (!task.getNode().isReview() || task.getStatus() != TaskStatus.APPROVED) {
+                continue;
+            }
+            for (TaskActor actor : task.getActors()) {
+                if (actor.getStatus() != ActorStatus.APPROVED || actor.getActorType() == ActorType.INITIATOR) {
+                    continue;
+                }
+                String ccgid = actor.getActedByCcgid() != null ? actor.getActedByCcgid() : actor.getCcgid();
+                if (ccgid == null || ccgid.isBlank()) {
+                    continue;
+                }
+                boolean excluded = skip.stream().anyMatch(item -> item != null && item.equalsIgnoreCase(ccgid));
+                if (!excluded) {
+                    ccgids.add(ccgid);
+                }
+            }
+        }
+        return List.copyOf(ccgids);
+    }
+
+    /**
+     * Finished review visits for the given Timesheet positions, oldest first.
+     * Return / Approve each stay as their own visit after a later resubmit.
+     *
+     * @param positionIds Timesheet positions the caller occupies
+     * @return actors, possibly empty
+     */
+    public List<TaskActor> completedReviewActorsForPositions(Set<String> positionIds) {
+        if (positionIds == null || positionIds.isEmpty()) {
+            return List.of();
+        }
+        return tasks.stream()
+                .filter(task -> task.getNode().isReview())
+                .flatMap(task -> task.getActors().stream())
+                .filter(actor -> actor.getActorType() != ActorType.INITIATOR)
+                .filter(actor -> actor.getStatus() == ActorStatus.APPROVED
+                        || actor.getStatus() == ActorStatus.RETURNED)
+                .filter(actor -> actor.getPositionId() != null && positionIds.contains(actor.getPositionId()))
+                .sorted(Comparator.comparing(TaskActor::getActedAt, Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
+    }
+
+    /**
+     * Submit time of the cycle that opened this review visit.
+     *
+     * @param reviewTask review hop
+     * @return that cycle's submit time, or {@link #submittedAt}
+     */
+    public Instant submittedAtFor(ProcessTask reviewTask) {
+        if (reviewTask == null) {
+            return submittedAt;
+        }
+        Instant reviewCreated = reviewTask.getCreatedAt();
+        Instant last = null;
+        for (ProcessTask task : tasks) {
+            if (task.getNode() != TaskNode.SUBMIT) {
+                continue;
+            }
+            Instant submitAt = task.getCompletedAt() != null ? task.getCompletedAt() : task.getCreatedAt();
+            if (reviewCreated != null && submitAt != null && submitAt.isAfter(reviewCreated)) {
+                continue;
+            }
+            last = submitAt;
+        }
+        return last != null ? last : submittedAt;
     }
 
     /**
@@ -260,25 +341,23 @@ public class ProcessInstance {
     /**
      * Document bucket derived from this process.
      *
-     * @return UNDER_REVIEW / APPROVED / REJECTED / IN_PROGRESS
+     * @return UNDER_REVIEW / APPROVED / IN_PROGRESS
      */
     public String documentStatus() {
         if (isAwaitingReview()) {
             return ExerciseLifecycle.UNDER_REVIEW;
         }
         return lastReviewOutcome()
-                .map(outcome -> switch (outcome) {
-                    case APPROVED -> ExerciseLifecycle.APPROVED;
-                    case REJECTED -> ExerciseLifecycle.REJECTED;
-                    default -> ExerciseLifecycle.IN_PROGRESS;
-                })
+                .map(outcome -> outcome == TaskStatus.APPROVED
+                        ? ExerciseLifecycle.APPROVED
+                        : ExerciseLifecycle.IN_PROGRESS)
                 .orElse(ExerciseLifecycle.IN_PROGRESS);
     }
 
     /**
      * Public submissionStatus: OPEN while a reviewer is waiting, otherwise the last outcome.
      *
-     * @return OPEN / APPROVED / RETURNED / REJECTED / WITHDRAWN
+     * @return OPEN / APPROVED / RETURNED / WITHDRAWN
      */
     public String submissionStatus() {
         if (isAwaitingReview()) {
@@ -298,7 +377,7 @@ public class ProcessInstance {
     }
 
     /**
-     * Latest finished review visit (approve / return / reject / withdraw).
+     * Latest finished review visit (approve / return / withdraw).
      *
      * @return optional outcome
      */

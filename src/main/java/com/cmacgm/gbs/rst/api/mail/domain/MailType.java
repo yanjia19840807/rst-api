@@ -3,14 +3,30 @@ package com.cmacgm.gbs.rst.api.mail.domain;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * Mail types a signed-in Supervisor / Manager / CDH / LTH / ADMIN can opt into.
  */
 public enum MailType {
-    APPROVAL_REQUESTED("approval.requested", "Awaiting my approval"),
-    SUBMISSION_OUTCOME("submission.outcome", "Exercise returned, rejected or approved"),
+    WORKFLOW("workflow.notification", "Workflow notifications"),
     TIMESHEET_SYNC_FAILED("timesheet.sync.failed", "Timesheet sync failed");
+
+    private static final Set<String> WORKFLOW_ALIASES = Set.of(
+            "workflow.notification",
+            "WORKFLOW",
+            "approval.requested",
+            "APPROVAL_REQUESTED",
+            "submission.outcome",
+            "SUBMISSION_OUTCOME",
+            "submission.returned",
+            "submission.approved",
+            "SUBMISSION_RETURNED",
+            "SUBMISSION_APPROVED");
+
+    private static final List<String> LEGACY_WORKFLOW_IDS = List.of(
+            "approval.requested",
+            "submission.outcome");
 
     private final String id;
     private final String label;
@@ -29,6 +45,15 @@ public enum MailType {
     }
 
     /**
+     * Stored preference ids that used to be separate workflow switches.
+     *
+     * @return legacy ids
+     */
+    public static List<String> legacyWorkflowIds() {
+        return LEGACY_WORKFLOW_IDS;
+    }
+
+    /**
      * @param raw slug or enum name
      * @return type, or null
      */
@@ -37,13 +62,8 @@ public enum MailType {
             return null;
         }
         String trimmed = raw.trim();
-        if ("submission.returned".equals(trimmed)
-                || "submission.rejected".equals(trimmed)
-                || "submission.approved".equals(trimmed)
-                || "SUBMISSION_RETURNED".equalsIgnoreCase(trimmed)
-                || "SUBMISSION_REJECTED".equalsIgnoreCase(trimmed)
-                || "SUBMISSION_APPROVED".equalsIgnoreCase(trimmed)) {
-            return SUBMISSION_OUTCOME;
+        if (WORKFLOW_ALIASES.contains(trimmed) || WORKFLOW_ALIASES.contains(trimmed.toUpperCase(Locale.ROOT))) {
+            return WORKFLOW;
         }
         for (MailType type : values()) {
             if (type.id.equals(trimmed) || type.name().equalsIgnoreCase(trimmed)) {
@@ -64,9 +84,8 @@ public enum MailType {
             return List.of();
         }
         return switch (role.trim().toUpperCase(Locale.ROOT)) {
-            case "SUPERVISOR" -> List.of(SUBMISSION_OUTCOME);
-            case "MANAGER", "CDH" -> List.of(APPROVAL_REQUESTED);
-            case "LTH" -> List.of(APPROVAL_REQUESTED, TIMESHEET_SYNC_FAILED);
+            case "SUPERVISOR", "MANAGER", "CDH" -> List.of(WORKFLOW);
+            case "LTH" -> List.of(WORKFLOW, TIMESHEET_SYNC_FAILED);
             case "ADMIN" -> List.of(TIMESHEET_SYNC_FAILED);
             default -> List.of();
         };

@@ -309,17 +309,6 @@ public class RstExercise {
         this.updatedBy = actorCcgid;
     }
 
-    /**
-     * Records a terminal Reject. Document status comes from the process.
-     *
-     * @param actorCcgid acting approver
-     * @param now reject time
-     */
-    public void markRejected(String actorCcgid, Instant now) {
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
-    }
-
     public boolean hasOfficialScenario() {
         return officialScenarioId != null;
     }

@@ -10,20 +10,20 @@ import org.junit.jupiter.api.Test;
 class MailTypeTests {
 
     @Test
-    void supervisorOwnsOutcomeMailsOnly() {
-        assertThat(MailType.forRole("SUPERVISOR")).containsExactly(MailType.SUBMISSION_OUTCOME);
+    void supervisorOwnsWorkflowMail() {
+        assertThat(MailType.forRole("SUPERVISOR")).containsExactly(MailType.WORKFLOW);
     }
 
     @Test
-    void managerAndCdhOwnAwaitingApproval() {
-        assertThat(MailType.forRole("MANAGER")).containsExactly(MailType.APPROVAL_REQUESTED);
-        assertThat(MailType.forRole("CDH")).containsExactly(MailType.APPROVAL_REQUESTED);
+    void managerAndCdhOwnWorkflowMail() {
+        assertThat(MailType.forRole("MANAGER")).containsExactly(MailType.WORKFLOW);
+        assertThat(MailType.forRole("CDH")).containsExactly(MailType.WORKFLOW);
     }
 
     @Test
-    void lthOwnsAwaitingApprovalAndSyncFailed() {
+    void lthOwnsWorkflowAndSyncFailed() {
         assertThat(MailType.forRole("LTH")).containsExactly(
-                MailType.APPROVAL_REQUESTED, MailType.TIMESHEET_SYNC_FAILED);
+                MailType.WORKFLOW, MailType.TIMESHEET_SYNC_FAILED);
     }
 
     @Test
@@ -48,9 +48,11 @@ class MailTypeTests {
 
     @Test
     void fromIdAcceptsSlugOrEnumName() {
-        assertThat(MailType.fromId("approval.requested")).isEqualTo(MailType.APPROVAL_REQUESTED);
+        assertThat(MailType.fromId("approval.requested")).isEqualTo(MailType.WORKFLOW);
+        assertThat(MailType.fromId("submission.outcome")).isEqualTo(MailType.WORKFLOW);
+        assertThat(MailType.fromId("workflow.notification")).isEqualTo(MailType.WORKFLOW);
         assertThat(MailType.fromId("TIMESHEET_SYNC_FAILED")).isEqualTo(MailType.TIMESHEET_SYNC_FAILED);
-        assertThat(MailType.fromId("submission.returned")).isEqualTo(MailType.SUBMISSION_OUTCOME);
+        assertThat(MailType.fromId("submission.returned")).isEqualTo(MailType.WORKFLOW);
         assertThat(MailType.fromId("unknown")).isNull();
     }
 }
