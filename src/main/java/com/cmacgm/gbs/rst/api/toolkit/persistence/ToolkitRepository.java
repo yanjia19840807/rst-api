@@ -41,8 +41,18 @@ public interface ToolkitRepository extends JpaRepository<Toolkit, UUID> {
             from Toolkit toolkit
             where toolkit.id = :id
               and toolkit.deletedAt is null
+              and toolkit.enabled = true
             """)
     Optional<Toolkit> findActiveById(@Param("id") UUID id);
+
+    @EntityGraph(attributePaths = "subtasks")
+    @Query("""
+            select toolkit
+            from Toolkit toolkit
+            where toolkit.id = :id
+              and toolkit.deletedAt is null
+            """)
+    Optional<Toolkit> findExistingById(@Param("id") UUID id);
 
     @EntityGraph(attributePaths = "subtasks")
     List<Toolkit> findBySupervisorPositionIdAndDeletedAtIsNullOrderByName(

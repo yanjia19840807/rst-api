@@ -61,7 +61,7 @@ public class TmsSessionCommandService {
                     "toolkit-out-of-scope",
                     "The Agent is not currently assigned to the Toolkit scope by Timesheet.");
         }
-        var subtask = resolveSubtask(toolkit, request.subtaskId());
+        var subtask = resolveSubtask(toolkit, request.subtaskId(), true);
         requireWholeVolume(request.processedVolume());
         ensureDocumentKeyAvailable(
                 agentCcgid,
@@ -121,8 +121,28 @@ public class TmsSessionCommandService {
         return toResponse(session, now);
     }
 
+    @Transactional
+    public TmsSessionResponse setEnabled(String supervisorCcgid, String sessionNo, boolean enabled) {
+        TmsSession session = sessionRepository.findBySessionNo(sessionNo)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        "tms-session-not-found",
+                        "The TMS session was not found."));
+        Toolkit toolkit = session.getToolkit();
+        if (!timesheet.supervisorOwnsScope(
+                supervisorCcgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code())) {
+            throw new ApiException(
+                    HttpStatus.NOT_FOUND,
+                    "tms-session-not-found",
+                    "The TMS session was not found.");
+        }
+        var now = clock.instant();
+        session.setEnabled(enabled, now);
+        return toResponse(session, now);
+    }
+
     private void applyDetails(TmsSession session, UpdateTmsSessionRequest request, Instant now) {
-        Toolkit toolkit = toolkitRepository.findActiveById(session.getToolkit().getId())
+        Toolkit toolkit = toolkitRepository.findExistingById(session.getToolkit().getId())
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
                         "toolkit-not-found",
@@ -130,7 +150,7 @@ public class TmsSessionCommandService {
         UUID requestedSubtaskId = request == null
                 ? (session.getToolkitSubtask() == null ? null : session.getToolkitSubtask().getId())
                 : request.subtaskId();
-        ToolkitSubtask subtask = resolveSubtask(toolkit, requestedSubtaskId);
+        ToolkitSubtask subtask = resolveSubtask(toolkit, requestedSubtaskId, false);
         String reference = request == null ? session.getReference() : normalize(request.reference());
         ensureDocumentKeyAvailable(
                 session.getAgentCcgid(),
@@ -176,7 +196,7 @@ public class TmsSessionCommandService {
             return new ApiException(
                     HttpStatus.CONFLICT,
                     "document-session-exists",
-                    "A paused session already exists for this Toolkit, TASK and Reference. Resume it, or delete it from Paused Sessions.");
+                    "A paused session already exists for this Toolkit, TASK and Reference. Resume it, or discard it from Paused Sessions.");
         }
         if (existing.getStatus() == TmsSessionStatus.COMPLETED) {
             return new ApiException(
@@ -190,11 +210,10 @@ public class TmsSessionCommandService {
                 "Another session already exists for this Toolkit, TASK and Reference.");
     }
 
-    private ToolkitSubtask resolveSubtask(Toolkit toolkit, UUID subtaskId) {
-        boolean hasActiveSubtasks = toolkit.getSubtasks().stream()
-                .anyMatch(item -> item.getDeletedAt() == null);
+    private ToolkitSubtask resolveSubtask(Toolkit toolkit, UUID subtaskId, boolean requireEnabled) {
+        boolean hasSubtasks = !toolkit.getSubtasks().isEmpty();
         if (subtaskId == null) {
-            if (hasActiveSubtasks) {
+            if (hasSubtasks) {
                 throw new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "subtask-required",
@@ -204,7 +223,7 @@ public class TmsSessionCommandService {
         }
         return toolkit.getSubtasks().stream()
                 .filter(item -> item.getId().equals(subtaskId))
-                .filter(item -> item.getDeletedAt() == null)
+                .filter(item -> !requireEnabled || item.isEnabled())
                 .findFirst()
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,

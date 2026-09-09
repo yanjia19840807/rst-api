@@ -89,9 +89,9 @@ class TmsSessionApiIntegrationTests {
                 """
                 insert into toolkit
                     (id, name, supervisor_position_id, center, domain, pl1, pl2,
-                     pl3_name, primary_pl3_code, combine_subtasks_time,
+                     pl3_name, primary_pl3_code, combine_subtasks_time, enabled,
                      owner_ccgid, created_at, updated_at, version)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, ?, ?, ?)
                 """,
                 TOOLKIT_ID,
                 "Bank Rec Manual Check",
@@ -110,8 +110,8 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into toolkit_subtask
-                    (id, toolkit_id, name, display_order, created_at, updated_at, version)
-                values (?, ?, ?, ?, ?, ?, ?)
+                    (id, toolkit_id, name, display_order, enabled, created_at, updated_at, version)
+                values (?, ?, ?, ?, true, ?, ?, ?)
                 """,
                 SUBTASK_ID,
                 TOOLKIT_ID,
@@ -123,8 +123,8 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into toolkit_subtask
-                    (id, toolkit_id, name, display_order, created_at, updated_at, version)
-                values (?, ?, ?, ?, ?, ?, ?)
+                    (id, toolkit_id, name, display_order, enabled, created_at, updated_at, version)
+                values (?, ?, ?, ?, true, ?, ?, ?)
                 """,
                 SUBTASK_ID_2,
                 TOOLKIT_ID,
@@ -633,6 +633,99 @@ class TmsSessionApiIntegrationTests {
     }
 
     @Test
+    void supervisorCanDisableCompletedSessionFromAgentList() throws Exception {
+        String created = mockMvc.perform(post("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolkitId": "%s",
+                                  "subtaskId": "%s",
+                                  "processedVolume": 4,
+                                  "reference": "INV-ENABLE"
+                                }
+                                """.formatted(TOOLKIT_ID, SUBTASK_ID)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String sessionId = JsonPath.read(created, "$.id");
+
+        mockMvc.perform(post("/api/v1/tms/sessions/{id}/end", sessionId)
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "subtaskId": "%s",
+                                  "processedVolume": 4,
+                                  "reference": "INV-ENABLE"
+                                }
+                                """.formatted(SUBTASK_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(true));
+
+        mockMvc.perform(post("/api/v1/tms/sessions/{id}/discard", sessionId)
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(post("/api/v1/tms/team/sessions/{id}/disable", sessionId)
+                        .header("X-Dev-Ccgid", "SUPERVISOR001")
+                        .header("X-Dev-Role", "SUPERVISOR"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("completed"))
+                .andExpect(jsonPath("$.enabled").value(false));
+
+        mockMvc.perform(get("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .queryParam("status", "completed"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.id=='%s')].enabled".formatted(sessionId)).value(false));
+
+        mockMvc.perform(get("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .queryParam("status", "completed")
+                        .queryParam("enabled", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.id=='%s')]".formatted(sessionId)).isEmpty());
+
+        mockMvc.perform(get("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .queryParam("status", "completed")
+                        .queryParam("enabled", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.id=='%s')].enabled".formatted(sessionId)).value(false));
+
+        mockMvc.perform(get("/api/v1/tms/team/sessions")
+                        .header("X-Dev-Ccgid", "SUPERVISOR001")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .queryParam("status", "completed"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.id=='%s')].enabled".formatted(sessionId)).value(false));
+
+        mockMvc.perform(get("/api/v1/tms/team/sessions")
+                        .header("X-Dev-Ccgid", "SUPERVISOR001")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .queryParam("status", "completed")
+                        .queryParam("enabled", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.id=='%s')]".formatted(sessionId)).isEmpty());
+
+        mockMvc.perform(post("/api/v1/tms/team/sessions/{id}/enable", sessionId)
+                        .header("X-Dev-Ccgid", "SUPERVISOR001")
+                        .header("X-Dev-Role", "SUPERVISOR"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(true));
+    }
+
+    @Test
     void publishesTheTmsOpenApiContract() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
@@ -671,6 +764,41 @@ class TmsSessionApiIntegrationTests {
                         .header("X-Dev-Role", "SUPERVISOR"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.snapshot.timesheetSyncDate").exists());
+    }
+
+    @Test
+    void agentCanViewDisabledAuthorizedToolkitButCannotStart() throws Exception {
+        jdbcTemplate.update("update toolkit set enabled = false where id = ?", TOOLKIT_ID);
+
+        mockMvc.perform(get("/api/v1/toolkits")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(TOOLKIT_ID.toString()))
+                .andExpect(jsonPath("$[0].enabled").value(false));
+
+        mockMvc.perform(get("/api/v1/toolkits/{id}", TOOLKIT_ID)
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(false));
+
+        mockMvc.perform(post("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolkitId": "%s",
+                                  "subtaskId": "%s",
+                                  "processedVolume": 25,
+                                  "reference": "INV-DISABLED",
+                                  "remarks": ""
+                                }
+                                """.formatted(TOOLKIT_ID, SUBTASK_ID)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.type")
+                        .value("https://rst.cmacgm.com/problems/toolkit-not-found"));
     }
 
     @Test

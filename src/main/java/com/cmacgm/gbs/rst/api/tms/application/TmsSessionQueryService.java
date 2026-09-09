@@ -137,6 +137,7 @@ public class TmsSessionQueryService {
             String query,
             LocalDate dateFrom,
             LocalDate dateTo,
+            Boolean enabled,
             int page,
             int pageSize) {
         return pageSessions(
@@ -150,7 +151,8 @@ public class TmsSessionQueryService {
                         reference,
                         query,
                         dateFrom,
-                        dateTo),
+                        dateTo,
+                        enabled),
                 page,
                 pageSize);
     }
@@ -170,6 +172,7 @@ public class TmsSessionQueryService {
             String query,
             LocalDate dateFrom,
             LocalDate dateTo,
+            Boolean enabled,
             int page,
             int pageSize) {
         return pageSessions(teamFilter(
@@ -182,7 +185,8 @@ public class TmsSessionQueryService {
                 reference,
                 query,
                 dateFrom,
-                dateTo), page, pageSize);
+                dateTo,
+                enabled), page, pageSize);
     }
 
     /**
@@ -196,7 +200,8 @@ public class TmsSessionQueryService {
             String reference,
             String query,
             LocalDate dateFrom,
-            LocalDate dateTo) {
+            LocalDate dateTo,
+            Boolean enabled) {
         return excel.export(listSessions(new Filter(
                 agentCcgid,
                 null,
@@ -207,7 +212,8 @@ public class TmsSessionQueryService {
                 reference,
                 query,
                 dateFrom,
-                dateTo)));
+                dateTo,
+                enabled)));
     }
 
     /**
@@ -224,7 +230,8 @@ public class TmsSessionQueryService {
             String reference,
             String query,
             LocalDate dateFrom,
-            LocalDate dateTo) {
+            LocalDate dateTo,
+            Boolean enabled) {
         return excel.export(listSessions(teamFilter(
                 ccgid,
                 agentCcgid,
@@ -235,7 +242,8 @@ public class TmsSessionQueryService {
                 reference,
                 query,
                 dateFrom,
-                dateTo)));
+                dateTo,
+                enabled)));
     }
 
     /**
@@ -252,7 +260,7 @@ public class TmsSessionQueryService {
         var from = today.atStartOfDay(ZoneOffset.UTC).toInstant();
         var to = today.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
         return new TmsSummaryResponse(
-                sessionRepository.countByAgentCcgidAndStatusAndEndedAtGreaterThanEqualAndEndedAtLessThan(
+                sessionRepository.countByAgentCcgidAndStatusAndEnabledTrueAndEndedAtGreaterThanEqualAndEndedAtLessThan(
                         agentCcgid,
                         TmsSessionStatus.COMPLETED,
                         from,
@@ -275,7 +283,8 @@ public class TmsSessionQueryService {
             String reference,
             String query,
             LocalDate dateFrom,
-            LocalDate dateTo) {
+            LocalDate dateTo,
+            Boolean enabled) {
         Set<UUID> scopedToolkitIds = scopedToolkitIds(ccgid);
         if (toolkitId != null && !scopedToolkitIds.contains(toolkitId)) {
             throw new ApiException(
@@ -308,7 +317,8 @@ public class TmsSessionQueryService {
                 reference,
                 query,
                 dateFrom,
-                dateTo);
+                dateTo,
+                enabled);
     }
 
     private PageResponse<TmsSessionResponse> pageSessions(Filter filter, int page, int pageSize) {

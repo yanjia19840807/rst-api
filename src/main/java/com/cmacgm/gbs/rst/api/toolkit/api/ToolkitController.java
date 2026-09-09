@@ -10,6 +10,7 @@ import com.cmacgm.gbs.rst.api.toolkit.api.dto.CreateToolkitRequest;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.ToolkitListView;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.ToolkitResponse;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.UpdateToolkitRequest;
+import com.cmacgm.gbs.rst.api.toolkit.api.dto.WriteSubtaskRequest;
 import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitExportService;
 import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitExportService.ExportFile;
 import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitService;
@@ -19,7 +20,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -64,9 +64,10 @@ public class ToolkitController {
             @AuthenticationPrincipal RstPrincipal principal,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String pl3Name,
+            @RequestParam(required = false) Boolean enabled,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        return toolkits.listManaged(principal.ccgid(), name, pl3Name, page, pageSize);
+        return toolkits.listManaged(principal.ccgid(), name, pl3Name, enabled, page, pageSize);
     }
 
     @GetMapping("/{id}/export")
@@ -108,12 +109,57 @@ public class ToolkitController {
         return toolkits.update(principal.ccgid(), id, request);
     }
 
-    @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PostMapping("/{id}/enable")
     @PreAuthorize("hasRole('SUPERVISOR')")
-    public void delete(
+    public ToolkitResponse enable(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
-        toolkits.delete(principal.ccgid(), id);
+        return toolkits.setEnabled(principal.ccgid(), id, true);
+    }
+
+    @PostMapping("/{id}/disable")
+    @PreAuthorize("hasRole('SUPERVISOR')")
+    public ToolkitResponse disable(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID id) {
+        return toolkits.setEnabled(principal.ccgid(), id, false);
+    }
+
+    @PostMapping("/{id}/subtasks")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('SUPERVISOR')")
+    public ToolkitResponse addSubtask(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID id,
+            @Valid @RequestBody WriteSubtaskRequest request) {
+        return toolkits.addSubtask(principal.ccgid(), id, request);
+    }
+
+    @PutMapping("/{id}/subtasks/{subtaskId}")
+    @PreAuthorize("hasRole('SUPERVISOR')")
+    public ToolkitResponse renameSubtask(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID id,
+            @PathVariable UUID subtaskId,
+            @Valid @RequestBody WriteSubtaskRequest request) {
+        return toolkits.renameSubtask(principal.ccgid(), id, subtaskId, request);
+    }
+
+    @PostMapping("/{id}/subtasks/{subtaskId}/enable")
+    @PreAuthorize("hasRole('SUPERVISOR')")
+    public ToolkitResponse enableSubtask(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID id,
+            @PathVariable UUID subtaskId) {
+        return toolkits.setSubtaskEnabled(principal.ccgid(), id, subtaskId, true);
+    }
+
+    @PostMapping("/{id}/subtasks/{subtaskId}/disable")
+    @PreAuthorize("hasRole('SUPERVISOR')")
+    public ToolkitResponse disableSubtask(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID id,
+            @PathVariable UUID subtaskId) {
+        return toolkits.setSubtaskEnabled(principal.ccgid(), id, subtaskId, false);
     }
 }

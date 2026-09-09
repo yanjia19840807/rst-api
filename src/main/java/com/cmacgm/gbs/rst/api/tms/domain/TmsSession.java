@@ -76,6 +76,9 @@ public class TmsSession {
     @Column(name = "net_duration_seconds", nullable = false)
     private long netDurationSeconds;
 
+    @Column(nullable = false)
+    private boolean enabled;
+
     @Column(name = "discard_reason")
     private String discardReason;
 
@@ -114,6 +117,7 @@ public class TmsSession {
         session.reference = reference;
         session.remarks = remarks;
         session.status = TmsSessionStatus.RUNNING;
+        session.enabled = true;
         session.startedAt = now;
         session.runningSince = now;
         session.netDurationSeconds = 0;
@@ -172,7 +176,25 @@ public class TmsSession {
         updatedAt = now;
     }
 
+    public void setEnabled(boolean enabled, Instant now) {
+        if (status != TmsSessionStatus.COMPLETED) {
+            throw new TmsStateException("Only a completed session can be enabled or disabled.");
+        }
+        syncEnabled(enabled, now);
+    }
+
+    /**
+     * Aligns {@code enabled} with a Toolkit or TASK toggle. Does not change status.
+     */
+    public void syncEnabled(boolean enabled, Instant now) {
+        this.enabled = enabled;
+        updatedAt = now;
+    }
+
     public void discard(String reason, Instant now) {
+        if (status == TmsSessionStatus.COMPLETED) {
+            throw new TmsStateException("Completed sessions cannot be discarded.");
+        }
         if (status == TmsSessionStatus.DISCARDED) {
             throw new TmsStateException("The session is already discarded.");
         }
@@ -278,6 +300,10 @@ public class TmsSession {
 
     public long getNetDurationSeconds() {
         return netDurationSeconds;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
     }
 
     public String getDiscardReason() {

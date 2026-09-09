@@ -27,7 +27,15 @@ public interface TmsSessionRepository
 
     long countByToolkit_IdAndStatus(UUID toolkitId, TmsSessionStatus status);
 
+    long countByToolkit_IdAndEnabled(UUID toolkitId, boolean enabled);
+
     long countByToolkitSubtask_IdAndStatus(UUID toolkitSubtaskId, TmsSessionStatus status);
+
+    long countByToolkitSubtask_IdAndEnabled(UUID toolkitSubtaskId, boolean enabled);
+
+    List<TmsSession> findByToolkit_Id(UUID toolkitId);
+
+    List<TmsSession> findByToolkitSubtask_Id(UUID toolkitSubtaskId);
 
     @EntityGraph(attributePaths = {"toolkit", "toolkitSubtask"})
     List<TmsSession> findByToolkit_IdAndStatusOrderByStartedAtAsc(
@@ -48,6 +56,7 @@ public interface TmsSessionRepository
               and session.toolkit.id = :toolkitId
               and lower(session.reference) = lower(:reference)
               and session.status <> :discarded
+              and session.enabled = true
               and (
                     (:subtaskId is null and session.toolkitSubtask is null)
                  or (:subtaskId is not null and session.toolkitSubtask.id = :subtaskId)
@@ -67,7 +76,7 @@ public interface TmsSessionRepository
     @EntityGraph(attributePaths = {"toolkit", "toolkitSubtask", "pauseIntervals"})
     Optional<TmsSession> findBySessionNo(String sessionNo);
 
-    long countByAgentCcgidAndStatusAndEndedAtGreaterThanEqualAndEndedAtLessThan(
+    long countByAgentCcgidAndStatusAndEnabledTrueAndEndedAtGreaterThanEqualAndEndedAtLessThan(
             String agentCcgid,
             TmsSessionStatus status,
             Instant from,
@@ -80,6 +89,7 @@ public interface TmsSessionRepository
             from TmsSession session
             where session.agentCcgid = :agentCcgid
               and session.status = :status
+              and session.enabled = true
               and session.endedAt >= :from
               and session.endedAt < :to
             """)

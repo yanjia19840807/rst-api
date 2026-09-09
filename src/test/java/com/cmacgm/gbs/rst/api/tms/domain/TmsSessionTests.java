@@ -118,6 +118,39 @@ class TmsSessionTests {
         assertThat(session.getNetDurationSeconds()).isEqualTo(10);
     }
 
+    @Test
+    void rejectsDiscardOfCompletedSession() {
+        TmsSession session = newSession();
+        session.end(START.plusSeconds(10));
+
+        assertThatThrownBy(() -> session.discard("late delete", START.plusSeconds(20)))
+                .isInstanceOf(TmsStateException.class)
+                .hasMessage("Completed sessions cannot be discarded.");
+    }
+
+    @Test
+    void togglesEnabledOnCompletedSession() {
+        TmsSession session = newSession();
+        session.end(START.plusSeconds(10));
+        assertThat(session.isEnabled()).isTrue();
+
+        session.setEnabled(false, START.plusSeconds(20));
+        assertThat(session.isEnabled()).isFalse();
+        assertThat(session.getStatus()).isEqualTo(TmsSessionStatus.COMPLETED);
+
+        session.setEnabled(true, START.plusSeconds(30));
+        assertThat(session.isEnabled()).isTrue();
+    }
+
+    @Test
+    void rejectsEnableToggleOnOpenSession() {
+        TmsSession session = newSession();
+
+        assertThatThrownBy(() -> session.setEnabled(false, START.plusSeconds(5)))
+                .isInstanceOf(TmsStateException.class)
+                .hasMessage("Only a completed session can be enabled or disabled.");
+    }
+
     private static TmsSession newSession() {
         Toolkit toolkit = Toolkit.create(
                 "Bank Reconciliation", null, "POS-SUP-1", "Center", "Finance",

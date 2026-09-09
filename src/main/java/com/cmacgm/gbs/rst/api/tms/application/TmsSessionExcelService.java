@@ -30,7 +30,8 @@ public class TmsSessionExcelService {
             "Cycle Time",
             "Reference",
             "Volume",
-            "Remarks");
+            "Remarks",
+            "Enabled");
 
     /**
      * Writes the current filtered session list.
@@ -52,7 +53,8 @@ public class TmsSessionExcelService {
                     cycleTime(session),
                     dash(session.reference()),
                     formatVolume(session.processedVolume()),
-                    dash(session.remarks())));
+                    dash(session.remarks()),
+                    session.enabled() ? "Yes" : "No"));
         }
         return ExcelSheets.write("TMS Sessions", HEADERS, body);
     }

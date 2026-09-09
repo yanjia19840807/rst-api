@@ -38,7 +38,8 @@ public final class TmsSessionSpecification {
                 reference,
                 queryText,
                 dateFrom,
-                dateTo));
+                dateTo,
+                null));
     }
 
     /**
@@ -69,6 +70,9 @@ public final class TmsSessionSpecification {
             }
             if (filter.status() != null) {
                 predicates.add(builder.equal(root.get("status"), filter.status()));
+            }
+            if (filter.enabled() != null) {
+                predicates.add(builder.equal(root.get("enabled"), filter.enabled()));
             }
             if (filter.sessionNo() != null && !filter.sessionNo().isBlank()) {
                 String pattern = "%" + filter.sessionNo().trim().toLowerCase() + "%";
@@ -111,6 +115,7 @@ public final class TmsSessionSpecification {
      * @param queryText optional sessionNo∪reference contains
      * @param dateFrom optional started-at lower bound (inclusive)
      * @param dateTo optional started-at upper bound (inclusive day)
+     * @param enabled when set, restrict to enabled or disabled completed samples
      */
     public record Filter(
             String agentCcgid,
@@ -122,6 +127,31 @@ public final class TmsSessionSpecification {
             String reference,
             String queryText,
             LocalDate dateFrom,
-            LocalDate dateTo) {
+            LocalDate dateTo,
+            Boolean enabled) {
+        public Filter(
+                String agentCcgid,
+                Collection<UUID> toolkitIds,
+                UUID toolkitId,
+                String pl3Code,
+                TmsSessionStatus status,
+                String sessionNo,
+                String reference,
+                String queryText,
+                LocalDate dateFrom,
+                LocalDate dateTo) {
+            this(
+                    agentCcgid,
+                    toolkitIds,
+                    toolkitId,
+                    pl3Code,
+                    status,
+                    sessionNo,
+                    reference,
+                    queryText,
+                    dateFrom,
+                    dateTo,
+                    null);
+        }
     }
 }

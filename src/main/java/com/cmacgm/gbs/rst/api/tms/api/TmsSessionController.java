@@ -78,7 +78,8 @@ public class TmsSessionController {
                     LocalDate dateFrom,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-                    LocalDate dateTo) {
+                    LocalDate dateTo,
+            @RequestParam(required = false) Boolean enabled) {
         return excelResponse(
                 queryService.exportSessions(
                         principal.ccgid(),
@@ -87,7 +88,8 @@ public class TmsSessionController {
                         reference,
                         query,
                         dateFrom,
-                        dateTo),
+                        dateTo,
+                        enabled),
                 "tms-sessions.xlsx");
     }
 
@@ -110,6 +112,7 @@ public class TmsSessionController {
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
                     LocalDate dateTo,
+            @RequestParam(required = false) Boolean enabled,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         return queryService.sessions(
@@ -120,6 +123,7 @@ public class TmsSessionController {
                 query,
                 dateFrom,
                 dateTo,
+                enabled,
                 page,
                 pageSize);
     }

@@ -2,28 +2,28 @@ package com.cmacgm.gbs.rst.api.toolkit.application;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.timesheet.api.dto.TimesheetAlignmentView;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetAlignment;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
-import com.cmacgm.gbs.rst.api.tms.domain.TmsSessionStatus;
+import com.cmacgm.gbs.rst.api.tms.domain.TmsSession;
 import com.cmacgm.gbs.rst.api.tms.persistence.TmsSessionRepository;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.CreateToolkitRequest;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.SharedKpiSelectionRequest;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.ToolkitListView;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.ToolkitResponse;
+import com.cmacgm.gbs.rst.api.toolkit.api.dto.ToolkitResponse.SessionImpact;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.UpdateToolkitRequest;
-import com.cmacgm.gbs.rst.api.toolkit.api.dto.UpdateToolkitRequest.EditableSubtask;
+import com.cmacgm.gbs.rst.api.toolkit.api.dto.WriteSubtaskRequest;
 import com.cmacgm.gbs.rst.api.toolkit.domain.Toolkit;
 import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitSubtask;
 import com.cmacgm.gbs.rst.api.toolkit.persistence.ToolkitRepository;
@@ -53,14 +53,14 @@ public class ToolkitService {
     @Transactional(readOnly = true)
     public List<ToolkitResponse> listAvailable(String ccgid) {
         return toolkits.findAvailableToAgent(ccgid).stream()
-                .map(ToolkitResponse::from)
+                .map(toolkit -> toAlignedResponse(toolkit, 0, false))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public List<ToolkitResponse> listManaged(String ccgid) {
         return scopedManagedToolkits(ccgid).stream()
-                .map(ToolkitResponse::from)
+                .map(toolkit -> toAlignedResponse(toolkit, 0, true))
                 .toList();
     }
 
@@ -70,13 +70,14 @@ public class ToolkitService {
      * @param ccgid manager CCGID
      * @param name optional toolkit name contains
      * @param pl3Name optional exact PL3 name
+     * @param enabled optional Enable/Disable filter
      * @param page 1-based page
      * @param pageSize page size
      * @return one page of rows and unfiltered PL3 options
      */
     @Transactional(readOnly = true)
     public ToolkitListView listManaged(
-            String ccgid, String name, String pl3Name, int page, int pageSize) {
+            String ccgid, String name, String pl3Name, Boolean enabled, int page, int pageSize) {
         List<Toolkit> scoped = scopedManagedToolkits(ccgid);
         List<String> pl3Names = scoped.stream()
                 .map(Toolkit::getPl3Name)
@@ -90,7 +91,8 @@ public class ToolkitService {
                 .filter(toolkit -> nameQuery.isEmpty()
                         || toolkit.getName().toLowerCase(Locale.ROOT).contains(nameQuery))
                 .filter(toolkit -> pl3Query.isEmpty() || pl3Query.equals(toolkit.getPl3Name()))
-                .map(this::toAlignedResponse)
+                .filter(toolkit -> enabled == null || toolkit.isEnabled() == enabled)
+                .map(toolkit -> toAlignedResponse(toolkit, 0, true))
                 .toList();
         PageResponse<ToolkitResponse> paged = PageResponse.ofList(items, page, pageSize);
         return new ToolkitListView(
@@ -104,17 +106,17 @@ public class ToolkitService {
 
     @Transactional(readOnly = true)
     public ToolkitResponse detail(String ccgid, UUID id) {
-        Toolkit toolkit = toolkits.findActiveById(id)
+        Toolkit toolkit = toolkits.findExistingById(id)
                 .orElseThrow(() -> notFound("toolkit-not-found", "The Toolkit was not found."));
-        boolean allowed = timesheet.agentCanUse(
-                ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code())
-                || timesheet.supervisorOwnsScope(
-                        ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code());
-        if (!allowed) {
+        boolean supervisor = timesheet.supervisorOwnsScope(
+                ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code());
+        boolean agent = timesheet.agentCanUse(
+                ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code());
+        if (!supervisor && !agent) {
             throw forbidden("toolkit-out-of-scope",
                     "The Toolkit is outside the current Timesheet scope.");
         }
-        return toAlignedResponse(toolkit);
+        return toAlignedResponse(toolkit, 0, true);
     }
 
     @Transactional
@@ -133,7 +135,7 @@ public class ToolkitService {
                     toolkit.addSubtask(item.name(), item.description(), item.displayOrder(), now));
         }
         validateAndAddKpis(toolkit, request.sharedKpiSelections(), now);
-        return toAlignedResponse(toolkits.saveAndFlush(toolkit));
+        return toAlignedResponse(toolkits.saveAndFlush(toolkit), 0, true);
     }
 
     @Transactional
@@ -149,22 +151,56 @@ public class ToolkitService {
         toolkit.update(
                 name, request.description(), request.combineSubtasksTime(),
                 ccgid, now);
-        ensureSubtasksUnfinishedFree(toolkit, request.subtasks());
-        syncSubtasks(toolkit, request.subtasks(), now);
         toolkit.getSharedKpiSelections().stream()
                 .filter(selection -> selection.getDeletedAt() == null)
                 .forEach(selection -> selection.softDelete(now));
         // Flush old active KPI rows before inserting replacements due to partial uniqueness.
         toolkits.saveAndFlush(toolkit);
         validateAndAddKpis(toolkit, request.sharedKpiSelections(), now);
-        return toAlignedResponse(toolkits.saveAndFlush(toolkit));
+        return toAlignedResponse(toolkits.saveAndFlush(toolkit), 0, true);
     }
 
     @Transactional
-    public void delete(String ccgid, UUID toolkitId) {
+    public ToolkitResponse addSubtask(String ccgid, UUID toolkitId, WriteSubtaskRequest request) {
         Toolkit toolkit = ownedToolkit(ccgid, toolkitId);
-        ensureToolkitUnfinishedFree(toolkitId);
-        toolkit.softDelete(clock.instant());
+        Instant now = clock.instant();
+        int displayOrder = request.displayOrder() == null
+                ? toolkit.getSubtasks().size() + 1
+                : request.displayOrder();
+        toolkit.addSubtask(request.name(), request.description(), displayOrder, now);
+        return toAlignedResponse(toolkits.saveAndFlush(toolkit), 0, true);
+    }
+
+    @Transactional
+    public ToolkitResponse renameSubtask(
+            String ccgid, UUID toolkitId, UUID subtaskId, WriteSubtaskRequest request) {
+        Toolkit toolkit = ownedToolkit(ccgid, toolkitId);
+        ToolkitSubtask subtask = requireSubtask(toolkit, subtaskId);
+        int displayOrder = request.displayOrder() == null
+                ? subtask.getDisplayOrder()
+                : request.displayOrder();
+        subtask.rename(request.name(), request.description(), displayOrder, clock.instant());
+        return toAlignedResponse(toolkits.saveAndFlush(toolkit), 0, true);
+    }
+
+    @Transactional
+    public ToolkitResponse setEnabled(String ccgid, UUID toolkitId, boolean enabled) {
+        Toolkit toolkit = ownedToolkit(ccgid, toolkitId);
+        Instant now = clock.instant();
+        toolkit.setEnabled(enabled, now);
+        int synced = syncSessions(tmsSessions.findByToolkit_Id(toolkitId), enabled, now);
+        return toAlignedResponse(toolkits.saveAndFlush(toolkit), synced, true);
+    }
+
+    @Transactional
+    public ToolkitResponse setSubtaskEnabled(
+            String ccgid, UUID toolkitId, UUID subtaskId, boolean enabled) {
+        Toolkit toolkit = ownedToolkit(ccgid, toolkitId);
+        ToolkitSubtask subtask = requireSubtask(toolkit, subtaskId);
+        Instant now = clock.instant();
+        subtask.setEnabled(enabled, now);
+        int synced = syncSessions(tmsSessions.findByToolkitSubtask_Id(subtaskId), enabled, now);
+        return toAlignedResponse(toolkits.saveAndFlush(toolkit), synced, true);
     }
 
     private List<Toolkit> scopedManagedToolkits(String ccgid) {
@@ -183,79 +219,6 @@ public class ToolkitService {
                 .toList();
     }
 
-    private void ensureToolkitUnfinishedFree(UUID toolkitId) {
-        long running = tmsSessions.countByToolkit_IdAndStatus(toolkitId, TmsSessionStatus.RUNNING);
-        long paused = tmsSessions.countByToolkit_IdAndStatus(toolkitId, TmsSessionStatus.PAUSED);
-        if (running + paused > 0) {
-            throw conflict("toolkit-in-use", unfinishedMessage("This Toolkit", running, paused));
-        }
-    }
-
-    private void ensureSubtasksUnfinishedFree(Toolkit toolkit, List<EditableSubtask> requested) {
-        Set<UUID> keepActiveIds = requested == null
-                ? Set.of()
-                : requested.stream()
-                        .filter(item -> item.id() != null && item.deletedAt() == null)
-                        .map(EditableSubtask::id)
-                        .collect(Collectors.toSet());
-        for (ToolkitSubtask item : toolkit.getAllSubtasks()) {
-            if (item.getDeletedAt() != null || keepActiveIds.contains(item.getId())) {
-                continue;
-            }
-            long running = tmsSessions.countByToolkitSubtask_IdAndStatus(
-                    item.getId(), TmsSessionStatus.RUNNING);
-            long paused = tmsSessions.countByToolkitSubtask_IdAndStatus(
-                    item.getId(), TmsSessionStatus.PAUSED);
-            if (running + paused > 0) {
-                throw conflict(
-                        "subtask-in-use",
-                        unfinishedMessage("Subtask \"" + item.getName() + "\"", running, paused));
-            }
-        }
-    }
-
-    private static String unfinishedMessage(String subject, long running, long paused) {
-        List<String> parts = new ArrayList<>();
-        if (running > 0) {
-            parts.add(running + (running == 1 ? " running session" : " running sessions"));
-        }
-        if (paused > 0) {
-            parts.add(paused + (paused == 1 ? " paused session" : " paused sessions"));
-        }
-        return subject + " still has " + String.join(" and ", parts)
-                + ". End or discard them before deleting.";
-    }
-
-    private void syncSubtasks(Toolkit toolkit, List<EditableSubtask> requested, Instant now) {
-        Set<UUID> requestedIds = requested == null
-                ? Set.of()
-                : requested.stream()
-                        .map(EditableSubtask::id)
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toSet());
-        toolkit.getAllSubtasks().stream()
-                .filter(item -> !requestedIds.contains(item.getId()))
-                .forEach(item -> item.softDelete(now));
-        if (requested == null) {
-            return;
-        }
-        for (EditableSubtask item : requested) {
-            var existing = item.id() == null ? null : toolkit.getAllSubtasks().stream()
-                    .filter(candidate -> candidate.getId().equals(item.id()))
-                    .findFirst()
-                    .orElse(null);
-            if (existing == null) {
-                if (item.deletedAt() == null) {
-                    toolkit.addSubtask(item.name(), item.description(), item.displayOrder(), now);
-                }
-            } else {
-                existing.update(
-                        item.name(), item.description(), item.displayOrder(),
-                        item.deletedAt() != null, now);
-            }
-        }
-    }
-
     /**
      * Returns a Toolkit the Supervisor can manage.
      */
@@ -265,7 +228,7 @@ public class ToolkitService {
     }
 
     private Toolkit ownedToolkit(String ccgid, UUID toolkitId) {
-        Toolkit toolkit = toolkits.findActiveById(toolkitId)
+        Toolkit toolkit = toolkits.findExistingById(toolkitId)
                 .orElseThrow(() -> notFound("toolkit-not-found", "The Toolkit was not found."));
         if (!timesheet.supervisorOwnsScope(
                 ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code())) {
@@ -348,16 +311,50 @@ public class ToolkitService {
         }
     }
 
-    private ToolkitResponse toAlignedResponse(Toolkit toolkit) {
+    private ToolkitResponse toAlignedResponse(Toolkit toolkit, int syncedSessionCount, boolean includeDisabled) {
         List<TimesheetAlignment.Key> keys = toolkit.getSharedKpiSelections().stream()
                 .filter(selection -> selection.getDeletedAt() == null)
                 .map(selection -> new TimesheetAlignment.Key(
                         selection.getCarrier(), selection.getSite(), selection.getCustomerCountry()))
                 .toList();
+        TimesheetAlignmentView alignment = TimesheetAlignmentView.from(timesheet.align(
+                toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), keys));
+        SessionImpact toolkitImpact = new SessionImpact(
+                (int) tmsSessions.countByToolkit_IdAndEnabled(toolkit.getId(), true),
+                (int) tmsSessions.countByToolkit_IdAndEnabled(toolkit.getId(), false));
+        Map<UUID, SessionImpact> subtaskImpacts = new HashMap<>();
+        for (ToolkitSubtask subtask : toolkit.getAllSubtasks()) {
+            if (subtask.getId() == null) {
+                continue;
+            }
+            subtaskImpacts.put(
+                    subtask.getId(),
+                    new SessionImpact(
+                            (int) tmsSessions.countByToolkitSubtask_IdAndEnabled(subtask.getId(), true),
+                            (int) tmsSessions.countByToolkitSubtask_IdAndEnabled(
+                                    subtask.getId(), false)));
+        }
         return ToolkitResponse.from(
-                toolkit,
-                TimesheetAlignmentView.from(timesheet.align(
-                        toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), keys)));
+                toolkit, alignment, toolkitImpact, subtaskImpacts, syncedSessionCount, includeDisabled);
+    }
+
+    private ToolkitSubtask requireSubtask(Toolkit toolkit, UUID subtaskId) {
+        return toolkit.getSubtasks().stream()
+                .filter(item -> item.getId().equals(subtaskId))
+                .findFirst()
+                .orElseThrow(() -> notFound("subtask-not-found", "The Subtask was not found."));
+    }
+
+    private static int syncSessions(List<TmsSession> sessions, boolean enabled, Instant now) {
+        int synced = 0;
+        for (TmsSession session : sessions) {
+            if (session.isEnabled() == enabled) {
+                continue;
+            }
+            session.syncEnabled(enabled, now);
+            synced++;
+        }
+        return synced;
     }
 
     private static ApiException conflict(String code, String message) {

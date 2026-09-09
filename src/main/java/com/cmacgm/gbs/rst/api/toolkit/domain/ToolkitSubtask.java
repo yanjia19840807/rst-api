@@ -34,6 +34,9 @@ public class ToolkitSubtask {
     @Column(name = "display_order", nullable = false)
     private int displayOrder;
 
+    @Column(nullable = false)
+    private boolean enabled;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -71,6 +74,7 @@ public class ToolkitSubtask {
         subtask.name = name.trim();
         subtask.description = description == null || description.isBlank() ? null : description.trim();
         subtask.displayOrder = displayOrder;
+        subtask.enabled = true;
         subtask.createdAt = now;
         subtask.createdBy = actorCcgid;
         subtask.updatedAt = now;
@@ -85,14 +89,24 @@ public class ToolkitSubtask {
         updatedBy = toolkit.ownerForAudit();
     }
 
-    public void update(String name, String description, int displayOrder, boolean deleted, Instant now) {
+    public void rename(String name, String description, int displayOrder, Instant now) {
         this.name = name.trim();
         this.description = description == null || description.isBlank() ? null : description.trim();
         this.displayOrder = displayOrder;
-        this.deletedAt = deleted ? (deletedAt == null ? now : deletedAt) : null;
-        this.deletedBy = deleted ? toolkit.ownerForAudit() : null;
         this.updatedAt = now;
         this.updatedBy = toolkit.ownerForAudit();
+    }
+
+    public void setEnabled(boolean enabled, Instant now) {
+        this.enabled = enabled;
+        this.updatedAt = now;
+        this.updatedBy = toolkit.ownerForAudit();
+    }
+
+    public void update(String name, String description, int displayOrder, boolean deleted, Instant now) {
+        rename(name, description, displayOrder, now);
+        this.deletedAt = deleted ? (deletedAt == null ? now : deletedAt) : null;
+        this.deletedBy = deleted ? toolkit.ownerForAudit() : null;
     }
 
     public UUID getId() {
@@ -113,5 +127,9 @@ public class ToolkitSubtask {
 
     public Instant getDeletedAt() {
         return deletedAt;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
     }
 }

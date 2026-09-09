@@ -123,7 +123,9 @@ public final class ExerciseFreeze {
                 toolkit.isCombineSubtasksTime(),
                 exercise.getOwnerCcgid(),
                 now);
-        for (ToolkitSubtask subtask : toolkit.getSubtasks()) {
+        for (ToolkitSubtask subtask : toolkit.getSubtasks().stream()
+                .filter(ToolkitSubtask::isEnabled)
+                .toList()) {
             exercise.addSubtask(
                     subtask.getId(),
                     subtask.getName(),
@@ -166,6 +168,7 @@ public final class ExerciseFreeze {
                         true))
                 .toList();
         List<ExerciseSubtaskView> subtasks = toolkit.getSubtasks().stream()
+                .filter(ToolkitSubtask::isEnabled)
                 .map(item -> new ExerciseSubtaskView(
                         item.getId(), item.getId(), item.getName(), item.getDescription(),
                         item.getDisplayOrder(), null))

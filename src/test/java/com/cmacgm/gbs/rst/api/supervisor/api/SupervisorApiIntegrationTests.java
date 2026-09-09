@@ -210,16 +210,24 @@ class SupervisorApiIntegrationTests {
     }
 
     @Test
-    void allowsReusingNameAndHierarchyAfterSoftDelete() throws Exception {
+    void keepsNameTakenAfterToolkitDisable() throws Exception {
         String created = createToolkit("Reusable Toolkit");
         String toolkitId = JsonPath.read(created, "$.id");
 
-        mockMvc.perform(delete("/api/v1/toolkits/{id}", toolkitId)
+        mockMvc.perform(post("/api/v1/toolkits/{id}/disable", toolkitId)
                         .header("X-Dev-Role", "SUPERVISOR"))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(false));
 
         mockMvc.perform(get("/api/v1/toolkits/managed")
                         .header("X-Dev-Role", "SUPERVISOR"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].enabled").value(false));
+
+        mockMvc.perform(get("/api/v1/toolkits/managed")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .queryParam("enabled", "true"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(0));
 
@@ -227,12 +235,13 @@ class SupervisorApiIntegrationTests {
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(createToolkitRequest("Reusable Toolkit", true)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.name").value("Reusable Toolkit"));
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type")
+                        .value("https://rst.cmacgm.com/problems/toolkit-name-exists"));
     }
 
     @Test
-    void deletesToolkitWhenOnlyFinishedSessionsOrExerciseExist() throws Exception {
+    void disablesToolkitAndSyncsEveryReferencedSession() throws Exception {
         String created = createToolkit("History Toolkit");
         String toolkitId = JsonPath.read(created, "$.id");
         UUID toolkitUuid = UUID.fromString(toolkitId);
@@ -252,13 +261,21 @@ class SupervisorApiIntegrationTests {
                 Instant.parse("2026-08-11T10:00:00Z"));
         createExercise(toolkitId);
 
-        mockMvc.perform(delete("/api/v1/toolkits/{id}", toolkitId)
+        mockMvc.perform(post("/api/v1/toolkits/{id}/disable", toolkitId)
                         .header("X-Dev-Role", "SUPERVISOR"))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(false))
+                .andExpect(jsonPath("$.syncedSessionCount").value(2));
+
+        mockMvc.perform(post("/api/v1/toolkits/{id}/enable", toolkitId)
+                        .header("X-Dev-Role", "SUPERVISOR"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(true))
+                .andExpect(jsonPath("$.syncedSessionCount").value(2));
     }
 
     @Test
-    void rejectsDeleteWhenToolkitHasUnfinishedSessions() throws Exception {
+    void disablesToolkitEvenWhenSessionsAreRunningOrPaused() throws Exception {
         String created = createToolkit("Busy Toolkit");
         String toolkitId = JsonPath.read(created, "$.id");
         UUID toolkitUuid = UUID.fromString(toolkitId);
@@ -284,22 +301,18 @@ class SupervisorApiIntegrationTests {
                 "PAUSED",
                 Instant.parse("2026-08-12T12:00:00Z"));
 
-        mockMvc.perform(delete("/api/v1/toolkits/{id}", toolkitId)
+        mockMvc.perform(post("/api/v1/toolkits/{id}/disable", toolkitId)
                         .header("X-Dev-Role", "SUPERVISOR"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.type")
-                        .value("https://rst.cmacgm.com/problems/toolkit-in-use"))
-                .andExpect(jsonPath("$.detail").value(
-                        "This Toolkit still has 1 running session and 2 paused sessions. "
-                                + "End or discard them before deleting."));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(false))
+                .andExpect(jsonPath("$.syncedSessionCount").value(3));
     }
 
     @Test
-    void rejectsSubtaskDeleteWhenTaskHasUnfinishedSessions() throws Exception {
+    void disablesSubtaskAndSyncsReferencedSessions() throws Exception {
         String created = createToolkit("Busy Subtask Toolkit");
         String toolkitId = JsonPath.read(created, "$.id");
         String oldSubtaskId = JsonPath.read(created, "$.subtasks[0].id");
-        Number version = JsonPath.read(created, "$.version");
         insertTmsSession(
                 UUID.fromString("63000000-0000-0000-0000-000000000001"),
                 "TMS-TASK-RUNNING",
@@ -325,24 +338,18 @@ class SupervisorApiIntegrationTests {
                 "PAUSED",
                 Instant.parse("2026-08-13T12:00:00Z"));
 
-        mockMvc.perform(put("/api/v1/toolkits/{id}", toolkitId)
-                        .header("X-Dev-Role", "SUPERVISOR")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(updateToolkitWithoutSubtask(version.longValue())))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.type")
-                        .value("https://rst.cmacgm.com/problems/subtask-in-use"))
-                .andExpect(jsonPath("$.detail").value(
-                        "Subtask \"Manual match\" still has 1 running session and 2 paused sessions. "
-                                + "End or discard them before deleting."));
+        mockMvc.perform(post("/api/v1/toolkits/{id}/subtasks/{subtaskId}/disable", toolkitId, oldSubtaskId)
+                        .header("X-Dev-Role", "SUPERVISOR"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.subtasks[0].enabled").value(false))
+                .andExpect(jsonPath("$.syncedSessionCount").value(3));
     }
 
     @Test
-    void allowsSubtaskDeleteWhenOnlyFinishedSessionsExist() throws Exception {
+    void addsSubtaskInlineWithoutRemovingExistingTasks() throws Exception {
         String created = createToolkit("Finished Subtask Toolkit");
         String toolkitId = JsonPath.read(created, "$.id");
         String oldSubtaskId = JsonPath.read(created, "$.subtasks[0].id");
-        Number version = JsonPath.read(created, "$.version");
         insertTmsSession(
                 UUID.fromString("64000000-0000-0000-0000-000000000001"),
                 "TMS-TASK-COMPLETED",
@@ -352,12 +359,19 @@ class SupervisorApiIntegrationTests {
                 "COMPLETED",
                 Instant.parse("2026-08-14T10:00:00Z"));
 
-        mockMvc.perform(put("/api/v1/toolkits/{id}", toolkitId)
+        mockMvc.perform(post("/api/v1/toolkits/{id}/subtasks", toolkitId)
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(updateToolkitWithoutSubtask(version.longValue())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.subtasks[0].deletedAt").exists())
+                        .content("""
+                                {
+                                  "name": "Replacement task",
+                                  "description": "New active subtask",
+                                  "displayOrder": 2
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.subtasks[0].id").value(oldSubtaskId))
+                .andExpect(jsonPath("$.subtasks[0].enabled").value(true))
                 .andExpect(jsonPath("$.subtasks[1].name").value("Replacement task"));
     }
 
@@ -374,13 +388,6 @@ class SupervisorApiIntegrationTests {
                   "description": "Updated atomically",
                   "combineSubtasksTime": true,
                   "version": %d,
-                  "subtasks": [
-                    {
-                      "name": "Automated reconciliation",
-                      "description": "New active subtask",
-                      "displayOrder": 2
-                    }
-                  ],
                   "sharedKpiSelections": [
                     {
                       "carrier": "Carrier B",
@@ -398,16 +405,14 @@ class SupervisorApiIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Updated Toolkit"))
                 .andExpect(jsonPath("$.combineSubtasksTime").value(true))
+                .andExpect(jsonPath("$.enabled").value(true))
                 .andExpect(jsonPath("$.version").value(greaterThan(oldVersion.intValue())))
+                .andExpect(jsonPath("$.subtasks[0].id").value(oldSubtaskId))
                 .andExpect(jsonPath("$.sharedKpiSelections.length()").value(1))
                 .andExpect(jsonPath("$.sharedKpiSelections[0].carrier").value("Carrier B"))
                 .andExpect(jsonPath("$.sharedKpiSelections[0].site").value("Singapore"))
                 .andExpect(jsonPath("$.sharedKpiSelections[0].customerCountry").value("Germany"));
 
-        Integer deletedSubtasks = jdbcTemplate.queryForObject(
-                "select count(*) from toolkit_subtask where id = ? and deleted_at is not null",
-                Integer.class,
-                UUID.fromString(oldSubtaskId));
         Integer activeSubtasks = jdbcTemplate.queryForObject(
                 "select count(*) from toolkit_subtask where toolkit_id = ? and deleted_at is null",
                 Integer.class,
@@ -421,7 +426,6 @@ class SupervisorApiIntegrationTests {
                 """,
                 Integer.class,
                 UUID.fromString(toolkitId));
-        org.junit.jupiter.api.Assertions.assertEquals(1, deletedSubtasks);
         org.junit.jupiter.api.Assertions.assertEquals(1, activeSubtasks);
         org.junit.jupiter.api.Assertions.assertEquals(1, activeKpis);
 
@@ -437,10 +441,9 @@ class SupervisorApiIntegrationTests {
                         .header("X-Dev-Role", "SUPERVISOR"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Updated Toolkit"))
-                .andExpect(jsonPath("$.subtasks.length()").value(2))
-                .andExpect(jsonPath("$.subtasks[0].deletedAt").exists())
-                .andExpect(jsonPath("$.subtasks[1].name").value("Automated reconciliation"))
-                .andExpect(jsonPath("$.subtasks[1].deletedAt").doesNotExist());
+                .andExpect(jsonPath("$.subtasks.length()").value(1))
+                .andExpect(jsonPath("$.subtasks[0].id").value(oldSubtaskId))
+                .andExpect(jsonPath("$.subtasks[0].enabled").value(true));
     }
 
     @Test
@@ -1006,9 +1009,9 @@ class SupervisorApiIntegrationTests {
                 """
                 insert into toolkit
                     (id, name, supervisor_position_id, center, domain, pl1, pl2,
-                     pl3_name, primary_pl3_code, combine_subtasks_time,
+                     pl3_name, primary_pl3_code, combine_subtasks_time, enabled,
                      owner_ccgid, created_at, updated_at, version)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, ?, ?, ?)
                 """,
                 toolkitWithoutKpi,
                 "Legacy Toolkit Without KPI",
@@ -1027,8 +1030,8 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into toolkit_subtask
-                    (id, toolkit_id, name, display_order, created_at, updated_at, version)
-                values (?, ?, ?, ?, ?, ?, ?)
+                    (id, toolkit_id, name, display_order, enabled, created_at, updated_at, version)
+                values (?, ?, ?, ?, true, ?, ?, ?)
                 """,
                 subtaskId,
                 toolkitWithoutKpi,
@@ -1220,31 +1223,6 @@ class SupervisorApiIntegrationTests {
                 """.formatted(toolkitId);
     }
 
-    private String updateToolkitWithoutSubtask(long version) {
-        return """
-                {
-                  "name": "Updated Toolkit",
-                  "description": "Replace the original TASK",
-                  "combineSubtasksTime": false,
-                  "version": %d,
-                  "subtasks": [
-                    {
-                      "name": "Replacement task",
-                      "description": "New active subtask",
-                      "displayOrder": 1
-                    }
-                  ],
-                  "sharedKpiSelections": [
-                    {
-                      "carrier": "Carrier A",
-                      "site": "Kuala Lumpur",
-                      "customerCountry": "Australia"
-                    }
-                  ]
-                }
-                """.formatted(version);
-    }
-
     private void insertCompletedTmsSession(
             UUID id, String sessionNo, String agentCcgid, UUID toolkitId, Instant startedAt) {
         insertTmsSession(id, sessionNo, agentCcgid, toolkitId, "COMPLETED", startedAt);
@@ -1273,10 +1251,10 @@ class SupervisorApiIntegrationTests {
                 """
                 insert into tms_session
                     (id, session_no, agent_ccgid, toolkit_id, toolkit_subtask_id, processed_volume,
-                     reference, remarks, status, started_at, ended_at,
+                     reference, remarks, status, enabled, started_at, ended_at,
                      net_duration_seconds,
                      created_at, updated_at, version)
-                values (?, ?, ?, ?, ?, 10, 'REF', '', ?, ?, ?,
+                values (?, ?, ?, ?, ?, 10, 'REF', '', ?, true, ?, ?,
                         600,
                         ?, ?, 0)
                 """,

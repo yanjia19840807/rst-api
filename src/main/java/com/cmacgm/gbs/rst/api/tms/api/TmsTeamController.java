@@ -8,6 +8,7 @@ import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.TeamAgent;
 import com.cmacgm.gbs.rst.api.tms.api.dto.TmsSessionResponse;
+import com.cmacgm.gbs.rst.api.tms.application.TmsSessionCommandService;
 import com.cmacgm.gbs.rst.api.tms.application.TmsSessionQueryService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
@@ -17,6 +18,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,14 +32,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class TmsTeamController {
 
     private final TmsSessionQueryService queryService;
+    private final TmsSessionCommandService commandService;
 
     /**
      * Creates the team TMS controller.
      *
      * @param queryService TMS query service
+     * @param commandService TMS command service
      */
-    public TmsTeamController(TmsSessionQueryService queryService) {
+    public TmsTeamController(
+            TmsSessionQueryService queryService, TmsSessionCommandService commandService) {
         this.queryService = queryService;
+        this.commandService = commandService;
     }
 
     /**
@@ -84,6 +90,7 @@ public class TmsTeamController {
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
                     LocalDate dateTo,
+            @RequestParam(required = false) Boolean enabled,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         return queryService.sessionsForTeam(
@@ -97,6 +104,7 @@ public class TmsTeamController {
                 query,
                 dateFrom,
                 dateTo,
+                enabled,
                 page,
                 pageSize);
     }
@@ -119,7 +127,8 @@ public class TmsTeamController {
                     LocalDate dateFrom,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-                    LocalDate dateTo) {
+                    LocalDate dateTo,
+            @RequestParam(required = false) Boolean enabled) {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"tms-team-sessions.xlsx\"")
                 .contentType(MediaType.parseMediaType(
@@ -134,7 +143,8 @@ public class TmsTeamController {
                         reference,
                         query,
                         dateFrom,
-                        dateTo));
+                        dateTo,
+                        enabled));
     }
 
     /**
@@ -148,5 +158,17 @@ public class TmsTeamController {
     public TmsSessionResponse get(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable String id) {
         return queryService.getForTeam(principal.ccgid(), id);
+    }
+
+    @PostMapping("/sessions/{id}/enable")
+    public TmsSessionResponse enable(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable String id) {
+        return commandService.setEnabled(principal.ccgid(), id, true);
+    }
+
+    @PostMapping("/sessions/{id}/disable")
+    public TmsSessionResponse disable(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable String id) {
+        return commandService.setEnabled(principal.ccgid(), id, false);
     }
 }

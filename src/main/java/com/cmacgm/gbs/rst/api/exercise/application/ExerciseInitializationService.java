@@ -148,7 +148,8 @@ public class ExerciseInitializationService {
                 null,
                 null,
                 exercise.getTmsFrom(),
-                exercise.getTmsTo())));
+                exercise.getTmsTo(),
+                true)));
 
         Set<UUID> desiredIds = new HashSet<>();
         for (TmsSession session : qualifying) {

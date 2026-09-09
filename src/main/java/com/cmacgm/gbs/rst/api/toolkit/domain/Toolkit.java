@@ -64,6 +64,9 @@ public class Toolkit {
     @Column(name = "combine_subtasks_time", nullable = false)
     private boolean combineSubtasksTime;
 
+    @Column(nullable = false)
+    private boolean enabled;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -121,6 +124,7 @@ public class Toolkit {
         toolkit.primaryPl3Code = pl3Code;
         toolkit.pl3Name = pl3Name;
         toolkit.combineSubtasksTime = combineSubtasksTime;
+        toolkit.enabled = true;
         toolkit.ownerCcgid = ownerCcgid;
         toolkit.createdAt = now;
         toolkit.createdBy = ownerCcgid;
@@ -156,6 +160,12 @@ public class Toolkit {
                 ToolkitSharedKpiSelection.create(this, carrier, site, country, ownerCcgid, now);
         sharedKpiSelections.add(selection);
         return selection;
+    }
+
+    public void setEnabled(boolean enabled, Instant now) {
+        this.enabled = enabled;
+        this.updatedAt = now;
+        this.updatedBy = ownerCcgid;
     }
 
     public void softDelete(Instant now) {
@@ -207,6 +217,10 @@ public class Toolkit {
 
     public boolean isCombineSubtasksTime() {
         return combineSubtasksTime;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
     }
 
     public long getVersion() {
