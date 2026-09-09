@@ -66,6 +66,31 @@ public final class SystemCycleTimeBaselineWriter {
         replaceSystem(exerciseId, actorCcgid, computed.get());
     }
 
+    /**
+     * Rebuilds the SYSTEM baseline from current included sessions, replacing MANUAL if present.
+     * When no valid included samples remain, deactivates the active baseline.
+     */
+    public void refreshForcingSystem(UUID exerciseId, String actorCcgid) {
+        Optional<SystemBaseline> computed = computeSystemBaseline(
+                exerciseTmsSessions.findAllSessionRowsByExerciseId(exerciseId),
+                combineSubtasksTime(exerciseId));
+        if (computed.isEmpty()) {
+            baselines.deactivateActiveByExerciseId(exerciseId);
+            return;
+        }
+        replaceSystem(exerciseId, actorCcgid, computed.get());
+    }
+
+    /**
+     * Deactivates an active SYSTEM baseline. MANUAL baselines are left unchanged.
+     */
+    public void deactivateSystemIfActive(UUID exerciseId) {
+        Optional<CycleTimeBaseline> active = baselines.findByExerciseIdAndActiveTrue(exerciseId);
+        if (active.isPresent() && "SYSTEM".equalsIgnoreCase(active.get().getBaselineType())) {
+            baselines.deactivateActiveByExerciseId(exerciseId);
+        }
+    }
+
     boolean combineSubtasksTime(UUID exerciseId) {
         return exercises.findByIdAndDeletedAtIsNull(exerciseId)
                 .map(RstExercise::getToolkitSnapshot)

@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.exercise.submission.domain;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -85,10 +86,58 @@ public class ValidationResult {
      * @param reason skip or comparison outcome
      * @param comparedMonths overlapping months that were compared
      * @param mismatches months whose daily sum disagrees with monthly actual
+     * @param ratio TMS / Daily when computable
+     * @param tmsVolumeSum included TMS volume
+     * @param dailyVolumeSum Daily volume in the TMS period
+     * @param missingDateCount dates in the TMS period without Daily actuals
+     * @param threshold TMS ratio warning threshold
      */
-    public record Detail(String reason, int comparedMonths, List<MonthMismatch> mismatches) {
+    public record Detail(
+            String reason,
+            int comparedMonths,
+            List<MonthMismatch> mismatches,
+            BigDecimal ratio,
+            BigDecimal tmsVolumeSum,
+            BigDecimal dailyVolumeSum,
+            Integer missingDateCount,
+            BigDecimal threshold) {
         public Detail {
             mismatches = mismatches == null ? List.of() : List.copyOf(mismatches);
+        }
+
+        /**
+         * Daily vs monthly payload.
+         *
+         * @param reason skip or comparison outcome
+         * @param comparedMonths overlapping months
+         * @param mismatches failing months
+         * @return detail
+         */
+        public static Detail dailyVsMonthly(
+                String reason, int comparedMonths, List<MonthMismatch> mismatches) {
+            return new Detail(reason, comparedMonths, mismatches, null, null, null, null, null);
+        }
+
+        /**
+         * TMS ratio payload.
+         *
+         * @param reason comparison outcome
+         * @param ratio TMS / Daily when computable
+         * @param tmsVolumeSum included TMS volume
+         * @param dailyVolumeSum Daily volume in the TMS period
+         * @param missingDateCount dates without Daily actuals
+         * @param threshold warning threshold
+         * @return detail
+         */
+        public static Detail tmsRatio(
+                String reason,
+                BigDecimal ratio,
+                BigDecimal tmsVolumeSum,
+                BigDecimal dailyVolumeSum,
+                Integer missingDateCount,
+                BigDecimal threshold) {
+            return new Detail(
+                    reason, 0, List.of(), ratio, tmsVolumeSum, dailyVolumeSum, missingDateCount, threshold);
         }
     }
 

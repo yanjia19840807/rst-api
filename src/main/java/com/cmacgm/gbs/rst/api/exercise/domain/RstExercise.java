@@ -48,10 +48,10 @@ public class RstExercise {
     @Column(name = "slot_weeks")
     private Short slotWeeks;
 
-    @Column(name = "tms_from", nullable = false)
+    @Column(name = "tms_from")
     private LocalDate tmsFrom;
 
-    @Column(name = "tms_to", nullable = false)
+    @Column(name = "tms_to")
     private LocalDate tmsTo;
 
     @Column(name = "official_scenario_id")
@@ -109,8 +109,8 @@ public class RstExercise {
      * @param sizingMonth first day of sizing month
      * @param slotStartDate optional slot window start (set later in Volume Input)
      * @param slotWeeks optional slot window length in weeks
-     * @param tmsFrom TMS history from date
-     * @param tmsTo TMS history to date
+     * @param tmsFrom optional TMS history from date (set later for SYSTEM median)
+     * @param tmsTo optional TMS history to date
      * @param now creation timestamp
      * @return new Exercise aggregate
      */
@@ -143,23 +143,44 @@ public class RstExercise {
     }
 
     /**
-     * Updates sizing / TMS period fields while the Exercise remains editable.
+     * Updates Sizing Month while the Exercise remains editable.
      *
      * @param sizingMonth first day of sizing month
+     * @param actorCcgid updating Supervisor
+     * @param now update timestamp
+     */
+    public void updatePeriods(LocalDate sizingMonth, String actorCcgid, Instant now) {
+        this.sizingMonth = sizingMonth;
+        this.updatedAt = now;
+        this.updatedBy = actorCcgid;
+    }
+
+    /**
+     * Sets the TMS Period used to link COMPLETED sessions for the SYSTEM median.
+     *
      * @param tmsFrom TMS history from date
      * @param tmsTo TMS history to date
      * @param actorCcgid updating Supervisor
      * @param now update timestamp
      */
-    public void updatePeriods(
-            LocalDate sizingMonth,
-            LocalDate tmsFrom,
-            LocalDate tmsTo,
-            String actorCcgid,
-            Instant now) {
-        this.sizingMonth = sizingMonth;
+    public void updateTmsPeriod(
+            LocalDate tmsFrom, LocalDate tmsTo, String actorCcgid, Instant now) {
         this.tmsFrom = tmsFrom;
         this.tmsTo = tmsTo;
+        this.updatedAt = now;
+        this.updatedBy = actorCcgid;
+    }
+
+    public boolean hasTmsPeriod() {
+        return tmsFrom != null && tmsTo != null && !tmsTo.isBefore(tmsFrom);
+    }
+
+    /**
+     * Clears the TMS Period so SYSTEM median is no longer populated from sessions.
+     */
+    public void clearTmsPeriod(String actorCcgid, Instant now) {
+        this.tmsFrom = null;
+        this.tmsTo = null;
         this.updatedAt = now;
         this.updatedBy = actorCcgid;
     }

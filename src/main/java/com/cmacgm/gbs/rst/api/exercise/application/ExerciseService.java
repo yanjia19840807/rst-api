@@ -39,6 +39,7 @@ import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseToolkitView;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateExercisePeriodsRequest;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateExercisePeriodsResult;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateSlotPeriodRequest;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateTmsPeriodRequest;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateSlotPeriodResult;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.SlotVolumeView;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseVolumeSlotInput;
@@ -136,7 +137,7 @@ public class ExerciseService {
     @Transactional(isolation = Isolation.REPEATABLE_READ)
     public CreateExerciseResult create(String ownerCcgid, CreateExerciseRequest request) {
         // Resolve under repeatable-read so an ACTIVE switch cannot mix snapshots.
-        validatePeriods(request.sizingMonth(), request.tmsFrom(), request.tmsTo());
+        validateSizingMonth(request.sizingMonth());
         ExerciseFreeze freeze = ExerciseFreeze.resolve(toolkits, timesheet, ownerCcgid, request.toolkitId());
 
         Instant now = clock.instant();
@@ -152,8 +153,8 @@ public class ExerciseService {
                 MonthKeys.parseMonthStart(request.sizingMonth()),
                 null,
                 null,
-                request.tmsFrom(),
-                request.tmsTo(),
+                null,
+                null,
                 now);
         freeze.applyTo(exercise, now);
         exercise = exercises.saveAndFlush(exercise);
@@ -244,7 +245,7 @@ public class ExerciseService {
     }
 
     /**
-     * Updates sizing / TMS periods on an editable Exercise.
+     * Updates Sizing Month on an editable Exercise.
      *
      * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
@@ -254,7 +255,7 @@ public class ExerciseService {
     @Transactional
     public UpdateExercisePeriodsResult updatePeriods(
             String ownerCcgid, UUID exerciseId, UpdateExercisePeriodsRequest request) {
-        validatePeriods(request.sizingMonth(), request.tmsFrom(), request.tmsTo());
+        validateSizingMonth(request.sizingMonth());
         RstExercise exercise = access.requireOwned(ownerCcgid, exerciseId);
         if (!ExerciseLifecycle.canEdit(processOf(exercise.getId()))) {
             throw new ApiException(
@@ -262,13 +263,10 @@ public class ExerciseService {
                     "exercise-not-editable",
                     "Exercise periods can only be changed during Supervisor Sizing.");
         }
-        boolean periodsChanged = periodsChanged(exercise, request);
         boolean sizingChanged = !MonthKeys.parseMonthStart(request.sizingMonth())
                 .equals(exercise.getSizingMonth());
         exercise.updatePeriods(
                 MonthKeys.parseMonthStart(request.sizingMonth()),
-                request.tmsFrom(),
-                request.tmsTo(),
                 ownerCcgid,
                 clock.instant());
         exercises.saveAndFlush(exercise);
@@ -279,9 +277,6 @@ public class ExerciseService {
             notices.add(
                     "Monthly and Daily Volume were reset from Toolkit for the new Sizing Month. "
                             + "Volume edits on this Exercise were discarded.");
-        }
-        notices.add(initialization.syncTmsPopulation(exercise, ownerCcgid));
-        if (periodsChanged) {
             int cleared = scenarioCommits.clearResultsForExercise(exerciseId);
             if (cleared > 0) {
                 notices.add(
@@ -290,8 +285,75 @@ public class ExerciseService {
                                 + " scenario(s). Re-run Preview / Save sizing on each scenario.");
             }
         }
-        // Volume / TMS / Cycle-Time sync may run bulk @Modifying deletes that clear the
+        // Volume sync may run bulk @Modifying deletes that clear the
         // persistence context; reload before mapping lazy Subtasks / Shared KPI lines.
+        RstExercise reloaded = access.requireOwned(ownerCcgid, exerciseId);
+        return new UpdateExercisePeriodsResult(
+                toResponse(reloaded, null, processOf(reloaded.getId())), notices);
+    }
+
+    /**
+     * Sets TMS Period, links COMPLETED sessions, and refreshes the SYSTEM Cycle Time baseline.
+     */
+    @Transactional
+    public UpdateExercisePeriodsResult updateTmsPeriod(
+            String ownerCcgid, UUID exerciseId, UpdateTmsPeriodRequest request) {
+        validateTmsPeriod(request.tmsFrom(), request.tmsTo());
+        RstExercise exercise = access.requireOwned(ownerCcgid, exerciseId);
+        if (!ExerciseLifecycle.canEdit(processOf(exercise.getId()))) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "exercise-not-editable",
+                    "TMS period can only be changed during Supervisor Sizing.");
+        }
+        boolean tmsChanged = !request.tmsFrom().equals(exercise.getTmsFrom())
+                || !request.tmsTo().equals(exercise.getTmsTo());
+        exercise.updateTmsPeriod(request.tmsFrom(), request.tmsTo(), ownerCcgid, clock.instant());
+        exercises.saveAndFlush(exercise);
+
+        List<String> notices = new ArrayList<>();
+        notices.add(initialization.syncTmsPopulation(exercise, ownerCcgid, true));
+        if (tmsChanged) {
+            int cleared = scenarioCommits.clearResultsForExercise(exerciseId);
+            if (cleared > 0) {
+                notices.add(
+                        "Cleared saved Forecast and Simulation results for "
+                                + cleared
+                                + " scenario(s). Re-run Preview / Save sizing on each scenario.");
+            }
+        }
+        RstExercise reloaded = access.requireOwned(ownerCcgid, exerciseId);
+        return new UpdateExercisePeriodsResult(
+                toResponse(reloaded, null, processOf(reloaded.getId())), notices);
+    }
+
+    /**
+     * Clears TMS Period, unlinks sessions, and drops the SYSTEM Cycle Time baseline.
+     */
+    @Transactional
+    public UpdateExercisePeriodsResult clearTmsPeriod(String ownerCcgid, UUID exerciseId) {
+        RstExercise exercise = access.requireOwned(ownerCcgid, exerciseId);
+        if (!ExerciseLifecycle.canEdit(processOf(exercise.getId()))) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "exercise-not-editable",
+                    "TMS period can only be changed during Supervisor Sizing.");
+        }
+        boolean hadPeriod = exercise.hasTmsPeriod();
+        exercise.clearTmsPeriod(ownerCcgid, clock.instant());
+        exercises.saveAndFlush(exercise);
+
+        List<String> notices = new ArrayList<>();
+        notices.add(initialization.clearTmsPopulation(exercise));
+        if (hadPeriod) {
+            int cleared = scenarioCommits.clearResultsForExercise(exerciseId);
+            if (cleared > 0) {
+                notices.add(
+                        "Cleared saved Forecast and Simulation results for "
+                                + cleared
+                                + " scenario(s). Re-run Preview / Save sizing on each scenario.");
+            }
+        }
         RstExercise reloaded = access.requireOwned(ownerCcgid, exerciseId);
         return new UpdateExercisePeriodsResult(
                 toResponse(reloaded, null, processOf(reloaded.getId())), notices);
@@ -386,20 +448,16 @@ public class ExerciseService {
         return new CommittedResultsStatus(scenarioCommits.clearResultsForExercise(exerciseId));
     }
 
-    private static boolean periodsChanged(RstExercise exercise, UpdateExercisePeriodsRequest request) {
-        LocalDate sizing = MonthKeys.parseMonthStart(request.sizingMonth());
-        return !sizing.equals(exercise.getSizingMonth())
-                || !request.tmsFrom().equals(exercise.getTmsFrom())
-                || !request.tmsTo().equals(exercise.getTmsTo());
-    }
-
-    private static void validatePeriods(String sizingMonth, LocalDate tmsFrom, LocalDate tmsTo) {
+    private static void validateTmsPeriod(LocalDate tmsFrom, LocalDate tmsTo) {
         if (tmsFrom == null || tmsTo == null || tmsTo.isBefore(tmsFrom)) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "invalid-tms-period",
                     "tmsTo cannot be before tmsFrom.");
         }
+    }
+
+    private static void validateSizingMonth(String sizingMonth) {
         if (sizingMonth == null || !sizingMonth.matches("^[0-9]{4}-(0[1-9]|1[0-2])$")) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,

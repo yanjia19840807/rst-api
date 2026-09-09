@@ -17,5 +17,6 @@ public record BaselineView(
         String manualReason,
         boolean active,
         Instant calculatedAt,
-        List<BaselineFileView> files) {
+        List<BaselineFileView> files,
+        TmsRatioView tmsRatio) {
 }

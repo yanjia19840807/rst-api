@@ -460,6 +460,8 @@ class SupervisorApiIntegrationTests {
                 .andExpect(jsonPath("$.exercise.snapshot.toolkit.name").value("Frozen Toolkit Name"))
                 .andExpect(jsonPath("$.exercise.snapshot.subtasks[0].name").value("Manual match"))
                 .andExpect(jsonPath("$.exercise.snapshot.sharedKpis[0].deliveryHc").value(2.0))
+                .andExpect(jsonPath("$.exercise.tmsFrom").isEmpty())
+                .andExpect(jsonPath("$.exercise.tmsTo").isEmpty())
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
@@ -675,6 +677,29 @@ class SupervisorApiIntegrationTests {
                         "select count(*) from rst_exercise where toolkit_id = ?",
                         Integer.class,
                         UUID.fromString(toolkitId)));
+    }
+
+    @Test
+    void appliesTmsPeriodAfterCreate() throws Exception {
+        String toolkitId = JsonPath.read(createToolkit("TMS Period Toolkit"), "$.id");
+        String exerciseId = JsonPath.read(createExercise(toolkitId), "$.exercise.id");
+        mockMvc.perform(put("/api/v1/exercises/{id}/tms-period", exerciseId)
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "tmsFrom": "2026-08-01",
+                                  "tmsTo": "2026-08-31"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.exercise.tmsFrom").value("2026-08-01"))
+                .andExpect(jsonPath("$.exercise.tmsTo").value("2026-08-31"));
+        mockMvc.perform(delete("/api/v1/exercises/{id}/tms-period", exerciseId)
+                        .header("X-Dev-Role", "SUPERVISOR"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.exercise.tmsFrom").isEmpty())
+                .andExpect(jsonPath("$.exercise.tmsTo").isEmpty());
     }
 
     @Test
@@ -1216,9 +1241,7 @@ class SupervisorApiIntegrationTests {
         return """
                 {
                   "toolkitId": "%s",
-                  "sizingMonth": "2026-09",
-                  "tmsFrom": "2026-08-01",
-                  "tmsTo": "2026-08-31"
+                  "sizingMonth": "2026-09"
                 }
                 """.formatted(toolkitId);
     }

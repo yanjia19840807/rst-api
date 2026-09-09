@@ -4,7 +4,8 @@ package com.cmacgm.gbs.rst.api.exercise.submission.domain;
  * Closed set of submit-time validation rules. Failure severity is part of the rule.
  */
 public enum ValidationRule {
-    DAILY_VS_MONTHLY(ValidationSeverity.WARNING);
+    DAILY_VS_MONTHLY(ValidationSeverity.WARNING),
+    TMS_RATIO(ValidationSeverity.WARNING);
 
     private final ValidationSeverity severity;
 

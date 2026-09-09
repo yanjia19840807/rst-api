@@ -54,6 +54,7 @@ public class CycleTimeService {
     private final FileArtifactRepository fileArtifacts;
     private final ExerciseTmsSessionRepository exerciseTmsSessions;
     private final SystemCycleTimeBaselineWriter systemCycleTime;
+    private final TmsRatioCalculator tmsRatioCalculator;
     private final TimesheetReadService timesheet;
     private final Clock clock;
 
@@ -67,6 +68,7 @@ public class CycleTimeService {
             FileArtifactRepository fileArtifacts,
             ExerciseTmsSessionRepository exerciseTmsSessions,
             SystemCycleTimeBaselineWriter systemCycleTime,
+            TmsRatioCalculator tmsRatioCalculator,
             TimesheetReadService timesheet,
             Clock clock) {
         this.exercises = exercises;
@@ -75,6 +77,7 @@ public class CycleTimeService {
         this.fileArtifacts = fileArtifacts;
         this.exerciseTmsSessions = exerciseTmsSessions;
         this.systemCycleTime = systemCycleTime;
+        this.tmsRatioCalculator = tmsRatioCalculator;
         this.timesheet = timesheet;
         this.clock = clock;
     }
@@ -113,7 +116,7 @@ public class CycleTimeService {
         if (!fileIds.isEmpty()) {
             linkSupportFiles(baseline.getId(), exerciseId, fileIds, ownerCcgid, now);
         }
-        return toView(baseline);
+        return toView(baseline, exercise);
     }
 
     /**
@@ -174,7 +177,7 @@ public class CycleTimeService {
      */
     @Transactional
     public BaselineView getActive(String ownerCcgid, UUID exerciseId) {
-        exercises.requireReadable(ownerCcgid, exerciseId);
+        RstExercise exercise = exercises.requireReadable(ownerCcgid, exerciseId);
         if (baselines.findByExerciseIdAndActiveTrue(exerciseId).isEmpty()) {
             systemCycleTime.refreshIfSystemOrAbsent(exerciseId, ownerCcgid);
         }
@@ -183,7 +186,7 @@ public class CycleTimeService {
                         HttpStatus.NOT_FOUND,
                         "cycle-time-baseline-not-found",
                         "No active Cycle Time baseline exists."));
-        return toView(baseline);
+        return toView(baseline, exercise);
     }
 
     /**
@@ -293,7 +296,7 @@ public class CycleTimeService {
                         "TMS session is not linked to this exercise."));
 
         BaselineView baseline = baselines.findByExerciseIdAndActiveTrue(exerciseId)
-                .map(this::toView)
+                .map(activeBaseline -> toView(activeBaseline, exercise))
                 .orElse(null);
         return new PatchTmsSessionResult(toSessionResponse(row, stats, new HashMap<>()), baseline);
     }
@@ -390,7 +393,7 @@ public class CycleTimeService {
         }
     }
 
-    private BaselineView toView(CycleTimeBaseline baseline) {
+    private BaselineView toView(CycleTimeBaseline baseline, RstExercise exercise) {
         List<BaselineFileView> files = List.of();
         if ("MANUAL".equals(baseline.getBaselineType())) {
             files = baselineFiles
@@ -411,7 +414,10 @@ public class CycleTimeService {
                 baseline.getManualReason(),
                 baseline.isActive(),
                 baseline.getCalculatedAt(),
-                files);
+                files,
+                "SYSTEM".equals(baseline.getBaselineType())
+                        ? tmsRatioCalculator.evaluate(exercise)
+                        : null);
     }
 
     private static BaselineFileView toFileView(FileArtifact artifact, int displayOrder) {

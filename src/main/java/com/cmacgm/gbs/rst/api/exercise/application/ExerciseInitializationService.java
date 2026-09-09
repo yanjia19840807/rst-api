@@ -104,19 +104,19 @@ public class ExerciseInitializationService {
         List<String> notices = new ArrayList<>();
 
         if (seedFromToolkit(exercise, actorCcgid, now)) {
-            notices.add(
-                    "Associated Data seeded from Toolkit latest state "
-                            + "(Team Setup, Production Support, Calendar).");
+            notices.add("Team Setup, Production Support, and Calendar copied from the Toolkit.");
         } else {
             notices.add(
-                    "No Toolkit latest state yet. "
-                            + "Associated Data starts empty. Add holiday dates in Calendar if needed.");
+                    "No Toolkit Associated Data yet. "
+                            + "Team Setup, Production Support, and Calendar start empty.");
         }
 
         replaceTrainVolumeGridsFromToolkit(exercise, actorCcgid);
-        notices.add("Volume Input pre-filled from Toolkit volume when available.");
+        notices.add("Volume Input filled from Toolkit history for this Sizing Month.");
 
-        notices.add(syncTmsPopulation(exercise, actorCcgid));
+        if (exercise.hasTmsPeriod()) {
+            notices.add(syncTmsPopulation(exercise, actorCcgid));
+        }
         return notices;
     }
 
@@ -132,10 +132,24 @@ public class ExerciseInitializationService {
     }
 
     /**
-     * Reconciles Embedded TMS population for the Exercise TMS period and refreshes SYSTEM CT.
+     * Reconciles Embedded TMS population for the Exercise TMS period and refreshes SYSTEM CT
+     * when the active baseline is absent or SYSTEM.
      */
     @Transactional
     public String syncTmsPopulation(RstExercise exercise, String actorCcgid) {
+        return syncTmsPopulation(exercise, actorCcgid, false);
+    }
+
+    /**
+     * Reconciles Embedded TMS population for the Exercise TMS period.
+     *
+     * @param forceSystem when true, replaces an active MANUAL baseline with SYSTEM
+     */
+    @Transactional
+    public String syncTmsPopulation(RstExercise exercise, String actorCcgid, boolean forceSystem) {
+        if (!exercise.hasTmsPeriod()) {
+            return "TMS period is not set. Select it in Associated Data when using the SYSTEM median.";
+        }
         Instant now = clock.instant();
         UUID exerciseId = exercise.getId();
         List<TmsSession> qualifying = tmsSessions.findAll(TmsSessionSpecification.filtered(new Filter(
@@ -181,9 +195,25 @@ public class ExerciseInitializationService {
         }
         exerciseTmsSessions.flush();
 
-        systemCycleTime.refreshIfSystemOrAbsent(exerciseId, actorCcgid);
+        if (forceSystem) {
+            systemCycleTime.refreshForcingSystem(exerciseId, actorCcgid);
+        } else {
+            systemCycleTime.refreshIfSystemOrAbsent(exerciseId, actorCcgid);
+        }
         return "Linked " + desiredIds.size()
                 + " COMPLETED TMS session(s) for the Exercise TMS period.";
+    }
+
+    /**
+     * Unlinks Embedded TMS sessions and drops an active SYSTEM baseline.
+     */
+    @Transactional
+    public String clearTmsPopulation(RstExercise exercise) {
+        UUID exerciseId = exercise.getId();
+        exerciseTmsSessions.deleteByExerciseId(exerciseId);
+        exerciseTmsSessions.flush();
+        systemCycleTime.deactivateSystemIfActive(exerciseId);
+        return "TMS period cleared. Linked sessions and the SYSTEM median were removed.";
     }
 
     private boolean seedFromToolkit(RstExercise target, String actorCcgid, Instant now) {

@@ -748,9 +748,7 @@ class TmsSessionApiIntegrationTests {
                         .content("""
                                 {
                                   "toolkitId": "%s",
-                                  "sizingMonth": "2026-09",
-                                  "tmsFrom": "2026-08-01",
-                                  "tmsTo": "2026-08-31"
+                                  "sizingMonth": "2026-09"
                                 }
                                 """.formatted(TOOLKIT_ID)))
                 .andExpect(status().isCreated())

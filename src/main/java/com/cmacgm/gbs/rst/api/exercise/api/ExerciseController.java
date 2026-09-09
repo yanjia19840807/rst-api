@@ -17,6 +17,7 @@ import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateExercisePeriodsRequest;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateExercisePeriodsResult;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateSlotPeriodRequest;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateSlotPeriodResult;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateTmsPeriodRequest;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.exercise.submission.application.SubmissionService;
@@ -181,7 +182,7 @@ public class ExerciseController {
     }
 
     /**
-     * Updates sizing / TMS periods on an editable Exercise.
+     * Updates Sizing Month on an editable Exercise.
      *
      * @param principal authenticated owner
      * @param id Exercise id
@@ -195,6 +196,28 @@ public class ExerciseController {
             @PathVariable UUID id,
             @Valid @RequestBody UpdateExercisePeriodsRequest request) {
         return service.updatePeriods(principal.ccgid(), id, request);
+    }
+
+    /**
+     * Sets TMS Period, links COMPLETED sessions, and refreshes the SYSTEM Cycle Time baseline.
+     */
+    @PutMapping("/{id}/tms-period")
+    @PreAuthorize("hasRole('SUPERVISOR')")
+    public UpdateExercisePeriodsResult updateTmsPeriod(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateTmsPeriodRequest request) {
+        return service.updateTmsPeriod(principal.ccgid(), id, request);
+    }
+
+    /**
+     * Clears TMS Period, unlinks sessions, and drops the SYSTEM Cycle Time baseline.
+     */
+    @DeleteMapping("/{id}/tms-period")
+    @PreAuthorize("hasRole('SUPERVISOR')")
+    public UpdateExercisePeriodsResult clearTmsPeriod(
+            @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID id) {
+        return service.clearTmsPeriod(principal.ccgid(), id);
     }
 
     /**

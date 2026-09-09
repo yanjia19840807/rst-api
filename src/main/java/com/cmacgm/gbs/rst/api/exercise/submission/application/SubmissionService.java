@@ -5,6 +5,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.HexFormat;
@@ -23,8 +24,11 @@ import com.cmacgm.gbs.rst.api.exercise.scenario.application.ScenarioOfficialRead
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.ScenarioService;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.DailyMonthlyVolumeMath;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.TmsRatioMath;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseVolumeDailyInputRepository;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseVolumeMonthlyInputRepository;
+import com.cmacgm.gbs.rst.api.exercise.cycletime.application.TmsRatioCalculator;
+import com.cmacgm.gbs.rst.api.exercise.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
 import com.cmacgm.gbs.rst.api.exercise.submission.domain.ValidationResult;
 import com.cmacgm.gbs.rst.api.exercise.submission.domain.ValidationRule;
@@ -69,6 +73,8 @@ public class SubmissionService {
     private final ScenarioRepository scenarios;
     private final ExerciseVolumeMonthlyInputRepository monthlyVolumes;
     private final ExerciseVolumeDailyInputRepository dailyVolumes;
+    private final CycleTimeBaselineRepository cycleTimeBaselines;
+    private final TmsRatioCalculator tmsRatioCalculator;
     private final ProcessInstanceRepository workflows;
     private final WorkflowRouter workflowRouter;
     private final WorkflowViews workflowViews;
@@ -89,6 +95,8 @@ public class SubmissionService {
             ScenarioRepository scenarios,
             ExerciseVolumeMonthlyInputRepository monthlyVolumes,
             ExerciseVolumeDailyInputRepository dailyVolumes,
+            CycleTimeBaselineRepository cycleTimeBaselines,
+            TmsRatioCalculator tmsRatioCalculator,
             ProcessInstanceRepository workflows,
             WorkflowRouter workflowRouter,
             WorkflowViews workflowViews,
@@ -104,6 +112,8 @@ public class SubmissionService {
         this.scenarios = scenarios;
         this.monthlyVolumes = monthlyVolumes;
         this.dailyVolumes = dailyVolumes;
+        this.cycleTimeBaselines = cycleTimeBaselines;
+        this.tmsRatioCalculator = tmsRatioCalculator;
         this.workflows = workflows;
         this.workflowRouter = workflowRouter;
         this.workflowViews = workflowViews;
@@ -127,7 +137,9 @@ public class SubmissionService {
                     "Exercise must have an Official Scenario and be editable to submit.");
         }
         UUID scenarioId = requireOfficialPackage(exercise);
-        List<ValidationFinding> findings = List.of(toFinding(evaluateDailyVsMonthly(exercise, ownerCcgid)));
+        List<ValidationFinding> findings = evaluateFindings(exercise, ownerCcgid).stream()
+                .map(SubmissionService::toFinding)
+                .toList();
         TimesheetAlignmentView alignment = align(exercise);
         WorkflowRouter.RoutedStep manager = managerHop(exercise);
         return new SubmitPreviewView(
@@ -180,8 +192,10 @@ public class SubmissionService {
         requireOfficialPackage(exercise);
         Instant now = clock.instant();
         UUID requestId = request.requestId() == null ? UUID.randomUUID() : request.requestId();
-        ValidationResult finding = evaluateDailyVsMonthly(exercise, ownerCcgid);
-        List<ValidationFinding> findings = List.of(toFinding(finding));
+        List<ValidationResult> evaluated = evaluateFindings(exercise, ownerCcgid);
+        List<ValidationFinding> findings = evaluated.stream()
+                .map(SubmissionService::toFinding)
+                .toList();
         if (submitBlocked(findings)) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
@@ -207,14 +221,14 @@ public class SubmissionService {
             return submittedDetails(ownerCcgid, exerciseId);
         }
         if (existing != null && existing.isResubmittable()) {
-            return reopenWorkflow(ownerCcgid, exercise, existing, request.remarks(), requestId, now, finding, handler);
+            return reopenWorkflow(ownerCcgid, exercise, existing, request.remarks(), requestId, now, evaluated, handler);
         }
         if (existing != null) {
             return submittedDetails(ownerCcgid, exerciseId);
         }
 
         requireDomainHead(exercise);
-        validations.save(finding);
+        validations.saveAll(evaluated);
         ProcessInstance workflow = ProcessInstance.start(
                 exerciseId, request.remarks(), handler, requestId, now);
         attachScopes(exercise, workflow);
@@ -235,7 +249,7 @@ public class SubmissionService {
             String remarks,
             UUID requestId,
             Instant now,
-            ValidationResult finding,
+            List<ValidationResult> evaluated,
             Handler handler) {
         if (workflow.findActorByRequestId(requestId).isPresent()) {
             return toDetails(exercise, workflow);
@@ -246,7 +260,7 @@ public class SubmissionService {
         attachScopes(exercise, workflow);
 
         requireDomainHead(exercise);
-        validations.save(finding);
+        validations.saveAll(evaluated);
         workflow.recordSubmit(handler, remarks, requestId, now);
         String managerCcgid = openManager(workflow, exercise, now);
         workflows.save(workflow);
@@ -315,6 +329,16 @@ public class SubmissionService {
         return toDetails(exercise, workflow);
     }
 
+    private List<ValidationResult> evaluateFindings(RstExercise exercise, String actorCcgid) {
+        List<ValidationResult> findings = new ArrayList<>();
+        findings.add(evaluateDailyVsMonthly(exercise, actorCcgid));
+        ValidationResult tmsRatio = evaluateTmsRatio(exercise, actorCcgid);
+        if (tmsRatio != null) {
+            findings.add(tmsRatio);
+        }
+        return findings;
+    }
+
     private ValidationResult evaluateDailyVsMonthly(RstExercise exercise, String actorCcgid) {
         DailyMonthlyVolumeMath.Result volumes = DailyMonthlyVolumeMath.compare(
                 monthlyVolumes.findByExerciseIdOrderByMonthAsc(exercise.getId()),
@@ -323,13 +347,37 @@ public class SubmissionService {
                 exercise.getId(),
                 ValidationRule.DAILY_VS_MONTHLY,
                 volumes.passed(),
-                new ValidationResult.Detail(
+                ValidationResult.Detail.dailyVsMonthly(
                         volumes.reason(),
                         volumes.comparedMonths(),
                         volumes.mismatches().stream()
                                 .map(m -> new ValidationResult.MonthMismatch(
                                         m.month(), m.daily(), m.monthly()))
                                 .toList()),
+                actorCcgid,
+                clock.instant());
+    }
+
+    private ValidationResult evaluateTmsRatio(RstExercise exercise, String actorCcgid) {
+        var baseline = cycleTimeBaselines.findByExerciseIdAndActiveTrue(exercise.getId()).orElse(null);
+        if (baseline == null || !"SYSTEM".equals(baseline.getBaselineType()) || !exercise.hasTmsPeriod()) {
+            return null;
+        }
+        TmsRatioMath.Result ratio = tmsRatioCalculator.compute(exercise);
+        if (ratio == null) {
+            return null;
+        }
+        return ValidationResult.create(
+                exercise.getId(),
+                ValidationRule.TMS_RATIO,
+                ratio.passed(),
+                ValidationResult.Detail.tmsRatio(
+                        ratio.reason(),
+                        ratio.ratio(),
+                        ratio.tmsVolumeSum(),
+                        ratio.dailyVolumeSum(),
+                        ratio.missingDateCount(),
+                        TmsRatioMath.THRESHOLD),
                 actorCcgid,
                 clock.instant());
     }
@@ -457,7 +505,12 @@ public class SubmissionService {
                                 detail.mismatches().stream()
                                         .map(m -> new ValidationFinding.MonthMismatch(
                                                 m.month(), m.daily(), m.monthly()))
-                                        .toList()));
+                                        .toList(),
+                                detail.ratio(),
+                                detail.tmsVolumeSum(),
+                                detail.dailyVolumeSum(),
+                                detail.missingDateCount(),
+                                detail.threshold()));
     }
 
     private static String sha256(String value) {
