@@ -1,8 +1,8 @@
 spring:
   application:
     name: rst-api
-  # IDE / bare `main` runs use application-dev.yml unless overridden.
-  # Production must set SPRING_PROFILES_ACTIVE (e.g. prod) explicitly.
+  # Local `main` / `spring-boot:run` → application-dev.yml.
+  # Deployed hosts must set SPRING_PROFILES_ACTIVE to uat | pre | prod.
   profiles:
     default: dev
   config:
@@ -35,8 +35,13 @@ server:
   tomcat:
     max-http-form-post-size: 25MB
     max-swallow-size: 25MB
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${SESSION_COOKIE_SECURE:false}
 
-# Keep p6spy JDBC logging off outside local/dev (enable in application-dev.yml).
 decorator:
   datasource:
     enabled: false
@@ -58,9 +63,12 @@ app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   security:
-    azure-tenant-id: ${AZURE_TENANT_ID:}
-    # SSO claim name for GBS Center. Dev uses app.security.dev-identity.center instead.
-    center-claim: Center
+    sso:
+      tenant-id: ${AZURE_TENANT_ID:9d314297-75dc-4329-8f94-a66489b4b9bb}
+      client-id: ${AZURE_CLIENT_ID:}
+      client-secret: ${AZURE_CLIENT_SECRET:}
+      redirect-uri: ${AZURE_REDIRECT_URI:}
+      env: ${SSO_ENV:}
 
 rst:
   forecast:
@@ -69,17 +77,10 @@ rst:
     read-timeout-ms: ${RST_FORECAST_READ_TIMEOUT_MS:60000}
     enabled: ${RST_FORECAST_ENABLED:true}
     confidence-level: ${RST_FORECAST_CONFIDENCE:0.95}
-  workflow:
-    # Timesheet has no LTH column yet; LTH steps share this position until IAM provides one.
-    lth-position-id: ${RST_WORKFLOW_LTH_POSITION_ID:LTH}
   mail:
-    # Approval-requested and submission-outcome mail only. Timesheet sync alerts stay separate.
-    workflow-enabled: ${RST_MAIL_WORKFLOW_ENABLED:false}
-    # When set, every workflow mail is sent here instead of the Timesheet occupant.
+    enabled: ${RST_MAIL_ENABLED:false}
     redirect-to: ${RST_MAIL_REDIRECT_TO:}
   sharepoint:
-    # RST-owned root in the Timesheet library. Daily / Monthly / Template / Process hang off this.
-    # Dev / UAT: 4.RST/2.UAT. Production overrides this in application-prod.yml.
     root: ${RST_SHAREPOINT_ROOT:4.RST/2.UAT}
 
 timesheet:
@@ -98,7 +99,7 @@ microsoft:
   graph:
     enabled: ${MS_GRAPH_ENABLED:false}
     secret-name: ${MS_GRAPH_SECRET_NAME:timesheet-prd-microsoft-graph-credentials}
-    tenant-id: ${MS_GRAPH_TENANT_ID:${AZURE_TENANT_ID:}}
+    tenant-id: ${MS_GRAPH_TENANT_ID:${AZURE_TENANT_ID:9d314297-75dc-4329-8f94-a66489b4b9bb}}
     client-id: ${MS_GRAPH_CLIENT_ID:}
     client-secret: ${MS_GRAPH_CLIENT_SECRET:}
     sharepoint-site: ${MS_GRAPH_SHAREPOINT_SITE:https://cmacgmgroup.sharepoint.com/sites/CMA-SharedKPIAutomation}

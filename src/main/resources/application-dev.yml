@@ -1,22 +1,33 @@
+# Local development. Profile default. No Azure SSO — Dev Identity only.
+# Deployed gbs-rst-dev should use uat/pre/prod if Azure login is required
+# (SSO role suffix is UAT / PRE / PROD only).
+
 app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   security:
-    # Test login. When true, the SPA picks the person (URL / account menu).
-    # Unspecified requests default to ADMIN. Keep false after SSO is connected.
     dev-identity:
       override-enabled: true
 
+server:
+  servlet:
+    session:
+      cookie:
+        secure: false
+
 rst:
+  sharepoint:
+    root: ${RST_SHAREPOINT_ROOT:4.RST/2.UAT}
   mail:
-    workflow-enabled: ${RST_MAIL_WORKFLOW_ENABLED:true}
-    redirect-to: ${RST_MAIL_REDIRECT_TO:yanjiafelix@gmail.com}
+    enabled: ${RST_MAIL_ENABLED:true}
+    redirect-to: ${RST_MAIL_REDIRECT_TO:}
 
 microsoft:
   graph:
-    enabled: true
+    enabled: ${MS_GRAPH_ENABLED:true}
     client-id: ${MS_GRAPH_CLIENT_ID:2b5ec0be-1344-4161-80f5-b7674d74f019}
     client-secret: ${MS_GRAPH_CLIENT_SECRET:}
 
-# Log SQL with parameters substituted into '?' (dev only). p6spy does this natively.
 decorator:
   datasource:
     enabled: true
@@ -24,14 +35,11 @@ decorator:
       enable-logging: true
       logging: slf4j
       multiline: true
-      # %(sql) already has bound values inlined (not separate Params:).
-      # Use real \n — p6spy does not treat %n as a newline.
       log-format: "%(executionTime)ms | %(category) | connection %(connectionId)\n%(sql)"
       exclude-categories: info,debug,result,resultset,batch
 
 logging:
   level:
-    # Prefer p6spy output; keep Hibernate SQL quiet to avoid duplicates.
     org.hibernate.SQL: warn
     org.hibernate.orm.jdbc.bind: warn
     p6spy: info

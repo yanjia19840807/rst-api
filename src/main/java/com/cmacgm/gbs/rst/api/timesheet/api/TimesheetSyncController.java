@@ -36,7 +36,7 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @RestController
 @RequestMapping("/api/v1/timesheet/sync")
-@PreAuthorize("hasAnyRole('LTH','ADMIN')")
+@PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','ADMIN')")
 public class TimesheetSyncController {
 
     private final TimesheetSyncAdminService admin;

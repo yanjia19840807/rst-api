@@ -124,7 +124,7 @@ class TimesheetSyncServiceTests {
                         TimesheetScope::getCenter,
                         TimesheetScope::getDomain)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple(
-                        "POS-SUP-1", "PL3", "Kuala Lumpur", "Finance"));
+                        "POS-SUP-1", "PL3", "GBS CHINA INDIA", "Finance"));
         assertThat(savedKpis)
                 .extracting(TimesheetKpi::getSite, TimesheetKpi::getCustomerCountry, TimesheetKpi::getHc)
                 .containsExactly(
@@ -147,7 +147,7 @@ class TimesheetSyncServiceTests {
                 String csv =
                         """
                         month,emp_emp_id,emp_ccgid,emp_name,emp_email,emp_position_id,supervisor_emp_id,supervisor_ccgid,supervisor_name,supervisor_position_id,sr_manager_emp_id,sr_manager_ccgid,sr_manager_name,sr_manager_position_id,domain_head_emp_id,domain_head_ccgid,domain_head_name,domain_head_position_id,center,site,gbs_domain,pl1,pl2,pl3_code,pl3,carrier,customer_country,hc,management_or_production,cost_type
-                        2026-07,EMP-1,S00000001,Agent One,s00000001@dev.local,EMP-POS-1,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,Kuala Lumpur,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,3,production,productive
+                        2026-07,EMP-1,S00000001,Agent One,s00000001@dev.local,EMP-POS-1,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,GBS CHINA INDIA,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,3,production,productive
                         """;
                 return new Source(
                         "monthly-replacement.csv",
@@ -208,7 +208,7 @@ class TimesheetSyncServiceTests {
         String csv =
                 """
                 month,emp_emp_id,emp_ccgid,emp_name,emp_email,emp_position_id,supervisor_emp_id,supervisor_ccgid,supervisor_name,supervisor_position_id,sr_manager_emp_id,sr_manager_ccgid,sr_manager_name,sr_manager_position_id,domain_head_emp_id,domain_head_ccgid,domain_head_name,domain_head_position_id,center,site,gbs_domain,pl1,pl2,pl3_code,pl3,carrier,customer_country,hc,management_or_production,cost_type
-                2026-05,EMP-1,S00000001,Agent One,s00000001@dev.local,EMP-POS-1,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,Kuala Lumpur,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,4,production,productive
+                2026-05,EMP-1,S00000001,Agent One,s00000001@dev.local,EMP-POS-1,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,GBS CHINA INDIA,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,4,production,productive
                 """;
         TimesheetSourceResolver manual = new TimesheetSourceResolver(
                 new RstSharePointProperties("4.RST/2.UAT"), null) {
@@ -300,7 +300,7 @@ class TimesheetSyncServiceTests {
                 String csv =
                         """
                         month,emp_emp_id,emp_ccgid,emp_name,emp_email,emp_position_id,supervisor_emp_id,supervisor_ccgid,supervisor_name,supervisor_position_id,sr_manager_emp_id,sr_manager_ccgid,sr_manager_name,sr_manager_position_id,domain_head_emp_id,domain_head_ccgid,domain_head_name,domain_head_position_id,center,site,gbs_domain,pl1,pl2,pl3_code,pl3,carrier,customer_country,hc,management_or_production,cost_type
-                        2026-06,EMP-1,S00000001,Agent One,s00000001@dev.local,EMP-POS-1,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,Kuala Lumpur,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,1,production,productive
+                        2026-06,EMP-1,S00000001,Agent One,s00000001@dev.local,EMP-POS-1,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,GBS CHINA INDIA,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,1,production,productive
                         """;
                 return new Source(
                         "mismatch.csv",
@@ -311,7 +311,7 @@ class TimesheetSyncServiceTests {
                         LocalDate.of(2026, 1, 31));
             }
         };
-        TimesheetSyncAlertNotifier notifier = new TimesheetSyncAlertNotifier(null, null, null, null, null) {
+        TimesheetSyncAlertNotifier notifier = new TimesheetSyncAlertNotifier(null, null, null, null) {
             @Override
             public void notifyFailed(UUID runId) {
                 mails.incrementAndGet();
@@ -349,8 +349,8 @@ class TimesheetSyncServiceTests {
                 String csv =
                         """
                         month,emp_emp_id,emp_ccgid,emp_name,emp_email,emp_position_id,supervisor_emp_id,supervisor_ccgid,supervisor_name,supervisor_position_id,sr_manager_emp_id,sr_manager_ccgid,sr_manager_name,sr_manager_position_id,domain_head_emp_id,domain_head_ccgid,domain_head_name,domain_head_position_id,center,site,gbs_domain,pl1,pl2,pl3_code,pl3,carrier,customer_country,hc,management_or_production,cost_type
-                        2026-06,EMP-1,S00000001,Agent One,s00000001@dev.local,EMP-POS-1,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,Kuala Lumpur,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,1,production,productive
-                        2026-06,EMP-2,S00000005,Agent Two,s00000005@dev.local,EMP-POS-2,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,Kuala Lumpur,Site B,Finance,PL1,PL2,,PL3 Name,CMA,SG,1,production,productive
+                        2026-06,EMP-1,S00000001,Agent One,s00000001@dev.local,EMP-POS-1,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,GBS CHINA INDIA,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,1,production,productive
+                        2026-06,EMP-2,S00000005,Agent Two,s00000005@dev.local,EMP-POS-2,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,GBS CHINA INDIA,Site B,Finance,PL1,PL2,,PL3 Name,CMA,SG,1,production,productive
                         """;
                 return new Source(
                         "missing-field.csv",
@@ -361,7 +361,7 @@ class TimesheetSyncServiceTests {
                         LocalDate.of(2026, 6, 30));
             }
         };
-        TimesheetSyncAlertNotifier notifier = new TimesheetSyncAlertNotifier(null, null, null, null, null) {
+        TimesheetSyncAlertNotifier notifier = new TimesheetSyncAlertNotifier(null, null, null, null) {
             @Override
             public void notifyFailed(UUID runId) {
                 mails.incrementAndGet();

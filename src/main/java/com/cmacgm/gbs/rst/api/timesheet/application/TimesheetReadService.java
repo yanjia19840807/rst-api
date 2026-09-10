@@ -341,6 +341,34 @@ public class TimesheetReadService {
     }
 
     /**
+     * Timesheet seat used when SSO NAME is {@code USER}.
+     *
+     * @param ccgid identity
+     * @return roleType, center, and display fields when the person occupies a position
+     */
+    @Transactional(readOnly = true)
+    public Optional<ProductSeat> findActiveProductSeat(String ccgid) {
+        return findActivePerson(ccgid).flatMap(person -> {
+            String positionId = person.getPositionId();
+            if (positionId == null || positionId.isBlank()) {
+                return Optional.empty();
+            }
+            return positions.findActiveByPositionId(positionId.trim()).map(position -> new ProductSeat(
+                    position.getRoleType(),
+                    firstNonBlank(person.getCenter(), position.getCenter()),
+                    person.getName(),
+                    person.getEmail()));
+        });
+    }
+
+    private static String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) {
+            return first.trim();
+        }
+        return second == null || second.isBlank() ? null : second.trim();
+    }
+
+    /**
      * Active Daily person by CCGID.
      *
      * @param ccgid identity
@@ -551,5 +579,16 @@ public class TimesheetReadService {
     }
 
     public record ListedPerson(String ccgid, String name, String center) {
+    }
+
+    /**
+     * Occupied Timesheet seat for an SSO USER login.
+     *
+     * @param roleType AGENT / SUPERVISOR / SR_MANAGER / DOMAIN_HEAD
+     * @param center GBS center
+     * @param displayName Timesheet name
+     * @param email Timesheet email
+     */
+    public record ProductSeat(String roleType, String center, String displayName, String email) {
     }
 }

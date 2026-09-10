@@ -58,17 +58,17 @@ class DelegationApiIntegrationTests {
                 """
                 insert into timesheet_sync_run
                     (id, kind, center, sync_date, attempt_no, status, row_count, started_at, completed_at)
-                values (?, 'DAILY', 'Kuala Lumpur', date '2026-08-05', 1, 'ACTIVE', 2, ?, ?)
+                values (?, 'DAILY', 'GBS CHINA INDIA', date '2026-08-05', 1, 'ACTIVE', 2, ?, ?)
                 """,
                 DAILY_RUN_ID,
                 NOW,
                 NOW);
-        insertPerson("SUPERVISOR001", "Test Supervisor", "POS-SUP-001", "Kuala Lumpur");
+        insertPerson("SUPERVISOR001", "Test Supervisor", "POS-SUP-001", "GBS CHINA INDIA");
         insertPerson("SUPERVISOR002", "No Center Supervisor", "POS-SUP-002", "");
-        insertPosition("POS-SUP-002", "SUPERVISOR", "Kuala Lumpur");
-        insertPerson("AGENT010", "Test Agent AGENT010", "POS-AGT-010", "Kuala Lumpur");
-        insertPerson("AGENT011", "Test Agent AGENT011", "POS-AGT-011", "Kuala Lumpur");
-        insertPerson("AGENT099", "Other Center Agent", "POS-AGT-099", "GBS CHINA");
+        insertPosition("POS-SUP-002", "SUPERVISOR", "GBS CHINA INDIA");
+        insertPerson("AGENT010", "Test Agent AGENT010", "POS-AGT-010", "GBS CHINA INDIA");
+        insertPerson("AGENT011", "Test Agent AGENT011", "POS-AGT-011", "GBS CHINA INDIA");
+        insertPerson("AGENT099", "Other Center Agent", "POS-AGT-099", "GBS CHINA LEBANON");
     }
 
     @Test
@@ -141,7 +141,7 @@ class DelegationApiIntegrationTests {
 
         mockMvc.perform(post("/api/v1/delegations")
                         .header("X-Dev-Ccgid", "HO001")
-                        .header("X-Dev-Role", "HO")
+                        .header("X-Dev-Role", "GOVERNANCE")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"delegateCcgid":"AGENT010","validFrom":"%s","validUntil":"%s"}

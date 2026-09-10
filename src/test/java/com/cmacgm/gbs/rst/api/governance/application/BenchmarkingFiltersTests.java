@@ -15,7 +15,7 @@ class BenchmarkingFiltersTests {
 
     @Test
     void requiresPl3Code() {
-        BenchmarkRow row = row("PL3-BANK", "GBS China", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
+        BenchmarkRow row = row("PL3-BANK", "GBS CHINA LEBANON", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
         assertThat(BenchmarkingFilters.matches(row, query(null, null, null, null, null, null, null)))
                 .isFalse();
         assertThat(BenchmarkingFilters.matches(row, query(null, null, null, null, "PL3-BANK", null, null)))
@@ -26,12 +26,12 @@ class BenchmarkingFiltersTests {
 
     @Test
     void exactFiltersMustMatch() {
-        BenchmarkRow row = row("PL3-BANK", "GBS China", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
+        BenchmarkRow row = row("PL3-BANK", "GBS CHINA LEBANON", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
         assertThat(BenchmarkingFilters.matches(
-                row, query("GBS China", "FINANCE", "R2R", "Bank Rec", "PL3-BANK", null, null)))
+                row, query("GBS CHINA LEBANON", "FINANCE", "R2R", "Bank Rec", "PL3-BANK", null, null)))
                 .isTrue();
         assertThat(BenchmarkingFilters.matches(
-                row, query("GBS India", null, null, null, "PL3-BANK", null, null)))
+                row, query("GBS CHINA INDIA", null, null, null, "PL3-BANK", null, null)))
                 .isFalse();
         assertThat(BenchmarkingFilters.matches(
                 row, query(null, "OPS", null, null, "PL3-BANK", null, null)))
@@ -46,7 +46,7 @@ class BenchmarkingFiltersTests {
 
     @Test
     void submittedDateIsInclusive() {
-        BenchmarkRow row = row("PL3-BANK", "GBS China", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
+        BenchmarkRow row = row("PL3-BANK", "GBS CHINA LEBANON", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
         assertThat(BenchmarkingFilters.matches(
                 row, query(null, null, null, null, "PL3-BANK",
                         LocalDate.parse("2026-03-10"), LocalDate.parse("2026-03-10"))))
@@ -62,10 +62,10 @@ class BenchmarkingFiltersTests {
     @Test
     void distinctPl3KeepsCodeAndSortsByName() {
         List<BenchmarkPl3Option> options = BenchmarkingFilters.distinctPl3(List.of(
-                row("PL3-B", "GBS China", "FINANCE", "R2R", "Zebra", "2026-01-01"),
-                row("PL3-A", "GBS India", "FINANCE", "R2R", "Alpha", "2026-01-01"),
-                row("PL3-A", "GBS India", "FINANCE", "R2R", "Alpha", "2026-01-01"),
-                row("", "GBS India", "FINANCE", "R2R", "Missing", "2026-01-01")));
+                row("PL3-B", "GBS CHINA LEBANON", "FINANCE", "R2R", "Zebra", "2026-01-01"),
+                row("PL3-A", "GBS CHINA INDIA", "FINANCE", "R2R", "Alpha", "2026-01-01"),
+                row("PL3-A", "GBS CHINA INDIA", "FINANCE", "R2R", "Alpha", "2026-01-01"),
+                row("", "GBS CHINA INDIA", "FINANCE", "R2R", "Missing", "2026-01-01")));
         assertThat(options).extracting(BenchmarkPl3Option::code).containsExactly("PL3-A", "PL3-B");
         assertThat(options).extracting(BenchmarkPl3Option::name).containsExactly("Alpha", "Zebra");
     }

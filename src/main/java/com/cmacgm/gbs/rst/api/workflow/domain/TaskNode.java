@@ -5,9 +5,9 @@ package com.cmacgm.gbs.rst.api.workflow.domain;
  */
 public enum TaskNode {
     SUBMIT((short) 0, false),
-    MANAGER((short) 1, true),
-    CDH((short) 2, true),
-    LTH((short) 3, true);
+    SR_MANAGER((short) 1, true),
+    DOMAIN_HEAD((short) 2, true),
+    LOCAL_TRANSFORMATION_HEAD((short) 3, true);
 
     private final short order;
     private final boolean review;
@@ -29,21 +29,21 @@ public enum TaskNode {
     /**
      * Whether this node waits on an approver.
      *
-     * @return true for Manager / CDH / LTH
+     * @return true for Sr Manager / Domain Head / Local Transformation Head
      */
     public boolean isReview() {
         return review;
     }
 
     /**
-     * Next review hop, or empty after LTH.
+     * Next review hop, or empty after Local Transformation Head.
      *
      * @return next node, or null when this is the last review hop
      */
     public TaskNode nextReview() {
         return switch (this) {
-            case MANAGER -> CDH;
-            case CDH -> LTH;
+            case SR_MANAGER -> DOMAIN_HEAD;
+            case DOMAIN_HEAD -> LOCAL_TRANSFORMATION_HEAD;
             default -> null;
         };
     }
@@ -51,7 +51,7 @@ public enum TaskNode {
     /**
      * Role code used by Timesheet routing and the API.
      *
-     * @return MANAGER / CDH / LTH, or SUPERVISOR for submit
+     * @return SR_MANAGER / DOMAIN_HEAD / LOCAL_TRANSFORMATION_HEAD, or SUPERVISOR for submit
      */
     public String roleCode() {
         return this == SUBMIT ? "SUPERVISOR" : name();
@@ -68,9 +68,9 @@ public enum TaskNode {
             return null;
         }
         return switch (step) {
-            case 1 -> MANAGER;
-            case 2 -> CDH;
-            case 3 -> LTH;
+            case 1 -> SR_MANAGER;
+            case 2 -> DOMAIN_HEAD;
+            case 3 -> LOCAL_TRANSFORMATION_HEAD;
             default -> null;
         };
     }

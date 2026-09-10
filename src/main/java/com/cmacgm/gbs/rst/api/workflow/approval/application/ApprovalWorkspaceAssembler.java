@@ -219,9 +219,9 @@ public class ApprovalWorkspaceAssembler {
             return null;
         }
         return switch (role) {
-            case "MANAGER" -> "Manager Review";
-            case "CDH" -> "Center Delivery Head Review";
-            case "LTH" -> "Local Transformation Head Review";
+            case "SR_MANAGER" -> "Manager Review";
+            case "DOMAIN_HEAD" -> "Center Delivery Head Review";
+            case "LOCAL_TRANSFORMATION_HEAD" -> "Local Transformation Head Review";
             default -> role;
         };
     }
@@ -232,9 +232,9 @@ public class ApprovalWorkspaceAssembler {
         }
         return switch (role) {
             case "SUPERVISOR" -> "Supervisor";
-            case "MANAGER" -> "Manager";
-            case "CDH" -> "Center Delivery Head";
-            case "LTH" -> "Local Transformation Head";
+            case "SR_MANAGER" -> "Manager";
+            case "DOMAIN_HEAD" -> "Center Delivery Head";
+            case "LOCAL_TRANSFORMATION_HEAD" -> "Local Transformation Head";
             default -> role;
         };
     }

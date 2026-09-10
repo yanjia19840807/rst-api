@@ -36,7 +36,7 @@ public class MailNotificationService {
      * @param preferences switches
      * @param addresses Timesheet emp_email
      * @param graph sendMail
-     * @param mailSettings workflow enable / redirect
+     * @param mailSettings outgoing-mail enable / redirect
      */
     public MailNotificationService(
             SsoProfileRepository profiles,
@@ -156,7 +156,7 @@ public class MailNotificationService {
      */
     public List<String> timesheetSyncFailedAddresses() {
         Set<String> emails = new LinkedHashSet<>();
-        for (SsoProfile profile : profiles.findByRole("LTH")) {
+        for (SsoProfile profile : profiles.findByRole("LOCAL_TRANSFORMATION_HEAD")) {
             addIfSendable(emails, MailType.TIMESHEET_SYNC_FAILED, profile.getCcgid());
         }
         for (SsoProfile profile : profiles.findByRole("ADMIN")) {
@@ -177,8 +177,8 @@ public class MailNotificationService {
         if (type == null || ccgids == null || ccgids.isEmpty()) {
             return;
         }
-        if (mailSettings == null || !mailSettings.workflowEnabled()) {
-            log.info("Workflow mail skipped: rst.mail.workflow-enabled is false");
+        if (!outgoingEnabled()) {
+            log.info("RST mail skipped: rst.mail.enabled is false");
             return;
         }
         List<String> intended = new ArrayList<>();
@@ -204,6 +204,35 @@ public class MailNotificationService {
             return;
         }
         dispatch(subject, html, List.copyOf(emails));
+    }
+
+    /**
+     * Sends already-resolved addresses. Honors {@code rst.mail.enabled} and {@code redirect-to}.
+     *
+     * @param subject subject
+     * @param html body
+     * @param to addresses
+     */
+    public void sendAddresses(String subject, String html, List<String> to) {
+        if (!outgoingEnabled()) {
+            log.info("RST mail skipped: rst.mail.enabled is false");
+            return;
+        }
+        if (to == null || to.isEmpty()) {
+            return;
+        }
+        if (mailSettings.redirectEnabled()) {
+            dispatch(subject + " [intended: " + String.join(", ", to) + "]", html, List.of(mailSettings.redirectTo()));
+            return;
+        }
+        dispatch(subject, html, to);
+    }
+
+    /**
+     * @return false when the environment switch is off
+     */
+    public boolean outgoingEnabled() {
+        return mailSettings != null && mailSettings.enabled();
     }
 
     /**
@@ -244,7 +273,7 @@ public class MailNotificationService {
         if (center == null || center.isBlank()) {
             return null;
         }
-        List<SsoProfile> matches = profiles.findByRoleAndCenterIgnoreCaseOrderBySeenAtDesc("LTH", center.trim());
+        List<SsoProfile> matches = profiles.findByRoleAndCenterIgnoreCaseOrderBySeenAtDesc("LOCAL_TRANSFORMATION_HEAD", center.trim());
         return matches.isEmpty() ? null : matches.getFirst();
     }
 

@@ -159,7 +159,7 @@ public class ExerciseController {
      * @return Exercise detail
      */
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
+    @PreAuthorize("hasAnyRole('SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
     public ExerciseResponse detail(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
@@ -246,7 +246,7 @@ public class ExerciseController {
      * Returns how many scenarios have saved Forecast / Simulation snapshots.
      */
     @GetMapping("/{id}/committed-results")
-    @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
+    @PreAuthorize("hasAnyRole('SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
     public CommittedResultsStatus committedResults(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {

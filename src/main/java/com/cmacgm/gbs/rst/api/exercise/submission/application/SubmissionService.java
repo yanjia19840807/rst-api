@@ -288,7 +288,7 @@ public class SubmissionService {
                 : exercise.getToolkitSnapshot().getSupervisorPositionId();
         WorkflowRouter.RoutedStep manager = workflowRouter.resolveManager(supervisorPositionId);
         workflow.openReview(
-                TaskNode.MANAGER,
+                TaskNode.SR_MANAGER,
                 List.of(new ProcessInstance.Assignee(manager.positionId(), manager.assigneeCcgid())),
                 now);
         return manager.assigneeCcgid();

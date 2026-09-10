@@ -34,7 +34,7 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @RestController
 @RequestMapping("/api/v1/exercises/{exerciseId}/cycle-time")
-@PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
+@PreAuthorize("hasAnyRole('SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
 public class CycleTimeController {
 
     private final CycleTimeService service;

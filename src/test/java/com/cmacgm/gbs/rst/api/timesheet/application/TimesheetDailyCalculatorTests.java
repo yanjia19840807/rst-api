@@ -39,18 +39,20 @@ class TimesheetDailyCalculatorTests {
                         TimesheetPerson::getEmail,
                         TimesheetPerson::getPositionId)
                 .contains(org.assertj.core.groups.Tuple.tuple(
-                        "S00000001", "Kuala Lumpur", "s00000001@dev.local", "EMP-POS-1"));
+                        "S00000001", "GBS CHINA INDIA", "s00000001@dev.local", "EMP-POS-1"));
         assertThat(result.people())
                 .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getPositionId)
                 .contains(
                         org.assertj.core.groups.Tuple.tuple("S00000002", "POS-SUP-1"),
-                        org.assertj.core.groups.Tuple.tuple("S00000003", "POS-SRM-1"))
-                .doesNotContain(org.assertj.core.groups.Tuple.tuple("S00000004", "POS-DH-1"));
+                        org.assertj.core.groups.Tuple.tuple("S00000003", "POS-SRM-1"),
+                        org.assertj.core.groups.Tuple.tuple("S00000004", "POS-DH-1"));
         assertThat(result.positions())
                 .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
                 .contains(
                         org.assertj.core.groups.Tuple.tuple("EMP-POS-1", "AGENT"),
-                        org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "SUPERVISOR"));
+                        org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "SUPERVISOR"),
+                        org.assertj.core.groups.Tuple.tuple("POS-SRM-1", "SR_MANAGER"),
+                        org.assertj.core.groups.Tuple.tuple("POS-DH-1", "DOMAIN_HEAD"));
     }
 
     @Test
@@ -126,8 +128,8 @@ class TimesheetDailyCalculatorTests {
                 .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
                 .contains(
                         org.assertj.core.groups.Tuple.tuple("EMP-POS-1", "AGENT"),
-                        org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "SUPERVISOR"))
-                .doesNotContain(org.assertj.core.groups.Tuple.tuple("POS-DH-1", "DOMAIN_HEAD"));
+                        org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "SUPERVISOR"),
+                        org.assertj.core.groups.Tuple.tuple("POS-DH-1", "DOMAIN_HEAD"));
     }
 
     @Test
@@ -154,7 +156,7 @@ class TimesheetDailyCalculatorTests {
                 "",
                 "",
                 "",
-                "Kuala Lumpur",
+                "GBS CHINA INDIA",
                 "Site",
                 "Finance",
                 "PL1",
@@ -338,7 +340,7 @@ class TimesheetDailyCalculatorTests {
                                 "production",
                                 "productive",
                                 "SRM-1",
-                                "Kuala Lumpur")),
+                                "GBS CHINA INDIA")),
                 Instant.parse("2026-08-23T00:00:00Z"),
                 null,
                 RST_YES);
@@ -371,7 +373,7 @@ class TimesheetDailyCalculatorTests {
                 "S00000004",
                 "Head One",
                 "POS-DH-1",
-                "Kuala Lumpur",
+                "GBS CHINA INDIA",
                 "Site",
                 "Finance",
                 "PL1",
@@ -405,7 +407,7 @@ class TimesheetDailyCalculatorTests {
                 "production",
                 "productive",
                 "SRM-1",
-                "Kuala Lumpur",
+                "GBS CHINA INDIA",
                 supervisorPositionId);
     }
 
@@ -419,7 +421,7 @@ class TimesheetDailyCalculatorTests {
                 "management",
                 "non-productive",
                 "SRM-1",
-                "Kuala Lumpur",
+                "GBS CHINA INDIA",
                 supervisorPositionId);
     }
 
@@ -430,7 +432,7 @@ class TimesheetDailyCalculatorTests {
             String empPositionId,
             String managementOrProduction,
             String costType) {
-        return row(empCcgid, empId, empName, empPositionId, managementOrProduction, costType, "SRM-1", "Kuala Lumpur");
+        return row(empCcgid, empId, empName, empPositionId, managementOrProduction, costType, "SRM-1", "GBS CHINA INDIA");
     }
 
     private static ReportRow row(
@@ -449,7 +451,7 @@ class TimesheetDailyCalculatorTests {
                 managementOrProduction,
                 costType,
                 srManagerId,
-                "Kuala Lumpur");
+                "GBS CHINA INDIA");
     }
 
     private static ReportRow row(

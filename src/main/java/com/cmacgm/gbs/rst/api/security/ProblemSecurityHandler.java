@@ -26,7 +26,7 @@ public class ProblemSecurityHandler implements AuthenticationEntryPoint, AccessD
                 HttpServletResponse.SC_UNAUTHORIZED,
                 "authentication-required",
                 "Authentication required",
-                "A valid bearer token is required.");
+                "A signed-in session is required.");
     }
 
     @Override

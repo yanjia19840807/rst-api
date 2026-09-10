@@ -1,3 +1,27 @@
+# SPRING_PROFILES_ACTIVE=uat  →  https://gbs-rst-uat.cma-cgm.com
+# Required secrets: AZURE_CLIENT_SECRET, DB_PASSWORD, MS_GRAPH_CLIENT_SECRET
+
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://gbs-rst-uat.cma-cgm.com}
+  security:
+    sso:
+      env: ${SSO_ENV:UAT}
+      client-id: ${AZURE_CLIENT_ID:522ce29d-df11-438a-b18b-fede0b45ae5b}
+      redirect-uri: ${AZURE_REDIRECT_URI:https://gbs-rst-uat.cma-cgm.com/api/sso/callback}
+
+server:
+  servlet:
+    session:
+      cookie:
+        secure: ${SESSION_COOKIE_SECURE:true}
+
 rst:
   sharepoint:
     root: ${RST_SHAREPOINT_ROOT:4.RST/2.UAT}
+  mail:
+    enabled: ${RST_MAIL_ENABLED:true}
+
+microsoft:
+  graph:
+    enabled: ${MS_GRAPH_ENABLED:true}

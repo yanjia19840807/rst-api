@@ -47,7 +47,7 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @RestController
 @RequestMapping("/api/v1/exercises/{exerciseId}")
-@PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH')")
+@PreAuthorize("hasAnyRole('SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
 public class ExerciseAssociatedDataController {
 
     private final AssociatedDataService service;

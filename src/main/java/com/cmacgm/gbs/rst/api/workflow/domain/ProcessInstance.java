@@ -204,7 +204,7 @@ public class ProcessInstance {
         actor.approve(comments, requestId, now);
         actor.getTask().applyDecision(actor, now);
         if (actor.getTask().getStatus() == TaskStatus.APPROVED
-                && actor.getTask().getNode() == TaskNode.LTH) {
+                && actor.getTask().getNode() == TaskNode.LOCAL_TRANSFORMATION_HEAD) {
             this.status = ProcessStatus.FINISHED;
         }
     }

@@ -73,7 +73,7 @@ class TimesheetSyncAlertAdminTests {
     }
 
     private static RstPrincipal principal() {
-        return new RstPrincipal("S0001", "LTH", "lth@cma-cgm.com", Set.of("LTH"), Set.of(), "SHA");
+        return new RstPrincipal("S0001", "LOCAL_TRANSFORMATION_HEAD", "lth@cma-cgm.com", Set.of("LOCAL_TRANSFORMATION_HEAD"), Set.of(), "SHA");
     }
 
     @SuppressWarnings("unchecked")

@@ -18,17 +18,17 @@ class SupportRepositoryFiltersTests {
     @Test
     void matchesAllWhenQueryIsEmpty() {
         assertThat(SupportRepositoryFilters.matches(
-                row("GBS China", QUALITY, "Quality Control", "Bank Rec", "2026-03-10"),
+                row("GBS CHINA LEBANON", QUALITY, "Quality Control", "Bank Rec", "2026-03-10"),
                 new SupportRepositoryQuery(null, null, null, null, null))).isTrue();
     }
 
     @Test
     void exactFiltersMustMatch() {
-        SupportRepositoryRow row = row("GBS China", QUALITY, "Quality Control", "Bank Rec", "2026-03-10");
+        SupportRepositoryRow row = row("GBS CHINA LEBANON", QUALITY, "Quality Control", "Bank Rec", "2026-03-10");
         assertThat(SupportRepositoryFilters.matches(
-                row, query("GBS China", QUALITY, "Bank Rec", null, null))).isTrue();
+                row, query("GBS CHINA LEBANON", QUALITY, "Bank Rec", null, null))).isTrue();
         assertThat(SupportRepositoryFilters.matches(
-                row, query("GBS India", null, null, null, null))).isFalse();
+                row, query("GBS CHINA INDIA", null, null, null, null))).isFalse();
         assertThat(SupportRepositoryFilters.matches(
                 row, query(null, UUID.fromString("31000000-0000-0000-0000-000000000004"), null, null, null)))
                 .isFalse();
@@ -38,7 +38,7 @@ class SupportRepositoryFiltersTests {
 
     @Test
     void submittedDateIsInclusive() {
-        SupportRepositoryRow row = row("GBS China", QUALITY, "Quality Control", "Bank Rec", "2026-03-10");
+        SupportRepositoryRow row = row("GBS CHINA LEBANON", QUALITY, "Quality Control", "Bank Rec", "2026-03-10");
         assertThat(SupportRepositoryFilters.matches(
                 row, query(null, null, null, LocalDate.parse("2026-03-10"), LocalDate.parse("2026-03-10"))))
                 .isTrue();
@@ -54,12 +54,12 @@ class SupportRepositoryFiltersTests {
     void distinctIgnoresBlankAndSorts() {
         List<String> names = SupportRepositoryFilters.distinct(
                 List.of(
-                        row("GBS India", QUALITY, "Reporting", "A", "2026-01-01"),
-                        row("GBS China", QUALITY, "Reporting", "B", "2026-01-01"),
+                        row("GBS CHINA INDIA", QUALITY, "Reporting", "A", "2026-01-01"),
+                        row("GBS CHINA LEBANON", QUALITY, "Reporting", "B", "2026-01-01"),
                         row("", QUALITY, "Reporting", "C", "2026-01-01"),
-                        row("GBS China", QUALITY, "Reporting", "D", "2026-01-01")),
+                        row("GBS CHINA LEBANON", QUALITY, "Reporting", "D", "2026-01-01")),
                 SupportRepositoryRow::center);
-        assertThat(names).containsExactly("GBS China", "GBS India");
+        assertThat(names).containsExactly("GBS CHINA INDIA", "GBS CHINA LEBANON");
     }
 
     private static SupportRepositoryQuery query(

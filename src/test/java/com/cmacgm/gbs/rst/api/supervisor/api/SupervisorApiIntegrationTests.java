@@ -119,7 +119,7 @@ class SupervisorApiIntegrationTests {
         insertPosition(DAILY_RUN_ID, "AGENT011", "AGENT", SUPERVISOR_POSITION_ID);
         insertPosition(DAILY_RUN_ID, "AGENT012", "AGENT", SUPERVISOR_POSITION_ID);
         insertScope(MONTHLY_RUN_ID);
-        insertKpi(MONTHLY_RUN_ID, "Carrier A", "Kuala Lumpur", "Australia", "2.000000");
+        insertKpi(MONTHLY_RUN_ID, "Carrier A", "GBS CHINA INDIA", "Australia", "2.000000");
         insertKpi(MONTHLY_RUN_ID, "Carrier B", "Singapore", "Germany", "3.000000");
     }
 
@@ -143,7 +143,7 @@ class SupervisorApiIntegrationTests {
                 .andExpect(jsonPath("$.customerCountries[1]").value("Germany"))
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].carrier").value("Carrier A"))
-                .andExpect(jsonPath("$.items[0].site").value("Kuala Lumpur"))
+                .andExpect(jsonPath("$.items[0].site").value("GBS CHINA INDIA"))
                 .andExpect(jsonPath("$.items[0].customerCountry").value("Australia"))
                 .andExpect(jsonPath("$.items[0].deliveryHc").value(2.0));
     }
@@ -516,7 +516,7 @@ class SupervisorApiIntegrationTests {
                 """
                 update timesheet_kpi set hc = 99
                 where sync_run_id = ? and carrier = 'Carrier A'
-                  and site = 'Kuala Lumpur' and customer_country = 'Australia'
+                  and site = 'GBS CHINA INDIA' and customer_country = 'Australia'
                 """,
                 MONTHLY_RUN_ID);
 
@@ -559,6 +559,16 @@ class SupervisorApiIntegrationTests {
                 Instant.parse("2026-08-16T10:00:00Z"));
 
         String exerciseId = JsonPath.read(createExercise(toolkitId), "$.exercise.id");
+        mockMvc.perform(put("/api/v1/exercises/{id}/tms-period", exerciseId)
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "tmsFrom": "2026-08-01",
+                                  "tmsTo": "2026-08-31"
+                                }
+                                """))
+                .andExpect(status().isOk());
 
         org.junit.jupiter.api.Assertions.assertEquals(
                 Integer.valueOf(1),
@@ -1041,7 +1051,7 @@ class SupervisorApiIntegrationTests {
                 toolkitWithoutKpi,
                 "Legacy Toolkit Without KPI",
                 SUPERVISOR_POSITION_ID,
-                "Kuala Lumpur",
+                "GBS CHINA INDIA",
                 "Finance",
                 "Accounting",
                 "Record to Report",
@@ -1119,7 +1129,7 @@ class SupervisorApiIntegrationTests {
                 """
                 insert into process_task
                     (id, instance_id, node_code, node_order, completion_strategy, status, created_at, completed_at)
-                values (?, ?, 'LTH', 3, 'OR', 'APPROVED', ?, ?)
+                values (?, ?, 'LOCAL_TRANSFORMATION_HEAD', 3, 'OR', 'APPROVED', ?, ?)
                 """,
                 taskId,
                 processId,
@@ -1207,7 +1217,7 @@ class SupervisorApiIntegrationTests {
                   "sharedKpiSelections": [
                     {
                       "carrier": "Carrier A",
-                      "site": "Kuala Lumpur",
+                      "site": "GBS CHINA INDIA",
                       "customerCountry": "Australia"
                     }
                   ]
@@ -1218,7 +1228,7 @@ class SupervisorApiIntegrationTests {
                   "name": "%s",
                   "description": "Integration test toolkit",
                   "supervisorPositionId": "%s",
-                  "center": "Kuala Lumpur",
+                  "center": "GBS CHINA INDIA",
                   "domain": "Finance",
                   "pl1": "Accounting",
                   "pl2": "Record to Report",
@@ -1298,7 +1308,7 @@ class SupervisorApiIntegrationTests {
                 """
                 insert into timesheet_sync_run
                     (id, kind, center, sync_date, attempt_no, status, row_count, started_at, completed_at)
-                values (?, ?, 'Kuala Lumpur', date '2026-08-05', 1, 'ACTIVE', ?, ?, ?)
+                values (?, ?, 'GBS CHINA INDIA', date '2026-08-05', 1, 'ACTIVE', ?, ?, ?)
                 """,
                 id,
                 kind,
@@ -1328,7 +1338,7 @@ class SupervisorApiIntegrationTests {
                 positionId,
                 roleType,
                 parentPositionId,
-                "Kuala Lumpur");
+                "GBS CHINA INDIA");
     }
 
     private void insertScope(UUID runId) {
@@ -1343,7 +1353,7 @@ class SupervisorApiIntegrationTests {
                 SUPERVISOR_POSITION_ID,
                 PL3_CODE,
                 "Bank Reconciliation",
-                "Kuala Lumpur",
+                "GBS CHINA INDIA",
                 "Finance",
                 "Accounting",
                 "Record to Report");
@@ -1360,7 +1370,7 @@ class SupervisorApiIntegrationTests {
                 runId,
                 SUPERVISOR_POSITION_ID,
                 PL3_CODE,
-                "Kuala Lumpur",
+                "GBS CHINA INDIA",
                 carrier,
                 site,
                 country,

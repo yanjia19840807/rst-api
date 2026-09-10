@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/approvals")
-@PreAuthorize("hasAnyRole('MANAGER','CDH','LTH','SUPERVISOR')")
+@PreAuthorize("hasAnyRole('SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD','SUPERVISOR')")
 public class ApprovalController {
 
     private final ApprovalService approvals;

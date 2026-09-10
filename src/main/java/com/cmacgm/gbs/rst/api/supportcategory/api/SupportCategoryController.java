@@ -26,7 +26,7 @@ public class SupportCategoryController {
      * Active Standard Categories for Workload Registry and reports.
      */
     @GetMapping
-    @PreAuthorize("hasAnyRole('SUPERVISOR','MANAGER','CDH','LTH','HO','ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public SupportCategoryView list() {
         return new SupportCategoryView(service.listActive());
     }

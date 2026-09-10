@@ -23,10 +23,10 @@ class WorkflowAgingTests {
         Instant cdhApproved = Instant.parse("2026-01-12T00:00:00Z");
         ProcessInstance instance = ProcessInstance.start(
                 UUID.randomUUID(), null, "s1", UUID.randomUUID(), submitted);
-        instance.openReview(TaskNode.MANAGER, List.of(new ProcessInstance.Assignee("P1", "m1")), submitted);
+        instance.openReview(TaskNode.SR_MANAGER, List.of(new ProcessInstance.Assignee("P1", "m1")), submitted);
         TaskActor manager = instance.findCurrentPendingTask().orElseThrow().findAnyPendingActor().orElseThrow();
         instance.approve(manager, null, UUID.randomUUID(), managerApproved);
-        instance.openReview(TaskNode.CDH, List.of(new ProcessInstance.Assignee("P2", "c1")), managerApproved);
+        instance.openReview(TaskNode.DOMAIN_HEAD, List.of(new ProcessInstance.Assignee("P2", "c1")), managerApproved);
         TaskActor cdh = instance.findCurrentPendingTask().orElseThrow().findAnyPendingActor().orElseThrow();
         instance.approve(cdh, null, UUID.randomUUID(), cdhApproved);
         assertThat(WorkflowAging.currentStepStartedAt(instance, submitted)).isEqualTo(cdhApproved);

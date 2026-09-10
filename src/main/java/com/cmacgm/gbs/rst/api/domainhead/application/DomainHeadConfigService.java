@@ -203,7 +203,7 @@ public class DomainHeadConfigService {
      * (may be blank on GET before the picker selection). Save for ADMIN still requires center.
      */
     private String resolveCenter(RstPrincipal principal, String requestedCenter) {
-        if (principal != null && hasRole(principal, "LTH")) {
+        if (principal != null && hasRole(principal, "LOCAL_TRANSFORMATION_HEAD")) {
             return requireIdentityCenter(principal);
         }
         if (principal != null && hasRole(principal, "ADMIN")) {
@@ -240,7 +240,7 @@ public class DomainHeadConfigService {
         int count = 0;
         for (ProcessInstance workflow : workflows.findOpenCdhByCenterAndDomain(center, domain)) {
             ProcessTask ready = workflow.findCurrentPendingTask().orElse(null);
-            if (ready == null || ready.getNode() != TaskNode.CDH || positionId == null) {
+            if (ready == null || ready.getNode() != TaskNode.DOMAIN_HEAD || positionId == null) {
                 continue;
             }
             for (TaskActor actor : ready.getActors()) {

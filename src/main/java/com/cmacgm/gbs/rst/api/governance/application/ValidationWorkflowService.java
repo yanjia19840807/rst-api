@@ -325,9 +325,9 @@ public class ValidationWorkflowService {
             return null;
         }
         return switch (role) {
-            case "MANAGER" -> "Manager Review";
-            case "CDH" -> "Center Delivery Head Review";
-            case "LTH" -> "Local Transformation Head Review";
+            case "SR_MANAGER" -> "Manager Review";
+            case "DOMAIN_HEAD" -> "Center Delivery Head Review";
+            case "LOCAL_TRANSFORMATION_HEAD" -> "Local Transformation Head Review";
             default -> role;
         };
     }

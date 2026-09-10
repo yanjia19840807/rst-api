@@ -45,7 +45,7 @@ app:
       override-enabled: true
 ```
 
-- URL: `?ccgid=S00813982&role=SUPERVISOR` (optional `&center=GBS%20CHINA`)
+- URL: `?ccgid=S00813982&role=SUPERVISOR` (optional `&center=GBS%20CHINA%20INDIA`)
 - Headers: `X-Dev-Ccgid`, `X-Dev-Role`, `X-Dev-Center`
 
 Display name comes from the ACTIVE Daily Timesheet (or `Dev User <ccgid>`).
@@ -62,22 +62,28 @@ To connect `rst-web`, set `VITE_API_BASE_URL=http://localhost:8080` and
 
 ## Configuration
 
+Runtime profiles are **dev** (default, local Dev Identity), **uat**, **pre**, and **prod**.
+JUnit uses `application-test.yml` only.
+
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `DB_URL` | `jdbc:postgresql://localhost:5432/rst` | PostgreSQL JDBC URL |
 | `DB_USERNAME` | `postgres` | Database user |
 | `DB_PASSWORD` | empty | Database password; local `.env`, never commit |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated SPA origins |
-| `AZURE_TENANT_ID` | empty | Azure AD tenant; local `.env`, required for Graph and prod JWT |
-| `MS_GRAPH_ENABLED` | `false` (`true` in dev) | Enable Microsoft Graph / SharePoint access |
+| `CORS_ALLOWED_ORIGINS` | localhost / host per profile | Comma-separated SPA origins |
+| `AZURE_TENANT_ID` | CMA CGM tenant | Entra tenant; required for SSO (uat/pre/prod) and Graph |
+| `AZURE_CLIENT_ID` | profile default | RST Azure app; not used on local `dev` |
+| `AZURE_CLIENT_SECRET` | empty | RST Azure secret; env only, never commit |
+| `AZURE_REDIRECT_URI` | `{host}/api/sso/callback` | Registered confidential-client redirect |
+| `SSO_ENV` | UAT / PRE / PROD | Must match `CMACGM_APP_RST_{NAME}_{ENV}` |
+| `MS_GRAPH_ENABLED` | `true` in all four profiles | Microsoft Graph / SharePoint |
 | `MS_GRAPH_CLIENT_ID` | empty (dev default set) | Graph application (client) id |
-| `MS_GRAPH_CLIENT_SECRET` | empty | Graph client secret; local `.env`, never commit |
-| `MS_GRAPH_SECRET_NAME` | `timesheet-prd-microsoft-graph-credentials` | Azure / K8s secret name for Graph credentials |
-| `RST_FORECAST_BASE_URL` | `http://localhost:8000` | Python forecast service base URL |
+| `MS_GRAPH_CLIENT_SECRET` | empty | Graph client secret; never commit |
+| `RST_FORECAST_BASE_URL` | `http://localhost:8000` | Python forecast service |
 | `RST_FORECAST_ENABLED` | `true` | Enable forecast HTTP calls |
 
-Production validates Azure JWTs. Authorization is derived from the authenticated principal; API
-requests cannot select another user's scope.
+uat / pre / prod authenticate with Azure authorization-code + HttpOnly session.
+Local `dev` uses Dev Identity (`X-Dev-Role` / query). Do not put secrets in YAML.
 
 ## Architecture
 
@@ -88,7 +94,7 @@ api -> application -> domain/persistence
 ```
 
 - `common`: ProblemDetail errors and shared paging.
-- `config` / `security`: CORS, OAuth2 Resource Server, OpenAPI, clock and principals.
+- `config` / `security`: CORS, Dev Identity or Azure SSO session, OpenAPI, clock and principals.
 - `identity`: application users.
 - `graph`: Microsoft Graph client-credentials client for the Timesheet SharePoint library.
 - `timesheet`: Daily org + Monthly KPI snapshots, Toolkit hierarchy, and Shared KPI candidates.

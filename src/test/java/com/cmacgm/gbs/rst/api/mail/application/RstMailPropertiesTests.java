@@ -9,6 +9,7 @@ class RstMailPropertiesTests {
     @Test
     void blankRedirectIsUnset() {
         RstMailProperties settings = new RstMailProperties(true, "  ");
+        assertThat(settings.enabled()).isTrue();
         assertThat(settings.redirectTo()).isNull();
         assertThat(settings.redirectEnabled()).isFalse();
     }
@@ -16,6 +17,7 @@ class RstMailPropertiesTests {
     @Test
     void trimsRedirectAddress() {
         RstMailProperties settings = new RstMailProperties(true, " yanjiafelix@gmail.com ");
+        assertThat(settings.enabled()).isTrue();
         assertThat(settings.redirectTo()).isEqualTo("yanjiafelix@gmail.com");
         assertThat(settings.redirectEnabled()).isTrue();
     }

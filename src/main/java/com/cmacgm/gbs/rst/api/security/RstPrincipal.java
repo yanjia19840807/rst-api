@@ -1,5 +1,7 @@
 package com.cmacgm.gbs.rst.api.security;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.security.Principal;
 import java.util.Set;
 import java.util.UUID;
@@ -17,10 +19,13 @@ public record RstPrincipal(
         String center,
         String actorCcgid,
         String actorDisplayName,
-        UUID delegationId) implements Principal {
+        UUID delegationId) implements Principal, Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private static final Set<String> GRANTABLE_ROLES = Set.of(
-            "AGENT", "SUPERVISOR", "MANAGER", "CDH", "LTH");
+            "AGENT", "SUPERVISOR", "SR_MANAGER", "DOMAIN_HEAD", "LOCAL_TRANSFORMATION_HEAD");
 
     /**
      * Builds a non-delegated principal (actor equals effective identity).
@@ -78,7 +83,7 @@ public record RstPrincipal(
     /**
      * Whether the real signed-in user may grant a delegation.
      *
-     * @return true for AGENT / SUPERVISOR / MANAGER / CDH / LTH
+     * @return true for AGENT / SUPERVISOR / SR_MANAGER / DOMAIN_HEAD / LOCAL_TRANSFORMATION_HEAD
      */
     public boolean canGrantDelegation() {
         if (isDelegated() || roles == null) {

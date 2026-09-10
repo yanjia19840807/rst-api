@@ -74,7 +74,7 @@ public class GovernanceController {
      * @return dashboard payload
      */
     @GetMapping("/dashboard")
-    @PreAuthorize("hasAnyRole('LTH','HO','ADMIN')")
+    @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public DashboardView dashboard() {
         return dashboardService.build();
     }
@@ -94,7 +94,7 @@ public class GovernanceController {
      * @return one page of filtered rows and unfiltered dropdown options
      */
     @GetMapping("/repository")
-    @PreAuthorize("hasAnyRole('LTH','HO','ADMIN')")
+    @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public RepositoryListView repository(
             @RequestParam(required = false) String exerciseCode,
             @RequestParam(required = false) String center,
@@ -126,7 +126,7 @@ public class GovernanceController {
      * Exports filtered RST Repository rows as Excel.
      */
     @GetMapping("/repository/export")
-    @PreAuthorize("hasAnyRole('LTH','HO','ADMIN')")
+    @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public ResponseEntity<byte[]> exportRepository(
             @RequestParam(required = false) String exerciseCode,
             @RequestParam(required = false) String center,
@@ -159,7 +159,7 @@ public class GovernanceController {
      * @return toolkit, subtasks, and Shared KPI lines at freeze time
      */
     @GetMapping("/repository/{exerciseId}/toolkit-info")
-    @PreAuthorize("hasAnyRole('LTH','HO','ADMIN')")
+    @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public ExerciseSnapshot repositoryToolkitInfo(@PathVariable UUID exerciseId) {
         return rstRepository.toolkitInfo(exerciseId);
     }
@@ -178,7 +178,7 @@ public class GovernanceController {
      * @return one page of filtered rows, summaries from all matches, and unfiltered dropdown options
      */
     @GetMapping("/support-repository")
-    @PreAuthorize("hasAnyRole('LTH','HO','ADMIN')")
+    @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public SupportRepositoryView supportRepository(
             @RequestParam(required = false) String center,
             @RequestParam(required = false) UUID categoryId,
@@ -206,7 +206,7 @@ public class GovernanceController {
      * Exports filtered Support Repository rows as Excel.
      */
     @GetMapping("/support-repository/export")
-    @PreAuthorize("hasAnyRole('LTH','HO','ADMIN')")
+    @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public ResponseEntity<byte[]> exportSupportRepository(
             @RequestParam(required = false) String center,
             @RequestParam(required = false) UUID categoryId,
@@ -244,7 +244,7 @@ public class GovernanceController {
      * @return one page of rows, cards from all matches, and unfiltered dropdown options
      */
     @GetMapping("/benchmarking")
-    @PreAuthorize("hasAnyRole('LTH','HO','ADMIN')")
+    @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public BenchmarkingView benchmarking(
             @RequestParam(required = false) String center,
             @RequestParam(required = false) String domain,
@@ -269,7 +269,7 @@ public class GovernanceController {
      * Exports filtered Benchmarking rows as Excel.
      */
     @GetMapping("/benchmarking/export")
-    @PreAuthorize("hasAnyRole('LTH','HO','ADMIN')")
+    @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public ResponseEntity<byte[]> exportBenchmarking(
             @RequestParam(required = false) String center,
             @RequestParam(required = false) String domain,
@@ -306,7 +306,7 @@ public class GovernanceController {
      * @return one page of filtered rows and unfiltered dropdown options
      */
     @GetMapping("/validation-workflow")
-    @PreAuthorize("hasAnyRole('LTH','ADMIN')")
+    @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','ADMIN')")
     public ValidationWorkflowView validationWorkflow(
             @RequestParam(required = false) String exerciseCode,
             @RequestParam(required = false) String center,

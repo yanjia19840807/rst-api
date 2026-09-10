@@ -37,7 +37,7 @@ public class ProcessTask {
     private ProcessInstance instance;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "node_code", nullable = false, length = 20)
+    @Column(name = "node_code", nullable = false, length = 40)
     private TaskNode node;
 
     @Column(name = "node_order", nullable = false)

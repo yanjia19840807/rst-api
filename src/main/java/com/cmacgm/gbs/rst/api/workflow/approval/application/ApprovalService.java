@@ -334,7 +334,7 @@ public class ApprovalService {
         boolean notifyOwnerApproved = false;
         if (current.getStatus() == TaskStatus.APPROVED) {
             TaskNode next = current.getNode().nextReview();
-            if (next == TaskNode.CDH) {
+            if (next == TaskNode.DOMAIN_HEAD) {
                 WorkflowRouter.RoutedStep cdh = workflowRouter.resolveCdh(
                         toolkitCenter(loaded.exercise()), toolkitDomain(loaded.exercise()));
                 loaded.workflow().openReview(
@@ -342,14 +342,14 @@ public class ApprovalService {
                         List.of(new ProcessInstance.Assignee(cdh.positionId(), cdh.assigneeCcgid())),
                         now);
                 nextApproverCcgid = cdh.assigneeCcgid();
-            } else if (next == TaskNode.LTH) {
+            } else if (next == TaskNode.LOCAL_TRANSFORMATION_HEAD) {
                 WorkflowRouter.RoutedStep lth = workflowRouter.resolveLth();
                 loaded.workflow().openReview(
                         next,
                         List.of(new ProcessInstance.Assignee(lth.positionId(), lth.assigneeCcgid())),
                         now);
                 notifyLth = true;
-            } else if (current.getNode() == TaskNode.LTH) {
+            } else if (current.getNode() == TaskNode.LOCAL_TRANSFORMATION_HEAD) {
                 volumeTraining.freezeOfficialTrainingAndUpsert(
                         loaded.exercise(), principal.ccgid(), now);
                 toolkitAssociatedData.replaceSnapshots(
@@ -845,9 +845,9 @@ public class ApprovalService {
             return null;
         }
         return switch (role) {
-            case "MANAGER" -> "Manager Review";
-            case "CDH" -> "Center Delivery Head Review";
-            case "LTH" -> "Local Transformation Head Review";
+            case "SR_MANAGER" -> "Manager Review";
+            case "DOMAIN_HEAD" -> "Center Delivery Head Review";
+            case "LOCAL_TRANSFORMATION_HEAD" -> "Local Transformation Head Review";
             default -> role;
         };
     }
@@ -857,9 +857,9 @@ public class ApprovalService {
             return null;
         }
         return switch (step) {
-            case 1 -> "MANAGER";
-            case 2 -> "CDH";
-            case 3 -> "LTH";
+            case 1 -> "SR_MANAGER";
+            case 2 -> "DOMAIN_HEAD";
+            case 3 -> "LOCAL_TRANSFORMATION_HEAD";
             default -> null;
         };
     }

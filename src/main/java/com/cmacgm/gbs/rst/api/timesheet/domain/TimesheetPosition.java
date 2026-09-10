@@ -16,7 +16,7 @@ import jakarta.persistence.Transient;
 import org.springframework.data.domain.Persistable;
 
 /**
- * Supervisor / Manager / CDH position tree node in a Daily sync.
+ * Supervisor / Sr Manager / Domain Head position tree node in a Daily sync.
  */
 @Entity
 @Table(name = "timesheet_position")

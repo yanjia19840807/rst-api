@@ -21,7 +21,7 @@ public class SsoProfile {
     @Column(length = 120)
     private String center;
 
-    @Column(nullable = false, length = 16)
+    @Column(nullable = false, length = 40)
     private String role;
 
     @Column(name = "seen_at", nullable = false)

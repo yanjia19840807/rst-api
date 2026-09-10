@@ -6,6 +6,7 @@ import java.util.Set;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.domainhead.application.DomainHeadConfigService;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
+import com.cmacgm.gbs.rst.api.security.RstRoles;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.Occupant;
 import org.springframework.http.HttpStatus;
@@ -14,27 +15,25 @@ import org.springframework.stereotype.Component;
 /**
  * Routes workflow steps to Timesheet positions. The occupant ccgid is recorded for display
  * only; queue membership and Approve/Return authorization use {@code positionId}.
+ * Timesheet has no LTH column, so LTH steps share {@link RstRoles#LOCAL_TRANSFORMATION_HEAD}
+ * as the position id.
  */
 @Component
 public class WorkflowRouter {
 
     private final TimesheetReadService timesheet;
-    private final WorkflowProperties properties;
     private final DomainHeadConfigService domainHeads;
 
     /**
      * Creates the Timesheet workflow router.
      *
      * @param timesheet ACTIVE Daily org
-     * @param properties LTH position fallback
-     * @param domainHeads LTH Center × Domain CDH mapping
+     * @param domainHeads Center × Domain CDH mapping
      */
     public WorkflowRouter(
             TimesheetReadService timesheet,
-            WorkflowProperties properties,
             DomainHeadConfigService domainHeads) {
         this.timesheet = timesheet;
-        this.properties = properties;
         this.domainHeads = domainHeads;
     }
 
@@ -60,14 +59,14 @@ public class WorkflowRouter {
         }
         Set<String> roles = principal.roles() == null ? Set.of() : principal.roles();
         Set<String> positions = new LinkedHashSet<>();
-        if (roles.contains("MANAGER")) {
+        if (roles.contains("SR_MANAGER")) {
             positions.addAll(timesheet.positionsForRole(principal.ccgid(), "SR_MANAGER"));
         }
-        if (roles.contains("CDH")) {
+        if (roles.contains("DOMAIN_HEAD")) {
             positions.addAll(timesheet.heldPositionIds(principal.ccgid()));
         }
-        if (roles.contains("LTH")) {
-            positions.add(properties.lthPositionId());
+        if (roles.contains(RstRoles.LOCAL_TRANSFORMATION_HEAD)) {
+            positions.add(RstRoles.LOCAL_TRANSFORMATION_HEAD);
         }
         positions.removeIf(position -> position == null || position.isBlank());
         return Set.copyOf(positions);
@@ -107,12 +106,12 @@ public class WorkflowRouter {
     }
 
     /**
-     * Resolves the shared LTH position (Timesheet has no LTH column yet).
+     * Resolves the shared LTH position (Timesheet has no LTH column).
      *
      * @return LTH position; occupant is unknown until IAM provides one
      */
     public RoutedStep resolveLth() {
-        return new RoutedStep(properties.lthPositionId(), null, null);
+        return new RoutedStep(RstRoles.LOCAL_TRANSFORMATION_HEAD, null, null);
     }
 
     /**
@@ -130,12 +129,12 @@ public class WorkflowRouter {
             return NextHop.empty();
         }
         return switch (currentRole) {
-            case "MANAGER" -> {
+            case "SR_MANAGER" -> {
                 String positionId = blankToNull(domainHeads.configuredPositionId(center, domain));
                 Occupant occupant = hasText(positionId) ? timesheet.occupant(positionId) : null;
                 yield NextHop.of("Center Delivery Head Review", positionId, occupant);
             }
-            case "CDH" -> {
+            case "DOMAIN_HEAD" -> {
                 RoutedStep lth = resolveLth();
                 yield new NextHop(
                         "Local Transformation Head Review",
@@ -143,7 +142,7 @@ public class WorkflowRouter {
                         lth.occupantName(),
                         lth.assigneeCcgid());
             }
-            case "LTH" -> new NextHop("Archive", null, null, null);
+            case "LOCAL_TRANSFORMATION_HEAD" -> new NextHop("Archive", null, null, null);
             default -> NextHop.empty();
         };
     }
@@ -189,13 +188,13 @@ public class WorkflowRouter {
         if (!hasText(roleCode)) {
             return null;
         }
-        if ("LTH".equals(roleCode)) {
-            return properties.lthPositionId();
+        if (RstRoles.LOCAL_TRANSFORMATION_HEAD.equals(roleCode)) {
+            return RstRoles.LOCAL_TRANSFORMATION_HEAD;
         }
-        if ("MANAGER".equals(roleCode)) {
+        if ("SR_MANAGER".equals(roleCode)) {
             return parentOrNull(supervisorPositionId);
         }
-        if ("CDH".equals(roleCode)) {
+        if ("DOMAIN_HEAD".equals(roleCode)) {
             return domainHeads.configuredPositionId(center, domain);
         }
         return null;
@@ -212,8 +211,8 @@ public class WorkflowRouter {
         if (!hasText(roleCode) || !hasText(positionId)) {
             return null;
         }
-        if ("LTH".equals(roleCode)) {
-            return positionId.equals(properties.lthPositionId())
+        if (RstRoles.LOCAL_TRANSFORMATION_HEAD.equals(roleCode)) {
+            return RstRoles.LOCAL_TRANSFORMATION_HEAD.equals(positionId)
                     ? new RoutedStep(positionId, null, null)
                     : null;
         }

@@ -23,11 +23,11 @@ class BenchmarkingMathTests {
     @Test
     void picksBestDailyCapacityAndTotalsSupportRatio() {
         BenchmarkingMath.Summary summary = BenchmarkingMath.summarize("BANK REC", List.of(
-                row("GBS China", "142", "183", "10.00", "1.30"),
-                row("GBS India", "118", "220", "10.00", "0.80"),
+                row("GBS CHINA LEBANON", "142", "183", "10.00", "1.30"),
+                row("GBS CHINA INDIA", "118", "220", "10.00", "0.80"),
                 row("GBS Portugal", "132", "196", "5.00", "0.40")));
         assertThat(summary.bestDailyCapacity()).isEqualByComparingTo("220");
-        assertThat(summary.bestDailyCapacityHint()).isEqualTo("GBS India");
+        assertThat(summary.bestDailyCapacityHint()).isEqualTo("GBS CHINA INDIA");
         assertThat(summary.medianCycleTimeSeconds()).isEqualByComparingTo("132");
         assertThat(summary.productionSupportRatioPct()).isEqualByComparingTo("10.0");
     }

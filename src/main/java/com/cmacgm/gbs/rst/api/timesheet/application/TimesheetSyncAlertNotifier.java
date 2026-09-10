@@ -10,7 +10,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphService;
 import com.cmacgm.gbs.rst.api.mail.application.MailNotificationService;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncAlert;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
@@ -30,26 +29,22 @@ public class TimesheetSyncAlertNotifier {
     private final TimesheetSyncAlertRepository alerts;
     private final TimesheetSyncRunRepository syncRuns;
     private final TimesheetSyncIssueRepository issues;
-    private final MicrosoftGraphService graph;
     private final MailNotificationService mail;
 
     /**
      * @param alerts alert config
      * @param syncRuns run headers
      * @param issues issue rows
-     * @param graph Graph sendMail
-     * @param mail LTH SSO recipients
+     * @param mail outgoing mail + LTH / Admin recipients
      */
     public TimesheetSyncAlertNotifier(
             TimesheetSyncAlertRepository alerts,
             TimesheetSyncRunRepository syncRuns,
             TimesheetSyncIssueRepository issues,
-            MicrosoftGraphService graph,
             MailNotificationService mail) {
         this.alerts = alerts;
         this.syncRuns = syncRuns;
         this.issues = issues;
-        this.graph = graph;
         this.mail = mail;
     }
 
@@ -60,6 +55,10 @@ public class TimesheetSyncAlertNotifier {
      */
     public void notifyFailed(UUID runId) {
         if (runId == null) {
+            return;
+        }
+        if (mail == null || !mail.outgoingEnabled()) {
+            log.info("Timesheet fail email skipped: rst.mail.enabled is false");
             return;
         }
         CompletableFuture.runAsync(() -> {
@@ -92,7 +91,7 @@ public class TimesheetSyncAlertNotifier {
         String kind = blankToDash(run.getKind());
         String date = run.getSyncDate() == null ? "—" : run.getSyncDate().toString();
         String subject = "RST Timesheet sync failed: " + kind + " " + date;
-        graph.sendMail(subject, html(run, issueCount), List.copyOf(recipients));
+        mail.sendAddresses(subject, html(run, issueCount), List.copyOf(recipients));
     }
 
     private static String html(TimesheetSyncRun run, long issueCount) {

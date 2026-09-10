@@ -11,10 +11,10 @@ public final class DevRoles {
     public static final Set<String> ALL = Set.of(
             "AGENT",
             "SUPERVISOR",
-            "MANAGER",
-            "CDH",
-            "LTH",
-            "HO",
+            "SR_MANAGER",
+            "DOMAIN_HEAD",
+            "LOCAL_TRANSFORMATION_HEAD",
+            "GOVERNANCE",
             "ADMIN");
 
     private DevRoles() {

@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/domain-heads")
-@PreAuthorize("hasAnyRole('LTH', 'ADMIN')")
+@PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD', 'ADMIN')")
 public class DomainHeadController {
 
     private final DomainHeadConfigService domainHeads;

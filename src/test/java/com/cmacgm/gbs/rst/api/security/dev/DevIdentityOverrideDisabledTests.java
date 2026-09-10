@@ -26,11 +26,11 @@ class DevIdentityOverrideDisabledTests {
         mockMvc.perform(get("/api/v1/me")
                         .header("X-Dev-Ccgid", "ADMIN001")
                         .header("X-Dev-Role", "ADMIN")
-                        .header("X-Dev-Center", "GBS CHINA"))
+                        .header("X-Dev-Center", "GBS CHINA INDIA"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ccgid").value("SUPERVISOR001"))
                 .andExpect(jsonPath("$.roles[0]").value("SUPERVISOR"))
-                .andExpect(jsonPath("$.center").value("Kuala Lumpur"))
+                .andExpect(jsonPath("$.center").value("GBS CHINA INDIA"))
                 .andExpect(jsonPath("$.devOverrideEnabled").value(false));
     }
 }

@@ -32,7 +32,7 @@ class ProcessInstanceTests {
     void startRecordsApprovedSubmitAndOpensManager() {
         ProcessInstance instance = ProcessInstance.start(
                 UUID.randomUUID(), "go", "sup1", UUID.randomUUID(), T0);
-        instance.openReview(TaskNode.MANAGER, List.of(new ProcessInstance.Assignee("P-M", "mgr1")), T0);
+        instance.openReview(TaskNode.SR_MANAGER, List.of(new ProcessInstance.Assignee("P-M", "mgr1")), T0);
 
         assertThat(instance.getStatus()).isEqualTo(ProcessStatus.OPEN);
         assertThat(instance.documentStatus()).isEqualTo(ExerciseLifecycle.UNDER_REVIEW);
@@ -88,7 +88,7 @@ class ProcessInstanceTests {
         TaskActor manager = instance.findCurrentPendingTask().orElseThrow()
                 .findAnyPendingActor().orElseThrow();
         instance.approve(manager, "ok", UUID.randomUUID(), T1);
-        instance.openReview(TaskNode.CDH, List.of(new ProcessInstance.Assignee("P-C", "cdh1")), T1);
+        instance.openReview(TaskNode.DOMAIN_HEAD, List.of(new ProcessInstance.Assignee("P-C", "cdh1")), T1);
         TaskActor cdh = instance.findCurrentPendingTask().orElseThrow()
                 .findAnyPendingActor().orElseThrow();
         instance.returnToSupervisor(cdh, "fix", UUID.randomUUID(), T1);
@@ -126,7 +126,7 @@ class ProcessInstanceTests {
         assertThat(ExerciseLifecycle.canDelete(instance)).isTrue();
         assertThat(ExerciseLifecycle.canWithdraw(instance)).isFalse();
         ProcessTask manager = instance.getTasks().stream()
-                .filter(task -> task.getNode() == TaskNode.MANAGER)
+                .filter(task -> task.getNode() == TaskNode.SR_MANAGER)
                 .reduce((a, b) -> b)
                 .orElseThrow();
         assertThat(manager.getStatus()).isEqualTo(TaskStatus.WITHDRAWN);
@@ -144,7 +144,7 @@ class ProcessInstanceTests {
                 .findAnyPendingActor().orElseThrow();
         instance.returnToSupervisor(first, "fix", UUID.randomUUID(), T1);
         instance.recordSubmit("sup1", "again", UUID.randomUUID(), t2);
-        instance.openReview(TaskNode.MANAGER, List.of(new ProcessInstance.Assignee("P-M", "mgr1")), t2);
+        instance.openReview(TaskNode.SR_MANAGER, List.of(new ProcessInstance.Assignee("P-M", "mgr1")), t2);
         TaskActor second = instance.findCurrentPendingTask().orElseThrow()
                 .findAnyPendingActor().orElseThrow();
         instance.approve(second, "ok", UUID.randomUUID(), t3);
@@ -165,11 +165,11 @@ class ProcessInstanceTests {
         instance.returnToSupervisor(actor, "fix", UUID.randomUUID(), T1);
 
         instance.recordSubmit("sup1", "again", UUID.randomUUID(), T1);
-        instance.openReview(TaskNode.MANAGER, List.of(new ProcessInstance.Assignee("P-M", "mgr1")), T1);
+        instance.openReview(TaskNode.SR_MANAGER, List.of(new ProcessInstance.Assignee("P-M", "mgr1")), T1);
 
         assertThat(instance.getStatus()).isEqualTo(ProcessStatus.OPEN);
         assertThat(instance.getTasks().stream().filter(task -> task.getNode() == TaskNode.SUBMIT)).hasSize(2);
-        assertThat(instance.getTasks().stream().filter(task -> task.getNode() == TaskNode.MANAGER)).hasSize(2);
+        assertThat(instance.getTasks().stream().filter(task -> task.getNode() == TaskNode.SR_MANAGER)).hasSize(2);
         assertThat(instance.findCurrentPendingTask().orElseThrow().getStatus()).isEqualTo(TaskStatus.PENDING);
     }
 
@@ -177,7 +177,7 @@ class ProcessInstanceTests {
     void lthApproveFinishesAsApproved() {
         ProcessInstance instance = ProcessInstance.start(
                 UUID.randomUUID(), null, "sup1", UUID.randomUUID(), T0);
-        instance.openReview(TaskNode.LTH, List.of(new ProcessInstance.Assignee("P-L", "lth1")), T0);
+        instance.openReview(TaskNode.LOCAL_TRANSFORMATION_HEAD, List.of(new ProcessInstance.Assignee("P-L", "lth1")), T0);
         TaskActor actor = instance.findCurrentPendingTask().orElseThrow()
                 .findAnyPendingActor().orElseThrow();
 
@@ -192,7 +192,7 @@ class ProcessInstanceTests {
     private static ProcessInstance openAtManager() {
         ProcessInstance instance = ProcessInstance.start(
                 UUID.randomUUID(), "go", "sup1", UUID.randomUUID(), T0);
-        instance.openReview(TaskNode.MANAGER, List.of(new ProcessInstance.Assignee("P-M", "mgr1")), T0);
+        instance.openReview(TaskNode.SR_MANAGER, List.of(new ProcessInstance.Assignee("P-M", "mgr1")), T0);
         return instance;
     }
 }

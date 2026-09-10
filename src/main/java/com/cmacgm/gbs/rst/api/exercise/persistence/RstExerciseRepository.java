@@ -66,7 +66,7 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
                   join w.tasks t
                   where w.exerciseId = e.id
                     and w.status = com.cmacgm.gbs.rst.api.workflow.domain.ProcessStatus.FINISHED
-                    and t.node = com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LTH
+                    and t.node = com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LOCAL_TRANSFORMATION_HEAD
                     and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.APPROVED
               )
             order by e.submittedAt desc, e.exerciseCode asc, e.id asc
@@ -90,7 +90,7 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
                   join w.tasks t
                   where w.exerciseId = e.id
                     and w.status = com.cmacgm.gbs.rst.api.workflow.domain.ProcessStatus.FINISHED
-                    and t.node = com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LTH
+                    and t.node = com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LOCAL_TRANSFORMATION_HEAD
                     and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.APPROVED
               )
             """)
@@ -110,7 +110,7 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
                   join w.tasks t
                   where w.exerciseId = e.id
                     and w.status = com.cmacgm.gbs.rst.api.workflow.domain.ProcessStatus.FINISHED
-                    and t.node = com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LTH
+                    and t.node = com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LOCAL_TRANSFORMATION_HEAD
                     and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.APPROVED
               )
             order by e.submittedAt desc, e.exerciseCode asc, e.id asc
@@ -132,9 +132,9 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
                   where w.exerciseId = e.id
                     and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.PENDING
                     and t.node in (
-                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.MANAGER,
-                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.CDH,
-                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LTH
+                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.SR_MANAGER,
+                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.DOMAIN_HEAD,
+                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LOCAL_TRANSFORMATION_HEAD
                     )
               )
             order by e.submittedAt desc, e.exerciseCode asc, e.id asc
@@ -155,9 +155,9 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
                   where w.exerciseId = e.id
                     and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.PENDING
                     and t.node in (
-                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.MANAGER,
-                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.CDH,
-                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LTH
+                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.SR_MANAGER,
+                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.DOMAIN_HEAD,
+                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LOCAL_TRANSFORMATION_HEAD
                     )
               )
             """)

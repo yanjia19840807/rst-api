@@ -15,13 +15,13 @@ class ValidationWorkflowFiltersTests {
     @Test
     void matchesAllWhenQueryIsEmpty() {
         assertThat(ValidationWorkflowFilters.matches(
-                row("EX-1", "GBS China", "OPS", "PL3-A", "TK-1", 9, "2026-03-01"),
+                row("EX-1", "GBS CHINA LEBANON", "OPS", "PL3-A", "TK-1", 9, "2026-03-01"),
                 query(null, null, null, null, null, null, null, null))).isTrue();
     }
 
     @Test
     void exerciseCodeIsCaseInsensitiveContains() {
-        ValidationWorkflowRow row = row("EX-ABC-01", "GBS China", "OPS", "PL3-A", "TK-1", 9, "2026-03-01");
+        ValidationWorkflowRow row = row("EX-ABC-01", "GBS CHINA LEBANON", "OPS", "PL3-A", "TK-1", 9, "2026-03-01");
         assertThat(ValidationWorkflowFilters.matches(
                 row, query("abc", null, null, null, null, null, null, null))).isTrue();
         assertThat(ValidationWorkflowFilters.matches(
@@ -30,11 +30,11 @@ class ValidationWorkflowFiltersTests {
 
     @Test
     void exactFiltersMustMatch() {
-        ValidationWorkflowRow row = row("EX-1", "GBS China", "OPS", "PL3-A", "TK-1", 9, "2026-03-01");
+        ValidationWorkflowRow row = row("EX-1", "GBS CHINA LEBANON", "OPS", "PL3-A", "TK-1", 9, "2026-03-01");
         assertThat(ValidationWorkflowFilters.matches(
-                row, query(null, "GBS China", "OPS", "PL3-A", "TK-1", null, null, null))).isTrue();
+                row, query(null, "GBS CHINA LEBANON", "OPS", "PL3-A", "TK-1", null, null, null))).isTrue();
         assertThat(ValidationWorkflowFilters.matches(
-                row, query(null, "GBS India", null, null, null, null, null, null))).isFalse();
+                row, query(null, "GBS CHINA INDIA", null, null, null, null, null, null))).isFalse();
         assertThat(ValidationWorkflowFilters.matches(
                 row, query(null, null, "FIN", null, null, null, null, null))).isFalse();
         assertThat(ValidationWorkflowFilters.matches(
@@ -45,19 +45,19 @@ class ValidationWorkflowFiltersTests {
 
     @Test
     void agingIsAtLeastMinDays() {
-        ValidationWorkflowRow row = row("EX-1", "GBS China", "OPS", "PL3-A", "TK-1", 14, "2026-03-01");
+        ValidationWorkflowRow row = row("EX-1", "GBS CHINA LEBANON", "OPS", "PL3-A", "TK-1", 14, "2026-03-01");
         assertThat(ValidationWorkflowFilters.matches(
                 row, query(null, null, null, null, null, 14, null, null))).isTrue();
         assertThat(ValidationWorkflowFilters.matches(
                 row, query(null, null, null, null, null, 15, null, null))).isFalse();
         assertThat(ValidationWorkflowFilters.matches(
-                row("EX-2", "GBS China", "OPS", "PL3-A", "TK-1", null, "2026-03-01"),
+                row("EX-2", "GBS CHINA LEBANON", "OPS", "PL3-A", "TK-1", null, "2026-03-01"),
                 query(null, null, null, null, null, 0, null, null))).isFalse();
     }
 
     @Test
     void submittedDateIsInclusive() {
-        ValidationWorkflowRow row = row("EX-1", "GBS China", "OPS", "PL3-A", "TK-1", 9, "2026-03-10");
+        ValidationWorkflowRow row = row("EX-1", "GBS CHINA LEBANON", "OPS", "PL3-A", "TK-1", 9, "2026-03-10");
         assertThat(ValidationWorkflowFilters.matches(
                 row,
                 query(null, null, null, null, null, null,
@@ -75,12 +75,12 @@ class ValidationWorkflowFiltersTests {
     void distinctIgnoresBlankAndSorts() {
         List<String> names = ValidationWorkflowFilters.distinct(
                 List.of(
-                        row("EX-1", "GBS India", "OPS", "B", "TK", 1, "2026-01-01"),
-                        row("EX-2", "GBS China", "OPS", "A", "TK", 1, "2026-01-01"),
+                        row("EX-1", "GBS CHINA INDIA", "OPS", "B", "TK", 1, "2026-01-01"),
+                        row("EX-2", "GBS CHINA LEBANON", "OPS", "A", "TK", 1, "2026-01-01"),
                         row("EX-3", "", "OPS", "A", "TK", 1, "2026-01-01"),
-                        row("EX-4", "GBS China", "OPS", "A", "TK", 1, "2026-01-01")),
+                        row("EX-4", "GBS CHINA LEBANON", "OPS", "A", "TK", 1, "2026-01-01")),
                 ValidationWorkflowRow::gbs);
-        assertThat(names).containsExactly("GBS China", "GBS India");
+        assertThat(names).containsExactly("GBS CHINA INDIA", "GBS CHINA LEBANON");
     }
 
     private static ValidationWorkflowQuery query(

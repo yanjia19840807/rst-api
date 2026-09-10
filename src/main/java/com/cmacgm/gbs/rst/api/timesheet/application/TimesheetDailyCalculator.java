@@ -128,6 +128,15 @@ public class TimesheetDailyCalculator {
                     null,
                     null,
                     row.srManagerPositionId());
+            rememberPerson(
+                    people,
+                    personToPosition,
+                    row.domainHeadCcgid(),
+                    row.domainHeadId(),
+                    row.domainHeadName(),
+                    null,
+                    null,
+                    row.domainHeadPositionId());
             addPosition(
                     positions,
                     childToParent,
@@ -147,6 +156,13 @@ public class TimesheetDailyCalculator {
                     childToParent,
                     row.srManagerPositionId(),
                     "SR_MANAGER",
+                    row.domainHeadPositionId(),
+                    row.center());
+            addPosition(
+                    positions,
+                    childToParent,
+                    row.domainHeadPositionId(),
+                    "DOMAIN_HEAD",
                     null,
                     row.center());
         }
@@ -288,7 +304,9 @@ public class TimesheetDailyCalculator {
             return;
         }
         positions.putIfAbsent(
-                positionId, new PositionDraft(positionId, roleType, parent, hasText(center) ? center : ""));
+                positionId,
+                new PositionDraft(
+                        positionId, roleType, hasText(parent) ? parent : null, hasText(center) ? center : ""));
         if (hasText(parent)) {
             childToParent.computeIfAbsent(positionId, ignored -> new LinkedHashSet<>()).add(parent);
         }

@@ -43,7 +43,7 @@ public class DelegationController {
      */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('AGENT','SUPERVISOR','MANAGER','CDH','LTH')")
+    @PreAuthorize("hasAnyRole('AGENT','SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
     public DelegationView create(
             @AuthenticationPrincipal RstPrincipal principal,
             @Valid @RequestBody CreateDelegationRequest request) {
@@ -54,7 +54,7 @@ public class DelegationController {
      * Revokes an open grant issued by the signed-in user.
      */
     @PostMapping("/{id}/revoke")
-    @PreAuthorize("hasAnyRole('AGENT','SUPERVISOR','MANAGER','CDH','LTH')")
+    @PreAuthorize("hasAnyRole('AGENT','SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
     public DelegationView revoke(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
@@ -81,7 +81,7 @@ public class DelegationController {
      * Timesheet people the grantor may pick.
      */
     @GetMapping("/candidates")
-    @PreAuthorize("hasAnyRole('AGENT','SUPERVISOR','MANAGER','CDH','LTH')")
+    @PreAuthorize("hasAnyRole('AGENT','SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
     public PageResponse<DelegationCandidateView> candidates(
             @AuthenticationPrincipal RstPrincipal principal,
             @RequestParam(required = false) String q,

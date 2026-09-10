@@ -45,7 +45,7 @@ class TimesheetSnapshotBrowseServiceTests {
         when(people.searchActive(eq(""), eq("anna"), any()))
                 .thenReturn(new PageImpl<>(
                         List.of(TimesheetPerson.create(
-                                runId, "S00000001", "EMP-1", "GBS CHINA", "TIAN Anna", "a@cma-cgm.com", "748595")),
+                                runId, "S00000001", "EMP-1", "GBS CHINA INDIA", "TIAN Anna", "a@cma-cgm.com", "748595")),
                         PageRequest.of(0, 10),
                         1));
 
@@ -57,12 +57,12 @@ class TimesheetSnapshotBrowseServiceTests {
                         TimesheetSnapshotBrowseService.PersonView::ccgid,
                         TimesheetSnapshotBrowseService.PersonView::center,
                         TimesheetSnapshotBrowseService.PersonView::positionId)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("S00000001", "GBS CHINA", "748595"));
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("S00000001", "GBS CHINA INDIA", "748595"));
     }
 
     @Test
     void mapsPositionChains() {
-        when(positions.searchActiveChains(eq("GBS CHINA"), eq("174"), any()))
+        when(positions.searchActiveChains(eq("GBS CHINA INDIA"), eq("174"), any()))
                 .thenReturn(new PageImpl<>(
                         List.of(new TimesheetPositionRepository.PositionChain() {
                             @Override
@@ -82,7 +82,7 @@ class TimesheetSnapshotBrowseServiceTests {
 
                             @Override
                             public String getCenter() {
-                                return "GBS CHINA";
+                                return "GBS CHINA INDIA";
                             }
                         }),
                         PageRequest.of(0, 10),
@@ -92,11 +92,11 @@ class TimesheetSnapshotBrowseServiceTests {
         when(people.findActiveByPositionIdIn(any()))
                 .thenReturn(List.of(
                         TimesheetPerson.create(
-                                runId, "S00000001", "EMP-1", "GBS CHINA", "TIAN Anna", "a@cma-cgm.com", "172545"),
+                                runId, "S00000001", "EMP-1", "GBS CHINA INDIA", "TIAN Anna", "a@cma-cgm.com", "172545"),
                         TimesheetPerson.create(
-                                runId, "S00000002", "EMP-2", "GBS CHINA", "TANG Lavender", "b@cma-cgm.com", "174055")));
+                                runId, "S00000002", "EMP-2", "GBS CHINA INDIA", "TANG Lavender", "b@cma-cgm.com", "174055")));
 
-        assertThat(service.positions("GBS CHINA", "174", 1, 10).items())
+        assertThat(service.positions("GBS CHINA INDIA", "174", 1, 10).items())
                 .extracting(
                         TimesheetSnapshotBrowseService.PositionView::agentPositionId,
                         TimesheetSnapshotBrowseService.PositionView::agentName,
@@ -112,60 +112,60 @@ class TimesheetSnapshotBrowseServiceTests {
                         "TANG Lavender",
                         "174100",
                         null,
-                        "GBS CHINA"));
+                        "GBS CHINA INDIA"));
     }
 
     @Test
     void mapsMonthlyRows() {
         UUID runId = UUID.randomUUID();
-        when(scopes.searchActive(eq("GBS CHINA"), eq(""), eq(""), any()))
+        when(scopes.searchActive(eq("GBS CHINA INDIA"), eq(""), eq(""), any()))
                 .thenReturn(new PageImpl<>(
                         List.of(TimesheetScope.create(
-                                runId, "POS-SUP-1", "PL3", "GBS CHINA", "PL3 Name", "Finance", "PL1", "PL2")),
+                                runId, "POS-SUP-1", "PL3", "GBS CHINA INDIA", "PL3 Name", "Finance", "PL1", "PL2")),
                         PageRequest.of(0, 10),
                         1));
-        when(positions.searchActiveAssignments(eq("GBS CHINA"), eq(""), eq("POS-SUP-1"), eq("PL3"), any()))
+        when(positions.searchActiveAssignments(eq("GBS CHINA INDIA"), eq(""), eq("POS-SUP-1"), eq("PL3"), any()))
                 .thenReturn(new PageImpl<>(
-                        List.of(derived("172545", "POS-SUP-1", "PL3", "PL3 Name", "GBS CHINA")),
+                        List.of(derived("172545", "POS-SUP-1", "PL3", "PL3 Name", "GBS CHINA INDIA")),
                         PageRequest.of(0, 10),
                         1));
         when(scopes.findActiveBySupervisorPositionIdIn(any()))
                 .thenReturn(List.of(TimesheetScope.create(
-                        runId, "POS-SUP-1", "PL3", "GBS CHINA", "PL3 Name", "Finance", "PL1", "PL2")));
-        when(kpis.searchActive(eq("GBS CHINA"), eq(""), eq(""), any()))
+                        runId, "POS-SUP-1", "PL3", "GBS CHINA INDIA", "PL3 Name", "Finance", "PL1", "PL2")));
+        when(kpis.searchActive(eq("GBS CHINA INDIA"), eq(""), eq(""), any()))
                 .thenReturn(new PageImpl<>(
                         List.of(TimesheetKpi.create(
-                                runId, "POS-SUP-1", "PL3", "GBS CHINA", "CMA", "Site A", "MY", new BigDecimal("1.5"))),
+                                runId, "POS-SUP-1", "PL3", "GBS CHINA INDIA", "CMA", "Site A", "MY", new BigDecimal("1.5"))),
                         PageRequest.of(0, 10),
                         1));
         when(people.findActiveByPositionIdIn(any()))
                 .thenReturn(List.of(
                         TimesheetPerson.create(
-                                runId, "S00000001", "EMP-1", "GBS CHINA", "TIAN Anna", "a@cma-cgm.com", "172545"),
+                                runId, "S00000001", "EMP-1", "GBS CHINA INDIA", "TIAN Anna", "a@cma-cgm.com", "172545"),
                         TimesheetPerson.create(
-                                runId, "S00000002", "EMP-2", "GBS CHINA", "TANG Lavender", "b@cma-cgm.com", "POS-SUP-1")));
+                                runId, "S00000002", "EMP-2", "GBS CHINA INDIA", "TANG Lavender", "b@cma-cgm.com", "POS-SUP-1")));
 
-        assertThat(service.scopes("GBS CHINA", null, null, 1, 10).items())
+        assertThat(service.scopes("GBS CHINA INDIA", null, null, 1, 10).items())
                 .extracting(
                         TimesheetSnapshotBrowseService.ScopeView::pl3Code,
                         TimesheetSnapshotBrowseService.ScopeView::supervisorName)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("PL3", "TANG Lavender"));
-        assertThat(service.assignments("GBS CHINA", null, "POS-SUP-1", "PL3", 1, 10).items())
+        assertThat(service.assignments("GBS CHINA INDIA", null, "POS-SUP-1", "PL3", 1, 10).items())
                 .extracting(
                         TimesheetSnapshotBrowseService.AssignmentView::agentPositionId,
                         TimesheetSnapshotBrowseService.AssignmentView::agentName,
                         TimesheetSnapshotBrowseService.AssignmentView::pl3Name,
                         TimesheetSnapshotBrowseService.AssignmentView::center)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple(
-                        "172545", "TIAN Anna", "PL3 Name", "GBS CHINA"));
-        assertThat(service.kpis("GBS CHINA", null, null, 1, 10).items())
+                        "172545", "TIAN Anna", "PL3 Name", "GBS CHINA INDIA"));
+        assertThat(service.kpis("GBS CHINA INDIA", null, null, 1, 10).items())
                 .extracting(
                         TimesheetSnapshotBrowseService.KpiView::supervisorName,
                         TimesheetSnapshotBrowseService.KpiView::center,
                         TimesheetSnapshotBrowseService.KpiView::pl3Name,
                         TimesheetSnapshotBrowseService.KpiView::hc)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple(
-                        "TANG Lavender", "GBS CHINA", "PL3 Name", new BigDecimal("1.5")));
+                        "TANG Lavender", "GBS CHINA INDIA", "PL3 Name", new BigDecimal("1.5")));
     }
 
     private static TimesheetPositionRepository.DerivedAssignment derived(

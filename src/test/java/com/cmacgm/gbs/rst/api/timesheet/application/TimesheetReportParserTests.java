@@ -29,7 +29,7 @@ class TimesheetReportParserTests {
                     + "SUP-1,S00000002,Supervisor One,POS-SUP-1,"
                     + "SRM-1,S00000003,Manager One,POS-SRM-1,"
                     + "DH-1,S00000004,Head One,POS-DH-1,"
-                    + "Kuala Lumpur,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,1,"
+                    + "GBS CHINA INDIA,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,1,"
                     + "production,productive";
 
     private final TimesheetReportParser parser = new TimesheetReportParser();

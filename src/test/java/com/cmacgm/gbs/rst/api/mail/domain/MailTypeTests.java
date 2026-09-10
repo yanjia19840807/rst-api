@@ -16,13 +16,13 @@ class MailTypeTests {
 
     @Test
     void managerAndCdhOwnWorkflowMail() {
-        assertThat(MailType.forRole("MANAGER")).containsExactly(MailType.WORKFLOW);
-        assertThat(MailType.forRole("CDH")).containsExactly(MailType.WORKFLOW);
+        assertThat(MailType.forRole("SR_MANAGER")).containsExactly(MailType.WORKFLOW);
+        assertThat(MailType.forRole("DOMAIN_HEAD")).containsExactly(MailType.WORKFLOW);
     }
 
     @Test
     void lthOwnsWorkflowAndSyncFailed() {
-        assertThat(MailType.forRole("LTH")).containsExactly(
+        assertThat(MailType.forRole("LOCAL_TRANSFORMATION_HEAD")).containsExactly(
                 MailType.WORKFLOW, MailType.TIMESHEET_SYNC_FAILED);
     }
 
@@ -34,16 +34,17 @@ class MailTypeTests {
     @Test
     void agentAndHoHaveNoMailTypes() {
         assertThat(MailType.forRole("AGENT")).isEmpty();
-        assertThat(MailType.forRole("HO")).isEmpty();
+        assertThat(MailType.forRole("GOVERNANCE")).isEmpty();
         assertThat(MailType.forRole(null)).isEmpty();
     }
 
     @Test
     void mailRolePicksTheSingleProductRole() {
         assertThat(MailType.mailRole(List.of("SUPERVISOR"))).isEqualTo("SUPERVISOR");
-        assertThat(MailType.mailRole(Set.of("lth"))).isEqualTo("LTH");
+        assertThat(MailType.mailRole(Set.of("local_transformation_head")))
+                .isEqualTo("LOCAL_TRANSFORMATION_HEAD");
         assertThat(MailType.mailRole(Set.of("admin"))).isEqualTo("ADMIN");
-        assertThat(MailType.mailRole(List.of("AGENT", "HO"))).isNull();
+        assertThat(MailType.mailRole(List.of("AGENT", "GOVERNANCE"))).isNull();
     }
 
     @Test

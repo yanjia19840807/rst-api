@@ -53,7 +53,7 @@ public interface ProcessInstanceRepository extends JpaRepository<ProcessInstance
               and e.deletedAt is null
               and w.status = com.cmacgm.gbs.rst.api.workflow.domain.ProcessStatus.OPEN
               and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.PENDING
-              and t.node = com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.CDH
+              and t.node = com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.DOMAIN_HEAD
               and e.toolkitSnapshot.center = :center
               and e.toolkitSnapshot.domain = :domain
             """)

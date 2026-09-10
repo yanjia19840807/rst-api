@@ -84,8 +84,8 @@ public enum MailType {
             return List.of();
         }
         return switch (role.trim().toUpperCase(Locale.ROOT)) {
-            case "SUPERVISOR", "MANAGER", "CDH" -> List.of(WORKFLOW);
-            case "LTH" -> List.of(WORKFLOW, TIMESHEET_SYNC_FAILED);
+            case "SUPERVISOR", "SR_MANAGER", "DOMAIN_HEAD" -> List.of(WORKFLOW);
+            case "LOCAL_TRANSFORMATION_HEAD" -> List.of(WORKFLOW, TIMESHEET_SYNC_FAILED);
             case "ADMIN" -> List.of(TIMESHEET_SYNC_FAILED);
             default -> List.of();
         };
@@ -99,7 +99,7 @@ public enum MailType {
         if (roles == null) {
             return null;
         }
-        for (String candidate : List.of("SUPERVISOR", "MANAGER", "CDH", "LTH", "ADMIN")) {
+        for (String candidate : List.of("SUPERVISOR", "SR_MANAGER", "DOMAIN_HEAD", "LOCAL_TRANSFORMATION_HEAD", "ADMIN")) {
             for (String role : roles) {
                 if (candidate.equalsIgnoreCase(role == null ? "" : role.trim())) {
                     return candidate;
