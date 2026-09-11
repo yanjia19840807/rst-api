@@ -4,10 +4,10 @@ import org.springframework.stereotype.Service;
 
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphProperties;
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphService;
-import com.cmacgm.gbs.rst.api.graph.RstSharePointProperties;
+import com.cmacgm.gbs.rst.api.timesheet.config.TimesheetSharePointProperties;
 
 /**
- * Serves blank import Excel templates from {@code rst.sharepoint.root}/Template.
+ * Serves blank import Excel templates from {@code timesheet.sharepoint.root}/Template.
  */
 @Service
 public class ImportTemplateService {
@@ -36,7 +36,7 @@ public class ImportTemplateService {
         }
     }
 
-    private final RstSharePointProperties sharePoint;
+    private final TimesheetSharePointProperties sharePoint;
     private final MicrosoftGraphProperties graphProperties;
     private final MicrosoftGraphService graph;
     private final HolidayExcelService holidayExcel;
@@ -44,15 +44,15 @@ public class ImportTemplateService {
     private final SupportExcelService supportExcel;
 
     /**
-     * @param sharePoint RST SharePoint folders
-     * @param graphProperties Graph enable / credentials
+     * @param sharePoint Timesheet SharePoint folders
+     * @param graphProperties Graph credentials
      * @param graph Graph client
      * @param holidayExcel local holiday blank used when Graph is off
      * @param volumeExcel local volume blanks used when Graph is off
      * @param supportExcel local support blank used when Graph is off
      */
     public ImportTemplateService(
-            RstSharePointProperties sharePoint,
+            TimesheetSharePointProperties sharePoint,
             MicrosoftGraphProperties graphProperties,
             MicrosoftGraphService graph,
             HolidayExcelService holidayExcel,
@@ -73,7 +73,7 @@ public class ImportTemplateService {
      * @return xlsx bytes
      */
     public byte[] download(Kind kind) {
-        if (graphProperties.enabled() && graphProperties.hasCredentials()) {
+        if (graphProperties.hasCredentials()) {
             return graph.getFileBytes(sharePoint.templateFolder(), kind.fileName());
         }
         return generate(kind);

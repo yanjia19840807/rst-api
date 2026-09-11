@@ -7,7 +7,7 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
-import com.cmacgm.gbs.rst.api.timesheet.config.TimesheetProcessProperties;
+import com.cmacgm.gbs.rst.api.process.ProcessProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.DefaultResourceLoader;
 
@@ -47,10 +47,21 @@ class GbsProcessCatalogTests {
 
     @Test
     void loadClasspathMockIncludesKnownRstProcess() {
-        TimesheetProcessProperties properties = new TimesheetProcessProperties();
+        ProcessProperties properties = new ProcessProperties();
         GbsProcessCatalog catalog = new GbsProcessCatalogSource(properties, new DefaultResourceLoader()).load();
 
         assertThat(catalog.applies("497")).isTrue();
         assertThat(catalog.rstYesPl3Codes()).isNotEmpty();
+    }
+
+    @Test
+    void remoteTrueReadsSharePointAndIsNotWiredYet() {
+        ProcessProperties properties = new ProcessProperties();
+        properties.setRemote(true);
+
+        assertThatThrownBy(() -> new GbsProcessCatalogSource(properties, new DefaultResourceLoader()).load())
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("CMA-GlobalBusinessServices")
+                .hasMessageContaining("GBS Process");
     }
 }

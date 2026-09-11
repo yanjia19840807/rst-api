@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 
 import com.azure.identity.ClientSecretCredentialBuilder;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.mail.application.MailProperties;
+import com.cmacgm.gbs.rst.api.timesheet.config.TimesheetSharePointProperties;
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphModels.GraphDriveItem;
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphModels.GraphFile;
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphModels.GraphFolder;
@@ -44,6 +46,8 @@ public class MicrosoftGraphService {
     private static final String[] SCOPES = {"https://graph.microsoft.com/.default"};
 
     private final MicrosoftGraphProperties properties;
+    private final TimesheetSharePointProperties sharePoint;
+    private final MailProperties mail;
     private final Object lock = new Object();
 
     private volatile GraphServiceClient graph;
@@ -51,10 +55,17 @@ public class MicrosoftGraphService {
     private volatile String driveId;
 
     /**
-     * @param properties Graph client-credentials settings
+     * @param properties Graph client-credentials
+     * @param sharePoint Timesheet library location
+     * @param mail send-as mailbox
      */
-    public MicrosoftGraphService(MicrosoftGraphProperties properties) {
+    public MicrosoftGraphService(
+            MicrosoftGraphProperties properties,
+            TimesheetSharePointProperties sharePoint,
+            MailProperties mail) {
         this.properties = properties;
+        this.sharePoint = sharePoint;
+        this.mail = mail;
     }
 
     /**
@@ -162,18 +173,15 @@ public class MicrosoftGraphService {
 
     /**
      * Sends HTML mail from the configured Timesheet mailbox.
-     * Does nothing when Graph is disabled or credentials are missing.
+     * Does nothing when Graph credentials are missing.
      *
      * @param subject subject
      * @param html body
      * @param to recipients
      */
     public void sendMail(String subject, String html, List<String> to) {
-        if (!properties.enabled() || !properties.hasCredentials()) {
-            log.info(
-                    "Microsoft Graph sendMail skipped: enabled={} credentials={}",
-                    properties.enabled(),
-                    properties.hasCredentials());
+        if (!properties.hasCredentials()) {
+            log.info("Microsoft Graph sendMail skipped: credentials missing");
             return;
         }
         if (subject == null || subject.isBlank() || html == null || html.isBlank()
@@ -206,7 +214,7 @@ public class MicrosoftGraphService {
         message.setToRecipients(recipients);
         body.setMessage(message);
         invoke("send mail", () -> {
-            graph().users().byUserId(properties.fromMail()).sendMail().post(body);
+            graph().users().byUserId(mail.from()).sendMail().post(body);
             return Boolean.TRUE;
         });
     }
@@ -315,13 +323,13 @@ public class MicrosoftGraphService {
         }
         synchronized (lock) {
             if (siteId == null) {
-                String graphSiteId = MicrosoftGraphPaths.siteIdFromWebUrl(properties.sharepointSite());
+                String graphSiteId = MicrosoftGraphPaths.siteIdFromWebUrl(sharePoint.site());
                 Site site = invoke("resolve site", () -> graph().sites().bySiteId(graphSiteId).get());
                 if (site.getId() == null || site.getId().isBlank()) {
                     throw new ApiException(
                             HttpStatus.BAD_GATEWAY,
                             "graph-site-missing",
-                            "SharePoint site was not found: " + properties.sharepointSite());
+                            "SharePoint site was not found: " + sharePoint.site());
                 }
                 siteId = site.getId();
             }
@@ -348,7 +356,7 @@ public class MicrosoftGraphService {
         List<Drive> drives = response.getValue();
         if (drives != null) {
             for (Drive drive : drives) {
-                if (properties.listName().equals(drive.getName()) && drive.getId() != null) {
+                if (sharePoint.library().equals(drive.getName()) && drive.getId() != null) {
                     return drive.getId();
                 }
             }
@@ -356,16 +364,10 @@ public class MicrosoftGraphService {
         throw new ApiException(
                 HttpStatus.BAD_GATEWAY,
                 "graph-drive-missing",
-                "SharePoint library was not found: " + properties.listName());
+                "SharePoint library was not found: " + sharePoint.library());
     }
 
     private void ensureConfigured() {
-        if (!properties.enabled()) {
-            throw new ApiException(
-                    HttpStatus.SERVICE_UNAVAILABLE,
-                    "graph-disabled",
-                    "Microsoft Graph is disabled. Set MS_GRAPH_ENABLED=true to use SharePoint.");
-        }
         if (!properties.hasCredentials()) {
             throw new ApiException(
                     HttpStatus.SERVICE_UNAVAILABLE,

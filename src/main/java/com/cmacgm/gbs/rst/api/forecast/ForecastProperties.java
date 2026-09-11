@@ -11,7 +11,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param enabled when false, forecast endpoints return forecast-disabled
  * @param confidenceLevel prediction interval level
  */
-@ConfigurationProperties(prefix = "rst.forecast")
+@ConfigurationProperties(prefix = "forecast")
 public record ForecastProperties(
         String baseUrl,
         int connectTimeoutMs,

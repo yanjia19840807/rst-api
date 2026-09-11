@@ -3,58 +3,36 @@ package com.cmacgm.gbs.rst.api.graph;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Microsoft Graph client-credentials settings. Production injects client id and secret from
- * the named Azure / Kubernetes secret; local runs use {@code MS_GRAPH_*} environment variables.
+ * Microsoft Graph client-credentials. SharePoint locations live on the feature
+ * that owns them ({@code timesheet.sharepoint}, {@code process.sharepoint}).
  *
- * @param enabled when false, Graph calls fail fast without contacting Microsoft
  * @param secretName ops secret name that holds Graph credentials
  * @param tenantId Azure AD tenant
  * @param clientId application (client) id
  * @param clientSecret application client secret
- * @param sharepointSite SharePoint site web URL
- * @param listName document library / list name on that site
- * @param fromMail mailbox used for Graph sendMail
  */
 @ConfigurationProperties(prefix = "microsoft.graph")
 public record MicrosoftGraphProperties(
-        boolean enabled,
         String secretName,
         String tenantId,
         String clientId,
-        String clientSecret,
-        String sharepointSite,
-        String listName,
-        String fromMail) {
+        String clientSecret) {
 
     /**
      * Fills Graph defaults when a field is blank.
      *
-     * @param enabled Graph enable flag
      * @param secretName credential secret name
      * @param tenantId Azure tenant
      * @param clientId application id
      * @param clientSecret application secret
-     * @param sharepointSite SharePoint site URL
-     * @param listName document library name
-     * @param fromMail sendMail from mailbox
      */
     public MicrosoftGraphProperties {
         if (secretName == null || secretName.isBlank()) {
             secretName = "timesheet-prd-microsoft-graph-credentials";
         }
-        if (sharepointSite == null || sharepointSite.isBlank()) {
-            sharepointSite = "https://cmacgmgroup.sharepoint.com/sites/CMA-SharedKPIAutomation";
-        }
-        if (listName == null || listName.isBlank()) {
-            listName = "Timesheet";
-        }
-        if (fromMail == null || fromMail.isBlank()) {
-            fromMail = "GBS.TIMESHEET@cma-cgm.com";
-        }
         clientId = blankToEmpty(clientId);
         clientSecret = blankToEmpty(clientSecret);
         tenantId = blankToEmpty(tenantId);
-        fromMail = fromMail.trim();
     }
 
     /**

@@ -1,5 +1,5 @@
 # SPRING_PROFILES_ACTIVE=prod  →  https://gbs-rst.cma-cgm.com
-# Required secrets: AZURE_CLIENT_SECRET, DB_PASSWORD, MS_GRAPH_CLIENT_SECRET
+# Secrets: AZURE_CLIENT_SECRET, DB_PASSWORD, MS_GRAPH_CLIENT_SECRET
 
 app:
   cors:
@@ -22,13 +22,12 @@ springdoc:
   swagger-ui:
     enabled: false
 
-rst:
+timesheet:
   sharepoint:
-    root: ${RST_SHAREPOINT_ROOT:4.RST/3.Production}
-  mail:
-    enabled: ${RST_MAIL_ENABLED:true}
-    redirect-to: ${RST_MAIL_REDIRECT_TO:}
+    root: ${TIMESHEET_SHAREPOINT_ROOT:4.RST/3.Production}
 
-microsoft:
-  graph:
-    enabled: ${MS_GRAPH_ENABLED:true}
+process:
+  remote: true
+
+mail:
+  enabled: ${MAIL_ENABLED:true}

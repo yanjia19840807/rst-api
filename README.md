@@ -57,8 +57,7 @@ Identity is the CCGID only — no local `app_user` row. Keep the switch
 - OpenAPI: `http://localhost:8080/v3/api-docs`
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 
-To connect `rst-web`, set `VITE_API_BASE_URL=http://localhost:8080` and
-`VITE_ENABLE_MSW=false`.
+To connect `rst-web`, set `VITE_API_BASE_URL=http://localhost:8080` (or leave it empty and use the Vite `/api` proxy).
 
 ## Configuration
 
@@ -76,11 +75,14 @@ JUnit uses `application-test.yml` only.
 | `AZURE_CLIENT_SECRET` | empty | RST Azure secret; env only, never commit |
 | `AZURE_REDIRECT_URI` | `{host}/api/sso/callback` | Registered confidential-client redirect |
 | `SSO_ENV` | UAT / PRE / PROD | Must match `CMACGM_APP_RST_{NAME}_{ENV}` |
-| `MS_GRAPH_ENABLED` | `true` in all four profiles | Microsoft Graph / SharePoint |
 | `MS_GRAPH_CLIENT_ID` | empty (dev default set) | Graph application (client) id |
 | `MS_GRAPH_CLIENT_SECRET` | empty | Graph client secret; never commit |
-| `RST_FORECAST_BASE_URL` | `http://localhost:8000` | Python forecast service |
-| `RST_FORECAST_ENABLED` | `true` | Enable forecast HTTP calls |
+| `TIMESHEET_SHAREPOINT_ROOT` | `4.RST/2.UAT` (`4.RST/2.PRE` in pre, `4.RST/3.Production` in prod) | Timesheet library RST folder |
+| `FORECAST_BASE_URL` | `http://localhost:8000` | Python forecast service |
+| `FORECAST_ENABLED` | `true` | Enable forecast HTTP calls |
+| `MAIL_ENABLED` | `true` in runtime profiles | Send workflow / Timesheet-fail mail |
+| `MAIL_REDIRECT_TO` | empty | Redirect all outgoing mail to this inbox |
+| `MAIL_FROM` | `GBS.TIMESHEET@cma-cgm.com` | Graph send-as mailbox |
 
 uat / pre / prod authenticate with Azure authorization-code + HttpOnly session.
 Local `dev` uses Dev Identity (`X-Dev-Role` / query). Do not put secrets in YAML.
@@ -156,24 +158,22 @@ Automatic sync picks the file whose **name** has the latest business date
 with `AMBIGUOUS_SOURCE`. LTH uploads land in `{root}/Manual` and activate
 immediately when valid; they do not pause the Quartz schedule.
 
-```sh
-./mvnw spring-boot:run \
-  -Dspring-boot.run.arguments="--timesheet.sync.enabled=true --timesheet.sync.kind=all --server.port=0"
-```
-
-`kind` is `daily`, `monthly`, or `all` (default). The one-shot CLI still reads
-SharePoint via Microsoft Graph. Recurring sync uses Quartz when
-`timesheet.sync.schedule.enabled=true` (`TIMESHEET_SYNC_SCHEDULE_ENABLED`).
-Cron is system configuration only.
+Recurring sync uses Quartz when `timesheet.sync.daily.enabled` or
+`timesheet.sync.monthly.enabled` is true. Cron is system configuration only.
 
 | Property | Default | Purpose |
 | --- | --- | --- |
-| `rst.sharepoint.root` | `4.RST/2.UAT` (UAT) / `4.RST/3.Production` (prod) | RST folder (`Daily`, `Monthly`, `Manual`, `Template`, `Process`) |
-| `timesheet.process.source` | `classpath` | GBS Process catalog (`classpath` mock; `sharepoint` reserved) |
-| `timesheet.process.classpath-location` | `GBS Process.csv` | Classpath CSV used while SharePoint is not wired |
-| `timesheet.sync.schedule.enabled` | `false` | Register Quartz jobs from application config |
-| `timesheet.sync.schedule.daily-cron` | `0 0 6 * * ?` | Daily Quartz cron (`TIMESHEET_SYNC_DAILY_CRON`) |
-| `timesheet.sync.schedule.monthly-cron` | `0 30 6 * * ?` | Monthly Quartz cron (`TIMESHEET_SYNC_MONTHLY_CRON`) |
+| `timesheet.sharepoint.site` | `…/sites/CMA-SharedKPIAutomation` | Timesheet document-library site |
+| `timesheet.sharepoint.library` | `Timesheet` | Document library display name |
+| `timesheet.sharepoint.root` | `4.RST/2.UAT` / `4.RST/2.PRE` / `4.RST/3.Production` | RST folder (`Daily`, `Monthly`, `Manual`, `Template`) |
+| `timesheet.sync.daily.enabled` | `false` | Register Daily Quartz job |
+| `timesheet.sync.daily.cron` | `0 0 6 * * ?` | Daily Quartz cron |
+| `timesheet.sync.monthly.enabled` | `false` | Register Monthly Quartz job |
+| `timesheet.sync.monthly.cron` | `0 30 6 * * ?` | Monthly Quartz cron |
+| `process.remote` | `false` (`true` in pre / prod) | GBS Process from SharePoint list when true |
+| `process.classpath-location` | `timesheet/GBS Process.csv` | Local catalog; ignored when `remote=true` |
+| `process.sharepoint.site` | `…/sites/CMA-GlobalBusinessServices` | Site that hosts the GBS Process list |
+| `process.sharepoint.list` | `GBS Process` | SharePoint list display name |
 
 Same `driveItemId` + `etag` on the same business date, or the same content
 hash, skips cutover. An older filename date than the ACTIVE snapshot is also

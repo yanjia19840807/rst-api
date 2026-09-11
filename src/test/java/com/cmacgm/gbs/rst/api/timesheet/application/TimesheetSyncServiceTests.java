@@ -23,7 +23,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
-import com.cmacgm.gbs.rst.api.graph.RstSharePointProperties;
+import com.cmacgm.gbs.rst.api.timesheet.config.TimesheetSharePointProperties;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSourceResolver.Source;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
@@ -75,7 +75,7 @@ class TimesheetSyncServiceTests {
         TimesheetPositionRepository positions = unusedRepository(TimesheetPositionRepository.class);
 
         TimesheetSourceResolver sources = new TimesheetSourceResolver(
-                new RstSharePointProperties("4.RST/2.UAT"), null) {
+                new TimesheetSharePointProperties(null, null, "4.RST/2.UAT"), null) {
             @Override
             public Source open(String kind) {
                 assertThat(kind).isEqualTo("MONTHLY");
@@ -141,7 +141,7 @@ class TimesheetSyncServiceTests {
         UUID firstId = first.id();
 
         TimesheetSourceResolver replacement = new TimesheetSourceResolver(
-                new RstSharePointProperties("4.RST/2.UAT"), null) {
+                new TimesheetSharePointProperties(null, null, "4.RST/2.UAT"), null) {
             @Override
             public Source open(String kind) {
                 String csv =
@@ -211,7 +211,7 @@ class TimesheetSyncServiceTests {
                 2026-05,EMP-1,S00000001,Agent One,s00000001@dev.local,EMP-POS-1,SUP-1,S00000002,Supervisor One,POS-SUP-1,SRM-1,S00000003,Manager One,POS-SRM-1,DH-1,S00000004,Head One,POS-DH-1,GBS CHINA INDIA,Site A,Finance,PL1,PL2,PL3,PL3 Name,CMA,MY,4,production,productive
                 """;
         TimesheetSourceResolver manual = new TimesheetSourceResolver(
-                new RstSharePointProperties("4.RST/2.UAT"), null) {
+                new TimesheetSharePointProperties(null, null, "4.RST/2.UAT"), null) {
             @Override
             public Source storeManual(String uploadedName, byte[] content) {
                 return new Source(
@@ -294,7 +294,7 @@ class TimesheetSyncServiceTests {
                     default -> unsupported(method);
                 });
         TimesheetSourceResolver sources = new TimesheetSourceResolver(
-                new RstSharePointProperties("4.RST/2.UAT"), null) {
+                new TimesheetSharePointProperties(null, null, "4.RST/2.UAT"), null) {
             @Override
             public Source open(String kind) {
                 String csv =
@@ -343,7 +343,7 @@ class TimesheetSyncServiceTests {
         AtomicInteger mails = new AtomicInteger();
         List<TimesheetSyncIssue> savedIssues = new ArrayList<>();
         TimesheetSourceResolver sources = new TimesheetSourceResolver(
-                new RstSharePointProperties("4.RST/2.UAT"), null) {
+                new TimesheetSharePointProperties(null, null, "4.RST/2.UAT"), null) {
             @Override
             public Source open(String kind) {
                 String csv =

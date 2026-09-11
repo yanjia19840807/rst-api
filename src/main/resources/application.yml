@@ -1,12 +1,22 @@
+# Env keys consumed here (see .env.example). Unknown keys in .env are ignored.
+# DB_URL DB_USERNAME DB_PASSWORD
+# CORS_ALLOWED_ORIGINS SESSION_COOKIE_SECURE
+# AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_REDIRECT_URI SSO_ENV
+# MS_GRAPH_CLIENT_ID MS_GRAPH_CLIENT_SECRET MS_GRAPH_TENANT_ID MS_GRAPH_SECRET_NAME
+# TIMESHEET_SHAREPOINT_SITE TIMESHEET_SHAREPOINT_LIBRARY TIMESHEET_SHAREPOINT_ROOT
+# TIMESHEET_SYNC_DAILY_ENABLED TIMESHEET_SYNC_DAILY_CRON
+# TIMESHEET_SYNC_MONTHLY_ENABLED TIMESHEET_SYNC_MONTHLY_CRON
+# PROCESS_REMOTE PROCESS_CLASSPATH PROCESS_SHAREPOINT_SITE PROCESS_SHAREPOINT_LIST
+# MAIL_ENABLED MAIL_REDIRECT_TO MAIL_FROM FORECAST_*
 spring:
   application:
     name: rst-api
-  # Local `main` / `spring-boot:run` → application-dev.yml.
-  # Deployed hosts must set SPRING_PROFILES_ACTIVE to uat | pre | prod.
-  profiles:
-    default: dev
+  # Import .env first so SPRING_PROFILES_ACTIVE in that file can activate a profile.
+  # Official hosts also export it as a process env. Local default is still dev.
   config:
     import: optional:file:.env[.properties]
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/rst}
     username: ${DB_USERNAME:postgres}
@@ -37,6 +47,7 @@ server:
     max-swallow-size: 25MB
   servlet:
     session:
+      timeout: 8h
       cookie:
         http-only: true
         same-site: lax
@@ -70,38 +81,41 @@ app:
       redirect-uri: ${AZURE_REDIRECT_URI:}
       env: ${SSO_ENV:}
 
-rst:
-  forecast:
-    base-url: ${RST_FORECAST_BASE_URL:http://localhost:8000}
-    connect-timeout-ms: ${RST_FORECAST_CONNECT_TIMEOUT_MS:3000}
-    read-timeout-ms: ${RST_FORECAST_READ_TIMEOUT_MS:60000}
-    enabled: ${RST_FORECAST_ENABLED:true}
-    confidence-level: ${RST_FORECAST_CONFIDENCE:0.95}
-  mail:
-    enabled: ${RST_MAIL_ENABLED:false}
-    redirect-to: ${RST_MAIL_REDIRECT_TO:}
-  sharepoint:
-    root: ${RST_SHAREPOINT_ROOT:4.RST/2.UAT}
-
 timesheet:
-  process:
-    source: ${TIMESHEET_PROCESS_SOURCE:classpath}
-    classpath-location: ${TIMESHEET_PROCESS_CLASSPATH:GBS Process.csv}
+  sharepoint:
+    site: ${TIMESHEET_SHAREPOINT_SITE:https://cmacgmgroup.sharepoint.com/sites/CMA-SharedKPIAutomation}
+    library: ${TIMESHEET_SHAREPOINT_LIBRARY:Timesheet}
+    root: ${TIMESHEET_SHAREPOINT_ROOT:4.RST/2.UAT}
   sync:
-    enabled: false
-    kind: all
-    schedule:
-      enabled: ${TIMESHEET_SYNC_SCHEDULE_ENABLED:false}
-      daily-cron: ${TIMESHEET_SYNC_DAILY_CRON:0 0 6 * * ?}
-      monthly-cron: ${TIMESHEET_SYNC_MONTHLY_CRON:0 30 6 * * ?}
+    daily:
+      enabled: ${TIMESHEET_SYNC_DAILY_ENABLED:false}
+      cron: ${TIMESHEET_SYNC_DAILY_CRON:0 0 6 * * ?}
+    monthly:
+      enabled: ${TIMESHEET_SYNC_MONTHLY_ENABLED:false}
+      cron: ${TIMESHEET_SYNC_MONTHLY_CRON:0 30 6 * * ?}
+
+process:
+  remote: ${PROCESS_REMOTE:false}
+  classpath-location: ${PROCESS_CLASSPATH:timesheet/GBS Process.csv}
+  sharepoint:
+    site: ${PROCESS_SHAREPOINT_SITE:https://cmacgmgroup.sharepoint.com/sites/CMA-GlobalBusinessServices}
+    list: ${PROCESS_SHAREPOINT_LIST:GBS Process}
+
+mail:
+  enabled: ${MAIL_ENABLED:false}
+  redirect-to: ${MAIL_REDIRECT_TO:}
+  from: ${MAIL_FROM:GBS.TIMESHEET@cma-cgm.com}
+
+forecast:
+  base-url: ${FORECAST_BASE_URL:http://localhost:8000}
+  connect-timeout-ms: ${FORECAST_CONNECT_TIMEOUT_MS:3000}
+  read-timeout-ms: ${FORECAST_READ_TIMEOUT_MS:60000}
+  enabled: ${FORECAST_ENABLED:true}
+  confidence-level: ${FORECAST_CONFIDENCE:0.95}
 
 microsoft:
   graph:
-    enabled: ${MS_GRAPH_ENABLED:false}
     secret-name: ${MS_GRAPH_SECRET_NAME:timesheet-prd-microsoft-graph-credentials}
     tenant-id: ${MS_GRAPH_TENANT_ID:${AZURE_TENANT_ID:9d314297-75dc-4329-8f94-a66489b4b9bb}}
     client-id: ${MS_GRAPH_CLIENT_ID:}
     client-secret: ${MS_GRAPH_CLIENT_SECRET:}
-    sharepoint-site: ${MS_GRAPH_SHAREPOINT_SITE:https://cmacgmgroup.sharepoint.com/sites/CMA-SharedKPIAutomation}
-    list-name: ${MS_GRAPH_LIST_NAME:Timesheet}
-    from-mail: ${MS_GRAPH_FROM_MAIL:GBS.TIMESHEET@cma-cgm.com}

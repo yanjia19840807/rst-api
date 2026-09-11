@@ -58,7 +58,7 @@ public class TimesheetSyncAlertNotifier {
             return;
         }
         if (mail == null || !mail.outgoingEnabled()) {
-            log.info("Timesheet fail email skipped: rst.mail.enabled is false");
+            log.info("Timesheet fail email skipped: mail.enabled is false");
             return;
         }
         CompletableFuture.runAsync(() -> {

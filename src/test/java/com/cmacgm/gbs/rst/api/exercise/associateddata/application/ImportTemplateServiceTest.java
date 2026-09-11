@@ -7,18 +7,19 @@ import org.junit.jupiter.api.Test;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.ImportTemplateService.Kind;
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphProperties;
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphService;
-import com.cmacgm.gbs.rst.api.graph.RstSharePointProperties;
+import com.cmacgm.gbs.rst.api.mail.application.MailProperties;
+import com.cmacgm.gbs.rst.api.timesheet.config.TimesheetSharePointProperties;
 
 class ImportTemplateServiceTest {
 
     @Test
-    void download_fallsBackToGeneratedBlankWhenGraphIsOff() {
-        MicrosoftGraphProperties graphOff = new MicrosoftGraphProperties(
-                false, null, "", "", "", null, null, null);
+    void download_fallsBackToGeneratedBlankWhenGraphCredentialsMissing() {
+        MicrosoftGraphProperties graphOff = new MicrosoftGraphProperties(null, "", "", "");
+        TimesheetSharePointProperties sharePoint = new TimesheetSharePointProperties(null, null, null);
         ImportTemplateService templates = new ImportTemplateService(
-                new RstSharePointProperties(null),
+                sharePoint,
                 graphOff,
-                new MicrosoftGraphService(graphOff),
+                new MicrosoftGraphService(graphOff, sharePoint, new MailProperties(false, null, null)),
                 new HolidayExcelService(),
                 new VolumeExcelService(),
                 new SupportExcelService());

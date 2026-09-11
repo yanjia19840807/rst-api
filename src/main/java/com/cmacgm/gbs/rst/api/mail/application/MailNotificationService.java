@@ -29,7 +29,7 @@ public class MailNotificationService {
     private final MailPreferenceService preferences;
     private final MailAddressLookup addresses;
     private final MicrosoftGraphService graph;
-    private final RstMailProperties mailSettings;
+    private final MailProperties mailSettings;
 
     /**
      * @param profiles LTH / ADMIN directory
@@ -43,7 +43,7 @@ public class MailNotificationService {
             MailPreferenceService preferences,
             MailAddressLookup addresses,
             MicrosoftGraphService graph,
-            RstMailProperties mailSettings) {
+            MailProperties mailSettings) {
         this.profiles = profiles;
         this.preferences = preferences;
         this.addresses = addresses;
@@ -178,7 +178,7 @@ public class MailNotificationService {
             return;
         }
         if (!outgoingEnabled()) {
-            log.info("RST mail skipped: rst.mail.enabled is false");
+            log.info("RST mail skipped: mail.enabled is false");
             return;
         }
         List<String> intended = new ArrayList<>();
@@ -207,7 +207,7 @@ public class MailNotificationService {
     }
 
     /**
-     * Sends already-resolved addresses. Honors {@code rst.mail.enabled} and {@code redirect-to}.
+     * Sends already-resolved addresses. Honors {@code mail.enabled} and {@code redirect-to}.
      *
      * @param subject subject
      * @param html body
@@ -215,7 +215,7 @@ public class MailNotificationService {
      */
     public void sendAddresses(String subject, String html, List<String> to) {
         if (!outgoingEnabled()) {
-            log.info("RST mail skipped: rst.mail.enabled is false");
+            log.info("RST mail skipped: mail.enabled is false");
             return;
         }
         if (to == null || to.isEmpty()) {

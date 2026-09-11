@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphModels.GraphDriveItem;
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphService;
-import com.cmacgm.gbs.rst.api.graph.RstSharePointProperties;
+import com.cmacgm.gbs.rst.api.timesheet.config.TimesheetSharePointProperties;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportName.Parsed;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 
@@ -23,14 +23,14 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 @Component
 public class TimesheetSourceResolver {
 
-    private final RstSharePointProperties sharePoint;
+    private final TimesheetSharePointProperties sharePoint;
     private final MicrosoftGraphService graph;
 
     /**
-     * @param sharePoint RST SharePoint folders
+     * @param sharePoint Timesheet SharePoint folders
      * @param graph Graph client
      */
-    public TimesheetSourceResolver(RstSharePointProperties sharePoint, MicrosoftGraphService graph) {
+    public TimesheetSourceResolver(TimesheetSharePointProperties sharePoint, MicrosoftGraphService graph) {
         this.sharePoint = sharePoint;
         this.graph = graph;
     }

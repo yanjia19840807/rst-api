@@ -11,7 +11,6 @@ import org.quartz.TriggerBuilder;
 import org.quartz.TriggerKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
@@ -21,7 +20,6 @@ import jakarta.annotation.PostConstruct;
  * Registers Daily and Monthly Timesheet jobs from application configuration.
  */
 @Component
-@ConditionalOnProperty(prefix = "timesheet.sync.schedule", name = "enabled", havingValue = "true")
 public class TimesheetQuartzScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(TimesheetQuartzScheduler.class);
@@ -33,7 +31,7 @@ public class TimesheetQuartzScheduler {
 
     /**
      * @param scheduler Quartz
-     * @param properties system cron rules
+     * @param properties daily / monthly cron rules
      * @param applicationContext used by TimesheetSyncJob
      */
     public TimesheetQuartzScheduler(
@@ -44,7 +42,7 @@ public class TimesheetQuartzScheduler {
     }
 
     /**
-     * Registers Daily and Monthly triggers from configuration.
+     * Registers enabled Daily and Monthly triggers.
      */
     @PostConstruct
     public void apply() {
@@ -53,30 +51,34 @@ public class TimesheetQuartzScheduler {
         } catch (SchedulerException ex) {
             throw new IllegalStateException("Unable to bind Timesheet Quartz context", ex);
         }
-        TimesheetSyncProperties.Schedule schedule = properties.getSchedule();
-        register("DAILY", schedule.getDailyCron());
-        register("MONTHLY", schedule.getMonthlyCron());
+        register("DAILY", properties.getDaily());
+        register("MONTHLY", properties.getMonthly());
     }
 
-    private void register(String kind, String cronExpression) {
+    private void register(String kind, TimesheetSyncProperties.Job job) {
         JobKey jobKey = JobKey.jobKey(kind, GROUP);
         try {
             scheduler.deleteJob(jobKey);
+            if (job == null || !job.isEnabled()) {
+                log.info("Timesheet Quartz {} skipped: disabled", kind);
+                return;
+            }
+            String cronExpression = job.getCron();
             if (cronExpression == null || cronExpression.isBlank()) {
                 log.info("Timesheet Quartz {} skipped: cron is blank", kind);
                 return;
             }
-            JobDetail job = JobBuilder.newJob(TimesheetSyncJob.class)
+            JobDetail detail = JobBuilder.newJob(TimesheetSyncJob.class)
                     .withIdentity(jobKey)
                     .usingJobData("kind", kind)
                     .storeDurably()
                     .build();
             Trigger trigger = TriggerBuilder.newTrigger()
                     .withIdentity(TriggerKey.triggerKey(kind, GROUP))
-                    .forJob(job)
+                    .forJob(detail)
                     .withSchedule(CronScheduleBuilder.cronSchedule(cronExpression.trim()))
                     .build();
-            scheduler.scheduleJob(job, trigger);
+            scheduler.scheduleJob(detail, trigger);
             log.info("Timesheet Quartz {} cron={}", kind, cronExpression);
         } catch (SchedulerException ex) {
             throw new IllegalStateException("Unable to schedule Timesheet " + kind, ex);

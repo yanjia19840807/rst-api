@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +20,8 @@ import com.cmacgm.gbs.rst.api.exercise.associateddata.application.ImportTemplate
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.SupportExcelService;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.VolumeExcelService;
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphModels.GraphDriveItem;
+import com.cmacgm.gbs.rst.api.mail.application.MailProperties;
+import com.cmacgm.gbs.rst.api.timesheet.config.TimesheetSharePointProperties;
 
 /**
  * Live Graph write into the UAT RST output folders. Skips when tenant/secret are absent.
@@ -61,6 +64,26 @@ class MicrosoftGraphRstFolderIT {
                 DOT_ENV.putIfAbsent(key, value);
             }
         }
+    }
+
+    @Test
+    void writesProbeFileToManualFolder() {
+        MicrosoftGraphService graph = liveGraph();
+        assumeTrue(graph != null, "Microsoft Graph credentials are incomplete.");
+
+        TimesheetSharePointProperties sharePoint = liveSharePoint();
+        String folder = sharePoint.manualFolder();
+        GraphDriveItem folderItem = graph.ensureFolder(folder);
+        assertThat(folderItem.isFolder()).as(folder + " must be a folder").isTrue();
+
+        String fileName = "rst-graph-write-probe.txt";
+        byte[] body = ("rst-api write probe " + Instant.now()).getBytes(StandardCharsets.UTF_8);
+        GraphDriveItem uploaded = graph.putDriveItemContent(
+                folder, fileName, body, MediaType.TEXT_PLAIN);
+        assertThat(uploaded.name()).isEqualTo(fileName);
+        assertThat(uploaded.isFile()).isTrue();
+        assertThat(uploaded.size()).isEqualTo(body.length);
+        assertThat(graph.getFileBytes(folder, fileName)).isEqualTo(body);
     }
 
     @Test
@@ -144,18 +167,25 @@ class MicrosoftGraphRstFolderIT {
                 "Set AZURE_TENANT_ID in rst-api/.env");
         assumeTrue(hasText(env("MS_GRAPH_CLIENT_SECRET")), "Set MS_GRAPH_CLIENT_SECRET in rst-api/.env");
         MicrosoftGraphProperties properties = new MicrosoftGraphProperties(
-                true,
                 envOr("MS_GRAPH_SECRET_NAME", "timesheet-prd-microsoft-graph-credentials"),
                 envOr("MS_GRAPH_TENANT_ID", env("AZURE_TENANT_ID")),
                 envOr("MS_GRAPH_CLIENT_ID", "2b5ec0be-1344-4161-80f5-b7674d74f019"),
-                env("MS_GRAPH_CLIENT_SECRET"),
-                envOr("MS_GRAPH_SHAREPOINT_SITE", "https://cmacgmgroup.sharepoint.com/sites/CMA-SharedKPIAutomation"),
-                envOr("MS_GRAPH_LIST_NAME", "Timesheet"),
-                envOr("MS_GRAPH_FROM_MAIL", "GBS.TIMESHEET@cma-cgm.com"));
+                env("MS_GRAPH_CLIENT_SECRET"));
         if (!properties.hasCredentials()) {
             return null;
         }
-        return new MicrosoftGraphService(properties);
+        TimesheetSharePointProperties sharePoint = liveSharePoint();
+        return new MicrosoftGraphService(
+                properties,
+                sharePoint,
+                new MailProperties(false, null, envOr("MAIL_FROM", "GBS.TIMESHEET@cma-cgm.com")));
+    }
+
+    private static TimesheetSharePointProperties liveSharePoint() {
+        return new TimesheetSharePointProperties(
+                envOr("TIMESHEET_SHAREPOINT_SITE", "https://cmacgmgroup.sharepoint.com/sites/CMA-SharedKPIAutomation"),
+                envOr("TIMESHEET_SHAREPOINT_LIBRARY", "Timesheet"),
+                envOr("TIMESHEET_SHAREPOINT_ROOT", "4.RST/2.UAT"));
     }
 
     private static Path localReport(String fileName) {

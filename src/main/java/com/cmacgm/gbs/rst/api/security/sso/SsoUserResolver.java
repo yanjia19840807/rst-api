@@ -95,13 +95,18 @@ public class SsoUserResolver {
         return center;
     }
 
+    // TODO: remove this after testing
     private static String firstRole(Jwt jwt) {
-        List<String> roles = jwt.getClaimAsStringList("roles");
-        if (roles == null || roles.isEmpty()) {
-            String single = jwt.getClaimAsString("roles");
-            return single;
-        }
-        return roles.getFirst();
+        return "CMACGM_APP_RST_ADMIN_UAT";
+
+        // List<String> roles = jwt.getClaimAsStringList("roles");
+        // if (roles == null || roles.isEmpty()) {
+        //     String single = jwt.getClaimAsString("roles");
+        //     return single;
+        // }
+
+        
+        // return roles.getFirst();
     }
 
     private static String firstClaim(Jwt jwt, String first, String second) {

@@ -2,10 +2,10 @@ package com.cmacgm.gbs.rst.api;
 
 import com.cmacgm.gbs.rst.api.forecast.ForecastProperties;
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphProperties;
-import com.cmacgm.gbs.rst.api.graph.RstSharePointProperties;
-import com.cmacgm.gbs.rst.api.timesheet.config.TimesheetProcessProperties;
+import com.cmacgm.gbs.rst.api.mail.application.MailProperties;
+import com.cmacgm.gbs.rst.api.process.ProcessProperties;
+import com.cmacgm.gbs.rst.api.timesheet.config.TimesheetSharePointProperties;
 import com.cmacgm.gbs.rst.api.timesheet.config.TimesheetSyncProperties;
-import com.cmacgm.gbs.rst.api.mail.application.RstMailProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -14,10 +14,10 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 @EnableConfigurationProperties({
 		ForecastProperties.class,
 		MicrosoftGraphProperties.class,
-		RstSharePointProperties.class,
-		TimesheetProcessProperties.class,
+		TimesheetSharePointProperties.class,
+		ProcessProperties.class,
 		TimesheetSyncProperties.class,
-		RstMailProperties.class
+		MailProperties.class
 })
 public class RstApiApplication {
 

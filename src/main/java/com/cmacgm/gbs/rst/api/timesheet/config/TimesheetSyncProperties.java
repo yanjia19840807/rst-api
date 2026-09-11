@@ -1,71 +1,50 @@
 package com.cmacgm.gbs.rst.api.timesheet.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 /**
- * Timesheet sync CLI settings. SharePoint folders come from {@code rst.sharepoint}.
+ * Quartz schedule for Daily and Monthly SharePoint sync.
  */
 @ConfigurationProperties(prefix = "timesheet.sync")
 public class TimesheetSyncProperties {
 
-    /**
-     * When true, the application runs a sync and exits.
-     */
-    private boolean enabled;
+    @NestedConfigurationProperty
+    private Job daily = new Job("0 0 6 * * ?");
+    @NestedConfigurationProperty
+    private Job monthly = new Job("0 30 6 * * ?");
 
-    /**
-     * Kind to sync from CLI: daily, monthly, or all.
-     */
-    private String kind = "all";
-
-    /**
-     * Recurring Quartz schedule. Operators set this in config, not in the UI.
-     */
-    private Schedule schedule = new Schedule();
-
-    public boolean isEnabled() {
-        return enabled;
+    public Job getDaily() {
+        return daily;
     }
 
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
+    public void setDaily(Job daily) {
+        this.daily = daily == null ? new Job("0 0 6 * * ?") : daily;
     }
 
-    public String getKind() {
-        return kind;
+    public Job getMonthly() {
+        return monthly;
     }
 
-    public void setKind(String kind) {
-        this.kind = kind;
-    }
-
-    public Schedule getSchedule() {
-        return schedule;
-    }
-
-    public void setSchedule(Schedule schedule) {
-        this.schedule = schedule == null ? new Schedule() : schedule;
+    public void setMonthly(Job monthly) {
+        this.monthly = monthly == null ? new Job("0 30 6 * * ?") : monthly;
     }
 
     /**
-     * Quartz registration for Daily and Monthly SharePoint sync.
+     * One timed SharePoint sync job.
      */
-    public static class Schedule {
+    public static class Job {
 
-        /**
-         * When true, Quartz registers the configured cron jobs.
-         */
         private boolean enabled;
+        private String cron;
 
-        /**
-         * Quartz cron for Daily SharePoint sync.
-         */
-        private String dailyCron = "0 0 6 * * ?";
+        public Job() {
+            this("0 0 6 * * ?");
+        }
 
-        /**
-         * Quartz cron for Monthly SharePoint sync.
-         */
-        private String monthlyCron = "0 30 6 * * ?";
+        public Job(String cron) {
+            this.cron = cron;
+        }
 
         public boolean isEnabled() {
             return enabled;
@@ -75,20 +54,12 @@ public class TimesheetSyncProperties {
             this.enabled = enabled;
         }
 
-        public String getDailyCron() {
-            return dailyCron;
+        public String getCron() {
+            return cron;
         }
 
-        public void setDailyCron(String dailyCron) {
-            this.dailyCron = dailyCron;
-        }
-
-        public String getMonthlyCron() {
-            return monthlyCron;
-        }
-
-        public void setMonthlyCron(String monthlyCron) {
-            this.monthlyCron = monthlyCron;
+        public void setCron(String cron) {
+            this.cron = cron == null || cron.isBlank() ? null : cron.trim();
         }
     }
 }
