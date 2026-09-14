@@ -161,19 +161,6 @@ public final class SlotMath {
         return nz(teamCapacitySum).divide(manual, MC).setScale(6, RoundingMode.HALF_UP);
     }
 
-    /**
-     * Applicability On when calendar SLA ≤ 24h, or business-hours SLA ≤ 8h.
-     */
-    public static boolean applicabilityOn(String slaType, BigDecimal slaTurnaroundMinutes) {
-        if (slaTurnaroundMinutes == null || slaTurnaroundMinutes.signum() <= 0) {
-            return false;
-        }
-        String type = slaType == null ? "" : slaType.trim().toUpperCase();
-        boolean businessHours = type.contains("BUSINESS") || type.contains("BH");
-        BigDecimal limit = BigDecimal.valueOf(businessHours ? 8 * 60 : 24 * 60);
-        return slaTurnaroundMinutes.compareTo(limit) <= 0;
-    }
-
     /** Number of 30-min (or slot) steps allowed before volume ages out of SLA. */
     public static int slaSlotLimit(BigDecimal slaTurnaroundMinutes, int slotMinutes) {
         if (slaTurnaroundMinutes == null || slaTurnaroundMinutes.signum() <= 0 || slotMinutes <= 0) {

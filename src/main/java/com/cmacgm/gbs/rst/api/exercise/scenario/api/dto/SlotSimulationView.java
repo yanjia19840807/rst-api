@@ -19,7 +19,6 @@ public record SlotSimulationView(
         BigDecimal tatOnPeriod,
         BigDecimal actualVsTheoretical,
         int shiftCount,
-        boolean applicability,
         BigDecimal slaTargetRatio,
         List<SlotRowView> rows,
         SlotChartView chart) {

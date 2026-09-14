@@ -262,8 +262,6 @@ public class SlotSimulationService {
         List<SlotShift> shiftRows = toSlotShifts(scenario);
         ExerciseTeamSetup team = teamSetups.findById(exerciseId).orElse(null);
         Map<String, List<BigDecimal>> shiftSeries = rebuildShiftSeries(rows, shiftRows);
-        boolean applicability = team != null
-                && SlotMath.applicabilityOn(team.getSlaType(), team.getSlaTurnaroundMinutes());
         BigDecimal slaTarget = team == null ? null : team.getSlaTargetRatio();
 
         return new SlotSimulationView(
@@ -277,7 +275,6 @@ public class SlotSimulationService {
                 tatOnPeriod,
                 actualVs,
                 shiftRows.size(),
-                applicability,
                 slaTarget,
                 rowViews,
                 new SlotChartView(labels, theoretical, shiftSeries, cumulativeTat));
@@ -400,12 +397,10 @@ public class SlotSimulationService {
         }
         BigDecimal tatOnPeriod = SlotMath.tat(outsideSum, manualSum);
         BigDecimal actualVs = SlotMath.actualVsTheoretical(capacitySum, manualSum);
-        boolean applicability = SlotMath.applicabilityOn(ctx.slaType(), ctx.slaTurnaroundMinutes());
         return new Computed(
                 rows,
                 tatOnPeriod,
                 actualVs,
-                applicability,
                 new SlotChartView(labels, theoreticalSeries, shiftSeries, tatSeries));
     }
 
@@ -466,7 +461,6 @@ public class SlotSimulationService {
                 automation,
                 availability,
                 cycleTime,
-                team.getSlaType(),
                 slaMinutes,
                 team.getSlaTargetRatio());
     }
@@ -485,7 +479,6 @@ public class SlotSimulationService {
                 computed.tatOnPeriod(),
                 computed.actualVsTheoretical(),
                 shiftCount,
-                computed.applicability(),
                 slaTargetRatio,
                 rowViews,
                 computed.chart());
@@ -563,7 +556,6 @@ public class SlotSimulationService {
             BigDecimal automationRatio,
             BigDecimal availabilityRatio,
             BigDecimal cycleTimeSeconds,
-            String slaType,
             BigDecimal slaTurnaroundMinutes,
             BigDecimal slaTargetRatio) {
     }
@@ -580,7 +572,6 @@ public class SlotSimulationService {
             List<SlotSimulationResult> rows,
             BigDecimal tatOnPeriod,
             BigDecimal actualVsTheoretical,
-            boolean applicability,
             SlotChartView chart) {
     }
 }

@@ -18,11 +18,6 @@ class SlotMathTests {
     }
 
     @Test
-    void applicabilityOnAcceptsFractionalBusinessHoursSla() {
-        assertThat(SlotMath.applicabilityOn("BUSINESS_HOURS", new BigDecimal("0.5"))).isTrue();
-    }
-
-    @Test
     void withinShiftAcceptsFractionalDuration() {
         assertThat(SlotMath.withinShift(
                 java.time.LocalTime.of(9, 0),
