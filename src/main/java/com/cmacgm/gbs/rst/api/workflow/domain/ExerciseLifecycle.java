@@ -29,7 +29,7 @@ public final class ExerciseLifecycle {
      * Last process outcome for the public submissionStatus field.
      *
      * @param process current process, or null when never submitted
-     * @return OPEN / APPROVED / RETURNED / WITHDRAWN, or null
+     * @return OPEN / APPROVED / RETURNED, or null
      */
     public static String submissionStatus(ProcessInstance process) {
         if (process == null) {
@@ -48,10 +48,6 @@ public final class ExerciseLifecycle {
 
     public static boolean canSubmit(boolean hasOfficial, ProcessInstance process) {
         return hasOfficial && canEdit(process);
-    }
-
-    public static boolean canWithdraw(ProcessInstance process) {
-        return process != null && process.isAwaitingReview();
     }
 
     public static boolean isUnderReview(ProcessInstance process) {

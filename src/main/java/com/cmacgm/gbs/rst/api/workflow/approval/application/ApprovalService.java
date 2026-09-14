@@ -67,7 +67,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Approver queue, review detail, Approve/Return, and Supervisor Withdraw.
+ * Approver queue, review detail, Approve, and Return.
  */
 @Service
 public class ApprovalService {
@@ -413,7 +413,7 @@ public class ApprovalService {
         actor.applyHandler(Handler.from(principal));
         Instant now = clock.instant();
         loaded.workflow().returnToSupervisor(actor, request.comments(), requestId, now);
-        reopenExercise(loaded, principal.ccgid(), now, true);
+        reopenExercise(loaded, principal.ccgid(), now);
         persist(loaded);
         mail.notifyOwner(
                 OwnerOutcome.RETURNED,
@@ -436,61 +436,12 @@ public class ApprovalService {
     }
 
     /**
-     * Withdraws an UNDER_REVIEW submission as Supervisor. The process stays OPEN
-     * so the Exercise can be edited and submitted again.
-     *
-     * @param ownerCcgid Supervisor CCGID
-     * @param exerciseId Exercise id
-     * @return review detail after withdraw
-     */
-    @Transactional
-    public ApprovalDetailView withdraw(String ownerCcgid, UUID exerciseId) {
-        return withdrawInternal(ownerCcgid, exerciseId, Handler.self(ownerCcgid, ownerCcgid));
-    }
-
-    /**
-     * Withdraws as the current principal (records a delegate when acting).
-     *
-     * @param principal supervisor
-     * @param exerciseId Exercise id
-     * @return review detail after withdraw
-     */
-    @Transactional
-    public ApprovalDetailView withdraw(RstPrincipal principal, UUID exerciseId) {
-        return withdrawInternal(principal.ccgid(), exerciseId, Handler.from(principal));
-    }
-
-    private ApprovalDetailView withdrawInternal(String ownerCcgid, UUID exerciseId, Handler handler) {
-        RstExercise exercise = exercises.findByIdAndOwnerCcgidAndDeletedAtIsNull(exerciseId, ownerCcgid)
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND, "exercise-not-found", "The Exercise was not found."));
-        ProcessInstance workflow = workflows.findByExerciseId(exerciseId).orElse(null);
-        if (workflow == null || !ExerciseLifecycle.canWithdraw(workflow)) {
-            throw new ApiException(
-                    HttpStatus.CONFLICT,
-                    "exercise-not-withdrawable",
-                    "Only UNDER_REVIEW Exercises can be withdrawn.");
-        }
-
-        Instant now = clock.instant();
-        workflow.withdraw(handler, UUID.randomUUID(), now);
-        Loaded loaded = new Loaded(workflow, exercise);
-        reopenExercise(loaded, ownerCcgid, now, false);
-        persist(loaded);
-        return toDetail(loaded, null);
-    }
-
-    /**
-     * Reopens the Exercise after Return or Withdraw.
+     * Reopens the Exercise after Return.
      * Keeps the Official Scenario pointer and status; Official is only a flag.
      * Associated Data and scenario content are not rewritten.
      */
-    private void reopenExercise(Loaded loaded, String actorCcgid, Instant now, boolean returned) {
-        if (returned) {
-            loaded.exercise().markReturned(actorCcgid, now);
-        } else {
-            loaded.exercise().markWithdrawn(actorCcgid, now);
-        }
+    private void reopenExercise(Loaded loaded, String actorCcgid, Instant now) {
+        loaded.exercise().markReturned(actorCcgid, now);
     }
 
     private Loaded load(UUID submissionId) {
@@ -704,8 +655,7 @@ public class ApprovalService {
         if (workflow != null) {
             Instant fromAction = workflow.getTasks().stream()
                     .flatMap(task -> task.getActors().stream())
-                    .filter(actor -> actor.getStatus() == ActorStatus.RETURNED
-                            || actor.getStatus() == ActorStatus.WITHDRAWN)
+                    .filter(actor -> actor.getStatus() == ActorStatus.RETURNED)
                     .map(TaskActor::getActedAt)
                     .max(Instant::compareTo)
                     .orElse(exercise.getUpdatedAt());
@@ -720,9 +670,6 @@ public class ApprovalService {
         }
         if ("RETURNED".equals(submissionStatus)) {
             return "Returned";
-        }
-        if ("WITHDRAWN".equals(submissionStatus)) {
-            return "Withdrawn";
         }
         return null;
     }

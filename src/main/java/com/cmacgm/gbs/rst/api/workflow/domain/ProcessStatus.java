@@ -2,7 +2,7 @@ package com.cmacgm.gbs.rst.api.workflow.domain;
 
 /**
  * Case-level runtime state. A visit outcome lives on {@link TaskStatus}.
- * {@code OPEN} includes returned / withdrawn revision; {@code FINISHED} is
+ * {@code OPEN} includes returned revision; {@code FINISHED} is
  * LTH approve, or an Exercise that was deleted.
  */
 public enum ProcessStatus {

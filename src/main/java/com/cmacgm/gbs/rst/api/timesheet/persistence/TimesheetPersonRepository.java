@@ -168,7 +168,7 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
      * People in this Center who occupy a bindable position.
      *
      * @param center GBS center
-     * @param name optional name fragment; blank matches all
+     * @param name optional name / email / CCGID fragment; blank matches all
      * @param pageable page
      * @return people
      */
@@ -184,7 +184,8 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                       and p.positionId <> ''
                       and (:name = ''
                            or lower(p.name) like lower(concat('%', :name, '%'))
-                           or lower(p.id.ccgid) like lower(concat('%', :name, '%')))
+                           or lower(p.id.ccgid) like lower(concat('%', :name, '%'))
+                           or lower(coalesce(p.email, '')) like lower(concat('%', :name, '%')))
                     order by p.name, p.id.ccgid
                     """,
             countQuery = """
@@ -198,15 +199,16 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                       and p.positionId <> ''
                       and (:name = ''
                            or lower(p.name) like lower(concat('%', :name, '%'))
-                           or lower(p.id.ccgid) like lower(concat('%', :name, '%')))
+                           or lower(p.id.ccgid) like lower(concat('%', :name, '%'))
+                           or lower(coalesce(p.email, '')) like lower(concat('%', :name, '%')))
                     """)
     Page<TimesheetPerson> findActiveByCenter(
             @Param("center") String center, @Param("name") String name, Pageable pageable);
 
     /**
-     * Active people whose name or CCGID contains the query.
+     * Active people whose name, email or CCGID contains the query.
      *
-     * @param query name or CCGID fragment; blank matches all
+     * @param query name / email / CCGID fragment; blank matches all
      * @param pageable page
      * @return people
      */
@@ -221,7 +223,8 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                       and p.positionId <> ''
                       and (:query = ''
                            or lower(p.name) like lower(concat('%', :query, '%'))
-                           or lower(p.id.ccgid) like lower(concat('%', :query, '%')))
+                           or lower(p.id.ccgid) like lower(concat('%', :query, '%'))
+                           or lower(coalesce(p.email, '')) like lower(concat('%', :query, '%')))
                     order by p.name, p.id.ccgid
                     """,
             countQuery = """
@@ -234,7 +237,8 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                       and p.positionId <> ''
                       and (:query = ''
                            or lower(p.name) like lower(concat('%', :query, '%'))
-                           or lower(p.id.ccgid) like lower(concat('%', :query, '%')))
+                           or lower(p.id.ccgid) like lower(concat('%', :query, '%'))
+                           or lower(coalesce(p.email, '')) like lower(concat('%', :query, '%')))
                     """)
     Page<TimesheetPerson> findActiveByNameOrCcgid(@Param("query") String query, Pageable pageable);
 

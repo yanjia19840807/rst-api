@@ -13,5 +13,5 @@ public record ExerciseListView(
         int totalPages,
         List<String> toolkitNames,
         List<String> pl3Names,
-        List<String> reviewerNames) {
+        List<ExerciseReviewerOption> reviewers) {
 }

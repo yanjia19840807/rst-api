@@ -123,7 +123,7 @@ public class ProcessInstance {
     }
 
     /**
-     * Records a Submit (first or after Return / Withdraw).
+     * Records a Submit (first or after Return).
      *
      * @param actorCcgid supervisor
      * @param remarks remarks
@@ -135,7 +135,7 @@ public class ProcessInstance {
     }
 
     /**
-     * Records a Submit (first or after Return / Withdraw).
+     * Records a Submit (first or after Return).
      *
      * @param handler subject plus optional delegate
      * @param remarks remarks
@@ -150,27 +150,6 @@ public class ProcessInstance {
         ProcessTask submit = ProcessTask.submit(now);
         addTask(submit);
         submit.addActor(TaskActor.submit(handler, remarks, requestId, now));
-    }
-
-    /**
-     * Withdraws an open process from the Supervisor workbench.
-     *
-     * @param handler supervisor plus optional delegate
-     * @param requestId audit id
-     * @param now withdraw time
-     */
-    public void withdraw(Handler handler, UUID requestId, Instant now) {
-        ProcessTask current = findCurrentPendingTask().orElse(null);
-        if (current == null) {
-            return;
-        }
-        TaskActor initiator = TaskActor.pending(ActorType.INITIATOR, null, handler.subjectCcgid());
-        initiator.applyHandler(handler);
-        current.addActor(initiator);
-        initiator.withdraw(handler.subjectCcgid(), requestId, now);
-        initiator.applyHandler(handler);
-        current.complete(TaskStatus.WITHDRAWN, now);
-        this.currentStep = null;
     }
 
     /**
@@ -315,17 +294,6 @@ public class ProcessInstance {
         return last != null ? last : submittedAt;
     }
 
-    /**
-     * Withdraws an open process from the Supervisor workbench.
-     *
-     * @param ownerCcgid supervisor
-     * @param requestId audit id
-     * @param now withdraw time
-     */
-    public void withdraw(String ownerCcgid, UUID requestId, Instant now) {
-        withdraw(Handler.self(ownerCcgid, ownerCcgid), requestId, now);
-    }
-
     private void applySubmittedBy(Handler handler) {
         this.submittedByCcgid = handler.subjectCcgid();
         this.submittedByName = handler.subjectName();
@@ -357,27 +325,28 @@ public class ProcessInstance {
     /**
      * Public submissionStatus: OPEN while a reviewer is waiting, otherwise the last outcome.
      *
-     * @return OPEN / APPROVED / RETURNED / WITHDRAWN
+     * @return OPEN / APPROVED / RETURNED
      */
     public String submissionStatus() {
         if (isAwaitingReview()) {
             return "OPEN";
         }
-        return lastReviewOutcome().map(Enum::name).orElse(ProcessStatus.FINISHED.name());
+        return lastReviewOutcome().map(Enum::name).orElse("OPEN");
     }
 
     /**
      * Whether Supervisor may submit again on this instance.
      *
-     * @return true after Return or Withdraw
+     * @return true after Return, or when no finished review remains
      */
     public boolean isResubmittable() {
-        return !isAwaitingReview()
-                && lastReviewOutcome().map(TaskStatus::allowsResubmit).orElse(false);
+        return getStatus().isOpen()
+                && !isAwaitingReview()
+                && lastReviewOutcome().map(TaskStatus::allowsResubmit).orElse(true);
     }
 
     /**
-     * Latest finished review visit (approve / return / withdraw).
+     * Latest finished review visit (approve / return).
      *
      * @return optional outcome
      */

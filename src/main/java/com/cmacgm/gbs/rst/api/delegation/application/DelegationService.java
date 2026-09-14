@@ -172,7 +172,7 @@ public class DelegationService {
      * People in the grantor's Center, excluding A.
      *
      * @param principal grantor
-     * @param q name or CCGID
+     * @param q name / email / CCGID
      * @param page 1-based page
      * @param pageSize page size
      * @return candidates

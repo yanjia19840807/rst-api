@@ -5,8 +5,6 @@ import java.util.UUID;
 
 import jakarta.validation.Valid;
 
-import com.cmacgm.gbs.rst.api.workflow.approval.application.ApprovalService;
-import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.ApprovalDetailView;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.CommittedResultsStatus;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.CreateExerciseRequest;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.CreateExerciseResult;
@@ -48,20 +46,16 @@ public class ExerciseController {
 
     private final ExerciseService service;
     private final SubmissionService submissions;
-    private final ApprovalService approvals;
 
     /**
      * Creates the Exercise controller.
      *
      * @param service Exercise service
      * @param submissions Submission service
-     * @param approvals Approval service (Withdraw)
      */
-    public ExerciseController(
-            ExerciseService service, SubmissionService submissions, ApprovalService approvals) {
+    public ExerciseController(ExerciseService service, SubmissionService submissions) {
         this.service = service;
         this.submissions = submissions;
-        this.approvals = approvals;
     }
 
     /**
@@ -73,7 +67,7 @@ public class ExerciseController {
      * @param pl3Name optional exact PL3 name
      * @param workflowStatus optional exact workflow status within the tab
      * @param reviewStage optional current step ({@code SUPERVISOR} / {@code MANAGER} / {@code CDH} / {@code LTH})
-     * @param handler optional current reviewer display name
+     * @param handler optional current reviewer display name (not CCGID)
      * @param officialScenario {@code ASSIGNED} or {@code UNASSIGNED}
      * @param createdFrom optional created date from
      * @param createdTo optional created date to
@@ -311,20 +305,5 @@ public class ExerciseController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
         return submissions.submittedDetails(principal.ccgid(), id);
-    }
-
-    /**
-     * Withdraws an UNDER_REVIEW submission. The process stays OPEN for revision.
-     *
-     * @param principal authenticated owner
-     * @param id Exercise id
-     * @return review detail after withdraw
-     */
-    @PostMapping("/{id}/withdraw")
-    @PreAuthorize("hasRole('SUPERVISOR')")
-    public ApprovalDetailView withdraw(
-            @AuthenticationPrincipal RstPrincipal principal,
-            @PathVariable UUID id) {
-        return approvals.withdraw(principal, id);
     }
 }

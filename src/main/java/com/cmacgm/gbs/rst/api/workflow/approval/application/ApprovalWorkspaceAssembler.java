@@ -104,7 +104,6 @@ public class ApprovalWorkspaceAssembler {
         return switch (workflow.submissionStatus()) {
             case "APPROVED" -> new ApprovalStatusBar("APPROVED", "Approved", null, null);
             case "RETURNED" -> new ApprovalStatusBar("RETURNED", "Returned", null, null);
-            case "WITHDRAWN" -> new ApprovalStatusBar("WITHDRAWN", "Withdrawn", null, null);
             default -> new ApprovalStatusBar(
                     "NOW", workflow.submissionStatus(), waiting.step(), waiting.reviewer());
         };
@@ -192,7 +191,6 @@ public class ApprovalWorkspaceAssembler {
 
     private static String historyStep(ProcessTask task, TaskActor actor) {
         if (actor.getActorType() == ActorType.INITIATOR
-                || actor.getStatus() == ActorStatus.WITHDRAWN
                 || !task.getNode().isReview()) {
             return "Supervisor Workbench";
         }
@@ -209,7 +207,6 @@ public class ApprovalWorkspaceAssembler {
         return switch (actor.getStatus()) {
             case APPROVED -> "Approved";
             case RETURNED -> "Returned";
-            case WITHDRAWN -> "Withdrawn";
             default -> null;
         };
     }

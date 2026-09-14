@@ -40,7 +40,7 @@ public class TimesheetController {
      *
      * @param principal current user
      * @param center optional Center; defaults to the identity Center
-     * @param q optional name fragment
+     * @param q optional name / email / CCGID fragment
      * @param page 1-based page
      * @param pageSize page size
      * @return people
@@ -58,7 +58,7 @@ public class TimesheetController {
         return new PageResponse<>(
                 people.items().stream()
                         .map(person -> new TimesheetPersonView(
-                                person.positionId(), person.ccgid(), person.name()))
+                                person.positionId(), person.ccgid(), person.name(), person.email()))
                         .toList(),
                 people.page(),
                 people.pageSize(),
@@ -126,8 +126,9 @@ public class TimesheetController {
      * @param positionId emp or occupied management position
      * @param ccgid identity
      * @param name display name
+     * @param email Timesheet emp_email
      */
-    public record TimesheetPersonView(String positionId, String ccgid, String name) {
+    public record TimesheetPersonView(String positionId, String ccgid, String name, String email) {
     }
 
     private static String resolveCenter(RstPrincipal principal, String requested) {

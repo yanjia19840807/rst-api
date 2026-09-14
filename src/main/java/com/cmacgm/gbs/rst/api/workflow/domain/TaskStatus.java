@@ -6,8 +6,7 @@ package com.cmacgm.gbs.rst.api.workflow.domain;
 public enum TaskStatus {
     PENDING,
     APPROVED,
-    RETURNED,
-    WITHDRAWN;
+    RETURNED;
 
     /**
      * Whether the node is still waiting for a decision.
@@ -21,9 +20,9 @@ public enum TaskStatus {
     /**
      * Whether Supervisor may edit and submit again after this outcome.
      *
-     * @return true for return / withdraw
+     * @return true after Return
      */
     public boolean allowsResubmit() {
-        return this == RETURNED || this == WITHDRAWN;
+        return this == RETURNED;
     }
 }

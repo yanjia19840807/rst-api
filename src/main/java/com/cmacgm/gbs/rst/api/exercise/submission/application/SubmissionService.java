@@ -171,7 +171,7 @@ public class SubmissionService {
     /**
      * Submits the Official Scenario into Manager approval.
      *
-     * <p>First submit creates the workflow; after Return/Withdraw the same
+     * <p>First submit creates the workflow; after Return the same
      * instance is reopened at Manager step 1.
      */
     @Transactional

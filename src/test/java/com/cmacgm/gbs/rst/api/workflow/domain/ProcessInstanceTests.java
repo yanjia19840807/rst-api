@@ -77,7 +77,6 @@ class ProcessInstanceTests {
         assertThat(instance.isResubmittable()).isTrue();
         assertThat(ExerciseLifecycle.canEdit(instance)).isTrue();
         assertThat(ExerciseLifecycle.canDelete(instance)).isTrue();
-        assertThat(ExerciseLifecycle.canWithdraw(instance)).isFalse();
         assertThat(actor.getStatus()).isEqualTo(ActorStatus.RETURNED);
         assertThat(instance.findCurrentPendingTask()).isEmpty();
     }
@@ -112,27 +111,15 @@ class ProcessInstanceTests {
     }
 
     @Test
-    void withdrawFinishesCurrentReview() {
-        ProcessInstance instance = openAtManager();
+    void submitWithoutReviewRemainsResubmittable() {
+        ProcessInstance instance = ProcessInstance.start(
+                UUID.randomUUID(), "go", "sup1", UUID.randomUUID(), T0);
 
-        instance.withdraw("sup1", UUID.randomUUID(), T1);
-
-        assertThat(instance.getStatus()).isEqualTo(ProcessStatus.OPEN);
         assertThat(instance.isAwaitingReview()).isFalse();
         assertThat(instance.documentStatus()).isEqualTo(ExerciseLifecycle.IN_PROGRESS);
-        assertThat(instance.submissionStatus()).isEqualTo("WITHDRAWN");
+        assertThat(instance.submissionStatus()).isEqualTo("OPEN");
         assertThat(instance.isResubmittable()).isTrue();
         assertThat(ExerciseLifecycle.canEdit(instance)).isTrue();
-        assertThat(ExerciseLifecycle.canDelete(instance)).isTrue();
-        assertThat(ExerciseLifecycle.canWithdraw(instance)).isFalse();
-        ProcessTask manager = instance.getTasks().stream()
-                .filter(task -> task.getNode() == TaskNode.SR_MANAGER)
-                .reduce((a, b) -> b)
-                .orElseThrow();
-        assertThat(manager.getStatus()).isEqualTo(TaskStatus.WITHDRAWN);
-        assertThat(manager.getActors())
-                .extracting(TaskActor::getStatus)
-                .contains(ActorStatus.WITHDRAWN, ActorStatus.CANCELLED);
     }
 
     @Test

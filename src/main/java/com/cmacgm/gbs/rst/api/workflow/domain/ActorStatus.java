@@ -7,7 +7,6 @@ public enum ActorStatus {
     PENDING,
     APPROVED,
     RETURNED,
-    WITHDRAWN,
     CANCELLED;
 
     /**
@@ -25,6 +24,6 @@ public enum ActorStatus {
      * @return true when the actor has a public decision
      */
     public boolean isHistory() {
-        return this == APPROVED || this == RETURNED || this == WITHDRAWN;
+        return this == APPROVED || this == RETURNED;
     }
 }

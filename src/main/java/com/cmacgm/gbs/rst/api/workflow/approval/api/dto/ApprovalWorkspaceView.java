@@ -15,7 +15,7 @@ import java.util.UUID;
  * @param nextPositionId Timesheet position of that hop, if known
  * @param nextReviewer occupant name of that hop, if known
  * @param nextHandlerCcgid occupant CCGID of that hop, if known
- * @param history already-occurred Submit / Approve / Return / Withdraw rows
+ * @param history already-occurred Submit / Approve / Return rows
  */
 public record ApprovalWorkspaceView(
         String mode,
@@ -27,7 +27,7 @@ public record ApprovalWorkspaceView(
         String nextHandlerCcgid,
         List<ApprovalHistoryRow> history) {
 
-    /** Status strip: In progress / Now / Archived / Returned / Withdrawn. */
+    /** Status strip: In progress / Now / Archived / Returned. */
     public record ApprovalStatusBar(
             String state,
             String label,
@@ -47,7 +47,7 @@ public record ApprovalWorkspaceView(
      * @param step display name of the hop
      * @param role actor role label
      * @param actor actor display name
-     * @param decision Submitted / Approved / Returned / Withdrawn
+     * @param decision Submitted / Approved / Returned
      * @param comments action comments
      * @param completedAt when the action happened
      * @param mine true when this is the viewer's acted hop (completed mode highlight)

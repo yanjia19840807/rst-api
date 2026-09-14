@@ -281,16 +281,6 @@ public class RstExercise {
         reopenForEditing(actorCcgid, now);
     }
 
-    /**
-     * Clears validation after Withdraw while keeping the Official Scenario pointer.
-     *
-     * @param actorCcgid actor
-     * @param now update timestamp
-     */
-    public void markWithdrawn(String actorCcgid, Instant now) {
-        reopenForEditing(actorCcgid, now);
-    }
-
     private void reopenForEditing(String actorCcgid, Instant now) {
         this.validatedAt = null;
         this.updatedAt = now;

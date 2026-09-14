@@ -2,8 +2,11 @@ package com.cmacgm.gbs.rst.api.timesheet.application;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -383,9 +386,38 @@ public class TimesheetReadService {
     }
 
     /**
-     * People across centers matching name or CCGID.
+     * ACTIVE Daily people for the given CCGIDs, keyed by uppercase CCGID.
      *
-     * @param query name or CCGID fragment
+     * @param ccgids identities
+     * @return people
+     */
+    @Transactional(readOnly = true)
+    public Map<String, TimesheetPerson> findActivePeopleByCcgids(Collection<String> ccgids) {
+        if (ccgids == null || ccgids.isEmpty()) {
+            return Map.of();
+        }
+        List<String> keys = ccgids.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(value -> value.trim().toUpperCase(Locale.ROOT))
+                .distinct()
+                .toList();
+        if (keys.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, TimesheetPerson> result = new HashMap<>();
+        for (TimesheetPerson person : people.findActiveByCcgidIn(keys)) {
+            if (person.getCcgid() == null || person.getCcgid().isBlank()) {
+                continue;
+            }
+            result.put(person.getCcgid().toUpperCase(Locale.ROOT), person);
+        }
+        return result;
+    }
+
+    /**
+     * People across centers matching name, email or CCGID.
+     *
+     * @param query name / email / CCGID fragment
      * @param page 1-based page
      * @param pageSize page size
      * @return people
@@ -404,7 +436,7 @@ public class TimesheetReadService {
      * People in a Center who have a bindable position.
      *
      * @param center GBS center
-     * @param name optional name or CCGID fragment
+     * @param name optional name / email / CCGID fragment
      * @param page 1-based page
      * @param pageSize page size
      * @return people

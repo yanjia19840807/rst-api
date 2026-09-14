@@ -176,20 +176,7 @@ public class TaskActor {
     }
 
     /**
-     * Records Supervisor Withdraw on the current review task.
-     *
-     * @param ccgid supervisor
-     * @param requestId audit id
-     * @param now withdraw time
-     */
-    public void withdraw(String ccgid, UUID requestId, Instant now) {
-        this.ccgid = ccgid;
-        this.actorType = ActorType.INITIATOR;
-        decide(ActorStatus.WITHDRAWN, null, requestId, now);
-    }
-
-    /**
-     * Closes a sibling todo after or-sign / return / withdraw.
+     * Closes a sibling todo after or-sign / return.
      */
     public void cancel() {
         if (status.isPending()) {

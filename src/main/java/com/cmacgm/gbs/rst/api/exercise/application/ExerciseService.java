@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -33,6 +34,7 @@ import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseKpiView;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseListQuery;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseListView;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseResponse;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseReviewerOption;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseSubtaskView;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseToolkitView;
@@ -55,6 +57,7 @@ import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
 import com.cmacgm.gbs.rst.api.timesheet.api.dto.TimesheetAlignmentView;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetAlignment;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
 import com.cmacgm.gbs.rst.api.toolkit.persistence.ToolkitRepository;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
@@ -201,7 +204,7 @@ public class ExerciseService {
                 paged.totalPages(),
                 distinctNames(source, item -> item.snapshot().toolkit().name()),
                 distinctNames(source, item -> item.snapshot().toolkit().pl3Name()),
-                distinctNames(source, ExerciseResponse::currentReviewer));
+                reviewerOptions(progress));
     }
 
     /**
@@ -239,7 +242,7 @@ public class ExerciseService {
             throw new ApiException(
                     HttpStatus.CONFLICT,
                     "exercise-not-deletable",
-                    "The Exercise can be deleted only while it is unsubmitted, returned, or withdrawn.");
+                    "The Exercise can be deleted only while it is unsubmitted or returned.");
         }
         exercise.softDelete(ownerCcgid, clock.instant());
         exercises.save(exercise);
@@ -480,7 +483,7 @@ public class ExerciseService {
 
     /**
      * Current-step filter. {@code SUPERVISOR} is display-only (no workflow instance yet,
-     * or after Return / Withdraw). Review roles only match an open Under Review step.
+     * or after Return). Review roles only match an open Under Review step.
      */
     private static boolean matchesReviewStage(ExerciseResponse item, String reviewStage) {
         if ("SUPERVISOR".equals(reviewStage)) {
@@ -713,7 +716,7 @@ public class ExerciseService {
                 }
             }));
         });
-        Map<String, String> names = resolveDisplayNames(ccgids);
+        Map<String, TimesheetPerson> people = timesheet.findActivePeopleByCcgids(ccgids);
         Map<UUID, ReviewProgress> result = new HashMap<>();
         for (RstExercise exercise : tracked) {
             ProcessInstance workflow = workflowByExercise.get(exercise.getId());
@@ -730,6 +733,8 @@ public class ExerciseService {
                         null,
                         null,
                         returned.getComments(),
+                        null,
+                        null,
                         null));
                 continue;
             }
@@ -742,41 +747,61 @@ public class ExerciseService {
                     ? ready.getNode().roleCode()
                     : roleForStep(workflow.getCurrentStep());
             String positionId = pending == null ? null : pending.getPositionId();
+            String reviewerCcgid = pending == null ? null : pending.getCcgid();
+            TimesheetPerson person = personOf(people, reviewerCcgid);
             String reviewer = ready == null || pending == null
                     ? null
                     : firstNonBlank(
                             workflowRouter.occupantName(ready.getNode().roleCode(), positionId),
-                            displayName(names, pending.getCcgid()));
+                            personName(person, reviewerCcgid));
             Instant agingFrom = WorkflowAging.currentStepStartedAt(workflow, exercise.getSubmittedAt());
             result.put(exercise.getId(), new ReviewProgress(
                     workflow.getCurrentStep(),
                     role,
                     reviewer,
                     null,
-                    agingFrom));
+                    agingFrom,
+                    reviewerCcgid,
+                    emailOf(person)));
         }
         return result;
     }
 
-    private Map<String, String> resolveDisplayNames(Set<String> ccgids) {
-        if (ccgids == null || ccgids.isEmpty()) {
-            return Map.of();
-        }
-        Map<String, String> names = new HashMap<>();
-        for (String ccgid : ccgids) {
-            if (ccgid == null || ccgid.isBlank()) {
+    private static List<ExerciseReviewerOption> reviewerOptions(Map<UUID, ReviewProgress> progress) {
+        Map<String, ExerciseReviewerOption> unique = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (ReviewProgress item : progress.values()) {
+            if (item == null || !hasText(item.currentReviewer())) {
                 continue;
             }
-            names.put(ccgid, timesheet.displayNameByCcgid(ccgid));
+            unique.putIfAbsent(
+                    item.currentReviewer(),
+                    new ExerciseReviewerOption(
+                            item.currentReviewer(),
+                            item.currentReviewerEmail(),
+                            item.currentReviewerCcgid()));
         }
-        return names;
+        return List.copyOf(unique.values());
     }
 
-    private static String displayName(Map<String, String> names, String ccgid) {
-        if (ccgid == null) {
+    private static TimesheetPerson personOf(Map<String, TimesheetPerson> people, String ccgid) {
+        if (ccgid == null || ccgid.isBlank()) {
             return null;
         }
-        return names.get(ccgid);
+        return people.get(ccgid.trim().toUpperCase(Locale.ROOT));
+    }
+
+    private static String personName(TimesheetPerson person, String ccgid) {
+        if (person != null && person.getName() != null && !person.getName().isBlank()) {
+            return person.getName();
+        }
+        return ccgid;
+    }
+
+    private static String emailOf(TimesheetPerson person) {
+        if (person == null || person.getEmail() == null || person.getEmail().isBlank()) {
+            return null;
+        }
+        return person.getEmail().trim();
     }
 
     private static String firstNonBlank(String first, String second) {
@@ -796,7 +821,9 @@ public class ExerciseService {
             String requiredRole,
             String currentReviewer,
             String lastDecisionComment,
-            Instant agingFrom) {
+            Instant agingFrom,
+            String currentReviewerCcgid,
+            String currentReviewerEmail) {
     }
 
     private BigDecimal deliveryHc(RstExercise exercise) {
