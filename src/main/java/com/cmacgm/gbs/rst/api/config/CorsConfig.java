@@ -28,6 +28,7 @@ public class CorsConfig {
                 "Content-Type",
                 "X-Request-ID",
                 "Idempotency-Key",
+                "X-Rst-Delegation-Id",
                 "X-Dev-Role",
                 "X-Dev-Ccgid",
                 "X-Dev-Center"));
