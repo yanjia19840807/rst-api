@@ -11,6 +11,6 @@ public record BenchmarkingQuery(
         String pl1,
         String pl2,
         String pl3Code,
-        LocalDate submittedFrom,
-        LocalDate submittedTo) {
+        LocalDate validatedFrom,
+        LocalDate validatedTo) {
 }

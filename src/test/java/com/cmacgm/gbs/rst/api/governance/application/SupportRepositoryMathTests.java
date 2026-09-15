@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.governance.api.dto.SupportCategorySummary;
 import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryRow;
@@ -46,6 +47,7 @@ class SupportRepositoryMathTests {
     private static SupportRepositoryRow row(String category, String activity, String fte) {
         return new SupportRepositoryRow(
                 "EX-1",
+                UUID.fromString("11111111-1111-1111-1111-111111111111"),
                 "GBS LEBANON",
                 "Finance",
                 "BANK RECONCILIATION",

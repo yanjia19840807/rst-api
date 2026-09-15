@@ -26,5 +26,6 @@ public record RepositoryRow(
         BigDecimal capacityCreation,
         BigDecimal capacityPct,
         String volumeYoY,
-        String submittedDate) {
+        String sizingMonth,
+        String validatedDate) {
 }

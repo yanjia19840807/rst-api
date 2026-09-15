@@ -10,6 +10,6 @@ public record SupportRepositoryQuery(
         String center,
         UUID categoryId,
         String toolkitName,
-        LocalDate submittedFrom,
-        LocalDate submittedTo) {
+        LocalDate validatedFrom,
+        LocalDate validatedTo) {
 }

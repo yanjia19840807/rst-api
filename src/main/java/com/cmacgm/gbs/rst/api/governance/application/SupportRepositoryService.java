@@ -60,7 +60,7 @@ public class SupportRepositoryService {
     }
 
     /**
-     * Lists APPROVED Production Support rows, newest submission first.
+     * Lists APPROVED Production Support rows, newest validation first.
      * Summaries follow the filtered row set; Center / Toolkit options come from all APPROVED
      * rows. Category options come from the database lookup.
      *
@@ -121,7 +121,7 @@ public class SupportRepositoryService {
                     setups.get(exercise.getId())));
         }
         source.sort(Comparator
-                .comparing(SupportRepositoryRow::submittedDate, Comparator.nullsLast(Comparator.reverseOrder()))
+                .comparing(SupportRepositoryRow::validatedDate, Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(SupportRepositoryRow::exerciseNo, Comparator.nullsLast(String::compareTo))
                 .thenComparing(SupportRepositoryRow::standardCategory, Comparator.nullsLast(String::compareTo))
                 .thenComparing(SupportRepositoryRow::activity, Comparator.nullsLast(String::compareTo)));
@@ -146,9 +146,9 @@ public class SupportRepositoryService {
         String domain = snapshot == null ? "" : snapshot.getDomain();
         String pl3 = snapshot == null ? "" : snapshot.getPl3Name();
         String toolkit = snapshot == null ? "" : snapshot.getToolkitName();
-        String submittedDate = exercise.getSubmittedAt() == null
+        String validatedDate = exercise.getValidatedAt() == null || center == null || center.isBlank()
                 ? ""
-                : CenterDates.dateOf(exercise.getSubmittedAt(), center).toString();
+                : CenterDates.dateOf(exercise.getValidatedAt(), center).toString();
         BigDecimal workingDays = workingDaysService.workingDaysPerYear(exercise.getId());
         BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup, workingDays);
         List<SupportRepositoryRow> rows = new ArrayList<>();
@@ -161,6 +161,7 @@ public class SupportRepositoryService {
             }
             rows.add(new SupportRepositoryRow(
                     exercise.getExerciseCode(),
+                    exercise.getId(),
                     center,
                     domain,
                     pl3,
@@ -173,7 +174,7 @@ public class SupportRepositoryService {
                     item.getUnitOfMeasure(),
                     fte,
                     item.getComments() == null ? "" : item.getComments(),
-                    submittedDate));
+                    validatedDate));
         }
         return rows;
     }

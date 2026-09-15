@@ -474,7 +474,7 @@ public class ExerciseService {
     }
 
     private static Set<String> tabStatuses(String tab) {
-        if ("ARCHIVED".equalsIgnoreCase(tab)) {
+        if ("ARCHIVED".equalsIgnoreCase(tab) || "VALIDATED".equalsIgnoreCase(tab)) {
             return Set.of("APPROVED");
         }
         return Set.of("IN_PROGRESS", "UNDER_REVIEW");
@@ -519,6 +519,9 @@ public class ExerciseService {
             return false;
         }
         if ("UNASSIGNED".equalsIgnoreCase(query.officialScenario()) && item.officialScenarioId() != null) {
+            return false;
+        }
+        if (hasText(query.sizingMonth()) && !query.sizingMonth().trim().equals(item.sizingMonth())) {
             return false;
         }
         String center = item.snapshot().toolkit().center();

@@ -167,13 +167,12 @@ public class BenchmarkingService {
         BigDecimal actualHc = SizingMath.actualHeadcount(
                 setup == null ? null : setup.totalAgents(), totalDelivery);
         BigDecimal dailyCapacity = setup == null ? null : setup.dailyCapacityPerAgent(cycleTimeSeconds);
-        String submittedDate = exercise.getSubmittedAt() == null
+        String center = exercise.getToolkitSnapshot() == null
+                ? null
+                : exercise.getToolkitSnapshot().getCenter();
+        String validatedDate = exercise.getValidatedAt() == null || center == null || center.isBlank()
                 ? ""
-                : CenterDates.dateOf(
-                        exercise.getSubmittedAt(),
-                        exercise.getToolkitSnapshot() == null
-                                ? null
-                                : exercise.getToolkitSnapshot().getCenter()).toString();
+                : CenterDates.dateOf(exercise.getValidatedAt(), center).toString();
         List<BenchmarkRow> rows = new ArrayList<>();
         for (ExerciseSharedKpiLine line : exercise.getSharedKpiLines()) {
             if (!BenchmarkingFilters.hasText(line.getPl3Code())) {
@@ -195,7 +194,7 @@ public class BenchmarkingService {
                     metrics.capacityCreation(),
                     metrics.deliveryHc(),
                     metrics.productionSupport(),
-                    submittedDate));
+                    validatedDate));
         }
         return rows;
     }

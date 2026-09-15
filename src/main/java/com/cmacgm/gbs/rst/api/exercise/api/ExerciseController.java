@@ -61,7 +61,7 @@ public class ExerciseController {
     /**
      * Lists Exercises owned by the current principal, applying tab and field filters on the server.
      *
-     * @param tab {@code IN_PROGRESS} or {@code ARCHIVED}
+     * @param tab {@code IN_PROGRESS} or {@code VALIDATED} ({@code ARCHIVED} still accepted)
      * @param exerciseCode optional exercise code contains
      * @param toolkitName optional exact toolkit name
      * @param pl3Name optional exact PL3 name
@@ -69,6 +69,7 @@ public class ExerciseController {
      * @param reviewStage optional current step ({@code SUPERVISOR} / {@code MANAGER} / {@code CDH} / {@code LTH})
      * @param handler optional current reviewer display name (not CCGID)
      * @param officialScenario {@code ASSIGNED} or {@code UNASSIGNED}
+     * @param sizingMonth optional exact sizing month ({@code YYYY-MM})
      * @param createdFrom optional created date from
      * @param createdTo optional created date to
      * @param submittedFrom optional submitted date from
@@ -91,6 +92,7 @@ public class ExerciseController {
             @RequestParam(required = false) String reviewStage,
             @RequestParam(required = false) String handler,
             @RequestParam(required = false) String officialScenario,
+            @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
                     LocalDate createdFrom,
@@ -121,6 +123,7 @@ public class ExerciseController {
                 reviewStage,
                 handler,
                 officialScenario,
+                sizingMonth,
                 createdFrom,
                 createdTo,
                 submittedFrom,

@@ -11,6 +11,7 @@ public record RepositoryListQuery(
         String domain,
         String pl3Name,
         String toolkitName,
-        LocalDate submittedFrom,
-        LocalDate submittedTo) {
+        String sizingMonth,
+        LocalDate validatedFrom,
+        LocalDate validatedTo) {
 }

@@ -14,6 +14,7 @@ public record ExerciseListQuery(
         String reviewStage,
         String handler,
         String officialScenario,
+        String sizingMonth,
         LocalDate createdFrom,
         LocalDate createdTo,
         LocalDate submittedFrom,

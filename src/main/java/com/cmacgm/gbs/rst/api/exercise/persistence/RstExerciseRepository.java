@@ -113,7 +113,7 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
                     and t.node = com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LOCAL_TRANSFORMATION_HEAD
                     and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.APPROVED
               )
-            order by e.submittedAt desc, e.exerciseCode asc, e.id asc
+            order by e.validatedAt desc, e.exerciseCode asc, e.id asc
             """)
     List<RstExercise> findApprovedSupportRepositoryExercises();
 

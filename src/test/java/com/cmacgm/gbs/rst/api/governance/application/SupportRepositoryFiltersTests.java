@@ -37,7 +37,7 @@ class SupportRepositoryFiltersTests {
     }
 
     @Test
-    void submittedDateIsInclusive() {
+    void validatedDateIsInclusive() {
         SupportRepositoryRow row = row("GBS LEBANON", QUALITY, "Quality Control", "Bank Rec", "2026-03-10");
         assertThat(SupportRepositoryFilters.matches(
                 row, query(null, null, null, LocalDate.parse("2026-03-10"), LocalDate.parse("2026-03-10"))))
@@ -66,16 +66,17 @@ class SupportRepositoryFiltersTests {
             String center,
             UUID categoryId,
             String toolkitName,
-            LocalDate submittedFrom,
-            LocalDate submittedTo) {
+            LocalDate validatedFrom,
+            LocalDate validatedTo) {
         return new SupportRepositoryQuery(
-                center, categoryId, toolkitName, submittedFrom, submittedTo);
+                center, categoryId, toolkitName, validatedFrom, validatedTo);
     }
 
     private static SupportRepositoryRow row(
-            String center, UUID categoryId, String category, String toolkit, String submittedDate) {
+            String center, UUID categoryId, String category, String toolkit, String validatedDate) {
         return new SupportRepositoryRow(
                 "EX-1",
+                UUID.fromString("11111111-1111-1111-1111-111111111111"),
                 center,
                 "Finance",
                 "BANK RECONCILIATION",
@@ -88,6 +89,6 @@ class SupportRepositoryFiltersTests {
                 "Cases",
                 BigDecimal.ONE,
                 "",
-                submittedDate);
+                validatedDate);
     }
 }

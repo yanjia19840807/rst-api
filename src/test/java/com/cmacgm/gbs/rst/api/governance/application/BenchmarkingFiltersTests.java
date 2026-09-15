@@ -45,7 +45,7 @@ class BenchmarkingFiltersTests {
     }
 
     @Test
-    void submittedDateIsInclusive() {
+    void validatedDateIsInclusive() {
         BenchmarkRow row = row("PL3-BANK", "GBS LEBANON", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
         assertThat(BenchmarkingFilters.matches(
                 row, query(null, null, null, null, "PL3-BANK",
@@ -76,9 +76,9 @@ class BenchmarkingFiltersTests {
             String pl1,
             String pl2,
             String pl3Code,
-            LocalDate submittedFrom,
-            LocalDate submittedTo) {
-        return new BenchmarkingQuery(center, domain, pl1, pl2, pl3Code, submittedFrom, submittedTo);
+            LocalDate validatedFrom,
+            LocalDate validatedTo) {
+        return new BenchmarkingQuery(center, domain, pl1, pl2, pl3Code, validatedFrom, validatedTo);
     }
 
     private static BenchmarkRow row(
@@ -87,7 +87,7 @@ class BenchmarkingFiltersTests {
             String domain,
             String pl1,
             String pl2,
-            String submittedDate) {
+            String validatedDate) {
         return new BenchmarkRow(
                 gbs,
                 "China",
@@ -102,6 +102,6 @@ class BenchmarkingFiltersTests {
                 BigDecimal.ZERO,
                 BigDecimal.ONE,
                 BigDecimal.ZERO,
-                submittedDate);
+                validatedDate);
     }
 }

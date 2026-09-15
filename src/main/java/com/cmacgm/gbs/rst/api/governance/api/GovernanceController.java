@@ -87,8 +87,9 @@ public class GovernanceController {
      * @param domain optional exact domain
      * @param pl3Name optional exact PL3 name
      * @param toolkitName optional exact toolkit name
-     * @param submittedFrom optional submitted date from
-     * @param submittedTo optional submitted date to
+     * @param sizingMonth optional exact sizing month ({@code YYYY-MM})
+     * @param validatedFrom optional validated date from
+     * @param validatedTo optional validated date to
      * @param page 1-based page
      * @param pageSize page size
      * @return one page of filtered rows and unfiltered dropdown options
@@ -101,12 +102,13 @@ public class GovernanceController {
             @RequestParam(required = false) String domain,
             @RequestParam(required = false) String pl3Name,
             @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-                    LocalDate submittedFrom,
+                    LocalDate validatedFrom,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-                    LocalDate submittedTo,
+                    LocalDate validatedTo,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         return rstRepository.listApproved(
@@ -116,8 +118,9 @@ public class GovernanceController {
                         domain,
                         pl3Name,
                         toolkitName,
-                        submittedFrom,
-                        submittedTo),
+                        sizingMonth,
+                        validatedFrom,
+                        validatedTo),
                 page,
                 pageSize);
     }
@@ -133,12 +136,13 @@ public class GovernanceController {
             @RequestParam(required = false) String domain,
             @RequestParam(required = false) String pl3Name,
             @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-                    LocalDate submittedFrom,
+                    LocalDate validatedFrom,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-                    LocalDate submittedTo) {
+                    LocalDate validatedTo) {
         return excelResponse(
                 excel.exportRepository(rstRepository.listApprovedAll(
                         new RepositoryListQuery(
@@ -147,8 +151,9 @@ public class GovernanceController {
                                 domain,
                                 pl3Name,
                                 toolkitName,
-                                submittedFrom,
-                                submittedTo))),
+                                sizingMonth,
+                                validatedFrom,
+                                validatedTo))),
                 "rst-repository.xlsx");
     }
 
@@ -171,8 +176,8 @@ public class GovernanceController {
      * @param center optional exact GBS Center
      * @param categoryId optional catalog Category id
      * @param toolkitName optional exact toolkit name
-     * @param submittedFrom optional submitted date from
-     * @param submittedTo optional submitted date to
+     * @param validatedFrom optional validated date from
+     * @param validatedTo optional validated date to
      * @param page 1-based page
      * @param pageSize page size
      * @return one page of filtered rows, summaries from all matches, and unfiltered dropdown options
@@ -185,10 +190,10 @@ public class GovernanceController {
             @RequestParam(required = false) String toolkitName,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-                    LocalDate submittedFrom,
+                    LocalDate validatedFrom,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-                    LocalDate submittedTo,
+                    LocalDate validatedTo,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         return supportRepositoryService.listApproved(
@@ -196,8 +201,8 @@ public class GovernanceController {
                         center,
                         categoryId,
                         toolkitName,
-                        submittedFrom,
-                        submittedTo),
+                        validatedFrom,
+                        validatedTo),
                 page,
                 pageSize);
     }
@@ -213,18 +218,18 @@ public class GovernanceController {
             @RequestParam(required = false) String toolkitName,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-                    LocalDate submittedFrom,
+                    LocalDate validatedFrom,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-                    LocalDate submittedTo) {
+                    LocalDate validatedTo) {
         return excelResponse(
                 excel.exportSupportRepository(supportRepositoryService.listApprovedAll(
                         new SupportRepositoryQuery(
                                 center,
                                 categoryId,
                                 toolkitName,
-                                submittedFrom,
-                                submittedTo))),
+                                validatedFrom,
+                                validatedTo))),
                 "support-repository.xlsx");
     }
 
@@ -237,8 +242,8 @@ public class GovernanceController {
      * @param pl1 optional exact PL1
      * @param pl2 optional exact PL2
      * @param pl3Code required exact PL3 code for like-for-like rows
-     * @param submittedFrom optional submitted date from
-     * @param submittedTo optional submitted date to
+     * @param validatedFrom optional validated date from
+     * @param validatedTo optional validated date to
      * @param page 1-based page
      * @param pageSize page size
      * @return one page of rows, cards from all matches, and unfiltered dropdown options
@@ -253,14 +258,14 @@ public class GovernanceController {
             @RequestParam(required = false) String pl3Code,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-                    LocalDate submittedFrom,
+                    LocalDate validatedFrom,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-                    LocalDate submittedTo,
+                    LocalDate validatedTo,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         return benchmarkingService.listApproved(
-                new BenchmarkingQuery(center, domain, pl1, pl2, pl3Code, submittedFrom, submittedTo),
+                new BenchmarkingQuery(center, domain, pl1, pl2, pl3Code, validatedFrom, validatedTo),
                 page,
                 pageSize);
     }
@@ -278,14 +283,14 @@ public class GovernanceController {
             @RequestParam(required = false) String pl3Code,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-                    LocalDate submittedFrom,
+                    LocalDate validatedFrom,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-                    LocalDate submittedTo) {
+                    LocalDate validatedTo) {
         return excelResponse(
                 excel.exportBenchmarking(benchmarkingService.listApprovedAll(
                         new BenchmarkingQuery(
-                                center, domain, pl1, pl2, pl3Code, submittedFrom, submittedTo))),
+                                center, domain, pl1, pl2, pl3Code, validatedFrom, validatedTo))),
                 "benchmarking.xlsx");
     }
 

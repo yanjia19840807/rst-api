@@ -10,6 +10,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.time.CenterDates;
+import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath;
@@ -69,7 +70,7 @@ public class RstRepositoryService {
     }
 
     /**
-     * Lists APPROVED Shared KPI repository rows, newest submission first.
+     * Lists APPROVED Shared KPI repository rows, newest validation first.
      * Filter options are taken from all APPROVED rows so dropdowns do not shrink.
      *
      * @param query field filters
@@ -167,7 +168,7 @@ public class RstRepositoryService {
             source.addAll(rowsFor(exercise, rightSizingByExercise, supportByExercise, setups.get(exercise.getId())));
         }
         source.sort(Comparator
-                .comparing(RepositoryRow::submittedDate, Comparator.nullsLast(Comparator.reverseOrder()))
+                .comparing(RepositoryRow::validatedDate, Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(RepositoryRow::exerciseId, Comparator.nullsLast(String::compareTo))
                 .thenComparing(RepositoryRow::kpi, Comparator.nullsLast(String::compareTo))
                 .thenComparing(RepositoryRow::carrier, Comparator.nullsLast(String::compareTo))
@@ -214,9 +215,11 @@ public class RstRepositoryService {
                 setup == null ? null : setup.totalAgents(), totalDelivery);
         BigDecimal rightSizingHc = rightSizingByExercise.get(exercise.getId());
         BigDecimal productionSupport = supportByExercise.get(exercise.getId());
-        String submittedDate = exercise.getSubmittedAt() == null
+        String center = snapshot == null ? null : snapshot.getCenter();
+        String validatedDate = exercise.getValidatedAt() == null || center == null
                 ? ""
-                : CenterDates.dateOf(exercise.getSubmittedAt(), snapshot.getCenter()).toString();
+                : CenterDates.dateOf(exercise.getValidatedAt(), center).toString();
+        String sizingMonth = MonthKeys.formatYearMonth(exercise.getSizingMonth());
         List<RepositoryRow> rows = new ArrayList<>();
         for (ExerciseSharedKpiLine line : exercise.getSharedKpiLines()) {
             RepositoryLineMath.LineMetrics metrics = RepositoryLineMath.allocate(
@@ -239,7 +242,8 @@ public class RstRepositoryService {
                     metrics.capacityCreation(),
                     metrics.capacityPct(),
                     "",
-                    submittedDate));
+                    sizingMonth == null ? "" : sizingMonth,
+                    validatedDate));
         }
         return rows;
     }

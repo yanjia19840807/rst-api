@@ -47,13 +47,16 @@ public final class RepositoryRowFilters {
         if (hasText(query.toolkitName()) && !query.toolkitName().equals(row.toolkit())) {
             return false;
         }
-        LocalDate submitted = dateOf(row.submittedDate());
-        if (query.submittedFrom() != null
-                && (submitted == null || submitted.isBefore(query.submittedFrom()))) {
+        if (hasText(query.sizingMonth()) && !query.sizingMonth().trim().equals(row.sizingMonth())) {
             return false;
         }
-        if (query.submittedTo() != null
-                && (submitted == null || submitted.isAfter(query.submittedTo()))) {
+        LocalDate validated = dateOf(row.validatedDate());
+        if (query.validatedFrom() != null
+                && (validated == null || validated.isBefore(query.validatedFrom()))) {
+            return false;
+        }
+        if (query.validatedTo() != null
+                && (validated == null || validated.isAfter(query.validatedTo()))) {
             return false;
         }
         return true;
@@ -79,12 +82,12 @@ public final class RepositoryRowFilters {
         return value != null && !value.isBlank();
     }
 
-    private static LocalDate dateOf(String submittedDate) {
-        if (submittedDate == null || submittedDate.isBlank()) {
+    private static LocalDate dateOf(String value) {
+        if (value == null || value.isBlank()) {
             return null;
         }
         try {
-            return LocalDate.parse(submittedDate);
+            return LocalDate.parse(value);
         } catch (DateTimeParseException ignored) {
             return null;
         }
