@@ -7,20 +7,22 @@ import java.util.Set;
  */
 public final class RstCenters {
 
-    public static final String GBS_CHINA_INDIA = "GBS CHINA INDIA";
-    public static final String GBS_CHINA_LEBANON = "GBS CHINA LEBANON";
-    public static final String GBS_CHINA_ESTONIA = "GBS CHINA ESTONIA";
-    public static final String GBS_CHINA_COSTA_RICA = "GBS CHINA COSTA RICA";
-    public static final String GBS_CHINA_PHILIPPINES = "GBS CHINA PHILIPPINES";
-    public static final String GBS_CHINA_PORTUGAL = "GBS CHINA PORTUGAL";
+    public static final String GBS_CHINA = "GBS CHINA";
+    public static final String GBS_INDIA = "GBS INDIA";
+    public static final String GBS_LEBANON = "GBS LEBANON";
+    public static final String GBS_ESTONIA = "GBS ESTONIA";
+    public static final String GBS_COSTA_RICA = "GBS COSTA RICA";
+    public static final String GBS_PHILIPPINES = "GBS PHILIPPINES";
+    public static final String GBS_PORTUGAL = "GBS PORTUGAL";
 
     public static final Set<String> ALL = Set.of(
-            GBS_CHINA_INDIA,
-            GBS_CHINA_LEBANON,
-            GBS_CHINA_ESTONIA,
-            GBS_CHINA_COSTA_RICA,
-            GBS_CHINA_PHILIPPINES,
-            GBS_CHINA_PORTUGAL);
+            GBS_CHINA,
+            GBS_INDIA,
+            GBS_LEBANON,
+            GBS_ESTONIA,
+            GBS_COSTA_RICA,
+            GBS_PHILIPPINES,
+            GBS_PORTUGAL);
 
     private RstCenters() {
     }
@@ -44,7 +46,7 @@ public final class RstCenters {
 
     /**
      * @param value raw center
-     * @return true when the value is one of the six canonical GBS centers
+     * @return true when the value is one of the canonical GBS centers
      */
     public static boolean isKnown(String value) {
         return canonicalize(value) != null;

@@ -11,7 +11,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
@@ -292,10 +291,9 @@ public class SlotSimulationService {
             series.put("shift" + shift.shiftNo(), new ArrayList<>(rows.size()));
         }
         for (SlotSimulationResult row : rows) {
-            ZoneOffset zone = ZoneOffset.UTC;
-            LocalDateTime slotStart = row.getSlotStartAt().atZone(zone).toLocalDateTime();
+            LocalDateTime slotStart = row.getSlotStartAt();
             LocalTime slotStartLocal = slotStart.toLocalTime();
-            LocalTime slotEndLocal = row.getSlotEndAt().atZone(zone).toLocalTime();
+            LocalTime slotEndLocal = row.getSlotEndAt().toLocalTime();
             for (SlotShift shift : shiftRows) {
                 series.get("shift" + shift.shiftNo()).add(
                         contribution(shift, slotStart, slotStartLocal, slotEndLocal));
@@ -332,10 +330,9 @@ public class SlotSimulationService {
 
         int index = 0;
         for (ExerciseVolumeSlotInput volume : volumes) {
-            ZoneOffset zone = ZoneOffset.UTC;
-            LocalDateTime slotStart = volume.getSlotStartAt().atZone(zone).toLocalDateTime();
+            LocalDateTime slotStart = volume.getSlotStartAt();
             LocalTime slotStartLocal = slotStart.toLocalTime();
-            LocalTime slotEndLocal = volume.getSlotEndAt().atZone(zone).toLocalTime();
+            LocalTime slotEndLocal = volume.getSlotEndAt().toLocalTime();
 
             int slotMinutes = (int) Duration.between(volume.getSlotStartAt(), volume.getSlotEndAt())
                     .toMinutes();

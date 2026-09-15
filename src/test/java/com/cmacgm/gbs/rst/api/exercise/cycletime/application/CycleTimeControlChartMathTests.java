@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import com.cmacgm.gbs.rst.api.exercise.cycletime.application.SystemCycleTimeBaselineWriter.DatedSample;
@@ -13,7 +14,7 @@ class CycleTimeControlChartMathTests {
 
     @Test
     void emptySamplesYieldAnEmptyChart() {
-        var chart = CycleTimeControlChartMath.build(List.of());
+        var chart = CycleTimeControlChartMath.build(List.of(), ZoneOffset.UTC);
         assertThat(chart.points()).isEmpty();
         assertThat(chart.sampleCount()).isZero();
         assertThat(chart.centerSeconds()).isNull();
@@ -26,7 +27,7 @@ class CycleTimeControlChartMathTests {
         var chart = CycleTimeControlChartMath.build(List.of(
                 sample("2026-08-01T10:00:00Z", 10),
                 sample("2026-08-01T18:00:00Z", 30),
-                sample("2026-08-02T09:00:00Z", 50)));
+                sample("2026-08-02T09:00:00Z", 50)), ZoneOffset.UTC);
 
         assertThat(chart.sampleCount()).isEqualTo(3);
         assertThat(chart.points()).hasSize(2);
@@ -45,7 +46,7 @@ class CycleTimeControlChartMathTests {
     void omitsControlLimitsWhenOnlyOneDayExists() {
         var chart = CycleTimeControlChartMath.build(List.of(
                 sample("2026-08-01T10:00:00Z", 12),
-                sample("2026-08-01T12:00:00Z", 18)));
+                sample("2026-08-01T12:00:00Z", 18)), ZoneOffset.UTC);
 
         assertThat(chart.points()).hasSize(1);
         assertThat(chart.points().getFirst().dailyMedianSeconds()).isEqualByComparingTo("15");
@@ -61,7 +62,7 @@ class CycleTimeControlChartMathTests {
                 sample("2026-08-03T00:00:00Z", 12),
                 sample("2026-08-04T00:00:00Z", 10),
                 sample("2026-08-05T00:00:00Z", 11),
-                sample("2026-08-06T00:00:00Z", 80)));
+                sample("2026-08-06T00:00:00Z", 80)), ZoneOffset.UTC);
 
         assertThat(chart.points().getLast().date()).isEqualTo(LocalDate.of(2026, 8, 6));
         assertThat(chart.points().getLast().outlier()).isTrue();

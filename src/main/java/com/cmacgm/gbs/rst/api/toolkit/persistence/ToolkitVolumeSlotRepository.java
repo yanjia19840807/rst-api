@@ -1,6 +1,6 @@
 package com.cmacgm.gbs.rst.api.toolkit.persistence;
 
-import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -13,5 +13,5 @@ public interface ToolkitVolumeSlotRepository extends JpaRepository<ToolkitVolume
 
     List<ToolkitVolumeSlot> findByToolkitIdOrderBySlotStartAtAsc(UUID toolkitId);
 
-    Optional<ToolkitVolumeSlot> findByToolkitIdAndSlotStartAt(UUID toolkitId, Instant slotStartAt);
+    Optional<ToolkitVolumeSlot> findByToolkitIdAndSlotStartAt(UUID toolkitId, LocalDateTime slotStartAt);
 }

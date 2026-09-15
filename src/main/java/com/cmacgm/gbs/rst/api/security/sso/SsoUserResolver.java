@@ -76,7 +76,7 @@ public class SsoUserResolver {
         if (center == null) {
             throw new SsoException(
                     "sso-center-invalid",
-                    "Timesheet center is missing or is not a GBS China center.");
+                    "Timesheet center is missing or is not a known GBS Center.");
         }
         return new RstPrincipal(
                 ccgid,
@@ -90,7 +90,7 @@ public class SsoUserResolver {
     private static String requireCenter(Jwt jwt) {
         String center = RstCenters.canonicalize(firstClaim(jwt, "center", "Center"));
         if (center == null) {
-            throw new SsoException("sso-center-invalid", "Center is missing or is not a GBS China center.");
+            throw new SsoException("sso-center-invalid", "Center is missing or is not a known GBS Center.");
         }
         return center;
     }

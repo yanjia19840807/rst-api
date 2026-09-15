@@ -4,7 +4,9 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
+
+import com.cmacgm.gbs.rst.api.common.time.CenterZones;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -139,7 +141,8 @@ public class TmsSessionQueryService {
             LocalDate dateTo,
             Boolean enabled,
             int page,
-            int pageSize) {
+            int pageSize,
+            String dateCenter) {
         return pageSessions(
                 new Filter(
                         agentCcgid,
@@ -152,7 +155,8 @@ public class TmsSessionQueryService {
                         query,
                         dateFrom,
                         dateTo,
-                        enabled),
+                        enabled,
+                        dateCenter),
                 page,
                 pageSize);
     }
@@ -174,7 +178,8 @@ public class TmsSessionQueryService {
             LocalDate dateTo,
             Boolean enabled,
             int page,
-            int pageSize) {
+            int pageSize,
+            String dateCenter) {
         return pageSessions(teamFilter(
                 ccgid,
                 agentCcgid,
@@ -186,7 +191,8 @@ public class TmsSessionQueryService {
                 query,
                 dateFrom,
                 dateTo,
-                enabled), page, pageSize);
+                enabled,
+                dateCenter), page, pageSize);
     }
 
     /**
@@ -201,7 +207,8 @@ public class TmsSessionQueryService {
             String query,
             LocalDate dateFrom,
             LocalDate dateTo,
-            Boolean enabled) {
+            Boolean enabled,
+            String dateCenter) {
         return excel.export(listSessions(new Filter(
                 agentCcgid,
                 null,
@@ -213,7 +220,8 @@ public class TmsSessionQueryService {
                 query,
                 dateFrom,
                 dateTo,
-                enabled)));
+                enabled,
+                dateCenter)));
     }
 
     /**
@@ -231,7 +239,8 @@ public class TmsSessionQueryService {
             String query,
             LocalDate dateFrom,
             LocalDate dateTo,
-            Boolean enabled) {
+            Boolean enabled,
+            String dateCenter) {
         return excel.export(listSessions(teamFilter(
                 ccgid,
                 agentCcgid,
@@ -243,7 +252,8 @@ public class TmsSessionQueryService {
                 query,
                 dateFrom,
                 dateTo,
-                enabled)));
+                enabled,
+                dateCenter)));
     }
 
     /**
@@ -255,10 +265,11 @@ public class TmsSessionQueryService {
     }
 
     @Transactional(readOnly = true)
-    public TmsSummaryResponse summary(String agentCcgid) {
-        LocalDate today = LocalDate.now(clock.withZone(ZoneOffset.UTC));
-        var from = today.atStartOfDay(ZoneOffset.UTC).toInstant();
-        var to = today.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+    public TmsSummaryResponse summary(String agentCcgid, String dateCenter) {
+        ZoneId zone = CenterZones.of(dateCenter);
+        LocalDate today = LocalDate.now(clock.withZone(zone));
+        var from = today.atStartOfDay(zone).toInstant();
+        var to = today.plusDays(1).atStartOfDay(zone).toInstant();
         return new TmsSummaryResponse(
                 sessionRepository.countByAgentCcgidAndStatusAndEnabledTrueAndEndedAtGreaterThanEqualAndEndedAtLessThan(
                         agentCcgid,
@@ -284,7 +295,8 @@ public class TmsSessionQueryService {
             String query,
             LocalDate dateFrom,
             LocalDate dateTo,
-            Boolean enabled) {
+            Boolean enabled,
+            String dateCenter) {
         Set<UUID> scopedToolkitIds = scopedToolkitIds(ccgid);
         if (toolkitId != null && !scopedToolkitIds.contains(toolkitId)) {
             throw new ApiException(
@@ -318,7 +330,8 @@ public class TmsSessionQueryService {
                 query,
                 dateFrom,
                 dateTo,
-                enabled);
+                enabled,
+                dateCenter);
     }
 
     private PageResponse<TmsSessionResponse> pageSessions(Filter filter, int page, int pageSize) {

@@ -2,9 +2,13 @@ package com.cmacgm.gbs.rst.api.timesheet.application;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.security.RstCenters;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
@@ -43,7 +47,9 @@ final class TimesheetRowValidator {
             GbsProcessCatalog catalog) {
         GbsProcessCatalog processes = catalog == null ? GbsProcessCatalog.allowing() : catalog;
         List<TimesheetSyncIssue> issues = new ArrayList<>();
+        Set<String> unknownCenters = new LinkedHashSet<>();
         for (ReportRow row : rows) {
+            rejectUnknownCenter(issues, unknownCenters, runId, now, row);
             if ("DAILY".equals(kind)
                     && (!processes.applies(row.pl3Code()) || !isProductionLine(row))) {
                 continue;
@@ -157,6 +163,31 @@ final class TimesheetRowValidator {
             return row.month().withDayOfMonth(row.month().lengthOfMonth());
         }
         return null;
+    }
+
+    private static void rejectUnknownCenter(
+            List<TimesheetSyncIssue> issues,
+            Set<String> unknownCenters,
+            UUID runId,
+            java.time.Instant now,
+            ReportRow row) {
+        if (!hasText(row.center()) || RstCenters.isKnown(row.center())) {
+            return;
+        }
+        String raw = row.center().trim();
+        if (!unknownCenters.add(raw.toUpperCase(Locale.ROOT))) {
+            return;
+        }
+        issues.add(TimesheetSyncIssue.error(
+                runId,
+                TimesheetSyncErrorCode.UNKNOWN_CENTER,
+                "Center '" + raw + "' is not configured. Add it to the Center catalog before importing.",
+                row.empId(),
+                row.empCcgid(),
+                row.empPositionId(),
+                row.pl3Code(),
+                row.sourceRow(),
+                now));
     }
 
     private static void require(

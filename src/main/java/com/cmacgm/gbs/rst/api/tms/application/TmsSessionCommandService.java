@@ -4,7 +4,9 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
+
+import com.cmacgm.gbs.rst.api.common.time.CenterZones;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Set;
@@ -72,7 +74,7 @@ public class TmsSessionCommandService {
 
         var now = clock.instant();
         TmsSession session = TmsSession.start(
-                nextSessionNumber(agentCcgid),
+                nextSessionNumber(agentCcgid, toolkit),
                 agentCcgid,
                 toolkit,
                 subtask,
@@ -261,9 +263,10 @@ public class TmsSessionCommandService {
                 });
     }
 
-    private String nextSessionNumber(String ccgid) {
+    private String nextSessionNumber(String ccgid, Toolkit toolkit) {
         String owner = ccgid == null ? "AGENT" : ccgid.trim().toUpperCase(Locale.ROOT);
-        String date = LocalDate.now(clock.withZone(ZoneOffset.UTC)).format(SESSION_DATE);
+        ZoneId zone = CenterZones.of(toolkit.getCenter());
+        String date = LocalDate.now(clock.withZone(zone)).format(SESSION_DATE);
         String suffix = UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
         return "TMS-" + owner + "-" + date + "-" + suffix;
     }

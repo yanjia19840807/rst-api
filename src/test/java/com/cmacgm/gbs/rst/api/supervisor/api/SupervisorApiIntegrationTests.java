@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -119,7 +120,7 @@ class SupervisorApiIntegrationTests {
         insertPosition(DAILY_RUN_ID, "AGENT011", "AGENT", SUPERVISOR_POSITION_ID);
         insertPosition(DAILY_RUN_ID, "AGENT012", "AGENT", SUPERVISOR_POSITION_ID);
         insertScope(MONTHLY_RUN_ID);
-        insertKpi(MONTHLY_RUN_ID, "Carrier A", "GBS CHINA INDIA", "Australia", "2.000000");
+        insertKpi(MONTHLY_RUN_ID, "Carrier A", "GBS INDIA", "Australia", "2.000000");
         insertKpi(MONTHLY_RUN_ID, "Carrier B", "Singapore", "Germany", "3.000000");
     }
 
@@ -143,7 +144,7 @@ class SupervisorApiIntegrationTests {
                 .andExpect(jsonPath("$.customerCountries[1]").value("Germany"))
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].carrier").value("Carrier A"))
-                .andExpect(jsonPath("$.items[0].site").value("GBS CHINA INDIA"))
+                .andExpect(jsonPath("$.items[0].site").value("GBS INDIA"))
                 .andExpect(jsonPath("$.items[0].customerCountry").value("Australia"))
                 .andExpect(jsonPath("$.items[0].deliveryHc").value(2.0));
     }
@@ -516,7 +517,7 @@ class SupervisorApiIntegrationTests {
                 """
                 update timesheet_kpi set hc = 99
                 where sync_run_id = ? and carrier = 'Carrier A'
-                  and site = 'GBS CHINA INDIA' and customer_country = 'Australia'
+                  and site = 'GBS INDIA' and customer_country = 'Australia'
                 """,
                 MONTHLY_RUN_ID);
 
@@ -775,8 +776,8 @@ class SupervisorApiIntegrationTests {
     void appliesSlotPeriodOverlaysToolkitVolume() throws Exception {
         String toolkitId = JsonPath.read(createToolkit("Slot Overlay Toolkit"), "$.id");
         String exerciseId = JsonPath.read(createExercise(toolkitId), "$.exercise.id");
-        Instant slotStart = Instant.parse("2026-09-07T09:00:00Z");
-        Instant slotEnd = Instant.parse("2026-09-07T09:30:00Z");
+        LocalDateTime slotStart = LocalDateTime.of(2026, 9, 7, 9, 0);
+        LocalDateTime slotEnd = LocalDateTime.of(2026, 9, 7, 9, 30);
         jdbcTemplate.update(
                 """
                 insert into toolkit_volume_slot
@@ -879,8 +880,8 @@ class SupervisorApiIntegrationTests {
                 NOW);
         toolkitVolumes.upsertSlot(
                 toolkitUuid,
-                Instant.parse("2026-09-07T09:00:00Z"),
-                Instant.parse("2026-09-07T09:30:00Z"),
+                LocalDateTime.of(2026, 9, 7, 9, 0),
+                LocalDateTime.of(2026, 9, 7, 9, 30),
                 new BigDecimal("12.5"),
                 exerciseUuid,
                 SUPERVISOR_CCGID,
@@ -1051,7 +1052,7 @@ class SupervisorApiIntegrationTests {
                 toolkitWithoutKpi,
                 "Legacy Toolkit Without KPI",
                 SUPERVISOR_POSITION_ID,
-                "GBS CHINA INDIA",
+                "GBS INDIA",
                 "Finance",
                 "Accounting",
                 "Record to Report",
@@ -1217,7 +1218,7 @@ class SupervisorApiIntegrationTests {
                   "sharedKpiSelections": [
                     {
                       "carrier": "Carrier A",
-                      "site": "GBS CHINA INDIA",
+                      "site": "GBS INDIA",
                       "customerCountry": "Australia"
                     }
                   ]
@@ -1228,7 +1229,7 @@ class SupervisorApiIntegrationTests {
                   "name": "%s",
                   "description": "Integration test toolkit",
                   "supervisorPositionId": "%s",
-                  "center": "GBS CHINA INDIA",
+                  "center": "GBS INDIA",
                   "domain": "Finance",
                   "pl1": "Accounting",
                   "pl2": "Record to Report",
@@ -1308,7 +1309,7 @@ class SupervisorApiIntegrationTests {
                 """
                 insert into timesheet_sync_run
                     (id, kind, center, sync_date, attempt_no, status, row_count, started_at, completed_at)
-                values (?, ?, 'GBS CHINA INDIA', date '2026-08-05', 1, 'ACTIVE', ?, ?, ?)
+                values (?, ?, 'GBS INDIA', date '2026-08-05', 1, 'ACTIVE', ?, ?, ?)
                 """,
                 id,
                 kind,
@@ -1338,7 +1339,7 @@ class SupervisorApiIntegrationTests {
                 positionId,
                 roleType,
                 parentPositionId,
-                "GBS CHINA INDIA");
+                "GBS INDIA");
     }
 
     private void insertScope(UUID runId) {
@@ -1353,7 +1354,7 @@ class SupervisorApiIntegrationTests {
                 SUPERVISOR_POSITION_ID,
                 PL3_CODE,
                 "Bank Reconciliation",
-                "GBS CHINA INDIA",
+                "GBS INDIA",
                 "Finance",
                 "Accounting",
                 "Record to Report");
@@ -1370,7 +1371,7 @@ class SupervisorApiIntegrationTests {
                 runId,
                 SUPERVISOR_POSITION_ID,
                 PL3_CODE,
-                "GBS CHINA INDIA",
+                "GBS INDIA",
                 carrier,
                 site,
                 country,

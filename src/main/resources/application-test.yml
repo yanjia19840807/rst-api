@@ -17,7 +17,7 @@ app:
       override-enabled: true
       ccgid: SUPERVISOR001
       role: SUPERVISOR
-      center: GBS CHINA INDIA
+      center: GBS INDIA
 
 forecast:
   enabled: false

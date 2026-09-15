@@ -1,15 +1,15 @@
 package com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto;
 
 import java.math.BigDecimal;
-import java.time.Instant;
+import java.time.LocalDateTime;
 
 import jakarta.validation.constraints.NotNull;
 
 /**
- * Slot volume request row.
+ * Slot volume request row (Center wall clock, no offset).
  */
 public record SlotVolumeRequest(
-        @NotNull Instant slotStartAt,
-        @NotNull Instant slotEndAt,
+        @NotNull LocalDateTime slotStartAt,
+        @NotNull LocalDateTime slotEndAt,
         BigDecimal actualVolume) {
 }

@@ -33,12 +33,11 @@ class WorkflowAgingTests {
     }
 
     @Test
-    void daysBetweenUsesUtcCalendarDates() {
-        Instant from = Instant.parse("2026-01-01T23:00:00Z");
-        Instant sameUtcDay = Instant.parse("2026-01-01T23:59:59Z");
-        Instant nextUtcDay = Instant.parse("2026-01-02T00:00:00Z");
-        assertThat(WorkflowAging.daysBetween(from, sameUtcDay)).isZero();
-        assertThat(WorkflowAging.daysBetween(from, nextUtcDay)).isEqualTo(1);
-        assertThat(WorkflowAging.daysBetween(null, nextUtcDay)).isZero();
+    void daysBetweenUsesCenterCalendarDates() {
+        Instant from = Instant.parse("2026-03-15T18:30:00Z");
+        Instant portugalNextMorning = Instant.parse("2026-03-16T00:00:00Z");
+        assertThat(WorkflowAging.daysBetween(from, portugalNextMorning, "GBS INDIA")).isZero();
+        assertThat(WorkflowAging.daysBetween(from, portugalNextMorning, "GBS PORTUGAL")).isEqualTo(1);
+        assertThat(WorkflowAging.daysBetween(null, portugalNextMorning, "GBS INDIA")).isZero();
     }
 }

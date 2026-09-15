@@ -1,11 +1,10 @@
 package com.cmacgm.gbs.rst.api.exercise.associateddata.application;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.YearMonth;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -342,15 +341,14 @@ public class VolumeInputValidator {
             if (next.slotStartAt().isBefore(prev.slotEndAt())) {
                 fail("volume-slot-overlap", "Slot intervals must not overlap.");
             }
-            LocalDate prevDay = LocalDate.ofInstant(prev.slotStartAt(), ZoneOffset.UTC);
-            LocalDate nextDay = LocalDate.ofInstant(next.slotStartAt(), ZoneOffset.UTC);
+            LocalDate prevDay = prev.slotStartAt().toLocalDate();
+            LocalDate nextDay = next.slotStartAt().toLocalDate();
             if (prevDay.equals(nextDay) && !prev.slotEndAt().equals(next.slotStartAt())) {
                 fail(
                         "volume-slot-gap",
                         "Slots on " + prevDay
                                 + " must be continuous without gaps (missing "
-                                + prev.slotEndAt().atZone(ZoneOffset.UTC).toLocalTime()
-                                        .truncatedTo(ChronoUnit.MINUTES)
+                                + prev.slotEndAt().toLocalTime().truncatedTo(ChronoUnit.MINUTES)
                                 + ").");
             }
         }
@@ -366,11 +364,11 @@ public class VolumeInputValidator {
         }
         validateSlot(request);
         TreeSet<LocalDate> days = new TreeSet<>();
-        Map<Instant, SlotVolumeRequest> byStart = new HashMap<>();
+        Map<LocalDateTime, SlotVolumeRequest> byStart = new HashMap<>();
         for (int i = 0; i < request.size(); i++) {
             SlotVolumeRequest row = request.get(i);
-            LocalDate day = LocalDate.ofInstant(row.slotStartAt(), ZoneOffset.UTC);
-            LocalTime time = row.slotStartAt().atZone(ZoneOffset.UTC).toLocalTime();
+            LocalDate day = row.slotStartAt().toLocalDate();
+            LocalTime time = row.slotStartAt().toLocalTime();
             if (time.getSecond() != 0 || time.getNano() != 0 || time.getMinute() % 30 != 0) {
                 fail(
                         "volume-slot-alignment",
@@ -402,8 +400,7 @@ public class VolumeInputValidator {
                             "volume-slot-gap",
                             "Slots on " + cursor
                                     + " must be continuous without gaps (missing "
-                                    + bound.start().atZone(ZoneOffset.UTC).toLocalTime().truncatedTo(
-                                            ChronoUnit.MINUTES)
+                                    + bound.start().toLocalTime().truncatedTo(ChronoUnit.MINUTES)
                                     + ").");
                 }
             }

@@ -4,10 +4,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
@@ -112,7 +110,7 @@ public class VolumeExcelService {
             for (SlotVolumeRequest row : rows) {
                 Row excelRow = sheet.createRow(rowIdx++);
                 Cell startCell = excelRow.createCell(0);
-                startCell.setCellValue(LocalDateTime.ofInstant(row.slotStartAt(), ZoneOffset.UTC));
+                startCell.setCellValue(row.slotStartAt());
                 startCell.setCellStyle(dateStyle);
                 if (row.actualVolume() != null) {
                     excelRow.createCell(1).setCellValue(row.actualVolume().doubleValue());
@@ -173,8 +171,8 @@ public class VolumeExcelService {
                 if (excelRow == null || isBlank(excelRow, headers)) {
                     continue;
                 }
-                Instant startAt = readSlotStart(excelRow.getCell(headers.get("slot_start")), i);
-                Instant endAt = startAt.plusSeconds(SLOT_MINUTES * 60L);
+                LocalDateTime startAt = readSlotStart(excelRow.getCell(headers.get("slot_start")), i);
+                LocalDateTime endAt = startAt.plusMinutes(SLOT_MINUTES);
                 BigDecimal volume = parseDecimal(
                         cell(excelRow, headers.get("actual_volume")), i - 1, "actual_volume");
                 out.add(new SlotVolumeRequest(startAt, endAt, volume));
@@ -292,7 +290,7 @@ public class VolumeExcelService {
         }
     }
 
-    private Instant readSlotStart(Cell cell, int sheetRowIndex) {
+    private LocalDateTime readSlotStart(Cell cell, int sheetRowIndex) {
         int displayRow = sheetRowIndex + 1;
         if (cell == null || cell.getCellType() == CellType.BLANK) {
             throw conflict("invalid-excel", "Row " + displayRow + ": slot_start is required.");
@@ -300,18 +298,18 @@ public class VolumeExcelService {
         if (cell.getCellType() == CellType.NUMERIC
                 && (DateUtil.isCellDateFormatted(cell)
                         || DateUtil.isValidExcelDate(cell.getNumericCellValue()))) {
-            return cell.getLocalDateTimeCellValue().toInstant(ZoneOffset.UTC);
+            return cell.getLocalDateTimeCellValue();
         }
         if (cell.getCellType() == CellType.FORMULA
                 && cell.getCachedFormulaResultType() == CellType.NUMERIC
                 && DateUtil.isCellDateFormatted(cell)) {
-            return cell.getLocalDateTimeCellValue().toInstant(ZoneOffset.UTC);
+            return cell.getLocalDateTimeCellValue();
         }
         String raw = formatter.formatCellValue(cell).trim();
         if (raw.isBlank()) {
             throw conflict("invalid-excel", "Row " + displayRow + ": slot_start is required.");
         }
-        Instant parsed = parseSlotStartText(raw);
+        LocalDateTime parsed = parseSlotStartText(raw);
         if (parsed != null) {
             return parsed;
         }
@@ -320,22 +318,20 @@ public class VolumeExcelService {
                 "Row " + displayRow + ": slot_start must be a valid Excel date/time.");
     }
 
-    private static Instant parseSlotStartText(String raw) {
+    private static LocalDateTime parseSlotStartText(String raw) {
         String value = raw.trim();
-        try {
-            return Instant.parse(value);
-        } catch (DateTimeParseException ignored) {
-            // fall through
+        if (value.endsWith("Z") || value.endsWith("z")) {
+            value = value.substring(0, value.length() - 1);
         }
         String normalized = value.contains("T") ? value : value.replace(' ', 'T');
         try {
-            return LocalDateTime.parse(normalized).toInstant(ZoneOffset.UTC);
+            return LocalDateTime.parse(normalized);
         } catch (DateTimeParseException ignored) {
             // fall through
         }
         for (DateTimeFormatter format : SLOT_START_TEXT_FORMATS) {
             try {
-                return LocalDateTime.parse(value, format).toInstant(ZoneOffset.UTC);
+                return LocalDateTime.parse(value, format);
             } catch (DateTimeParseException ignored) {
                 // try next
             }

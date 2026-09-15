@@ -1,9 +1,8 @@
 package com.cmacgm.gbs.rst.api.exercise.associateddata.application;
 
-import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -109,13 +108,13 @@ public final class VolumeTrainWindows {
         return bounds;
     }
 
-    /** 30-minute bounds for one UTC calendar day (09:00–22:00). */
+    /** 30-minute bounds for one civil calendar day (09:00–22:00). */
     public static List<SlotBound> dayBounds(LocalDate day) {
-        Instant dayStart = day.atStartOfDay().toInstant(ZoneOffset.UTC);
+        LocalDateTime dayStart = day.atStartOfDay();
         List<SlotBound> bounds = new ArrayList<>();
         for (int minutes = SLOT_DAY_START_MINUTES; minutes < SLOT_DAY_END_MINUTES; minutes += SLOT_MINUTES) {
-            Instant start = dayStart.plusSeconds(minutes * 60L);
-            Instant end = start.plusSeconds(SLOT_MINUTES * 60L);
+            LocalDateTime start = dayStart.plusMinutes(minutes);
+            LocalDateTime end = start.plusMinutes(SLOT_MINUTES);
             bounds.add(new SlotBound(start, end));
         }
         return bounds;
@@ -125,6 +124,6 @@ public final class VolumeTrainWindows {
         return new LinkedHashSet<>(monthlyTrainMonths(sizingMonth));
     }
 
-    public record SlotBound(Instant start, Instant end) {
+    public record SlotBound(LocalDateTime start, LocalDateTime end) {
     }
 }

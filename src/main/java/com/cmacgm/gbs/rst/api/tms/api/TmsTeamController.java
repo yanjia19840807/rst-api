@@ -106,7 +106,8 @@ public class TmsTeamController {
                 dateTo,
                 enabled,
                 page,
-                pageSize);
+                pageSize,
+                principal.center());
     }
 
     /**
@@ -144,7 +145,8 @@ public class TmsTeamController {
                         query,
                         dateFrom,
                         dateTo,
-                        enabled));
+                        enabled,
+                        principal.center()));
     }
 
     /**

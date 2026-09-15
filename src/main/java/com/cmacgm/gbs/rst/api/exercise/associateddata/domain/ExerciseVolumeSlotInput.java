@@ -2,6 +2,7 @@ package com.cmacgm.gbs.rst.api.exercise.associateddata.domain;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 import jakarta.persistence.Column;
@@ -25,11 +26,11 @@ public class ExerciseVolumeSlotInput implements Persistable<UUID> {
     @Column(name = "exercise_id", nullable = false)
     private UUID exerciseId;
 
-    @Column(name = "slot_start_at", nullable = false)
-    private Instant slotStartAt;
+    @Column(name = "slot_start_at", nullable = false, columnDefinition = "timestamp")
+    private LocalDateTime slotStartAt;
 
-    @Column(name = "slot_end_at", nullable = false)
-    private Instant slotEndAt;
+    @Column(name = "slot_end_at", nullable = false, columnDefinition = "timestamp")
+    private LocalDateTime slotEndAt;
 
     @Column(name = "actual_volume", precision = 24, scale = 6)
     private BigDecimal actualVolume;
@@ -62,7 +63,7 @@ public class ExerciseVolumeSlotInput implements Persistable<UUID> {
      * Creates a slot volume row.
      *
      * @param exerciseId owning Exercise
-     * @param slotStartAt inclusive slot start (UTC)
+     * @param slotStartAt inclusive slot start (Center wall clock)
      * @param slotEndAt exclusive/end bound (must be after start)
      * @param actualVolume non-negative actual volume
      * @param sourceType MANUAL / TOOLKIT / IMPORT
@@ -73,8 +74,8 @@ public class ExerciseVolumeSlotInput implements Persistable<UUID> {
      */
     public static ExerciseVolumeSlotInput create(
             UUID exerciseId,
-            Instant slotStartAt,
-            Instant slotEndAt,
+            LocalDateTime slotStartAt,
+            LocalDateTime slotEndAt,
             BigDecimal actualVolume,
             String sourceType,
             UUID importBatchId,
@@ -113,8 +114,8 @@ public class ExerciseVolumeSlotInput implements Persistable<UUID> {
     }
 
     public UUID getExerciseId() { return exerciseId; }
-    public Instant getSlotStartAt() { return slotStartAt; }
-    public Instant getSlotEndAt() { return slotEndAt; }
+    public LocalDateTime getSlotStartAt() { return slotStartAt; }
+    public LocalDateTime getSlotEndAt() { return slotEndAt; }
     public BigDecimal getActualVolume() { return actualVolume; }
     public String getSourceType() { return sourceType; }
     public UUID getImportBatchId() { return importBatchId; }

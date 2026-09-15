@@ -3,7 +3,6 @@ package com.cmacgm.gbs.rst.api.governance.application;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -14,6 +13,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.common.time.CenterDates;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath;
@@ -149,9 +149,11 @@ public class ValidationWorkflowService {
                 actualHc, rightSizingHc, productionSupport);
         String submittedDate = exercise.getSubmittedAt() == null
                 ? ""
-                : exercise.getSubmittedAt().atZone(ZoneOffset.UTC).toLocalDate().toString();
+                : CenterDates.dateOf(exercise.getSubmittedAt(), snapshot.getCenter()).toString();
         Instant agingFrom = review == null ? exercise.getSubmittedAt() : review.agingFrom();
-        Integer agingDays = agingFrom == null ? null : WorkflowAging.daysBetween(agingFrom, clock.instant());
+        Integer agingDays = agingFrom == null
+                ? null
+                : WorkflowAging.daysBetween(agingFrom, clock.instant(), snapshot.getCenter());
         return new ValidationWorkflowRow(
                 blankToEmpty(exercise.getExerciseCode()),
                 snapshot == null ? "" : blankToEmpty(snapshot.getCenter()),

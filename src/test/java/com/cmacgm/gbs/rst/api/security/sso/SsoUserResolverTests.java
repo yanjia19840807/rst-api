@@ -26,7 +26,7 @@ class SsoUserResolverTests {
     void userReadsTimesheetSeat() {
         when(timesheet.findActiveProductSeat("S00596242"))
                 .thenReturn(Optional.of(new TimesheetReadService.ProductSeat(
-                        "SUPERVISOR", "GBS CHINA INDIA", "WU Bertie", "GSC.BERWU@cma-cgm.com")));
+                        "SUPERVISOR", "GBS INDIA", "WU Bertie", "GSC.BERWU@cma-cgm.com")));
         SsoUserResolver resolver = new SsoUserResolver(timesheet, properties("UAT"));
 
         var principal = resolver.resolve(token(
@@ -38,7 +38,7 @@ class SsoUserResolverTests {
 
         assertThat(principal.ccgid()).isEqualTo("S00596242");
         assertThat(principal.roles()).containsExactly(RstRoles.SUPERVISOR);
-        assertThat(principal.center()).isEqualTo("GBS CHINA INDIA");
+        assertThat(principal.center()).isEqualTo("GBS INDIA");
         assertThat(principal.displayName()).isEqualTo("WU Bertie");
     }
 
@@ -51,10 +51,10 @@ class SsoUserResolverTests {
                 List.of("CMACGM_APP_RST_LOCAL_TRANSFORMATION_HEAD_UAT"),
                 "LTH One",
                 "lth@cma-cgm.com",
-                "GBS CHINA PHILIPPINES"));
+                "GBS PHILIPPINES"));
 
         assertThat(principal.roles()).containsExactly(RstRoles.LOCAL_TRANSFORMATION_HEAD);
-        assertThat(principal.center()).isEqualTo("GBS CHINA PHILIPPINES");
+        assertThat(principal.center()).isEqualTo("GBS PHILIPPINES");
     }
 
     @Test
@@ -74,7 +74,7 @@ class SsoUserResolverTests {
                         List.of("CMACGM_APP_RST_ADMIN_PROD"),
                         "Admin",
                         "admin@cma-cgm.com",
-                        "GBS CHINA INDIA"))
+                        "GBS INDIA"))
                 .center())
                 .isNull();
     }
@@ -99,7 +99,7 @@ class SsoUserResolverTests {
     void userTimesheetRoleMustBeProductSeat() {
         when(timesheet.findActiveProductSeat("S010"))
                 .thenReturn(Optional.of(new TimesheetReadService.ProductSeat(
-                        "ADMIN", "GBS CHINA INDIA", "Wrong", "w@cma-cgm.com")));
+                        "ADMIN", "GBS INDIA", "Wrong", "w@cma-cgm.com")));
         SsoUserResolver resolver = new SsoUserResolver(timesheet, properties("UAT"));
 
         assertThatThrownBy(() -> resolver.resolve(token(

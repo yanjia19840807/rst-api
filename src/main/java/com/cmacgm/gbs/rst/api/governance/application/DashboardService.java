@@ -3,7 +3,6 @@ package com.cmacgm.gbs.rst.api.governance.application;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -11,6 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.common.time.CenterDates;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath;
@@ -114,7 +114,7 @@ public class DashboardService {
             if (key.isEmpty()) {
                 continue;
             }
-            LocalDate validated = exercise.getValidatedAt().atZone(ZoneOffset.UTC).toLocalDate();
+            LocalDate validated = CenterDates.dateOf(exercise.getValidatedAt(), snapshot.getCenter());
             LocalDate previous = latest.get(key);
             if (previous == null || validated.isAfter(previous)) {
                 latest.put(key, validated);
@@ -126,7 +126,10 @@ public class DashboardService {
     private BigDecimal capacityYtd(List<RstExercise> approved, int year) {
         List<RstExercise> ytd = approved.stream()
                 .filter(exercise -> exercise.getValidatedAt() != null
-                        && exercise.getValidatedAt().atZone(ZoneOffset.UTC).getYear() == year)
+                        && exercise.getToolkitSnapshot() != null
+                        && CenterDates.dateOf(
+                                exercise.getValidatedAt(),
+                                exercise.getToolkitSnapshot().getCenter()).getYear() == year)
                 .toList();
         if (ytd.isEmpty()) {
             return null;

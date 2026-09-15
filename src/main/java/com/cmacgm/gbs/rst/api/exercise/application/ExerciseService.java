@@ -4,9 +4,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -26,6 +24,7 @@ import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseProduc
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
+import com.cmacgm.gbs.rst.api.common.time.CenterDates;
 import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.CommittedResultsStatus;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.CreateExerciseRequest;
@@ -522,7 +521,8 @@ public class ExerciseService {
         if ("UNASSIGNED".equalsIgnoreCase(query.officialScenario()) && item.officialScenarioId() != null) {
             return false;
         }
-        LocalDate created = dateOf(item.createdAt());
+        String center = item.snapshot().toolkit().center();
+        LocalDate created = CenterDates.dateOf(item.createdAt(), center);
         if (query.createdFrom() != null
                 && (created == null || created.isBefore(query.createdFrom()))) {
             return false;
@@ -531,7 +531,7 @@ public class ExerciseService {
                 && (created == null || created.isAfter(query.createdTo()))) {
             return false;
         }
-        LocalDate submitted = dateOf(item.submittedAt());
+        LocalDate submitted = CenterDates.dateOf(item.submittedAt(), center);
         if (query.submittedFrom() != null
                 && (submitted == null || submitted.isBefore(query.submittedFrom()))) {
             return false;
@@ -540,7 +540,7 @@ public class ExerciseService {
                 && (submitted == null || submitted.isAfter(query.submittedTo()))) {
             return false;
         }
-        LocalDate archived = dateOf(item.archivedAt());
+        LocalDate archived = CenterDates.dateOf(item.archivedAt(), center);
         if (query.archivedFrom() != null
                 && (archived == null || archived.isBefore(query.archivedFrom()))) {
             return false;
@@ -564,13 +564,6 @@ public class ExerciseService {
 
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
-    }
-
-    private static LocalDate dateOf(Instant instant) {
-        if (instant == null) {
-            return null;
-        }
-        return instant.atZone(ZoneOffset.UTC).toLocalDate();
     }
 
     private ExerciseResponse toResponse(
@@ -629,7 +622,9 @@ public class ExerciseService {
             Instant agingFrom = progress != null && progress.agingFrom() != null
                     ? progress.agingFrom()
                     : exercise.getSubmittedAt();
-            agingDays = agingFrom == null ? null : daysBetween(agingFrom, clock.instant());
+            agingDays = agingFrom == null
+                    ? null
+                    : CenterDates.daysBetween(agingFrom, clock.instant(), snapshot.getCenter());
         }
         Instant archivedAt = archivedAt(exercise, process);
         return new ExerciseResponse(
@@ -864,16 +859,6 @@ public class ExerciseService {
             return exercise.getValidatedAt();
         }
         return null;
-    }
-
-    private static int daysBetween(Instant from, Instant to) {
-        if (from == null || to == null) {
-            return 0;
-        }
-        long days = ChronoUnit.DAYS.between(
-                from.atZone(ZoneOffset.UTC).toLocalDate(),
-                to.atZone(ZoneOffset.UTC).toLocalDate());
-        return (int) Math.max(0, days);
     }
 
     private static ApiException notFound(String code, String message) {

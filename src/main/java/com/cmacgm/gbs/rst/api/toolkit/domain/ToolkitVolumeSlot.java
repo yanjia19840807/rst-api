@@ -2,6 +2,7 @@ package com.cmacgm.gbs.rst.api.toolkit.domain;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 import jakarta.persistence.Column;
@@ -25,11 +26,11 @@ public class ToolkitVolumeSlot implements Persistable<UUID> {
     @Column(name = "toolkit_id", nullable = false)
     private UUID toolkitId;
 
-    @Column(name = "slot_start_at", nullable = false)
-    private Instant slotStartAt;
+    @Column(name = "slot_start_at", nullable = false, columnDefinition = "timestamp")
+    private LocalDateTime slotStartAt;
 
-    @Column(name = "slot_end_at", nullable = false)
-    private Instant slotEndAt;
+    @Column(name = "slot_end_at", nullable = false, columnDefinition = "timestamp")
+    private LocalDateTime slotEndAt;
 
     @Column(name = "actual_volume", nullable = false, precision = 24, scale = 6)
     private BigDecimal actualVolume;
@@ -60,8 +61,8 @@ public class ToolkitVolumeSlot implements Persistable<UUID> {
      */
     public static ToolkitVolumeSlot create(
             UUID toolkitId,
-            Instant slotStartAt,
-            Instant slotEndAt,
+            LocalDateTime slotStartAt,
+            LocalDateTime slotEndAt,
             BigDecimal actualVolume,
             UUID sourceExerciseId,
             String actorCcgid,
@@ -85,7 +86,7 @@ public class ToolkitVolumeSlot implements Persistable<UUID> {
      * Overwrites actual from a newly approved Exercise.
      */
     public void replaceFrom(
-            Instant slotEndAt,
+            LocalDateTime slotEndAt,
             BigDecimal actualVolume,
             UUID sourceExerciseId,
             String actorCcgid,
@@ -114,8 +115,8 @@ public class ToolkitVolumeSlot implements Persistable<UUID> {
     }
 
     public UUID getToolkitId() { return toolkitId; }
-    public Instant getSlotStartAt() { return slotStartAt; }
-    public Instant getSlotEndAt() { return slotEndAt; }
+    public LocalDateTime getSlotStartAt() { return slotStartAt; }
+    public LocalDateTime getSlotEndAt() { return slotEndAt; }
     public BigDecimal getActualVolume() { return actualVolume; }
     public UUID getSourceExerciseId() { return sourceExerciseId; }
 }

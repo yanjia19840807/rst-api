@@ -13,6 +13,7 @@ import java.util.UUID;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.FileArtifact;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.FileArtifactRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.common.time.CenterZones;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.exercise.cycletime.api.dto.ExerciseTmsSessionResponse;
 import com.cmacgm.gbs.rst.api.exercise.cycletime.domain.CycleTimeBaseline;
@@ -198,10 +199,11 @@ public class CycleTimeService {
      */
     @Transactional(readOnly = true)
     public CycleTimeChartView controlChart(String ownerCcgid, UUID exerciseId) {
-        exercises.requireReadable(ownerCcgid, exerciseId);
+        RstExercise exercise = exercises.requireReadable(ownerCcgid, exerciseId);
         List<ExerciseTmsSessionRow> rows = exerciseTmsSessions.findAllSessionRowsByExerciseId(exerciseId);
         return CycleTimeControlChartMath.build(
-                SystemCycleTimeBaselineWriter.includedDatedSamples(rows));
+                SystemCycleTimeBaselineWriter.includedDatedSamples(rows),
+                CenterZones.of(exercise.getToolkitSnapshot().getCenter()));
     }
 
     /**

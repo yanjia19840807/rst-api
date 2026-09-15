@@ -96,7 +96,7 @@ class TmsSessionApiIntegrationTests {
                 TOOLKIT_ID,
                 "Bank Rec Manual Check",
                 "POS-SUP-001",
-                "GBS CHINA INDIA",
+                "GBS INDIA",
                 "Finance",
                 "Accounting",
                 "Record to Report",
@@ -154,7 +154,7 @@ class TmsSessionApiIntegrationTests {
                 """
                 insert into timesheet_sync_run
                     (id, kind, center, sync_date, attempt_no, status, row_count, started_at, completed_at)
-                values (?, 'DAILY', 'GBS CHINA INDIA', current_date, 1, 'ACTIVE', 1, ?, ?)
+                values (?, 'DAILY', 'GBS INDIA', current_date, 1, 'ACTIVE', 1, ?, ?)
                 """,
                 dailyRunId,
                 now,
@@ -163,7 +163,7 @@ class TmsSessionApiIntegrationTests {
                 """
                 insert into timesheet_sync_run
                     (id, kind, center, sync_date, attempt_no, status, row_count, started_at, completed_at)
-                values (?, 'MONTHLY', 'GBS CHINA INDIA', current_date, 1, 'ACTIVE', 1, ?, ?)
+                values (?, 'MONTHLY', 'GBS INDIA', current_date, 1, 'ACTIVE', 1, ?, ?)
                 """,
                 monthlyRunId,
                 now,
@@ -189,14 +189,14 @@ class TmsSessionApiIntegrationTests {
                 """
                 insert into timesheet_position
                     (sync_run_id, position_id, role_type, parent_position_id, center)
-                values (?, 'POS-SUP-001', 'SUPERVISOR', 'POS-SRM-001', 'GBS CHINA INDIA')
+                values (?, 'POS-SUP-001', 'SUPERVISOR', 'POS-SRM-001', 'GBS INDIA')
                 """,
                 dailyRunId);
         jdbcTemplate.update(
                 """
                 insert into timesheet_position
                     (sync_run_id, position_id, role_type, parent_position_id, center)
-                values (?, 'POS-AGENT-001', 'AGENT', 'POS-SUP-001', 'GBS CHINA INDIA')
+                values (?, 'POS-AGENT-001', 'AGENT', 'POS-SUP-001', 'GBS INDIA')
                 """,
                 dailyRunId);
         jdbcTemplate.update(
@@ -205,7 +205,7 @@ class TmsSessionApiIntegrationTests {
                     (sync_run_id, supervisor_position_id, pl3_code, pl3_name,
                      center, domain, pl1, pl2)
                 values (?, 'POS-SUP-001', 'BANK_REC', 'Bank Reconciliation',
-                        'GBS CHINA INDIA', 'Finance', 'Accounting', 'Record to Report')
+                        'GBS INDIA', 'Finance', 'Accounting', 'Record to Report')
                 """,
                 monthlyRunId);
         jdbcTemplate.update(
@@ -213,7 +213,7 @@ class TmsSessionApiIntegrationTests {
                 insert into timesheet_kpi
                     (sync_run_id, supervisor_position_id, pl3_code, center,
                      carrier, site, customer_country, hc)
-                values (?, 'POS-SUP-001', 'BANK_REC', 'GBS CHINA INDIA', 'Carrier A', 'KL', 'Australia', 1)
+                values (?, 'POS-SUP-001', 'BANK_REC', 'GBS INDIA', 'Carrier A', 'KL', 'Australia', 1)
                 """,
                 monthlyRunId);
     }

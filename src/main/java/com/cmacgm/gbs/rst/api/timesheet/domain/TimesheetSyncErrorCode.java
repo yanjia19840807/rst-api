@@ -7,6 +7,7 @@ package com.cmacgm.gbs.rst.api.timesheet.domain;
 public enum TimesheetSyncErrorCode {
 
     MISSING_FIELD,
+    UNKNOWN_CENTER,
     DATE_MISMATCH,
     INVALID_HEADER,
     INVALID_HC,

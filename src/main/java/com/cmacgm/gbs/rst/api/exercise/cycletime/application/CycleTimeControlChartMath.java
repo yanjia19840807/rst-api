@@ -2,7 +2,7 @@ package com.cmacgm.gbs.rst.api.exercise.cycletime.application;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -15,7 +15,7 @@ import com.cmacgm.gbs.rst.api.exercise.cycletime.application.SystemCycleTimeBase
 /**
  * Builds a daily-median control chart from included TMS cycle-time samples.
  *
- * <p>Daily median is the median of that UTC day's samples. Rolling median is the median of the
+     * <p>Daily median is the median of that Center-local day's samples. Rolling median is the median of the
  * last up to 7 daily medians. Control limits are overall daily-median ± 2 sample standard
  * deviations when at least two days exist (aligned with Z-Score &gt; 2 on the session list).
  */
@@ -27,13 +27,13 @@ final class CycleTimeControlChartMath {
     private CycleTimeControlChartMath() {
     }
 
-    static CycleTimeChartView build(List<DatedSample> samples) {
+    static CycleTimeChartView build(List<DatedSample> samples, ZoneId zone) {
         Map<LocalDate, List<Double>> byDay = new TreeMap<>();
         for (DatedSample sample : samples) {
             if (sample == null || sample.at() == null) {
                 continue;
             }
-            LocalDate day = LocalDate.ofInstant(sample.at(), ZoneOffset.UTC);
+            LocalDate day = LocalDate.ofInstant(sample.at(), zone);
             byDay.computeIfAbsent(day, ignored -> new ArrayList<>()).add(sample.seconds());
         }
         if (byDay.isEmpty()) {

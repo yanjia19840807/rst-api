@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -163,7 +164,8 @@ public class ExerciseInitializationService {
                 null,
                 exercise.getTmsFrom(),
                 exercise.getTmsTo(),
-                true)));
+                true,
+                exercise.getToolkitSnapshot().getCenter())));
 
         Set<UUID> desiredIds = new HashSet<>();
         for (TmsSession session : qualifying) {
@@ -335,7 +337,7 @@ public class ExerciseInitializationService {
         slotVolumes.flush();
         List<SlotBound> expected = VolumeTrainWindows.slotTrainBounds(
                 exercise.getSlotStartDate(), exercise.getSlotWeeks());
-        Map<Instant, BigDecimal> seed = toolkitVolumes.slotSeedByStart(exercise.getToolkitId());
+        Map<LocalDateTime, BigDecimal> seed = toolkitVolumes.slotSeedByStart(exercise.getToolkitId());
         List<ExerciseVolumeSlotInput> rows = new ArrayList<>(expected.size());
         for (SlotBound bound : expected) {
             BigDecimal actual = seed.get(bound.start());

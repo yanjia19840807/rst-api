@@ -20,9 +20,9 @@ class DashboardMathTests {
 
     @Test
     void keyRequiresAllParts() {
-        assertThat(DashboardMath.key("GBS CHINA LEBANON", "SUP-1", "PL3-BANK")).isEqualTo("GBS CHINA LEBANON\u0001SUP-1\u0001PL3-BANK");
+        assertThat(DashboardMath.key("GBS LEBANON", "SUP-1", "PL3-BANK")).isEqualTo("GBS LEBANON\u0001SUP-1\u0001PL3-BANK");
         assertThat(DashboardMath.key(" ", "SUP-1", "PL3-BANK")).isEmpty();
-        assertThat(DashboardMath.key("GBS CHINA LEBANON", null, "PL3-BANK")).isEmpty();
+        assertThat(DashboardMath.key("GBS LEBANON", null, "PL3-BANK")).isEmpty();
     }
 
     @Test
@@ -49,12 +49,12 @@ class DashboardMathTests {
     @Test
     void centersPartitionAndSort() {
         List<DashboardCenterRow> rows = DashboardMath.centers(List.of(
-                status("GBS CHINA INDIA", "FINANCE", AgingBucket.THIS_QUARTER),
-                status("GBS CHINA LEBANON", "FINANCE", AgingBucket.THIS_QUARTER),
-                status("GBS CHINA LEBANON", "FINANCE", AgingBucket.NEVER_DONE),
-                status("GBS CHINA LEBANON", "CUSTOMER CARE", AgingBucket.THREE_TO_SIX)));
+                status("GBS INDIA", "FINANCE", AgingBucket.THIS_QUARTER),
+                status("GBS LEBANON", "FINANCE", AgingBucket.THIS_QUARTER),
+                status("GBS LEBANON", "FINANCE", AgingBucket.NEVER_DONE),
+                status("GBS LEBANON", "CUSTOMER CARE", AgingBucket.THREE_TO_SIX)));
         assertThat(rows).extracting(DashboardCenterRow::center)
-                .containsExactly("GBS CHINA INDIA", "GBS CHINA LEBANON");
+                .containsExactly("GBS INDIA", "GBS LEBANON");
         DashboardCenterRow lebanon = rows.get(1);
         assertThat(lebanon.applicablePl3()).isEqualTo(3);
         assertThat(lebanon.completedThisQuarter()).isEqualTo(1);
@@ -72,12 +72,12 @@ class DashboardMathTests {
     @Test
     void domainsGroupInsideCenter() {
         Map<String, List<DashboardDomainRow>> byCenter = DashboardMath.domainsByCenter(List.of(
-                status("GBS CHINA LEBANON", "FINANCE", AgingBucket.THIS_QUARTER),
-                status("GBS CHINA LEBANON", "FINANCE", AgingBucket.NEVER_DONE),
-                status("GBS CHINA LEBANON", "CUSTOMER CARE", AgingBucket.THIS_QUARTER)));
-        assertThat(byCenter.get("GBS CHINA LEBANON")).extracting(DashboardDomainRow::domain)
+                status("GBS LEBANON", "FINANCE", AgingBucket.THIS_QUARTER),
+                status("GBS LEBANON", "FINANCE", AgingBucket.NEVER_DONE),
+                status("GBS LEBANON", "CUSTOMER CARE", AgingBucket.THIS_QUARTER)));
+        assertThat(byCenter.get("GBS LEBANON")).extracting(DashboardDomainRow::domain)
                 .containsExactly("CUSTOMER CARE", "FINANCE");
-        DashboardDomainRow finance = byCenter.get("GBS CHINA LEBANON").get(1);
+        DashboardDomainRow finance = byCenter.get("GBS LEBANON").get(1);
         assertThat(finance.applicablePl3()).isEqualTo(2);
         assertThat(finance.completed()).isEqualTo(1);
         assertThat(finance.neverDone()).isEqualTo(1);
@@ -88,8 +88,8 @@ class DashboardMathTests {
     void metricsUseTotalsAndCapacity() {
         List<DashboardMetric> metrics = DashboardMath.metrics(
                 List.of(
-                        status("GBS CHINA LEBANON", "FINANCE", AgingBucket.THIS_QUARTER),
-                        status("GBS CHINA LEBANON", "FINANCE", AgingBucket.NEVER_DONE)),
+                        status("GBS LEBANON", "FINANCE", AgingBucket.THIS_QUARTER),
+                        status("GBS LEBANON", "FINANCE", AgingBucket.NEVER_DONE)),
                 3,
                 new BigDecimal("128.44"),
                 new BigDecimal("3000"));

@@ -46,7 +46,7 @@ class SupportRepositoryMathTests {
     private static SupportRepositoryRow row(String category, String activity, String fte) {
         return new SupportRepositoryRow(
                 "EX-1",
-                "GBS CHINA LEBANON",
+                "GBS LEBANON",
                 "Finance",
                 "BANK RECONCILIATION",
                 "Bank Rec",

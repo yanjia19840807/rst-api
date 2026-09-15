@@ -60,7 +60,7 @@ class MailPreferenceServiceTests {
     void adminSeesTimesheetEmailAndSyncFailedType() {
         MailPreferenceService service = new MailPreferenceService(emptyRepo(), ccgid -> "admin@timesheet.local");
         RstPrincipal principal = new RstPrincipal(
-                "ADMIN001", "Admin", "admin@dev.local", Set.of("ADMIN"), Set.of(), "GBS CHINA INDIA");
+                "ADMIN001", "Admin", "admin@dev.local", Set.of("ADMIN"), Set.of(), "GBS INDIA");
 
         MailPreferenceService.PreferenceView view = service.current(principal);
 

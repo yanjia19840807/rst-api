@@ -27,8 +27,8 @@ class TimesheetMonthlyCalculatorTests {
         TimesheetMonthlyCalculator.Result result = calculator.compute(
                 runId,
                 List.of(
-                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS CHINA INDIA", "1.5"),
-                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS CHINA INDIA", "0.5")),
+                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS INDIA", "1.5"),
+                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS INDIA", "0.5")),
                 Instant.parse("2026-08-24T00:00:00Z"),
                 null,
                 RST_YES);
@@ -36,10 +36,10 @@ class TimesheetMonthlyCalculatorTests {
         assertThat(result.issues()).isEmpty();
         assertThat(result.scopes())
                 .extracting(TimesheetScope::getSupervisorPositionId, TimesheetScope::getCenter, TimesheetScope::getPl3Code)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "GBS CHINA INDIA", "PL3"));
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "GBS INDIA", "PL3"));
         assertThat(result.kpis())
                 .extracting(TimesheetKpi::getSupervisorPositionId, TimesheetKpi::getCenter, TimesheetKpi::getHc)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "GBS CHINA INDIA", new BigDecimal("2.0")));
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "GBS INDIA", new BigDecimal("2.0")));
     }
 
     @Test
@@ -48,8 +48,8 @@ class TimesheetMonthlyCalculatorTests {
         TimesheetMonthlyCalculator.Result result = calculator.compute(
                 runId,
                 List.of(
-                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS CHINA INDIA", "1"),
-                        row("S00000001", "EMP-1", "POS-SUP-2", "PL3", "GBS CHINA INDIA", "1")),
+                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS INDIA", "1"),
+                        row("S00000001", "EMP-1", "POS-SUP-2", "PL3", "GBS INDIA", "1")),
                 Instant.parse("2026-08-24T00:00:00Z"),
                 null,
                 RST_YES);
@@ -66,8 +66,8 @@ class TimesheetMonthlyCalculatorTests {
         TimesheetMonthlyCalculator.Result result = calculator.compute(
                 runId,
                 List.of(
-                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS CHINA INDIA", "1"),
-                        row("S00000002", "EMP-2", "POS-SUP-1", "", "GBS CHINA INDIA", "1", "management", "non-productive")),
+                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS INDIA", "1"),
+                        row("S00000002", "EMP-2", "POS-SUP-1", "", "GBS INDIA", "1", "management", "non-productive")),
                 Instant.parse("2026-08-24T00:00:00Z"),
                 null,
                 RST_YES);
@@ -85,7 +85,7 @@ class TimesheetMonthlyCalculatorTests {
         UUID runId = UUID.randomUUID();
         TimesheetMonthlyCalculator.Result result = calculator.compute(
                 runId,
-                List.of(row("S00000001", "EMP-1", "POS-SUP-1", "", "GBS CHINA INDIA", "1", "production", "productive")),
+                List.of(row("S00000001", "EMP-1", "POS-SUP-1", "", "GBS INDIA", "1", "production", "productive")),
                 Instant.parse("2026-08-24T00:00:00Z"),
                 null,
                 RST_YES);
@@ -96,18 +96,35 @@ class TimesheetMonthlyCalculatorTests {
     }
 
     @Test
+    void rejectsUnconfiguredCenter() {
+        UUID runId = UUID.randomUUID();
+        TimesheetMonthlyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS VIETNAM", "1")),
+                Instant.parse("2026-08-24T00:00:00Z"),
+                null,
+                RST_YES);
+
+        assertThat(result.issues())
+                .extracting(TimesheetSyncIssue::getCode, TimesheetSyncIssue::getMessage)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(
+                        "UNKNOWN_CENTER",
+                        "Center 'GBS VIETNAM' is not configured. Add it to the Center catalog before importing."));
+    }
+
+    @Test
     void mapsScopeAndKpiFromEveryCompleteRow() {
         UUID runId = UUID.randomUUID();
         TimesheetMonthlyCalculator.Result result = calculator.compute(
                 runId,
                 List.of(
-                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS CHINA INDIA", "1"),
+                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS INDIA", "1"),
                         row(
                                 "S00000002",
                                 "EMP-2",
                                 "POS-SUP-2",
                                 "PL3",
-                                "GBS CHINA INDIA",
+                                "GBS INDIA",
                                 "1",
                                 "management",
                                 "non-productive"),
@@ -116,7 +133,7 @@ class TimesheetMonthlyCalculatorTests {
                                 "EMP-3",
                                 "182894",
                                 "344",
-                                "GBS CHINA INDIA",
+                                "GBS INDIA",
                                 "0.5",
                                 "production",
                                 "non-productive")),
@@ -145,8 +162,8 @@ class TimesheetMonthlyCalculatorTests {
         TimesheetMonthlyCalculator.Result result = calculator.compute(
                 runId,
                 List.of(
-                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS CHINA INDIA", "1"),
-                        row("S00000002", "EMP-2", "POS-SUP-1", "SKIP", "GBS CHINA INDIA", "1")),
+                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS INDIA", "1"),
+                        row("S00000002", "EMP-2", "POS-SUP-1", "SKIP", "GBS INDIA", "1")),
                 Instant.parse("2026-08-24T00:00:00Z"),
                 null,
                 RST_YES);

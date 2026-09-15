@@ -49,7 +49,7 @@ public class TmsSessionController {
 
     @GetMapping("/summary")
     public TmsSummaryResponse summary(@AuthenticationPrincipal RstPrincipal principal) {
-        return queryService.summary(principal.ccgid());
+        return queryService.summary(principal.ccgid(), principal.center());
     }
 
     @GetMapping("/sessions/current")
@@ -89,7 +89,8 @@ public class TmsSessionController {
                         query,
                         dateFrom,
                         dateTo,
-                        enabled),
+                        enabled,
+                        principal.center()),
                 "tms-sessions.xlsx");
     }
 
@@ -125,7 +126,8 @@ public class TmsSessionController {
                 dateTo,
                 enabled,
                 page,
-                pageSize);
+                pageSize,
+                principal.center());
     }
 
     @PostMapping("/sessions")

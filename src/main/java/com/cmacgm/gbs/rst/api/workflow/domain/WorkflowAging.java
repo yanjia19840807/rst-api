@@ -1,9 +1,9 @@
 package com.cmacgm.gbs.rst.api.workflow.domain;
 
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
+
+import com.cmacgm.gbs.rst.api.common.time.CenterDates;
 
 /**
  * Shared aging clock: days waiting on the current review node, not since original submit.
@@ -64,19 +64,14 @@ public final class WorkflowAging {
     }
 
     /**
-     * Whole UTC calendar days between two instants, never negative.
+     * Whole Center-local calendar days between two instants, never negative.
      *
      * @param from start instant
      * @param to end instant
+     * @param center owning Center
      * @return elapsed days, or 0 when either instant is missing
      */
-    public static int daysBetween(Instant from, Instant to) {
-        if (from == null || to == null) {
-            return 0;
-        }
-        long days = ChronoUnit.DAYS.between(
-                from.atZone(ZoneOffset.UTC).toLocalDate(),
-                to.atZone(ZoneOffset.UTC).toLocalDate());
-        return (int) Math.max(0, days);
+    public static int daysBetween(Instant from, Instant to, String center) {
+        return CenterDates.daysBetween(from, to, center);
     }
 }

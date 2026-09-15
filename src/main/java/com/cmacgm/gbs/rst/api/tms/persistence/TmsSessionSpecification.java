@@ -1,10 +1,12 @@
 package com.cmacgm.gbs.rst.api.tms.persistence;
 
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.UUID;
+
+import com.cmacgm.gbs.rst.api.common.time.CenterZones;
 
 import jakarta.persistence.criteria.Predicate;
 
@@ -39,6 +41,7 @@ public final class TmsSessionSpecification {
                 queryText,
                 dateFrom,
                 dateTo,
+                null,
                 null));
     }
 
@@ -89,14 +92,16 @@ public final class TmsSessionSpecification {
                         builder.like(builder.lower(root.get("reference")), pattern)));
             }
             if (filter.dateFrom() != null) {
+                ZoneId zone = dateZone(filter);
                 predicates.add(builder.greaterThanOrEqualTo(
                         root.get("startedAt"),
-                        filter.dateFrom().atStartOfDay(ZoneOffset.UTC).toInstant()));
+                        filter.dateFrom().atStartOfDay(zone).toInstant()));
             }
             if (filter.dateTo() != null) {
+                ZoneId zone = dateZone(filter);
                 predicates.add(builder.lessThan(
                         root.get("startedAt"),
-                        filter.dateTo().plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant()));
+                        filter.dateTo().plusDays(1).atStartOfDay(zone).toInstant()));
             }
             return builder.and(predicates.toArray(Predicate[]::new));
         };
@@ -116,6 +121,7 @@ public final class TmsSessionSpecification {
      * @param dateFrom optional started-at lower bound (inclusive)
      * @param dateTo optional started-at upper bound (inclusive day)
      * @param enabled when set, restrict to enabled or disabled completed samples
+     * @param dateCenter Center whose IANA zone interprets dateFrom / dateTo
      */
     public record Filter(
             String agentCcgid,
@@ -128,7 +134,8 @@ public final class TmsSessionSpecification {
             String queryText,
             LocalDate dateFrom,
             LocalDate dateTo,
-            Boolean enabled) {
+            Boolean enabled,
+            String dateCenter) {
         public Filter(
                 String agentCcgid,
                 Collection<UUID> toolkitIds,
@@ -151,7 +158,39 @@ public final class TmsSessionSpecification {
                     queryText,
                     dateFrom,
                     dateTo,
+                    null,
                     null);
         }
+
+        public Filter(
+                String agentCcgid,
+                Collection<UUID> toolkitIds,
+                UUID toolkitId,
+                String pl3Code,
+                TmsSessionStatus status,
+                String sessionNo,
+                String reference,
+                String queryText,
+                LocalDate dateFrom,
+                LocalDate dateTo,
+                Boolean enabled) {
+            this(
+                    agentCcgid,
+                    toolkitIds,
+                    toolkitId,
+                    pl3Code,
+                    status,
+                    sessionNo,
+                    reference,
+                    queryText,
+                    dateFrom,
+                    dateTo,
+                    enabled,
+                    null);
+        }
+    }
+
+    private static ZoneId dateZone(Filter filter) {
+        return CenterZones.of(filter.dateCenter());
     }
 }

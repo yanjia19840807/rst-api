@@ -7,6 +7,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -109,8 +110,8 @@ public class ToolkitVolumeService {
      * Lookup map for overlapping slot actuals from the canonical series.
      */
     @Transactional(readOnly = true)
-    public Map<Instant, BigDecimal> slotSeedByStart(UUID toolkitId) {
-        Map<Instant, BigDecimal> out = new LinkedHashMap<>();
+    public Map<LocalDateTime, BigDecimal> slotSeedByStart(UUID toolkitId) {
+        Map<LocalDateTime, BigDecimal> out = new LinkedHashMap<>();
         for (ToolkitVolumeSlot row : listSlot(toolkitId)) {
             if (row.getActualVolume() != null) {
                 out.put(row.getSlotStartAt(), row.getActualVolume());
@@ -205,8 +206,8 @@ public class ToolkitVolumeService {
     @Transactional
     public void upsertSlot(
             UUID toolkitId,
-            Instant slotStartAt,
-            Instant slotEndAt,
+            LocalDateTime slotStartAt,
+            LocalDateTime slotEndAt,
             BigDecimal actualVolume,
             UUID sourceExerciseId,
             String actorCcgid,

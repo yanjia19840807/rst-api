@@ -39,7 +39,7 @@ class TimesheetDailyCalculatorTests {
                         TimesheetPerson::getEmail,
                         TimesheetPerson::getPositionId)
                 .contains(org.assertj.core.groups.Tuple.tuple(
-                        "S00000001", "GBS CHINA INDIA", "s00000001@dev.local", "EMP-POS-1"));
+                        "S00000001", "GBS INDIA", "s00000001@dev.local", "EMP-POS-1"));
         assertThat(result.people())
                 .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getPositionId)
                 .contains(
@@ -156,7 +156,7 @@ class TimesheetDailyCalculatorTests {
                 "",
                 "",
                 "",
-                "GBS CHINA INDIA",
+                "GBS INDIA",
                 "Site",
                 "Finance",
                 "PL1",
@@ -204,6 +204,42 @@ class TimesheetDailyCalculatorTests {
         assertThat(result.people())
                 .extracting(TimesheetPerson::getCcgid)
                 .contains("S00000001", "S00000006");
+    }
+
+    @Test
+    void rejectsUnconfiguredCenter() {
+        UUID runId = UUID.randomUUID();
+        TimesheetDailyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(
+                        row(
+                                "S00000001",
+                                "EMP-1",
+                                "Agent One",
+                                "EMP-POS-1",
+                                "production",
+                                "productive",
+                                "SRM-1",
+                                "GBS VIETNAM"),
+                        row(
+                                "S00000007",
+                                "EMP-7",
+                                "Agent Seven",
+                                "EMP-POS-7",
+                                "production",
+                                "productive",
+                                "SRM-1",
+                                "GBS VIETNAM")),
+                Instant.parse("2026-08-23T00:00:00Z"),
+                null,
+                RST_YES);
+
+        assertThat(result.issues())
+                .extracting(TimesheetSyncIssue::getCode, TimesheetSyncIssue::getMessage)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(
+                        "UNKNOWN_CENTER",
+                        "Center 'GBS VIETNAM' is not configured. Add it to the Center catalog before importing."));
+        assertThat(TimesheetRowValidator.isAdvisory(result.issues().getFirst())).isFalse();
     }
 
     @Test
@@ -331,7 +367,7 @@ class TimesheetDailyCalculatorTests {
                                 "production",
                                 "productive",
                                 "SRM-1",
-                                "Shanghai"),
+                                "GBS CHINA"),
                         row(
                                 "S00000001",
                                 "EMP-1",
@@ -340,7 +376,7 @@ class TimesheetDailyCalculatorTests {
                                 "production",
                                 "productive",
                                 "SRM-1",
-                                "GBS CHINA INDIA")),
+                                "GBS INDIA")),
                 Instant.parse("2026-08-23T00:00:00Z"),
                 null,
                 RST_YES);
@@ -373,7 +409,7 @@ class TimesheetDailyCalculatorTests {
                 "S00000004",
                 "Head One",
                 "POS-DH-1",
-                "GBS CHINA INDIA",
+                "GBS INDIA",
                 "Site",
                 "Finance",
                 "PL1",
@@ -407,7 +443,7 @@ class TimesheetDailyCalculatorTests {
                 "production",
                 "productive",
                 "SRM-1",
-                "GBS CHINA INDIA",
+                "GBS INDIA",
                 supervisorPositionId);
     }
 
@@ -421,7 +457,7 @@ class TimesheetDailyCalculatorTests {
                 "management",
                 "non-productive",
                 "SRM-1",
-                "GBS CHINA INDIA",
+                "GBS INDIA",
                 supervisorPositionId);
     }
 
@@ -432,7 +468,7 @@ class TimesheetDailyCalculatorTests {
             String empPositionId,
             String managementOrProduction,
             String costType) {
-        return row(empCcgid, empId, empName, empPositionId, managementOrProduction, costType, "SRM-1", "GBS CHINA INDIA");
+        return row(empCcgid, empId, empName, empPositionId, managementOrProduction, costType, "SRM-1", "GBS INDIA");
     }
 
     private static ReportRow row(
@@ -451,7 +487,7 @@ class TimesheetDailyCalculatorTests {
                 managementOrProduction,
                 costType,
                 srManagerId,
-                "GBS CHINA INDIA");
+                "GBS INDIA");
     }
 
     private static ReportRow row(

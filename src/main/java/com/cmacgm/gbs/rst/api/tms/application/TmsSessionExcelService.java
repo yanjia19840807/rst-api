@@ -1,8 +1,10 @@
 package com.cmacgm.gbs.rst.api.tms.application;
 
 import java.math.BigDecimal;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+
+import com.cmacgm.gbs.rst.api.common.time.CenterZones;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,7 +20,7 @@ import com.cmacgm.gbs.rst.api.tms.api.dto.TmsSessionResponse;
 public class TmsSessionExcelService {
 
     private static final DateTimeFormatter DATE_TIME =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneOffset.UTC);
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final List<String> HEADERS = List.of(
             "Session No",
             "Agent",
@@ -47,8 +49,8 @@ public class TmsSessionExcelService {
                     blank(session.agentName()),
                     blank(session.toolkitName()),
                     dash(session.subtaskName()),
-                    formatInstant(session.startedAt()),
-                    formatInstant(session.endedAt()),
+                    formatInstant(session.startedAt(), session.center()),
+                    formatInstant(session.endedAt(), session.center()),
                     formatDuration(session.netDurationSeconds()),
                     cycleTime(session),
                     dash(session.reference()),
@@ -71,8 +73,12 @@ public class TmsSessionExcelService {
         return volume == null ? "" : volume.stripTrailingZeros().toPlainString();
     }
 
-    private static String formatInstant(java.time.Instant value) {
-        return value == null ? "" : DATE_TIME.format(value);
+    private static String formatInstant(java.time.Instant value, String center) {
+        if (value == null) {
+            return "";
+        }
+        ZoneId zone = CenterZones.of(center);
+        return DATE_TIME.format(value.atZone(zone));
     }
 
     private static String formatDuration(long totalSeconds) {

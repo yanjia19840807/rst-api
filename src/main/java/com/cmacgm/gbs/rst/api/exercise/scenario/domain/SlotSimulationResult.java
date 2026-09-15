@@ -1,7 +1,7 @@
 package com.cmacgm.gbs.rst.api.exercise.scenario.domain;
 
 import java.math.BigDecimal;
-import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 import jakarta.persistence.Column;
@@ -20,11 +20,11 @@ public class SlotSimulationResult {
     @Column(name = "simulation_run_id", nullable = false)
     private UUID simulationRunId;
 
-    @Column(name = "slot_start_at", nullable = false)
-    private Instant slotStartAt;
+    @Column(name = "slot_start_at", nullable = false, columnDefinition = "timestamp")
+    private LocalDateTime slotStartAt;
 
-    @Column(name = "slot_end_at", nullable = false)
-    private Instant slotEndAt;
+    @Column(name = "slot_end_at", nullable = false, columnDefinition = "timestamp")
+    private LocalDateTime slotEndAt;
 
     @Column(name = "raw_volume", precision = 24, scale = 6)
     private BigDecimal rawVolume;
@@ -67,8 +67,8 @@ public class SlotSimulationResult {
      */
     public static SlotSimulationResult create(
             UUID simulationRunId,
-            Instant slotStartAt,
-            Instant slotEndAt,
+            LocalDateTime slotStartAt,
+            LocalDateTime slotEndAt,
             BigDecimal rawVolume,
             BigDecimal manualVolume,
             BigDecimal theoreticalFte,
@@ -101,8 +101,8 @@ public class SlotSimulationResult {
 
     public UUID getId() { return id; }
     public UUID getSimulationRunId() { return simulationRunId; }
-    public Instant getSlotStartAt() { return slotStartAt; }
-    public Instant getSlotEndAt() { return slotEndAt; }
+    public LocalDateTime getSlotStartAt() { return slotStartAt; }
+    public LocalDateTime getSlotEndAt() { return slotEndAt; }
     public BigDecimal getRawVolume() { return rawVolume; }
     public BigDecimal getManualVolume() { return manualVolume; }
     public BigDecimal getTheoreticalFte() { return theoreticalFte; }

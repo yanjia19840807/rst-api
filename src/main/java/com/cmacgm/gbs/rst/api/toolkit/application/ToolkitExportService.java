@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -247,8 +248,8 @@ public class ToolkitExportService {
         int rowIdx = 1;
         for (ToolkitVolumeSlot row : rows) {
             Row excel = sheet.createRow(rowIdx++);
-            cell(excel, 0, instant(row.getSlotStartAt()));
-            cell(excel, 1, instant(row.getSlotEndAt()));
+            cell(excel, 0, localDateTime(row.getSlotStartAt()));
+            cell(excel, 1, localDateTime(row.getSlotEndAt()));
             cell(excel, 2, decimal(row.getActualVolume()));
         }
         autosize(sheet, 3);
@@ -296,6 +297,10 @@ public class ToolkitExportService {
 
     private static String instant(Instant value) {
         return value == null ? "" : ISO_INSTANT.format(value);
+    }
+
+    private static String localDateTime(LocalDateTime value) {
+        return value == null ? "" : value.toString();
     }
 
     private static String text(UUID value) {

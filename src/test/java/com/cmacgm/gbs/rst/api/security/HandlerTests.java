@@ -33,7 +33,7 @@ class HandlerTests {
                 "a@b.c",
                 Set.of("SUPERVISOR"),
                 Set.of(),
-                "GBS CHINA INDIA",
+                "GBS INDIA",
                 "AGT1",
                 "Li Wei",
                 UUID.randomUUID());

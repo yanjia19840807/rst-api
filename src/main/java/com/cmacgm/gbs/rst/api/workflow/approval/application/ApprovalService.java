@@ -4,8 +4,6 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -24,6 +22,7 @@ import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseProductionSupportItemRepository;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.common.time.CenterDates;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
@@ -245,7 +244,7 @@ public class ApprovalService {
         if (hasText(query.pl3Name()) && !query.pl3Name().equals(item.pl3Name())) {
             return false;
         }
-        LocalDate submitted = dateOf(item.submittedAt());
+        LocalDate submitted = CenterDates.dateOf(item.submittedAt(), item.center());
         if (query.submittedFrom() != null
                 && (submitted == null || submitted.isBefore(query.submittedFrom()))) {
             return false;
@@ -254,7 +253,7 @@ public class ApprovalService {
                 && (submitted == null || submitted.isAfter(query.submittedTo()))) {
             return false;
         }
-        LocalDate completedAt = dateOf(item.myCompletedAt());
+        LocalDate completedAt = CenterDates.dateOf(item.myCompletedAt(), item.center());
         if (query.completedFrom() != null
                 && (completedAt == null || completedAt.isBefore(query.completedFrom()))) {
             return false;
@@ -271,13 +270,6 @@ public class ApprovalService {
 
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
-    }
-
-    private static LocalDate dateOf(Instant instant) {
-        if (instant == null) {
-            return null;
-        }
-        return instant.atZone(ZoneOffset.UTC).toLocalDate();
     }
 
     /**
@@ -548,12 +540,12 @@ public class ApprovalService {
                 : supervisor;
         Instant previousStepAt = last != null ? last.getActedAt() : workflow.getSubmittedAt();
         Instant agingFrom = WorkflowAging.currentStepStartedAt(workflow, workflow.getSubmittedAt());
-        int agingDays = daysBetween(agingFrom, clock.instant());
+        int agingDays = CenterDates.daysBetween(agingFrom, clock.instant(), center);
 
         Instant archivedAt = archivedAt(exercise, workflow);
         Integer reviewDurationDays = workflow.isAwaitingReview()
                 ? null
-                : daysBetween(workflow.getSubmittedAt(), archivedAt);
+                : CenterDates.daysBetween(workflow.getSubmittedAt(), archivedAt, center);
         String myDecision = mine == null
                 ? null
                 : decisionLabel(mine.getStatus());
@@ -672,16 +664,6 @@ public class ApprovalService {
             return "Returned";
         }
         return null;
-    }
-
-    private static int daysBetween(Instant from, Instant to) {
-        if (from == null || to == null) {
-            return 0;
-        }
-        long days = ChronoUnit.DAYS.between(
-                from.atZone(ZoneOffset.UTC).toLocalDate(),
-                to.atZone(ZoneOffset.UTC).toLocalDate());
-        return (int) Math.max(0, days);
     }
 
     private String displayName(String ccgid, Map<String, String> names) {

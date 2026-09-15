@@ -1,7 +1,6 @@
 package com.cmacgm.gbs.rst.api.governance.application;
 
 import java.math.BigDecimal;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -9,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.common.time.CenterDates;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath;
@@ -148,7 +148,7 @@ public class SupportRepositoryService {
         String toolkit = snapshot == null ? "" : snapshot.getToolkitName();
         String submittedDate = exercise.getSubmittedAt() == null
                 ? ""
-                : exercise.getSubmittedAt().atZone(ZoneOffset.UTC).toLocalDate().toString();
+                : CenterDates.dateOf(exercise.getSubmittedAt(), center).toString();
         BigDecimal workingDays = workingDaysService.workingDaysPerYear(exercise.getId());
         BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup, workingDays);
         List<SupportRepositoryRow> rows = new ArrayList<>();

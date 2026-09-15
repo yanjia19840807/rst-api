@@ -1,7 +1,6 @@
 package com.cmacgm.gbs.rst.api.governance.application;
 
 import java.math.BigDecimal;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -10,6 +9,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.common.time.CenterDates;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath;
@@ -216,7 +216,7 @@ public class RstRepositoryService {
         BigDecimal productionSupport = supportByExercise.get(exercise.getId());
         String submittedDate = exercise.getSubmittedAt() == null
                 ? ""
-                : exercise.getSubmittedAt().atZone(ZoneOffset.UTC).toLocalDate().toString();
+                : CenterDates.dateOf(exercise.getSubmittedAt(), snapshot.getCenter()).toString();
         List<RepositoryRow> rows = new ArrayList<>();
         for (ExerciseSharedKpiLine line : exercise.getSharedKpiLines()) {
             RepositoryLineMath.LineMetrics metrics = RepositoryLineMath.allocate(
