@@ -15,8 +15,8 @@ import org.springframework.stereotype.Component;
 /**
  * Routes workflow steps to Timesheet positions. The occupant ccgid is recorded for display
  * only; queue membership and Approve/Return authorization use {@code positionId}.
- * Timesheet has no LTH column, so LTH steps share {@link RstRoles#LOCAL_TRANSFORMATION_HEAD}
- * as the position id.
+ * Timesheet has no LTH column, so LTH steps keep {@link RstRoles#LOCAL_TRANSFORMATION_HEAD}
+ * as the position id. Occupant comes from Center Roles when configured.
  */
 @Component
 public class WorkflowRouter {
@@ -106,12 +106,14 @@ public class WorkflowRouter {
     }
 
     /**
-     * Resolves the shared LTH position (Timesheet has no LTH column).
+     * Resolves the LTH step for a Center. Authorization stays on the SSO sentinel
+     * position; occupant comes from Center Roles when configured.
      *
-     * @return LTH position; occupant is unknown until IAM provides one
+     * @param center toolkit center
+     * @return LTH position plus configured occupant when live
      */
-    public RoutedStep resolveLth() {
-        return new RoutedStep(RstRoles.LOCAL_TRANSFORMATION_HEAD, null, null);
+    public RoutedStep resolveLth(String center) {
+        return domainHeads.resolveLth(center);
     }
 
     /**
@@ -135,7 +137,7 @@ public class WorkflowRouter {
                 yield NextHop.of("Center Delivery Head Review", positionId, occupant);
             }
             case "DOMAIN_HEAD" -> {
-                RoutedStep lth = resolveLth();
+                RoutedStep lth = resolveLth(center);
                 yield new NextHop(
                         "Local Transformation Head Review",
                         lth.positionId(),

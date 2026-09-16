@@ -142,6 +142,32 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
     List<RstExercise> findUnderReviewValidationExercises();
 
     /**
+     * One UNDER_REVIEW Exercise for Validation Workflow Toolkit Info.
+     * Loads Toolkit snapshot only; Subtasks / Shared KPI lines are fetched lazily.
+     *
+     * @param id Exercise id
+     * @return under-review exercise, or empty
+     */
+    @EntityGraph(attributePaths = {"toolkitSnapshot"})
+    @Query("""
+            select e from RstExercise e
+            where e.id = :id
+              and e.deletedAt is null
+              and exists (
+                  select 1 from ProcessInstance w
+                  join w.tasks t
+                  where w.exerciseId = e.id
+                    and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.PENDING
+                    and t.node in (
+                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.SR_MANAGER,
+                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.DOMAIN_HEAD,
+                        com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LOCAL_TRANSFORMATION_HEAD
+                    )
+              )
+            """)
+    Optional<RstExercise> findUnderReviewValidationExerciseById(UUID id);
+
+    /**
      * Counts Exercises whose process is waiting on a reviewer.
      *
      * @return under-review count

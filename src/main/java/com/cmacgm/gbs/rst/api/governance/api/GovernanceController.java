@@ -174,8 +174,11 @@ public class GovernanceController {
      * Totals and category mix follow the filtered rows; dropdown options do not shrink.
      *
      * @param center optional exact GBS Center
+     * @param domain optional exact domain
+     * @param pl3Name optional exact PL3 name
      * @param categoryId optional catalog Category id
      * @param toolkitName optional exact toolkit name
+     * @param sizingMonth optional exact sizing month ({@code YYYY-MM})
      * @param validatedFrom optional validated date from
      * @param validatedTo optional validated date to
      * @param page 1-based page
@@ -186,8 +189,11 @@ public class GovernanceController {
     @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public SupportRepositoryView supportRepository(
             @RequestParam(required = false) String center,
+            @RequestParam(required = false) String domain,
+            @RequestParam(required = false) String pl3Name,
             @RequestParam(required = false) UUID categoryId,
             @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
                     LocalDate validatedFrom,
@@ -199,8 +205,11 @@ public class GovernanceController {
         return supportRepositoryService.listApproved(
                 new SupportRepositoryQuery(
                         center,
+                        domain,
+                        pl3Name,
                         categoryId,
                         toolkitName,
+                        sizingMonth,
                         validatedFrom,
                         validatedTo),
                 page,
@@ -214,8 +223,11 @@ public class GovernanceController {
     @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public ResponseEntity<byte[]> exportSupportRepository(
             @RequestParam(required = false) String center,
+            @RequestParam(required = false) String domain,
+            @RequestParam(required = false) String pl3Name,
             @RequestParam(required = false) UUID categoryId,
             @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
                     LocalDate validatedFrom,
@@ -226,18 +238,20 @@ public class GovernanceController {
                 excel.exportSupportRepository(supportRepositoryService.listApprovedAll(
                         new SupportRepositoryQuery(
                                 center,
+                                domain,
+                                pl3Name,
                                 categoryId,
                                 toolkitName,
+                                sizingMonth,
                                 validatedFrom,
                                 validatedTo))),
                 "support-repository.xlsx");
     }
 
     /**
-     * Same-PL3 benchmarking for APPROVED Shared KPI lines. Cards follow all filtered
-     * matches; dropdown options do not shrink. Rows require {@code pl3Code}.
+     * Same-PL3 benchmarking for the latest APPROVED Exercise per Center × Supervisor × PL3.
+     * Cards follow all filtered matches; cascade paths do not shrink. Rows require {@code pl3Code}.
      *
-     * @param center optional exact GBS Center
      * @param domain optional exact domain
      * @param pl1 optional exact PL1
      * @param pl2 optional exact PL2
@@ -246,12 +260,11 @@ public class GovernanceController {
      * @param validatedTo optional validated date to
      * @param page 1-based page
      * @param pageSize page size
-     * @return one page of rows, cards from all matches, and unfiltered dropdown options
+     * @return one page of rows, cards from all matches, and unfiltered cascade paths
      */
     @GetMapping("/benchmarking")
     @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public BenchmarkingView benchmarking(
-            @RequestParam(required = false) String center,
             @RequestParam(required = false) String domain,
             @RequestParam(required = false) String pl1,
             @RequestParam(required = false) String pl2,
@@ -265,7 +278,7 @@ public class GovernanceController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         return benchmarkingService.listApproved(
-                new BenchmarkingQuery(center, domain, pl1, pl2, pl3Code, validatedFrom, validatedTo),
+                new BenchmarkingQuery(domain, pl1, pl2, pl3Code, validatedFrom, validatedTo),
                 page,
                 pageSize);
     }
@@ -276,7 +289,6 @@ public class GovernanceController {
     @GetMapping("/benchmarking/export")
     @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public ResponseEntity<byte[]> exportBenchmarking(
-            @RequestParam(required = false) String center,
             @RequestParam(required = false) String domain,
             @RequestParam(required = false) String pl1,
             @RequestParam(required = false) String pl2,
@@ -290,7 +302,7 @@ public class GovernanceController {
         return excelResponse(
                 excel.exportBenchmarking(benchmarkingService.listApprovedAll(
                         new BenchmarkingQuery(
-                                center, domain, pl1, pl2, pl3Code, validatedFrom, validatedTo))),
+                                domain, pl1, pl2, pl3Code, validatedFrom, validatedTo))),
                 "benchmarking.xlsx");
     }
 
@@ -339,6 +351,18 @@ public class GovernanceController {
                         submittedTo),
                 page,
                 pageSize);
+    }
+
+    /**
+     * Frozen Toolkit snapshot for an UNDER_REVIEW Exercise in Validation Workflow.
+     *
+     * @param exerciseId Exercise id
+     * @return toolkit, subtasks, and Shared KPI lines at freeze time
+     */
+    @GetMapping("/validation-workflow/{exerciseId}/toolkit-info")
+    @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','ADMIN')")
+    public ExerciseSnapshot validationWorkflowToolkitInfo(@PathVariable UUID exerciseId) {
+        return validationWorkflowService.toolkitInfo(exerciseId);
     }
 
     private static ResponseEntity<byte[]> excelResponse(byte[] body, String filename) {

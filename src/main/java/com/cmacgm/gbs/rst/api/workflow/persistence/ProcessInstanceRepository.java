@@ -59,4 +59,23 @@ public interface ProcessInstanceRepository extends JpaRepository<ProcessInstance
             """)
     List<ProcessInstance> findOpenCdhByCenterAndDomain(
             @Param("center") String center, @Param("domain") String domain);
+
+    /**
+     * OPEN processes currently waiting on LTH for Toolkits in this Center.
+     *
+     * @param center GBS center
+     * @return instances at the LTH node
+     */
+    @Query("""
+            select distinct w
+            from ProcessInstance w, RstExercise e
+            join w.tasks t
+            where w.exerciseId = e.id
+              and e.deletedAt is null
+              and w.status = com.cmacgm.gbs.rst.api.workflow.domain.ProcessStatus.OPEN
+              and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.PENDING
+              and t.node = com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LOCAL_TRANSFORMATION_HEAD
+              and e.toolkitSnapshot.center = :center
+            """)
+    List<ProcessInstance> findOpenLthByCenter(@Param("center") String center);
 }

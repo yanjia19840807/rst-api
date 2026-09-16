@@ -22,7 +22,7 @@ import com.cmacgm.gbs.rst.api.exercise.cycletime.persistence.CycleTimeBaselineRe
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
-import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkPl3Option;
+import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkProcessPath;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkRow;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingView;
@@ -72,13 +72,14 @@ public class BenchmarkingService {
     }
 
     /**
-     * Lists APPROVED Shared KPI rows for one PL3. Cards follow all filtered matches;
-     * dropdown options come from all APPROVED rows that have a PL3 code.
+     * Lists Shared KPI rows from the latest APPROVED Exercise per Center × Supervisor × PL3.
+     * Detail Cycle time / capacity / Support ratio are Delivery-HC weighted per Center.
+     * Cards use the same weights across all filtered matches.
      *
      * @param query field filters; {@code pl3Code} is required for rows
      * @param page 1-based page
      * @param pageSize page size
-     * @return one page of rows, cards from all matches, and unfiltered dropdown options
+     * @return one page of rows, cards from all matches, and unfiltered cascade paths
      */
     @Transactional(readOnly = true)
     public BenchmarkingView listApproved(BenchmarkingQuery query, int page, int pageSize) {
@@ -86,28 +87,22 @@ public class BenchmarkingService {
         if (rows.source().isEmpty()) {
             return emptyView(page, pageSize);
         }
-        List<BenchmarkRow> source = rows.source();
-        List<BenchmarkRow> items = rows.items();
-        List<BenchmarkPl3Option> pl3Options = rows.pl3Options();
-        String selectedPl3 = selectedPl3Name(query, pl3Options);
+        List<BenchmarkRow> items = BenchmarkingMath.weightDetailByCenter(rows.items());
+        List<BenchmarkProcessPath> processPaths = rows.processPaths();
+        String selectedPl3 = selectedPl3Name(query, processPaths);
         BenchmarkingMath.Summary summary = BenchmarkingMath.summarize(selectedPl3, items);
         PageResponse<BenchmarkRow> paged = PageResponse.ofList(items, page, pageSize);
         return new BenchmarkingView(
                 summary.selectedPl3(),
-                summary.bestDailyCapacity(),
-                summary.bestDailyCapacityHint(),
-                summary.medianCycleTimeSeconds(),
+                summary.dailyCapacityPerAgent(),
+                summary.cycleTimeSeconds(),
                 summary.productionSupportRatioPct(),
                 paged.items(),
                 paged.page(),
                 paged.pageSize(),
                 paged.total(),
                 paged.totalPages(),
-                BenchmarkingFilters.distinct(source, BenchmarkRow::gbs),
-                BenchmarkingFilters.distinct(source, BenchmarkRow::domain),
-                BenchmarkingFilters.distinct(source, BenchmarkRow::pl1),
-                BenchmarkingFilters.distinct(source, BenchmarkRow::pl2),
-                pl3Options);
+                processPaths);
     }
 
     /**
@@ -118,11 +113,12 @@ public class BenchmarkingService {
      */
     @Transactional(readOnly = true)
     public List<BenchmarkRow> listApprovedAll(BenchmarkingQuery query) {
-        return filteredRows(query).items();
+        return BenchmarkingMath.weightDetailByCenter(filteredRows(query).items());
     }
 
     private FilteredBenchmarking filteredRows(BenchmarkingQuery query) {
-        List<RstExercise> approved = exercises.findApprovedRepositoryExercises();
+        List<RstExercise> approved = BenchmarkingExercises.latestApprovedPerScope(
+                exercises.findApprovedRepositoryExercises());
         if (approved.isEmpty()) {
             return new FilteredBenchmarking(List.of(), List.of(), List.of());
         }
@@ -141,20 +137,22 @@ public class BenchmarkingService {
         }
         source.sort(Comparator
                 .comparing(BenchmarkRow::gbs, Comparator.nullsLast(String::compareTo))
+                .thenComparing(BenchmarkRow::carrier, Comparator.nullsLast(String::compareTo))
+                .thenComparing(BenchmarkRow::site, Comparator.nullsLast(String::compareTo))
                 .thenComparing(BenchmarkRow::sharedKpiLine, Comparator.nullsLast(String::compareTo))
                 .thenComparing(BenchmarkRow::domain, Comparator.nullsLast(String::compareTo))
                 .thenComparing(BenchmarkRow::pl3, Comparator.nullsLast(String::compareTo)));
-        List<BenchmarkPl3Option> pl3Options = BenchmarkingFilters.distinctPl3(source);
+        List<BenchmarkProcessPath> processPaths = BenchmarkingFilters.distinctPaths(source);
         List<BenchmarkRow> items = source.stream()
                 .filter(row -> BenchmarkingFilters.matches(row, query))
                 .toList();
-        return new FilteredBenchmarking(source, items, pl3Options);
+        return new FilteredBenchmarking(source, items, processPaths);
     }
 
     private record FilteredBenchmarking(
             List<BenchmarkRow> source,
             List<BenchmarkRow> items,
-            List<BenchmarkPl3Option> pl3Options) {
+            List<BenchmarkProcessPath> processPaths) {
     }
 
     private List<BenchmarkRow> rowsFor(
@@ -182,6 +180,8 @@ public class BenchmarkingService {
                     line.getDeliveryHc(), totalDelivery, actualHc, rightSizingHc, productionSupport);
             rows.add(new BenchmarkRow(
                     blank(line.getCenter()),
+                    blank(line.getCarrier()),
+                    blank(line.getSite()),
                     blank(line.getCustomerCountry()),
                     blank(line.getDomain()),
                     blank(line.getPl1()),
@@ -267,13 +267,13 @@ public class BenchmarkingService {
         return result;
     }
 
-    private static String selectedPl3Name(BenchmarkingQuery query, List<BenchmarkPl3Option> options) {
+    private static String selectedPl3Name(BenchmarkingQuery query, List<BenchmarkProcessPath> paths) {
         if (query == null || !BenchmarkingFilters.hasText(query.pl3Code())) {
             return "";
         }
-        return options.stream()
-                .filter(option -> query.pl3Code().equals(option.code()))
-                .map(BenchmarkPl3Option::name)
+        return paths.stream()
+                .filter(path -> query.pl3Code().equals(path.pl3Code()))
+                .map(BenchmarkProcessPath::pl3Name)
                 .findFirst()
                 .orElse(query.pl3Code());
     }
@@ -315,7 +315,6 @@ public class BenchmarkingService {
         return new BenchmarkingView(
                 "",
                 null,
-                "",
                 null,
                 null,
                 paged.items(),
@@ -323,10 +322,6 @@ public class BenchmarkingService {
                 paged.pageSize(),
                 paged.total(),
                 paged.totalPages(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
                 List.of());
     }
 }

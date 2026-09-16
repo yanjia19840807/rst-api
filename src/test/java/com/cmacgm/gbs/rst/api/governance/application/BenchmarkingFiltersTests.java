@@ -6,7 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
-import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkPl3Option;
+import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkProcessPath;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkRow;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingQuery;
 import org.junit.jupiter.api.Test;
@@ -15,81 +15,79 @@ class BenchmarkingFiltersTests {
 
     @Test
     void requiresPl3Code() {
-        BenchmarkRow row = row("PL3-BANK", "GBS LEBANON", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
-        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, null, null, null, null)))
+        BenchmarkRow row = row("PL3-BANK", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
+        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, null, null, null)))
                 .isFalse();
-        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, null, "PL3-BANK", null, null)))
+        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, "PL3-BANK", null, null)))
                 .isTrue();
-        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, null, "PL3-OTHER", null, null)))
+        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, "PL3-OTHER", null, null)))
                 .isFalse();
     }
 
     @Test
     void exactFiltersMustMatch() {
-        BenchmarkRow row = row("PL3-BANK", "GBS LEBANON", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
+        BenchmarkRow row = row("PL3-BANK", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
         assertThat(BenchmarkingFilters.matches(
-                row, query("GBS LEBANON", "FINANCE", "R2R", "Bank Rec", "PL3-BANK", null, null)))
+                row, query("FINANCE", "R2R", "Bank Rec", "PL3-BANK", null, null)))
                 .isTrue();
         assertThat(BenchmarkingFilters.matches(
-                row, query("GBS INDIA", null, null, null, "PL3-BANK", null, null)))
+                row, query("OPS", null, null, "PL3-BANK", null, null)))
                 .isFalse();
         assertThat(BenchmarkingFilters.matches(
-                row, query(null, "OPS", null, null, "PL3-BANK", null, null)))
+                row, query(null, "P2P", null, "PL3-BANK", null, null)))
                 .isFalse();
         assertThat(BenchmarkingFilters.matches(
-                row, query(null, null, "P2P", null, "PL3-BANK", null, null)))
-                .isFalse();
-        assertThat(BenchmarkingFilters.matches(
-                row, query(null, null, null, "AP", "PL3-BANK", null, null)))
+                row, query(null, null, "AP", "PL3-BANK", null, null)))
                 .isFalse();
     }
 
     @Test
     void validatedDateIsInclusive() {
-        BenchmarkRow row = row("PL3-BANK", "GBS LEBANON", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
+        BenchmarkRow row = row("PL3-BANK", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
         assertThat(BenchmarkingFilters.matches(
-                row, query(null, null, null, null, "PL3-BANK",
+                row, query(null, null, null, "PL3-BANK",
                         LocalDate.parse("2026-03-10"), LocalDate.parse("2026-03-10"))))
                 .isTrue();
         assertThat(BenchmarkingFilters.matches(
-                row, query(null, null, null, null, "PL3-BANK", LocalDate.parse("2026-03-11"), null)))
+                row, query(null, null, null, "PL3-BANK", LocalDate.parse("2026-03-11"), null)))
                 .isFalse();
         assertThat(BenchmarkingFilters.matches(
-                row, query(null, null, null, null, "PL3-BANK", null, LocalDate.parse("2026-03-09"))))
+                row, query(null, null, null, "PL3-BANK", null, LocalDate.parse("2026-03-09"))))
                 .isFalse();
     }
 
     @Test
-    void distinctPl3KeepsCodeAndSortsByName() {
-        List<BenchmarkPl3Option> options = BenchmarkingFilters.distinctPl3(List.of(
-                row("PL3-B", "GBS LEBANON", "FINANCE", "R2R", "Zebra", "2026-01-01"),
-                row("PL3-A", "GBS INDIA", "FINANCE", "R2R", "Alpha", "2026-01-01"),
-                row("PL3-A", "GBS INDIA", "FINANCE", "R2R", "Alpha", "2026-01-01"),
-                row("", "GBS INDIA", "FINANCE", "R2R", "Missing", "2026-01-01")));
-        assertThat(options).extracting(BenchmarkPl3Option::code).containsExactly("PL3-A", "PL3-B");
-        assertThat(options).extracting(BenchmarkPl3Option::name).containsExactly("Alpha", "Zebra");
+    void distinctPathsKeepsHierarchyAndSorts() {
+        List<BenchmarkProcessPath> paths = BenchmarkingFilters.distinctPaths(List.of(
+                row("PL3-B", "FINANCE", "R2R", "Zebra", "2026-01-01"),
+                row("PL3-A", "FINANCE", "R2R", "Alpha", "2026-01-01"),
+                row("PL3-A", "FINANCE", "R2R", "Alpha", "2026-01-01"),
+                row("", "FINANCE", "R2R", "Missing", "2026-01-01")));
+        assertThat(paths).extracting(BenchmarkProcessPath::pl3Code).containsExactly("PL3-A", "PL3-B");
+        assertThat(paths).extracting(BenchmarkProcessPath::pl3Name).containsExactly("Alpha", "Zebra");
+        assertThat(paths).extracting(BenchmarkProcessPath::domain).containsOnly("FINANCE");
     }
 
     private static BenchmarkingQuery query(
-            String center,
             String domain,
             String pl1,
             String pl2,
             String pl3Code,
             LocalDate validatedFrom,
             LocalDate validatedTo) {
-        return new BenchmarkingQuery(center, domain, pl1, pl2, pl3Code, validatedFrom, validatedTo);
+        return new BenchmarkingQuery(domain, pl1, pl2, pl3Code, validatedFrom, validatedTo);
     }
 
     private static BenchmarkRow row(
             String pl3Code,
-            String gbs,
             String domain,
             String pl1,
             String pl2,
             String validatedDate) {
         return new BenchmarkRow(
-                gbs,
+                "GBS LEBANON",
+                "CMA CGM",
+                "SHA",
                 "China",
                 domain,
                 pl1,

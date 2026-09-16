@@ -7,14 +7,13 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 
-import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkPl3Option;
+import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkProcessPath;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkRow;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingQuery;
 
 /**
- * Server-side matching and distinct option helpers for benchmarking rows.
+ * Server-side matching and cascade-path helpers for benchmarking rows.
  */
 public final class BenchmarkingFilters {
 
@@ -34,9 +33,6 @@ public final class BenchmarkingFilters {
             return false;
         }
         if (!query.pl3Code().equals(row.pl3Code())) {
-            return false;
-        }
-        if (hasText(query.center()) && !query.center().equals(row.gbs())) {
             return false;
         }
         if (hasText(query.domain()) && !query.domain().equals(row.domain())) {
@@ -61,41 +57,33 @@ public final class BenchmarkingFilters {
     }
 
     /**
-     * Distinct non-blank values, sorted, for dropdown options.
+     * Distinct Domain → PL1 → PL2 → PL3 paths from APPROVED rows, for cascade pickers.
      *
      * @param rows source rows (unfiltered)
-     * @param getter field accessor
-     * @return sorted distinct names
+     * @return sorted distinct paths
      */
-    public static List<String> distinct(List<BenchmarkRow> rows, Function<BenchmarkRow, String> getter) {
-        return rows.stream()
-                .map(getter)
-                .filter(BenchmarkingFilters::hasText)
-                .distinct()
-                .sorted()
-                .toList();
-    }
-
-    /**
-     * Distinct PL3 codes with a display name, sorted by name then code.
-     *
-     * @param rows source rows (unfiltered)
-     * @return PL3 options
-     */
-    public static List<BenchmarkPl3Option> distinctPl3(List<BenchmarkRow> rows) {
-        Map<String, String> names = new LinkedHashMap<>();
+    public static List<BenchmarkProcessPath> distinctPaths(List<BenchmarkRow> rows) {
+        Map<String, BenchmarkProcessPath> seen = new LinkedHashMap<>();
         for (BenchmarkRow row : rows) {
-            if (!hasText(row.pl3Code())) {
+            if (!hasText(row.domain())
+                    || !hasText(row.pl1())
+                    || !hasText(row.pl2())
+                    || !hasText(row.pl3Code())) {
                 continue;
             }
-            names.putIfAbsent(row.pl3Code(), hasText(row.pl3()) ? row.pl3() : row.pl3Code());
+            String key = row.domain() + '\0' + row.pl1() + '\0' + row.pl2() + '\0' + row.pl3Code();
+            String name = hasText(row.pl3()) ? row.pl3() : row.pl3Code();
+            seen.putIfAbsent(key, new BenchmarkProcessPath(
+                    row.domain(), row.pl1(), row.pl2(), row.pl3Code().trim(), name));
         }
-        List<BenchmarkPl3Option> options = new ArrayList<>();
-        names.forEach((code, name) -> options.add(new BenchmarkPl3Option(code, name)));
-        options.sort(Comparator
-                .comparing(BenchmarkPl3Option::name, String.CASE_INSENSITIVE_ORDER)
-                .thenComparing(BenchmarkPl3Option::code));
-        return List.copyOf(options);
+        List<BenchmarkProcessPath> paths = new ArrayList<>(seen.values());
+        paths.sort(Comparator
+                .comparing(BenchmarkProcessPath::domain, String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(BenchmarkProcessPath::pl1, String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(BenchmarkProcessPath::pl2, String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(BenchmarkProcessPath::pl3Name, String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(BenchmarkProcessPath::pl3Code));
+        return List.copyOf(paths);
     }
 
     static boolean hasText(String value) {

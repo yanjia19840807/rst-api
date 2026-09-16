@@ -7,6 +7,8 @@ import java.math.BigDecimal;
  */
 public record BenchmarkRow(
         String gbs,
+        String carrier,
+        String site,
         String sharedKpiLine,
         String domain,
         String pl1,

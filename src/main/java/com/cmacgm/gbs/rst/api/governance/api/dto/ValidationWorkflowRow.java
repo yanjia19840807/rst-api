@@ -7,8 +7,11 @@ import java.math.BigDecimal;
  */
 public record ValidationWorkflowRow(
         String exerciseNo,
+        String exerciseUuid,
         String gbs,
         String domain,
+        String pl1,
+        String pl2,
         String pl3,
         String toolkit,
         String currentStep,

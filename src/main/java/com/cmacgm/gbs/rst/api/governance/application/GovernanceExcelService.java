@@ -19,9 +19,9 @@ public class GovernanceExcelService {
 
     private static final List<String> REPOSITORY_HEADERS = List.of(
             "Exercise No",
+            "GBS Center",
             "Carrier",
             "GBS Site",
-            "GBS Country",
             "Domain",
             "PL1",
             "PL2",
@@ -51,8 +51,10 @@ public class GovernanceExcelService {
             "Comments");
 
     private static final List<String> BENCHMARK_HEADERS = List.of(
-            "GBS",
-            "Shared KPI Line",
+            "GBS Center",
+            "Carrier",
+            "GBS Site",
+            "Customer country",
             "Domain",
             "PL3",
             "Cycle time",
@@ -71,9 +73,9 @@ public class GovernanceExcelService {
         for (RepositoryRow row : rows) {
             body.add(List.of(
                     blank(row.exerciseId()),
+                    blank(row.country()),
                     blank(row.carrier()),
                     blank(row.site()),
-                    blank(row.country()),
                     blank(row.domain()),
                     blank(row.pl1()),
                     blank(row.pl2()),
@@ -128,6 +130,8 @@ public class GovernanceExcelService {
         for (BenchmarkRow row : rows) {
             body.add(List.of(
                     blank(row.gbs()),
+                    blank(row.carrier()),
+                    blank(row.site()),
                     blank(row.sharedKpiLine()),
                     blank(row.domain()),
                     blank(row.pl3()),

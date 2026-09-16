@@ -335,12 +335,16 @@ public class ApprovalService {
                         now);
                 nextApproverCcgid = cdh.assigneeCcgid();
             } else if (next == TaskNode.LOCAL_TRANSFORMATION_HEAD) {
-                WorkflowRouter.RoutedStep lth = workflowRouter.resolveLth();
+                WorkflowRouter.RoutedStep lth = workflowRouter.resolveLth(toolkitCenter(loaded.exercise()));
                 loaded.workflow().openReview(
                         next,
                         List.of(new ProcessInstance.Assignee(lth.positionId(), lth.assigneeCcgid())),
                         now);
-                notifyLth = true;
+                if (hasText(lth.assigneeCcgid())) {
+                    nextApproverCcgid = lth.assigneeCcgid();
+                } else {
+                    notifyLth = true;
+                }
             } else if (current.getNode() == TaskNode.LOCAL_TRANSFORMATION_HEAD) {
                 volumeTraining.freezeOfficialTrainingAndUpsert(
                         loaded.exercise(), principal.ccgid(), now);

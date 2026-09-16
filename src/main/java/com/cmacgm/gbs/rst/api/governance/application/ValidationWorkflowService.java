@@ -13,7 +13,12 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.time.CenterDates;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseKpiView;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseSnapshot;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseSubtaskView;
+import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseToolkitView;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath;
@@ -39,6 +44,7 @@ import com.cmacgm.gbs.rst.api.workflow.domain.TaskActor;
 import com.cmacgm.gbs.rst.api.workflow.domain.TaskNode;
 import com.cmacgm.gbs.rst.api.workflow.domain.WorkflowAging;
 import com.cmacgm.gbs.rst.api.workflow.persistence.ProcessInstanceRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -135,6 +141,56 @@ public class ValidationWorkflowService {
                 ValidationWorkflowFilters.distinct(source, ValidationWorkflowRow::toolkit));
     }
 
+    /**
+     * Frozen Toolkit snapshot for an UNDER_REVIEW Exercise (LTH / ADMIN).
+     *
+     * @param exerciseId Exercise id
+     * @return toolkit, subtasks, and Shared KPI lines at freeze time
+     */
+    @Transactional(readOnly = true)
+    public ExerciseSnapshot toolkitInfo(UUID exerciseId) {
+        RstExercise exercise = exercises.findUnderReviewValidationExerciseById(exerciseId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND, "exercise-not-found", "The Exercise was not found."));
+        ExerciseToolkitSnapshot snapshot = exercise.getToolkitSnapshot();
+        if (snapshot == null) {
+            throw new ApiException(
+                    HttpStatus.NOT_FOUND, "exercise-not-found", "The Exercise was not found.");
+        }
+        return new ExerciseSnapshot(
+                new ExerciseToolkitView(
+                        snapshot.getSourceToolkitId(),
+                        snapshot.getToolkitName(),
+                        snapshot.getCenter(),
+                        snapshot.getDomain(),
+                        snapshot.getPl1(),
+                        snapshot.getPl2(),
+                        snapshot.getPl3Code(),
+                        snapshot.getPl3Name(),
+                        snapshot.isCombineSubtasksTime(),
+                        snapshot.getSourceToolkitVersion()),
+                exercise.getSubtasks().stream()
+                        .map(item -> new ExerciseSubtaskView(
+                                item.getId(),
+                                item.getSourceToolkitSubtaskId(),
+                                item.getName(),
+                                item.getDescription(),
+                                item.getDisplayOrder(),
+                                null))
+                        .toList(),
+                exercise.getSharedKpiLines().stream()
+                        .map(item -> new ExerciseKpiView(
+                                item.getId(),
+                                item.getToolkitSharedKpiSelectionId(),
+                                item.getCarrier(),
+                                item.getSite(),
+                                item.getCustomerCountry(),
+                                item.getDeliveryHc(),
+                                true))
+                        .toList(),
+                null);
+    }
+
     private ValidationWorkflowRow rowFor(
             RstExercise exercise,
             ReviewState review,
@@ -156,8 +212,11 @@ public class ValidationWorkflowService {
                 : WorkflowAging.daysBetween(agingFrom, clock.instant(), snapshot.getCenter());
         return new ValidationWorkflowRow(
                 blankToEmpty(exercise.getExerciseCode()),
+                exercise.getId().toString(),
                 snapshot == null ? "" : blankToEmpty(snapshot.getCenter()),
                 snapshot == null ? "" : blankToEmpty(snapshot.getDomain()),
+                snapshot == null ? "" : blankToEmpty(snapshot.getPl1()),
+                snapshot == null ? "" : blankToEmpty(snapshot.getPl2()),
                 snapshot == null ? "" : blankToEmpty(snapshot.getPl3Name()),
                 snapshot == null ? "" : blankToEmpty(snapshot.getToolkitName()),
                 review == null ? "" : blankToEmpty(reviewStageLabel(review.requiredRole())),

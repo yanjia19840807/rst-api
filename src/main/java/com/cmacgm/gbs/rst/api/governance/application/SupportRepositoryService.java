@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.time.CenterDates;
+import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath;
@@ -61,8 +62,8 @@ public class SupportRepositoryService {
 
     /**
      * Lists APPROVED Production Support rows, newest validation first.
-     * Summaries follow the filtered row set; Center / Toolkit options come from all APPROVED
-     * rows. Category options come from the database lookup.
+     * Summaries follow the filtered row set; Center / Domain / PL3 / Toolkit options come from
+     * all APPROVED rows. Category options come from the database lookup.
      *
      * @param query field filters
      * @param page 1-based page
@@ -91,6 +92,8 @@ public class SupportRepositoryService {
                 paged.total(),
                 paged.totalPages(),
                 SupportRepositoryFilters.distinct(source, SupportRepositoryRow::center),
+                SupportRepositoryFilters.distinct(source, SupportRepositoryRow::domain),
+                SupportRepositoryFilters.distinct(source, SupportRepositoryRow::pl3),
                 categoryOptions,
                 SupportRepositoryFilters.distinct(source, SupportRepositoryRow::toolkit));
     }
@@ -146,6 +149,7 @@ public class SupportRepositoryService {
         String domain = snapshot == null ? "" : snapshot.getDomain();
         String pl3 = snapshot == null ? "" : snapshot.getPl3Name();
         String toolkit = snapshot == null ? "" : snapshot.getToolkitName();
+        String sizingMonth = MonthKeys.formatYearMonth(exercise.getSizingMonth());
         String validatedDate = exercise.getValidatedAt() == null || center == null || center.isBlank()
                 ? ""
                 : CenterDates.dateOf(exercise.getValidatedAt(), center).toString();
@@ -174,6 +178,7 @@ public class SupportRepositoryService {
                     item.getUnitOfMeasure(),
                     fte,
                     item.getComments() == null ? "" : item.getComments(),
+                    sizingMonth == null ? "" : sizingMonth,
                     validatedDate));
         }
         return rows;
@@ -211,6 +216,8 @@ public class SupportRepositoryService {
                 paged.pageSize(),
                 paged.total(),
                 paged.totalPages(),
+                List.of(),
+                List.of(),
                 List.of(),
                 supportCategories.listActive(),
                 List.of());

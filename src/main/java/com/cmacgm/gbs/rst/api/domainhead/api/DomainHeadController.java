@@ -18,10 +18,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Domain Head (CDH) configuration for an LTH Center, or any Center for ADMIN.
+ * Center Roles: LTH and Domain Head configuration for an LTH Center, or any Center for ADMIN.
  */
 @RestController
-@RequestMapping("/api/v1/domain-heads")
+@RequestMapping("/api/v1/center-roles")
 @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD', 'ADMIN')")
 public class DomainHeadController {
 
@@ -47,7 +47,7 @@ public class DomainHeadController {
     }
 
     /**
-     * Lists Domains in a Center and the current CDH mapping.
+     * Lists the Center LTH and Domain Head mappings.
      *
      * @param principal current caller
      * @param center Admin-selected center; ignored for LTH
@@ -61,7 +61,7 @@ public class DomainHeadController {
     }
 
     /**
-     * Saves dirty mappings and remounts READY CDH steps for changed Domains.
+     * Saves dirty LTH / Domain Head mappings and remounts READY steps that changed.
      *
      * @param principal current caller
      * @param request dirty rows (and center for ADMIN)

@@ -113,8 +113,11 @@ class ValidationWorkflowFiltersTests {
             String submittedDate) {
         return new ValidationWorkflowRow(
                 exerciseNo,
+                "11111111-1111-1111-1111-111111111111",
                 gbs,
                 domain,
+                "PL1-A",
+                "PL2-A",
                 pl3,
                 toolkit,
                 "Manager Review",

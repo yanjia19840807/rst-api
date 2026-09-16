@@ -8,8 +8,11 @@ import java.util.UUID;
  */
 public record SupportRepositoryQuery(
         String center,
+        String domain,
+        String pl3Name,
         UUID categoryId,
         String toolkitName,
+        String sizingMonth,
         LocalDate validatedFrom,
         LocalDate validatedTo) {
 }

@@ -60,6 +60,7 @@ class SupportRepositoryMathTests {
                 "Cases",
                 new BigDecimal(fte),
                 "",
+                "2026-03",
                 "2026-03-10");
     }
 }

@@ -19,6 +19,8 @@ public record SupportRepositoryView(
         long total,
         int totalPages,
         List<String> centers,
+        List<String> domains,
+        List<String> pl3Names,
         List<SupportCategoryOption> categories,
         List<String> toolkitNames) {
 }

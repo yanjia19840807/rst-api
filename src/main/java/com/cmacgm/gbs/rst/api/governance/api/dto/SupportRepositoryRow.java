@@ -22,5 +22,6 @@ public record SupportRepositoryRow(
         String uom,
         BigDecimal fte,
         String comments,
+        String sizingMonth,
         String validatedDate) {
 }

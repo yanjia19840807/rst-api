@@ -30,10 +30,19 @@ public final class SupportRepositoryFilters {
         if (hasText(query.center()) && !query.center().equals(row.center())) {
             return false;
         }
+        if (hasText(query.domain()) && !query.domain().equals(row.domain())) {
+            return false;
+        }
+        if (hasText(query.pl3Name()) && !query.pl3Name().equals(row.pl3())) {
+            return false;
+        }
         if (query.categoryId() != null && !query.categoryId().equals(row.categoryId())) {
             return false;
         }
         if (hasText(query.toolkitName()) && !query.toolkitName().equals(row.toolkit())) {
+            return false;
+        }
+        if (hasText(query.sizingMonth()) && !query.sizingMonth().trim().equals(row.sizingMonth())) {
             return false;
         }
         LocalDate validated = dateOf(row.validatedDate());
