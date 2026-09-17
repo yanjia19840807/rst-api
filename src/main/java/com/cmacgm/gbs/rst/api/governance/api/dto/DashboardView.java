@@ -5,6 +5,7 @@ import java.util.Map;
 
 /**
  * Global Dashboard: header cards, GBS aging table, and domain drill-down by center.
+ * Completion and aging are weighted by current Timesheet Delivery HC.
  */
 public record DashboardView(
         List<DashboardMetric> metrics,

@@ -1,12 +1,14 @@
 package com.cmacgm.gbs.rst.api.governance.api.dto;
 
+import java.math.BigDecimal;
+
 /**
- * Domain drill-down row for one GBS Center.
+ * Domain drill-down row for one GBS Center, weighted by Delivery HC.
  */
 public record DashboardDomainRow(
         String domain,
-        int applicablePl3,
-        int completed,
+        BigDecimal applicableHc,
+        BigDecimal completed,
         String pct,
-        int neverDone) {
+        BigDecimal neverDone) {
 }

@@ -13,6 +13,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPosition;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
@@ -568,6 +569,16 @@ public class TimesheetReadService {
     @Transactional(readOnly = true)
     public List<TimesheetScope> dashboardObligations() {
         return scopes.findActiveDashboardObligations();
+    }
+
+    /**
+     * Dashboard universe: ACTIVE Monthly Delivery HC rows.
+     *
+     * @return KPI rows
+     */
+    @Transactional(readOnly = true)
+    public List<TimesheetKpi> dashboardKpis() {
+        return kpis.findActiveDashboardKpis();
     }
 
     /**

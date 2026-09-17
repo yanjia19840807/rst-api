@@ -1,16 +1,18 @@
 package com.cmacgm.gbs.rst.api.governance.api.dto;
 
+import java.math.BigDecimal;
+
 /**
- * One GBS Center completion and aging row.
+ * One GBS Center completion and aging row, weighted by Delivery HC.
  */
 public record DashboardCenterRow(
         String center,
-        int applicablePl3,
-        int completedThisQuarter,
+        BigDecimal applicableHc,
+        BigDecimal completedThisQuarter,
         String completionPct,
-        int completed3To6Months,
-        int neverDone,
-        int completed6To12Months,
-        int completedOver1Year,
+        BigDecimal completed3To6Months,
+        BigDecimal neverDone,
+        BigDecimal completed6To12Months,
+        BigDecimal completedOver1Year,
         boolean onTrack) {
 }

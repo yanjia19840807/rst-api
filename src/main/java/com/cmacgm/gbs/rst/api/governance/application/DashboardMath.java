@@ -19,6 +19,7 @@ import com.cmacgm.gbs.rst.api.governance.api.dto.DashboardMetric;
 
 /**
  * Aging buckets, completion %, and header cards for Global Dashboard.
+ * Coverage is weighted by current Timesheet Delivery HC at Shared KPI grain.
  */
 public final class DashboardMath {
 
@@ -30,7 +31,7 @@ public final class DashboardMath {
     }
 
     /**
-     * Obligation key used to match Timesheet units to APPROVED Toolkit snapshots.
+     * Obligation key used to attach Timesheet domain to a KPI row.
      *
      * @param center GBS center
      * @param supervisorPositionId supervisor position
@@ -42,6 +43,40 @@ public final class DashboardMath {
             return "";
         }
         return center.trim() + '\u0001' + supervisorPositionId.trim() + '\u0001' + pl3Code.trim();
+    }
+
+    /**
+     * KPI-line key used to match Timesheet Delivery HC to APPROVED Toolkit lines.
+     *
+     * @param center GBS center
+     * @param supervisorPositionId supervisor position
+     * @param pl3Code PL3 code
+     * @param carrier carrier
+     * @param site site
+     * @param country customer country
+     * @return stable key, or empty when any part is blank
+     */
+    public static String kpiKey(
+            String center,
+            String supervisorPositionId,
+            String pl3Code,
+            String carrier,
+            String site,
+            String country) {
+        if (!hasText(center)
+                || !hasText(supervisorPositionId)
+                || !hasText(pl3Code)
+                || !hasText(carrier)
+                || !hasText(site)
+                || !hasText(country)) {
+            return "";
+        }
+        return center.trim()
+                + '\u0001' + supervisorPositionId.trim()
+                + '\u0001' + pl3Code.trim()
+                + '\u0001' + carrier.trim()
+                + '\u0001' + site.trim()
+                + '\u0001' + country.trim();
     }
 
     /**
@@ -74,11 +109,11 @@ public final class DashboardMath {
     /**
      * Integer completion percent, or empty when there is no denominator.
      *
-     * @param completed this-quarter count
-     * @param applicable obligation count
+     * @param completed this-quarter Delivery HC
+     * @param applicable applicable Delivery HC
      * @return {@code 65%} style label, or {@code —}
      */
-    public static String percentLabel(int completed, int applicable) {
+    public static String percentLabel(BigDecimal completed, BigDecimal applicable) {
         Integer pct = percent(completed, applicable);
         return pct == null ? "—" : pct + "%";
     }
@@ -86,38 +121,39 @@ public final class DashboardMath {
     /**
      * Whether the displayed completion percent is on track.
      *
-     * @param completed this-quarter count
-     * @param applicable obligation count
+     * @param completed this-quarter Delivery HC
+     * @param applicable applicable Delivery HC
      * @return true when rounded percent is at least 50
      */
-    public static boolean onTrack(int completed, int applicable) {
+    public static boolean onTrack(BigDecimal completed, BigDecimal applicable) {
         Integer pct = percent(completed, applicable);
         return pct != null && pct >= ON_TRACK_PERCENT;
     }
 
-    static Integer percent(int completed, int applicable) {
-        if (applicable <= 0) {
+    static Integer percent(BigDecimal completed, BigDecimal applicable) {
+        if (applicable == null || applicable.signum() <= 0) {
             return null;
         }
-        return BigDecimal.valueOf(completed)
+        BigDecimal numerator = completed == null ? BigDecimal.ZERO : completed;
+        return numerator
                 .multiply(HUNDRED)
-                .divide(BigDecimal.valueOf(applicable), 0, RoundingMode.HALF_UP)
+                .divide(applicable, 0, RoundingMode.HALF_UP)
                 .intValue();
     }
 
     /**
-     * Rolls obligation statuses into GBS Center rows, sorted by center name.
+     * Rolls KPI coverage into GBS Center rows, sorted by center name.
      *
-     * @param items one status per applicable unit
+     * @param items one status per applicable Timesheet KPI
      * @return center rows
      */
-    public static List<DashboardCenterRow> centers(List<ObligationStatus> items) {
+    public static List<DashboardCenterRow> centers(List<KpiCoverage> items) {
         Map<String, Counts> byCenter = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-        for (ObligationStatus item : items) {
+        for (KpiCoverage item : items) {
             if (!hasText(item.center())) {
                 continue;
             }
-            byCenter.computeIfAbsent(item.center(), ignored -> new Counts()).add(item.bucket());
+            byCenter.computeIfAbsent(item.center(), ignored -> new Counts()).add(item.bucket(), item.hc());
         }
         List<DashboardCenterRow> rows = new ArrayList<>();
         byCenter.forEach((center, counts) -> rows.add(centerRow(center, counts)));
@@ -125,21 +161,21 @@ public final class DashboardMath {
     }
 
     /**
-     * Rolls obligation statuses into domain rows keyed by GBS Center.
+     * Rolls KPI coverage into domain rows keyed by GBS Center.
      *
-     * @param items one status per applicable unit
+     * @param items one status per applicable Timesheet KPI
      * @return center → domain rows
      */
-    public static Map<String, List<DashboardDomainRow>> domainsByCenter(List<ObligationStatus> items) {
+    public static Map<String, List<DashboardDomainRow>> domainsByCenter(List<KpiCoverage> items) {
         Map<String, Map<String, Counts>> nested = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-        for (ObligationStatus item : items) {
+        for (KpiCoverage item : items) {
             if (!hasText(item.center())) {
                 continue;
             }
             String domain = hasText(item.domain()) ? item.domain() : "";
             nested.computeIfAbsent(item.center(), ignored -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER))
                     .computeIfAbsent(domain, ignored -> new Counts())
-                    .add(item.bucket());
+                    .add(item.bucket(), item.hc());
         }
         Map<String, List<DashboardDomainRow>> result = new LinkedHashMap<>();
         nested.forEach((center, domains) -> {
@@ -156,36 +192,36 @@ public final class DashboardMath {
     }
 
     /**
-     * Builds the five header cards from all obligations plus YTD capacity inputs.
+     * Builds the five header cards from KPI coverage plus YTD capacity inputs.
      *
-     * @param items obligation statuses
+     * @param items KPI coverage statuses
      * @param stuckUnderReview UNDER_REVIEW Exercise count
      * @param capacityYtd Capacity Creation for APPROVED this year; null when none
      * @param deliveryHc ACTIVE Timesheet Σ hc
      * @return header cards
      */
     public static List<DashboardMetric> metrics(
-            List<ObligationStatus> items,
+            List<KpiCoverage> items,
             long stuckUnderReview,
             BigDecimal capacityYtd,
             BigDecimal deliveryHc) {
         Counts total = new Counts();
-        for (ObligationStatus item : items) {
-            total.add(item.bucket());
+        for (KpiCoverage item : items) {
+            total.add(item.bucket(), item.hc());
         }
         String completionValue = percentLabel(total.thisQuarter, total.applicable);
         return List.of(
                 new DashboardMetric(
                         "RST completion (%)",
                         completionValue,
-                        counts(total.thisQuarter) + " / " + counts(total.applicable)
-                                + " applicable PL3 completed this quarter",
+                        formatHc(total.thisQuarter) + " / " + formatHc(total.applicable)
+                                + " Delivery HC completed this quarter",
                         toneForCompletion(total.thisQuarter, total.applicable)),
                 new DashboardMetric(
                         "Never done",
-                        counts(total.neverDone),
-                        "Applicable PL3 with no RST record",
-                        total.neverDone > 0 ? "bad" : "good"),
+                        formatHc(total.neverDone),
+                        "Delivery HC not covered by a completed RST",
+                        total.neverDone.signum() > 0 ? "bad" : "good"),
                 new DashboardMetric(
                         "Stuck in validation",
                         counts(stuckUnderReview),
@@ -225,6 +261,16 @@ public final class DashboardMath {
         return capacityYtd.multiply(HUNDRED).divide(deliveryHc, 1, RoundingMode.HALF_UP).toPlainString() + "%";
     }
 
+    static String formatHc(BigDecimal value) {
+        if (value == null) {
+            return "—";
+        }
+        NumberFormat format = NumberFormat.getNumberInstance(Locale.US);
+        format.setMinimumFractionDigits(1);
+        format.setMaximumFractionDigits(1);
+        return format.format(value);
+    }
+
     static String counts(long value) {
         return NumberFormat.getIntegerInstance(Locale.US).format(value);
     }
@@ -246,8 +292,8 @@ public final class DashboardMath {
                 onTrack(counts.thisQuarter, counts.applicable));
     }
 
-    private static String toneForCompletion(int completed, int applicable) {
-        if (applicable <= 0) {
+    private static String toneForCompletion(BigDecimal completed, BigDecimal applicable) {
+        if (applicable == null || applicable.signum() <= 0) {
             return "neutral";
         }
         return onTrack(completed, applicable) ? "good" : "bad";
@@ -261,17 +307,18 @@ public final class DashboardMath {
     }
 
     /**
-     * One applicable Timesheet unit after matching the latest APPROVED date.
+     * One applicable Timesheet KPI after matching the latest APPROVED line.
      *
      * @param center GBS center
      * @param domain business domain
      * @param bucket aging bucket
+     * @param hc current Timesheet Delivery HC
      */
-    public record ObligationStatus(String center, String domain, AgingBucket bucket) {
+    public record KpiCoverage(String center, String domain, AgingBucket bucket, BigDecimal hc) {
     }
 
     /**
-     * Mutually exclusive aging partition of applicable PL3 units.
+     * Mutually exclusive aging partition of applicable KPI Delivery HC.
      */
     public enum AgingBucket {
         THIS_QUARTER,
@@ -282,21 +329,24 @@ public final class DashboardMath {
     }
 
     private static final class Counts {
-        private int applicable;
-        private int thisQuarter;
-        private int threeToSix;
-        private int sixToTwelve;
-        private int overOneYear;
-        private int neverDone;
+        private BigDecimal applicable = BigDecimal.ZERO;
+        private BigDecimal thisQuarter = BigDecimal.ZERO;
+        private BigDecimal threeToSix = BigDecimal.ZERO;
+        private BigDecimal sixToTwelve = BigDecimal.ZERO;
+        private BigDecimal overOneYear = BigDecimal.ZERO;
+        private BigDecimal neverDone = BigDecimal.ZERO;
 
-        private void add(AgingBucket bucket) {
-            applicable++;
+        private void add(AgingBucket bucket, BigDecimal hc) {
+            if (hc == null || hc.signum() <= 0) {
+                return;
+            }
+            applicable = applicable.add(hc);
             switch (bucket) {
-                case THIS_QUARTER -> thisQuarter++;
-                case THREE_TO_SIX -> threeToSix++;
-                case SIX_TO_TWELVE -> sixToTwelve++;
-                case OVER_ONE_YEAR -> overOneYear++;
-                case NEVER_DONE -> neverDone++;
+                case THIS_QUARTER -> thisQuarter = thisQuarter.add(hc);
+                case THREE_TO_SIX -> threeToSix = threeToSix.add(hc);
+                case SIX_TO_TWELVE -> sixToTwelve = sixToTwelve.add(hc);
+                case OVER_ONE_YEAR -> overOneYear = overOneYear.add(hc);
+                case NEVER_DONE -> neverDone = neverDone.add(hc);
             }
         }
     }

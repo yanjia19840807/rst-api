@@ -124,6 +124,22 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
     BigDecimal sumActiveHeadcount();
 
     /**
+     * Dashboard universe: every ACTIVE Monthly KPI row.
+     *
+     * @return KPI rows
+     */
+    @Query("""
+            select k
+            from TimesheetKpi k, TimesheetSyncRun r
+            where k.id.syncRunId = r.id
+              and r.kind = 'MONTHLY'
+              and r.status = 'ACTIVE'
+            order by k.id.center, k.id.supervisorPositionId, k.id.pl3Code,
+                     k.id.carrier, k.id.site, k.id.customerCountry
+            """)
+    List<TimesheetKpi> findActiveDashboardKpis();
+
+    /**
      * ACTIVE Monthly Delivery HC rows for the Timesheet Sync browser.
      *
      * @param center exact center; blank matches all

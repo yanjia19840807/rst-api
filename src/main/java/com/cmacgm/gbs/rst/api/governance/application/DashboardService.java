@@ -26,13 +26,14 @@ import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Builds Global Dashboard cards and aging tables from ACTIVE Timesheet
- * obligations and APPROVED Exercises.
+ * KPI Delivery HC and APPROVED Exercise Shared KPI lines.
  */
 @Service
 public class DashboardService {
@@ -46,7 +47,7 @@ public class DashboardService {
     private final Clock clock;
 
     /**
-     * @param timesheet ACTIVE Monthly scopes and HC
+     * @param timesheet ACTIVE Monthly KPI Delivery HC and scopes
      * @param exercises APPROVED / UNDER_REVIEW Exercises
      * @param scenarios Official Scenario + Right Sizing HC
      * @param supportItems production support inputs
@@ -72,7 +73,7 @@ public class DashboardService {
     }
 
     /**
-     * Aggregates applicable PL3 coverage, aging, stuck reviews, and YTD capacity.
+     * Aggregates applicable KPI Delivery HC, aging, stuck reviews, and YTD capacity.
      *
      * @return dashboard payload
      */
@@ -80,17 +81,33 @@ public class DashboardService {
     public DashboardView build() {
         LocalDate today = LocalDate.now(clock);
         List<RstExercise> approved = exercises.findApprovedRepositoryExercises();
-        Map<String, LocalDate> latestApproved = latestApprovedByKey(approved);
-        List<DashboardMath.ObligationStatus> statuses = new ArrayList<>();
-        for (TimesheetScope row : timesheet.dashboardObligations()) {
-            String key = DashboardMath.key(row.getCenter(), row.getSupervisorPositionId(), row.getPl3Code());
-            if (key.isEmpty()) {
+        Map<String, LocalDate> latestApproved = latestApprovedByKpiKey(approved);
+        Map<String, String> domainByObligation = domainByObligation();
+        List<DashboardMath.KpiCoverage> statuses = new ArrayList<>();
+        for (TimesheetKpi row : timesheet.dashboardKpis()) {
+            if (row.getHc() == null || row.getHc().signum() <= 0) {
                 continue;
             }
-            statuses.add(new DashboardMath.ObligationStatus(
+            String coverageKey = DashboardMath.kpiKey(
                     row.getCenter(),
-                    row.getDomain(),
-                    DashboardMath.bucket(latestApproved.get(key), today)));
+                    row.getSupervisorPositionId(),
+                    row.getPl3Code(),
+                    row.getCarrier(),
+                    row.getSite(),
+                    row.getCustomerCountry());
+            if (coverageKey.isEmpty()) {
+                continue;
+            }
+            String obligationKey = DashboardMath.key(
+                    row.getCenter(), row.getSupervisorPositionId(), row.getPl3Code());
+            String domain = obligationKey.isEmpty()
+                    ? ""
+                    : domainByObligation.getOrDefault(obligationKey, "");
+            statuses.add(new DashboardMath.KpiCoverage(
+                    row.getCenter(),
+                    domain,
+                    DashboardMath.bucket(latestApproved.get(coverageKey), today),
+                    row.getHc()));
         }
         return new DashboardView(
                 DashboardMath.metrics(
@@ -102,22 +119,44 @@ public class DashboardService {
                 DashboardMath.domainsByCenter(statuses));
     }
 
-    private static Map<String, LocalDate> latestApprovedByKey(List<RstExercise> approved) {
+    private Map<String, String> domainByObligation() {
+        Map<String, String> domains = new HashMap<>();
+        for (TimesheetScope row : timesheet.dashboardObligations()) {
+            String key = DashboardMath.key(row.getCenter(), row.getSupervisorPositionId(), row.getPl3Code());
+            if (key.isEmpty()) {
+                continue;
+            }
+            domains.put(key, row.getDomain());
+        }
+        return domains;
+    }
+
+    private static Map<String, LocalDate> latestApprovedByKpiKey(List<RstExercise> approved) {
         Map<String, LocalDate> latest = new HashMap<>();
         for (RstExercise exercise : approved) {
             ExerciseToolkitSnapshot snapshot = exercise.getToolkitSnapshot();
             if (snapshot == null || exercise.getValidatedAt() == null) {
                 continue;
             }
-            String key = DashboardMath.key(
-                    snapshot.getCenter(), snapshot.getSupervisorPositionId(), snapshot.getPl3Code());
-            if (key.isEmpty()) {
+            LocalDate validated = CenterDates.dateOf(exercise.getValidatedAt(), snapshot.getCenter());
+            if (validated == null) {
                 continue;
             }
-            LocalDate validated = CenterDates.dateOf(exercise.getValidatedAt(), snapshot.getCenter());
-            LocalDate previous = latest.get(key);
-            if (previous == null || validated.isAfter(previous)) {
-                latest.put(key, validated);
+            for (ExerciseSharedKpiLine line : exercise.getSharedKpiLines()) {
+                String key = DashboardMath.kpiKey(
+                        snapshot.getCenter(),
+                        snapshot.getSupervisorPositionId(),
+                        snapshot.getPl3Code(),
+                        line.getCarrier(),
+                        line.getSite(),
+                        line.getCustomerCountry());
+                if (key.isEmpty()) {
+                    continue;
+                }
+                LocalDate previous = latest.get(key);
+                if (previous == null || validated.isAfter(previous)) {
+                    latest.put(key, validated);
+                }
             }
         }
         return latest;
