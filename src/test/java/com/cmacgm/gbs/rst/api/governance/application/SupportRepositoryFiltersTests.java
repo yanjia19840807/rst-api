@@ -19,42 +19,50 @@ class SupportRepositoryFiltersTests {
     void matchesAllWhenQueryIsEmpty() {
         assertThat(SupportRepositoryFilters.matches(
                 row("GBS LEBANON", QUALITY, "Quality Control", "Bank Rec", "2026-03-10"),
-                new SupportRepositoryQuery(null, null, null, null, null, null, null, null))).isTrue();
+                new SupportRepositoryQuery(null, null, null, null, null, null, null, null, null))).isTrue();
     }
 
     @Test
     void exactFiltersMustMatch() {
         SupportRepositoryRow row = row("GBS LEBANON", QUALITY, "Quality Control", "Bank Rec", "2026-03-10");
         assertThat(SupportRepositoryFilters.matches(
-                row, query("GBS LEBANON", "Finance", "BANK RECONCILIATION", QUALITY, "Bank Rec", "2026-03", null, null)))
+                row, query(null, "GBS LEBANON", "Finance", "BANK RECONCILIATION", QUALITY, "Bank Rec", "2026-03", null, null)))
                 .isTrue();
         assertThat(SupportRepositoryFilters.matches(
-                row, query("GBS INDIA", null, null, null, null, null, null, null))).isFalse();
+                row, query("EX-2", null, null, null, null, null, null, null, null))).isFalse();
         assertThat(SupportRepositoryFilters.matches(
-                row, query(null, "Customer Care", null, null, null, null, null, null))).isFalse();
+                row, query("ex-1", null, null, null, null, null, null, null, null))).isTrue();
         assertThat(SupportRepositoryFilters.matches(
-                row, query(null, null, "BOOKING AMENDMENTS", null, null, null, null, null))).isFalse();
+                row, query(null, "GBS INDIA", null, null, null, null, null, null, null))).isFalse();
         assertThat(SupportRepositoryFilters.matches(
-                row, query(null, null, null, UUID.fromString("31000000-0000-0000-0000-000000000004"), null, null, null, null)))
+                row, query(null, null, "Customer Care", null, null, null, null, null, null))).isFalse();
+        assertThat(SupportRepositoryFilters.matches(
+                row, query(null, null, null, "BOOKING AMENDMENTS", null, null, null, null, null))).isFalse();
+        assertThat(SupportRepositoryFilters.matches(
+                row, query(null, null, null, null, UUID.fromString("31000000-0000-0000-0000-000000000004"), null, null, null, null)))
                 .isFalse();
         assertThat(SupportRepositoryFilters.matches(
-                row, query(null, null, null, null, "Other Toolkit", null, null, null))).isFalse();
+                row, query(null, null, null, null, null, "Other Toolkit", null, null, null))).isFalse();
         assertThat(SupportRepositoryFilters.matches(
-                row, query(null, null, null, null, null, "2026-02", null, null))).isFalse();
+                row, query(null, null, null, null, null, null, "2026-02", null, null))).isFalse();
     }
 
     @Test
     void validatedDateIsInclusive() {
         SupportRepositoryRow row = row("GBS LEBANON", QUALITY, "Quality Control", "Bank Rec", "2026-03-10");
         assertThat(SupportRepositoryFilters.matches(
-                row, query(null, null, null, null, null, null, LocalDate.parse("2026-03-10"), LocalDate.parse("2026-03-10"))))
+                row, query(null, null, null, null, null, null, null, LocalDate.parse("2026-03-10"), LocalDate.parse("2026-03-10"))))
                 .isTrue();
         assertThat(SupportRepositoryFilters.matches(
-                row, query(null, null, null, null, null, null, LocalDate.parse("2026-03-11"), null)))
+                row, query(null, null, null, null, null, null, null, LocalDate.parse("2026-03-11"), null)))
                 .isFalse();
         assertThat(SupportRepositoryFilters.matches(
-                row, query(null, null, null, null, null, null, null, LocalDate.parse("2026-03-09"))))
+                row, query(null, null, null, null, null, null, null, null, LocalDate.parse("2026-03-09"))))
                 .isFalse();
+        SupportRepositoryRow timed = row("GBS LEBANON", QUALITY, "Quality Control", "Bank Rec", "2026-03-10T16:45:00");
+        assertThat(SupportRepositoryFilters.matches(
+                timed, query(null, null, null, null, null, null, null, LocalDate.parse("2026-03-10"), LocalDate.parse("2026-03-10"))))
+                .isTrue();
     }
 
     @Test
@@ -70,6 +78,7 @@ class SupportRepositoryFiltersTests {
     }
 
     private static SupportRepositoryQuery query(
+            String exerciseCode,
             String center,
             String domain,
             String pl3Name,
@@ -79,7 +88,7 @@ class SupportRepositoryFiltersTests {
             LocalDate validatedFrom,
             LocalDate validatedTo) {
         return new SupportRepositoryQuery(
-                center, domain, pl3Name, categoryId, toolkitName, sizingMonth, validatedFrom, validatedTo);
+                exerciseCode, center, domain, pl3Name, categoryId, toolkitName, sizingMonth, validatedFrom, validatedTo);
     }
 
     private static SupportRepositoryRow row(

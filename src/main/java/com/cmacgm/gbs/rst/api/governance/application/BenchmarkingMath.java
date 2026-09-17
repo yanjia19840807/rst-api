@@ -6,8 +6,10 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.function.Function;
 
+import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkCenterComparison;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkRow;
 
 /**
@@ -67,6 +69,61 @@ public final class BenchmarkingMath {
             }
         }
         return List.copyOf(weighted);
+    }
+
+    /**
+     * One bar per GBS Center from already Center-weighted detail rows.
+     * Capacity Creation is summed; the other three metrics are taken from the Center group.
+     *
+     * @param items filtered rows after {@link #weightDetailByCenter}
+     * @return centers sorted by name
+     */
+    public static List<BenchmarkCenterComparison> compareByCenter(List<BenchmarkRow> items) {
+        if (items == null || items.isEmpty()) {
+            return List.of();
+        }
+        Map<String, List<BenchmarkRow>> groups = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (BenchmarkRow row : items) {
+            String gbs = blank(row.gbs());
+            if (gbs.isBlank()) {
+                continue;
+            }
+            groups.computeIfAbsent(gbs, ignored -> new ArrayList<>()).add(row);
+        }
+        List<BenchmarkCenterComparison> comparisons = new ArrayList<>();
+        for (Map.Entry<String, List<BenchmarkRow>> entry : groups.entrySet()) {
+            List<BenchmarkRow> group = entry.getValue();
+            comparisons.add(new BenchmarkCenterComparison(
+                    entry.getKey(),
+                    first(group, BenchmarkRow::cycleTimeSeconds),
+                    first(group, BenchmarkRow::dailyCapacityPerAgent),
+                    first(group, BenchmarkRow::productionSupportRatioPct),
+                    sumCapacity(group)));
+        }
+        return List.copyOf(comparisons);
+    }
+
+    private static BigDecimal first(
+            List<BenchmarkRow> items, Function<BenchmarkRow, BigDecimal> getter) {
+        for (BenchmarkRow row : items) {
+            BigDecimal value = getter.apply(row);
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private static BigDecimal sumCapacity(List<BenchmarkRow> items) {
+        BigDecimal sum = BigDecimal.ZERO;
+        boolean any = false;
+        for (BenchmarkRow row : items) {
+            if (row.capacityCreation() != null) {
+                sum = sum.add(row.capacityCreation());
+                any = true;
+            }
+        }
+        return any ? sum.setScale(2, RoundingMode.HALF_UP) : null;
     }
 
     static BigDecimal weightedSupportRatioPct(List<BenchmarkRow> items) {
@@ -158,6 +215,7 @@ public final class BenchmarkingMath {
                 row.capacityCreation(),
                 row.deliveryHc(),
                 row.productionSupport(),
+                row.sizingMonth(),
                 row.validatedDate());
     }
 

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigDecimal;
 import java.util.List;
 
+import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkCenterComparison;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkRow;
 import org.junit.jupiter.api.Test;
 
@@ -54,6 +55,23 @@ class BenchmarkingMathTests {
     }
 
     @Test
+    void comparesCentersWithWeightedProductivityAndSummedCapacity() {
+        List<BenchmarkCenterComparison> centers = BenchmarkingMath.compareByCenter(
+                BenchmarkingMath.weightDetailByCenter(List.of(
+                        row("GBS CHINA", "China", "9", "2880", "12.80", "1.856", "1.00"),
+                        row("GBS CHINA", "Hong Kong", "21", "1800", "3.20", "0.320", "0.20"),
+                        row("GBS LEBANON", "Lebanon", "20", "1800", "4.00", "0.400", "0.50"))));
+        assertThat(centers).hasSize(2);
+        assertThat(centers.get(0).gbs()).isEqualTo("GBS CHINA");
+        assertThat(centers.get(0).cycleTimeSeconds()).isEqualByComparingTo("11.400000");
+        assertThat(centers.get(0).dailyCapacityPerAgent()).isEqualByComparingTo("2482.105263");
+        assertThat(centers.get(0).productionSupportRatioPct()).isEqualByComparingTo("13.6");
+        assertThat(centers.get(0).capacityCreation()).isEqualByComparingTo("1.20");
+        assertThat(centers.get(1).gbs()).isEqualTo("GBS LEBANON");
+        assertThat(centers.get(1).capacityCreation()).isEqualByComparingTo("0.50");
+    }
+
+    @Test
     void skipsRowsWithoutPositiveDeliveryHc() {
         BenchmarkingMath.Summary summary = BenchmarkingMath.summarize("BANK REC", List.of(
                 row("GBS LEBANON", "142", "183", "10.00", "1.00"),
@@ -97,6 +115,7 @@ class BenchmarkingMathTests {
                 new BigDecimal(capacityCreation),
                 deliveryHc == null ? null : new BigDecimal(deliveryHc),
                 new BigDecimal(support),
+                "2026-06",
                 "2026-03-10");
     }
 }

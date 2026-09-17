@@ -6,9 +6,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
+import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath;
 import com.cmacgm.gbs.rst.api.governance.api.dto.SupportCategorySummary;
 import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryRow;
 
@@ -67,12 +67,12 @@ public final class SupportRepositoryMath {
      * @return title-case label
      */
     public static String frequencyLabel(String frequencyCode) {
-        String code = frequencyCode == null ? "" : frequencyCode.trim().toUpperCase(Locale.ROOT);
-        return switch (code) {
-            case "DAILY", "DAY" -> "Daily";
-            case "WEEKLY", "WEEK" -> "Weekly";
-            case "MONTHLY", "MONTH" -> "Monthly";
-            default -> frequencyCode == null ? "" : frequencyCode;
+        return switch (SupportWorkloadMath.canonicalFrequency(frequencyCode)) {
+            case "DAILY" -> "Daily";
+            case "WEEKLY" -> "Weekly";
+            case "MONTHLY" -> "Monthly";
+            default -> throw new IllegalArgumentException(
+                    "frequencyCode must be DAILY, WEEKLY, or MONTHLY.");
         };
     }
 

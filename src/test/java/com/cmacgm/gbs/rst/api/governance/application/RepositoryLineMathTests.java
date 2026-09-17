@@ -59,6 +59,20 @@ class RepositoryLineMathTests {
     }
 
     @Test
+    void leavesCapacityEmptyWhenActualHcMissing() {
+        RepositoryLineMath.LineMetrics metrics = RepositoryLineMath.allocate(
+                new BigDecimal("10"),
+                new BigDecimal("10"),
+                null,
+                new BigDecimal("8"),
+                new BigDecimal("1.5"));
+        assertThat(metrics.rightSizingHc()).isEqualByComparingTo("8");
+        assertThat(metrics.productionSupport()).isEqualByComparingTo("1.5");
+        assertThat(metrics.capacityCreation()).isNull();
+        assertThat(metrics.capacityPct()).isNull();
+    }
+
+    @Test
     void skipsAllocationWhenTotalDeliveryIsZero() {
         RepositoryLineMath.LineMetrics metrics = RepositoryLineMath.allocate(
                 BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("4"), new BigDecimal("1"));

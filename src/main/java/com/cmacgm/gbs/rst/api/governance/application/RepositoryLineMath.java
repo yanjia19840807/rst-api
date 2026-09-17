@@ -39,7 +39,7 @@ public final class RepositoryLineMath {
      *
      * @param lineDeliveryHc this line's frozen Delivery HC
      * @param totalDeliveryHc sum of Delivery HC on the Exercise
-     * @param actualHc Team Setup TotalAgent, else Delivery HC
+     * @param actualHc Team Setup TotalAgent; missing or non-positive leaves Capacity empty
      * @param rightSizingHc Official Scenario RIGHT_SIZING_HC; null leaves RS / Capacity empty
      * @param productionSupportFte Exercise Support FTE total
      * @return allocated line metrics
@@ -62,17 +62,17 @@ public final class RepositoryLineMath {
         if (rightSizingHc == null) {
             return new LineMetrics(lineHc, null, lineSupport, null, null);
         }
-        if (productionSupportFte == null) {
-            return new LineMetrics(
-                    lineHc, scale(rightSizingHc.multiply(weight, MC)), null, null, null);
-        }
-        BigDecimal supportTotal = productionSupportFte;
-        BigDecimal headcount = SizingMath.actualHeadcount(actualHc, totalHc);
-        BigDecimal capacityTotal = SizingMath.capacityCreation(headcount, rightSizingHc, supportTotal);
         BigDecimal lineRs = scale(rightSizingHc.multiply(weight, MC));
+        if (productionSupportFte == null) {
+            return new LineMetrics(lineHc, lineRs, null, null, null);
+        }
+        if (actualHc == null || actualHc.signum() <= 0) {
+            return new LineMetrics(lineHc, lineRs, lineSupport, null, null);
+        }
+        BigDecimal capacityTotal = SizingMath.capacityCreation(actualHc, rightSizingHc, productionSupportFte);
         BigDecimal lineCapacity = scale(capacityTotal.multiply(weight, MC));
         BigDecimal pct = capacityTotal.multiply(HUNDRED, MC)
-                .divide(headcount, 1, RoundingMode.HALF_UP);
+                .divide(actualHc, 1, RoundingMode.HALF_UP);
         return new LineMetrics(lineHc, lineRs, lineSupport, lineCapacity, pct);
     }
 
@@ -91,7 +91,7 @@ public final class RepositoryLineMath {
      * @param rightSizingHc allocated RS HC
      * @param productionSupport allocated Support FTE
      * @param capacityCreation allocated Capacity Creation
-     * @param capacityPct Exercise Capacity / Delivery HC as a percent (one decimal)
+     * @param capacityPct Exercise Capacity / Actual HC as a percent (one decimal)
      */
     public record LineMetrics(
             BigDecimal deliveryHc,

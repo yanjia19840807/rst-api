@@ -20,5 +20,6 @@ public record ValidationWorkflowRow(
         BigDecimal capacityCreation,
         BigDecimal capacityPct,
         String volumeYoY,
+        String sizingMonth,
         String submittedDate) {
 }

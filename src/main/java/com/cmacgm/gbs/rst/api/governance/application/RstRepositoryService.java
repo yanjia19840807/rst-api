@@ -30,7 +30,6 @@ import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryListQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryListView;
 import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryRow;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.WorkingDaysService;
-import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
 import org.springframework.http.HttpStatus;
@@ -191,6 +190,7 @@ public class RstRepositoryService {
             List<String> pl3Names,
             List<String> toolkitNames) {
         PageResponse<RepositoryRow> paged = PageResponse.ofList(items, page, pageSize);
+        RepositoryListMath.Totals totals = RepositoryListMath.summarize(items);
         return new RepositoryListView(
                 paged.items(),
                 paged.page(),
@@ -200,7 +200,11 @@ public class RstRepositoryService {
                 centers,
                 domains,
                 pl3Names,
-                toolkitNames);
+                toolkitNames,
+                totals.deliveryHc(),
+                totals.rightSizingHc(),
+                totals.support(),
+                totals.capacityCreation());
     }
 
     private List<RepositoryRow> rowsFor(
@@ -211,14 +215,13 @@ public class RstRepositoryService {
         ExerciseToolkitSnapshot snapshot = exercise.getToolkitSnapshot();
         String toolkitName = snapshot == null ? "" : snapshot.getToolkitName();
         BigDecimal totalDelivery = deliveryHc(exercise);
-        BigDecimal actualHc = SizingMath.actualHeadcount(
-                setup == null ? null : setup.totalAgents(), totalDelivery);
+        BigDecimal actualHc = setup == null ? null : setup.totalAgents();
         BigDecimal rightSizingHc = rightSizingByExercise.get(exercise.getId());
         BigDecimal productionSupport = supportByExercise.get(exercise.getId());
         String center = snapshot == null ? null : snapshot.getCenter();
         String validatedDate = exercise.getValidatedAt() == null || center == null
                 ? ""
-                : CenterDates.dateOf(exercise.getValidatedAt(), center).toString();
+                : CenterDates.civilDateTime(exercise.getValidatedAt(), center);
         String sizingMonth = MonthKeys.formatYearMonth(exercise.getSizingMonth());
         List<RepositoryRow> rows = new ArrayList<>();
         for (ExerciseSharedKpiLine line : exercise.getSharedKpiLines()) {

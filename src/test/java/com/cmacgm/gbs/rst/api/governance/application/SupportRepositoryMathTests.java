@@ -1,6 +1,7 @@
 package com.cmacgm.gbs.rst.api.governance.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -42,6 +43,8 @@ class SupportRepositoryMathTests {
         assertThat(SupportRepositoryMath.frequencyLabel("DAILY")).isEqualTo("Daily");
         assertThat(SupportRepositoryMath.frequencyLabel("weekly")).isEqualTo("Weekly");
         assertThat(SupportRepositoryMath.frequencyLabel("MONTHLY")).isEqualTo("Monthly");
+        assertThatThrownBy(() -> SupportRepositoryMath.frequencyLabel("YEARLY"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     private static SupportRepositoryRow row(String category, String activity, String fte) {

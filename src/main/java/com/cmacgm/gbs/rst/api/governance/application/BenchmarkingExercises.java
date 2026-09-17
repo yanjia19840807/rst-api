@@ -41,24 +41,10 @@ public final class BenchmarkingExercises {
                 continue;
             }
             RstExercise previous = latest.get(key);
-            if (previous == null || newer(exercise, previous)) {
+            if (previous == null || exercise.getValidatedAt().isAfter(previous.getValidatedAt())) {
                 latest.put(key, exercise);
             }
         }
         return List.copyOf(latest.values());
-    }
-
-    private static boolean newer(RstExercise candidate, RstExercise previous) {
-        int byTime = candidate.getValidatedAt().compareTo(previous.getValidatedAt());
-        if (byTime != 0) {
-            return byTime > 0;
-        }
-        String left = candidate.getExerciseCode() == null ? "" : candidate.getExerciseCode();
-        String right = previous.getExerciseCode() == null ? "" : previous.getExerciseCode();
-        int byCode = left.compareTo(right);
-        if (byCode != 0) {
-            return byCode > 0;
-        }
-        return candidate.getId().compareTo(previous.getId()) > 0;
     }
 }

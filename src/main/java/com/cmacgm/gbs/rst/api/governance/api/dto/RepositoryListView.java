@@ -1,9 +1,11 @@
 package com.cmacgm.gbs.rst.api.governance.api.dto;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * RST Repository list: one page of filtered rows plus unfiltered dropdown options.
+ * RST Repository list: one page of filtered rows, unfiltered dropdown options,
+ * and HC totals from all filtered rows.
  */
 public record RepositoryListView(
         List<RepositoryRow> items,
@@ -14,5 +16,9 @@ public record RepositoryListView(
         List<String> centers,
         List<String> domains,
         List<String> pl3Names,
-        List<String> toolkitNames) {
+        List<String> toolkitNames,
+        BigDecimal totalDeliveryHc,
+        BigDecimal totalRightSizingHc,
+        BigDecimal totalSupport,
+        BigDecimal totalCapacityCreation) {
 }

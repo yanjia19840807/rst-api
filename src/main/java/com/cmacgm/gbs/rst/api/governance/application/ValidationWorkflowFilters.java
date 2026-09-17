@@ -1,11 +1,11 @@
 package com.cmacgm.gbs.rst.api.governance.application;
 
 import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Function;
 
+import com.cmacgm.gbs.rst.api.common.time.CenterDates;
 import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationWorkflowQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationWorkflowRow;
 
@@ -47,11 +47,14 @@ public final class ValidationWorkflowFilters {
         if (hasText(query.toolkitName()) && !query.toolkitName().equals(row.toolkit())) {
             return false;
         }
+        if (hasText(query.sizingMonth()) && !query.sizingMonth().trim().equals(row.sizingMonth())) {
+            return false;
+        }
         if (query.agingMinDays() != null
                 && (row.agingDays() == null || row.agingDays() < query.agingMinDays())) {
             return false;
         }
-        LocalDate submitted = dateOf(row.submittedDate());
+        LocalDate submitted = CenterDates.civilDateOf(row.submittedDate());
         if (query.submittedFrom() != null
                 && (submitted == null || submitted.isBefore(query.submittedFrom()))) {
             return false;
@@ -84,14 +87,4 @@ public final class ValidationWorkflowFilters {
         return value != null && !value.isBlank();
     }
 
-    private static LocalDate dateOf(String submittedDate) {
-        if (submittedDate == null || submittedDate.isBlank()) {
-            return null;
-        }
-        try {
-            return LocalDate.parse(submittedDate);
-        } catch (DateTimeParseException ignored) {
-            return null;
-        }
-    }
 }

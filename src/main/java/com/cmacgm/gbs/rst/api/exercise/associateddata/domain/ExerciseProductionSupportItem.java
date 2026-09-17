@@ -98,7 +98,7 @@ public class ExerciseProductionSupportItem {
         item.categoryId = categoryId;
         item.category = category;
         item.activity = activity;
-        item.frequencyCode = frequencyCode;
+        item.frequencyCode = SupportWorkloadMath.canonicalFrequency(frequencyCode);
         item.volume = volume;
         item.unitOfMeasure = unitOfMeasure;
         item.workloadPerUnitMinutes = workloadPerUnitMinutes;
@@ -151,7 +151,7 @@ public class ExerciseProductionSupportItem {
         this.categoryId = categoryId;
         this.category = category;
         this.activity = activity;
-        this.frequencyCode = frequencyCode;
+        this.frequencyCode = SupportWorkloadMath.canonicalFrequency(frequencyCode);
         this.volume = volume;
         this.unitOfMeasure = unitOfMeasure;
         this.workloadPerUnitMinutes = workloadPerUnitMinutes;

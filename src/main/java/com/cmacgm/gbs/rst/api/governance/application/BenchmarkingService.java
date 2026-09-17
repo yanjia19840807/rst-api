@@ -11,6 +11,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.time.CenterDates;
+import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseProductionSupportItem;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath;
@@ -27,7 +28,6 @@ import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkRow;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingView;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.WorkingDaysService;
-import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
 import org.springframework.stereotype.Service;
@@ -102,7 +102,8 @@ public class BenchmarkingService {
                 paged.pageSize(),
                 paged.total(),
                 paged.totalPages(),
-                processPaths);
+                processPaths,
+                BenchmarkingMath.compareByCenter(items));
     }
 
     /**
@@ -162,15 +163,15 @@ public class BenchmarkingService {
             BigDecimal cycleTimeSeconds,
             ExerciseTeamSetup setup) {
         BigDecimal totalDelivery = deliveryHc(exercise);
-        BigDecimal actualHc = SizingMath.actualHeadcount(
-                setup == null ? null : setup.totalAgents(), totalDelivery);
+        BigDecimal actualHc = setup == null ? null : setup.totalAgents();
         BigDecimal dailyCapacity = setup == null ? null : setup.dailyCapacityPerAgent(cycleTimeSeconds);
         String center = exercise.getToolkitSnapshot() == null
                 ? null
                 : exercise.getToolkitSnapshot().getCenter();
+        String sizingMonth = MonthKeys.formatYearMonth(exercise.getSizingMonth());
         String validatedDate = exercise.getValidatedAt() == null || center == null || center.isBlank()
                 ? ""
-                : CenterDates.dateOf(exercise.getValidatedAt(), center).toString();
+                : CenterDates.civilDateTime(exercise.getValidatedAt(), center);
         List<BenchmarkRow> rows = new ArrayList<>();
         for (ExerciseSharedKpiLine line : exercise.getSharedKpiLines()) {
             if (!BenchmarkingFilters.hasText(line.getPl3Code())) {
@@ -194,6 +195,7 @@ public class BenchmarkingService {
                     metrics.capacityCreation(),
                     metrics.deliveryHc(),
                     metrics.productionSupport(),
+                    sizingMonth == null ? "" : sizingMonth,
                     validatedDate));
         }
         return rows;
@@ -322,6 +324,7 @@ public class BenchmarkingService {
                 paged.pageSize(),
                 paged.total(),
                 paged.totalPages(),
+                List.of(),
                 List.of());
     }
 }

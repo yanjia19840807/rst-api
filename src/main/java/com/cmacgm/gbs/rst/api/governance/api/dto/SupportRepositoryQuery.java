@@ -7,6 +7,7 @@ import java.util.UUID;
  * Support Repository list filters (field values applied on the server).
  */
 public record SupportRepositoryQuery(
+        String exerciseCode,
         String center,
         String domain,
         String pl3Name,

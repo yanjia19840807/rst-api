@@ -28,13 +28,14 @@ public class GovernanceExcelService {
             "PL3",
             "Toolkit",
             "Sizing Month",
+            "Validated Date",
             "Customer Country",
             "Delivery HC",
             "Right Sizing HC",
-            "Production Support",
-            "Capacity Creation",
-            "Capacity Creation %",
-            "Volume Increase % YoY");
+            "Production Support (FTE)",
+            "Capacity Creation (HC)",
+            "Capacity Creation (%)",
+            "Volume Increase YoY (%)");
 
     private static final List<String> SUPPORT_HEADERS = List.of(
             "Exercise NO",
@@ -42,12 +43,14 @@ public class GovernanceExcelService {
             "Domain",
             "PL3",
             "Toolkit",
+            "Sizing Month",
+            "Validated Date",
             "Standard Category",
             "Activity",
             "Frequency",
-            "Volume",
+            "Volume (transactions)",
             "UOM",
-            "FTE",
+            "Support (FTE)",
             "Comments");
 
     private static final List<String> BENCHMARK_HEADERS = List.of(
@@ -57,10 +60,11 @@ public class GovernanceExcelService {
             "Customer country",
             "Domain",
             "PL3",
-            "Cycle time",
-            "Daily Production Capacity / Agent",
-            "Production Support Ratio",
-            "Capacity Creation");
+            "Sizing Month",
+            "Cycle time (s)",
+            "Daily Production Capacity / Agent (transactions)",
+            "Production Support Ratio (%)",
+            "Capacity Creation (HC)");
 
     /**
      * Writes filtered RST Repository rows.
@@ -82,6 +86,7 @@ public class GovernanceExcelService {
                     blank(row.pl3()),
                     blank(row.toolkit()),
                     blank(row.sizingMonth()),
+                    dateTime(row.validatedDate()),
                     blank(row.kpi()),
                     decimal(row.deliveryHc()),
                     decimal(row.rsHc()),
@@ -108,6 +113,8 @@ public class GovernanceExcelService {
                     blank(row.domain()),
                     blank(row.pl3()),
                     blank(row.toolkit()),
+                    blank(row.sizingMonth()),
+                    dateTime(row.validatedDate()),
                     blank(row.standardCategory()),
                     blank(row.activity()),
                     blank(row.frequency()),
@@ -135,6 +142,7 @@ public class GovernanceExcelService {
                     blank(row.sharedKpiLine()),
                     blank(row.domain()),
                     blank(row.pl3()),
+                    blank(row.sizingMonth()),
                     decimal(row.cycleTimeSeconds()),
                     decimal(row.dailyCapacityPerAgent()),
                     decimal(row.productionSupportRatioPct()),
@@ -149,5 +157,16 @@ public class GovernanceExcelService {
 
     private static String blank(String value) {
         return value == null ? "" : value;
+    }
+
+    private static String dateTime(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() >= 16 && trimmed.charAt(10) == 'T') {
+            return trimmed.substring(0, 10) + " " + trimmed.substring(11, 16);
+        }
+        return trimmed;
     }
 }

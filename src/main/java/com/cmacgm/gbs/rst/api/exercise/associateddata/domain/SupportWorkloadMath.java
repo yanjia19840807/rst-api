@@ -19,19 +19,36 @@ public final class SupportWorkloadMath {
     }
 
     /**
+     * Stored frequency: DAILY / WEEKLY / MONTHLY.
+     * DAY / WEEK / MONTH are accepted on input and mapped to the stored values.
+     *
+     * @param frequencyCode input code
+     * @return canonical stored code
+     */
+    public static String canonicalFrequency(String frequencyCode) {
+        String code = frequencyCode == null ? "" : frequencyCode.trim().toUpperCase(Locale.ROOT);
+        return switch (code) {
+            case "DAILY", "DAY" -> "DAILY";
+            case "WEEKLY", "WEEK" -> "WEEKLY";
+            case "MONTHLY", "MONTH" -> "MONTHLY";
+            default -> throw new IllegalArgumentException(
+                    "frequencyCode must be DAILY, WEEKLY, or MONTHLY.");
+        };
+    }
+
+    /**
      * Maps frequency to annual multiplier.
      * Daily → WorkingDays/year; Weekly → 52; Monthly → 12.
      *
      * @return multiplier, or null when Daily has no working-days input
      */
     public static BigDecimal annualMultiplier(String frequencyCode, BigDecimal workingDaysPerYear) {
-        String code = frequencyCode == null ? "" : frequencyCode.trim().toUpperCase(Locale.ROOT);
-        return switch (code) {
-            case "DAILY", "DAY" -> workingDaysPerYear != null && workingDaysPerYear.compareTo(BigDecimal.ZERO) > 0
+        return switch (canonicalFrequency(frequencyCode)) {
+            case "DAILY" -> workingDaysPerYear != null && workingDaysPerYear.compareTo(BigDecimal.ZERO) > 0
                     ? workingDaysPerYear
                     : null;
-            case "WEEKLY", "WEEK" -> WEEKLY;
-            case "MONTHLY", "MONTH" -> MONTHLY;
+            case "WEEKLY" -> WEEKLY;
+            case "MONTHLY" -> MONTHLY;
             default -> throw new IllegalArgumentException(
                     "frequencyCode must be DAILY, WEEKLY, or MONTHLY.");
         };
@@ -41,7 +58,7 @@ public final class SupportWorkloadMath {
      * Validates a frequency code without requiring working days.
      */
     public static void requireFrequency(String frequencyCode) {
-        annualMultiplier(frequencyCode, BigDecimal.ONE);
+        canonicalFrequency(frequencyCode);
     }
 
     /**
@@ -113,15 +130,11 @@ public final class SupportWorkloadMath {
         }
         BigDecimal total = BigDecimal.ZERO;
         for (ExerciseProductionSupportItem item : items) {
-            try {
-                BigDecimal fte = derive(item, workingDaysPerYear, fteHours).supportFte();
-                if (fte == null) {
-                    return null;
-                }
-                total = total.add(fte);
-            } catch (IllegalArgumentException ignored) {
-                // skip historical rows whose frequency codes are no longer recognized
+            BigDecimal fte = derive(item, workingDaysPerYear, fteHours).supportFte();
+            if (fte == null) {
+                return null;
             }
+            total = total.add(fte);
         }
         return total;
     }

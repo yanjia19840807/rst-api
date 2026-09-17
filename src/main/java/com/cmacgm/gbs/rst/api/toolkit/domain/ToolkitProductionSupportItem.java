@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseProductionSupportItem;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -82,7 +83,7 @@ public class ToolkitProductionSupportItem {
         item.categoryId = source.getCategoryId();
         item.category = source.getCategory();
         item.activity = source.getActivity();
-        item.frequencyCode = source.getFrequencyCode();
+        item.frequencyCode = SupportWorkloadMath.canonicalFrequency(source.getFrequencyCode());
         item.volume = source.getVolume();
         item.unitOfMeasure = source.getUnitOfMeasure();
         item.workloadPerUnitMinutes = source.getWorkloadPerUnitMinutes();

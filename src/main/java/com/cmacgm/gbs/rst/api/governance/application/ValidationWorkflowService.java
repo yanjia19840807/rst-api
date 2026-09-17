@@ -15,6 +15,7 @@ import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.time.CenterDates;
+import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseKpiView;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseSubtaskView;
@@ -203,13 +204,15 @@ public class ValidationWorkflowService {
                 setup == null ? null : setup.totalAgents(), deliveryHc);
         BigDecimal capacity = ValidationWorkflowMath.capacityCreation(
                 actualHc, rightSizingHc, productionSupport);
-        String submittedDate = exercise.getSubmittedAt() == null
+        String center = snapshot == null ? null : snapshot.getCenter();
+        String submittedDate = exercise.getSubmittedAt() == null || center == null || center.isBlank()
                 ? ""
-                : CenterDates.dateOf(exercise.getSubmittedAt(), snapshot.getCenter()).toString();
+                : CenterDates.civilDateTime(exercise.getSubmittedAt(), center);
+        String sizingMonth = MonthKeys.formatYearMonth(exercise.getSizingMonth());
         Instant agingFrom = review == null ? exercise.getSubmittedAt() : review.agingFrom();
-        Integer agingDays = agingFrom == null
+        Integer agingDays = agingFrom == null || center == null || center.isBlank()
                 ? null
-                : WorkflowAging.daysBetween(agingFrom, clock.instant(), snapshot.getCenter());
+                : WorkflowAging.daysBetween(agingFrom, clock.instant(), center);
         return new ValidationWorkflowRow(
                 blankToEmpty(exercise.getExerciseCode()),
                 exercise.getId().toString(),
@@ -225,6 +228,7 @@ public class ValidationWorkflowService {
                 capacity,
                 ValidationWorkflowMath.capacityPct(capacity, actualHc),
                 "",
+                sizingMonth == null ? "" : sizingMonth,
                 submittedDate);
     }
 

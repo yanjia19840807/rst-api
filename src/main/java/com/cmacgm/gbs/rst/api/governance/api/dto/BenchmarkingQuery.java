@@ -10,6 +10,7 @@ public record BenchmarkingQuery(
         String pl1,
         String pl2,
         String pl3Code,
+        String sizingMonth,
         LocalDate validatedFrom,
         LocalDate validatedTo) {
 }

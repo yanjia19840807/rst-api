@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 
 import org.junit.jupiter.api.Test;
@@ -50,6 +51,12 @@ class CenterZonesTests {
         assertThat(CenterDates.dateOf(lateUtc, RstCenters.GBS_PORTUGAL))
                 .isEqualTo(LocalDate.of(2026, 3, 15));
         assertThat(CenterDates.dateOf(lateUtc, RstCenters.GBS_CHINA))
+                .isEqualTo(LocalDate.of(2026, 3, 16));
+        assertThat(CenterDates.dateTimeOf(lateUtc, RstCenters.GBS_INDIA))
+                .isEqualTo(LocalDateTime.of(2026, 3, 16, 0, 0));
+        assertThat(CenterDates.civilDateTime(lateUtc, RstCenters.GBS_INDIA))
+                .isEqualTo("2026-03-16T00:00:00");
+        assertThat(CenterDates.civilDateOf("2026-03-16T00:00:00"))
                 .isEqualTo(LocalDate.of(2026, 3, 16));
     }
 }

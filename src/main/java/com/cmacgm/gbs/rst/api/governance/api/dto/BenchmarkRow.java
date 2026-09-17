@@ -21,5 +21,6 @@ public record BenchmarkRow(
         BigDecimal capacityCreation,
         BigDecimal deliveryHc,
         BigDecimal productionSupport,
+        String sizingMonth,
         String validatedDate) {
 }

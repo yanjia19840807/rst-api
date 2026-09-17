@@ -1,10 +1,11 @@
 package com.cmacgm.gbs.rst.api.governance.application;
 
 import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Function;
 
+import com.cmacgm.gbs.rst.api.common.time.CenterDates;
 import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryRow;
 
@@ -27,6 +28,13 @@ public final class SupportRepositoryFilters {
         if (query == null) {
             return true;
         }
+        if (hasText(query.exerciseCode())) {
+            String code = row.exerciseNo() == null ? "" : row.exerciseNo();
+            if (!code.toLowerCase(Locale.ROOT)
+                    .contains(query.exerciseCode().trim().toLowerCase(Locale.ROOT))) {
+                return false;
+            }
+        }
         if (hasText(query.center()) && !query.center().equals(row.center())) {
             return false;
         }
@@ -45,7 +53,7 @@ public final class SupportRepositoryFilters {
         if (hasText(query.sizingMonth()) && !query.sizingMonth().trim().equals(row.sizingMonth())) {
             return false;
         }
-        LocalDate validated = dateOf(row.validatedDate());
+        LocalDate validated = CenterDates.civilDateOf(row.validatedDate());
         if (query.validatedFrom() != null
                 && (validated == null || validated.isBefore(query.validatedFrom()))) {
             return false;
@@ -78,14 +86,4 @@ public final class SupportRepositoryFilters {
         return value != null && !value.isBlank();
     }
 
-    private static LocalDate dateOf(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return LocalDate.parse(value);
-        } catch (DateTimeParseException ignored) {
-            return null;
-        }
-    }
 }

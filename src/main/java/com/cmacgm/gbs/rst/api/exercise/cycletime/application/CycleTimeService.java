@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.exercise.cycletime.application;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -10,6 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.exercise.associateddata.application.ManualImportStore;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.FileArtifact;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.FileArtifactRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
@@ -53,6 +55,7 @@ public class CycleTimeService {
     private final CycleTimeBaselineRepository baselines;
     private final CycleTimeBaselineFileRepository baselineFiles;
     private final FileArtifactRepository fileArtifacts;
+    private final ManualImportStore importFiles;
     private final ExerciseTmsSessionRepository exerciseTmsSessions;
     private final SystemCycleTimeBaselineWriter systemCycleTime;
     private final TmsRatioCalculator tmsRatioCalculator;
@@ -67,6 +70,7 @@ public class CycleTimeService {
             CycleTimeBaselineRepository baselines,
             CycleTimeBaselineFileRepository baselineFiles,
             FileArtifactRepository fileArtifacts,
+            ManualImportStore importFiles,
             ExerciseTmsSessionRepository exerciseTmsSessions,
             SystemCycleTimeBaselineWriter systemCycleTime,
             TmsRatioCalculator tmsRatioCalculator,
@@ -76,6 +80,7 @@ public class CycleTimeService {
         this.baselines = baselines;
         this.baselineFiles = baselineFiles;
         this.fileArtifacts = fileArtifacts;
+        this.importFiles = importFiles;
         this.exerciseTmsSessions = exerciseTmsSessions;
         this.systemCycleTime = systemCycleTime;
         this.tmsRatioCalculator = tmsRatioCalculator;
@@ -121,7 +126,7 @@ public class CycleTimeService {
     }
 
     /**
-     * Uploads a support-file artifact stub for a MANUAL median (SharePoint deferred).
+     * Uploads a Cycle Time support file to {@code {root}/Manual/CycleTime}.
      *
      * @param ownerCcgid Supervisor CCGID
      * @param exerciseId Exercise id
@@ -153,14 +158,25 @@ public class CycleTimeService {
             mimeType = "application/octet-stream";
         }
 
+        byte[] content;
+        try {
+            content = file.getBytes();
+        } catch (IOException ex) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "support-file-unreadable",
+                    "The support file could not be read.");
+        }
+
         Instant now = clock.instant();
-        FileArtifact artifact = fileArtifacts.save(FileArtifact.createStub(
+        FileArtifact artifact = fileArtifacts.save(importFiles.store(
+                ManualImportStore.Module.CYCLE_TIME,
                 SUPPORT_ARTIFACT_TYPE,
                 SUPPORT_BUSINESS_TYPE,
                 exerciseId,
                 fileName.trim(),
                 mimeType,
-                file.getSize(),
+                content,
                 ownerCcgid,
                 now));
         return toFileView(artifact, 0);

@@ -152,17 +152,12 @@ public class SupportRepositoryService {
         String sizingMonth = MonthKeys.formatYearMonth(exercise.getSizingMonth());
         String validatedDate = exercise.getValidatedAt() == null || center == null || center.isBlank()
                 ? ""
-                : CenterDates.dateOf(exercise.getValidatedAt(), center).toString();
+                : CenterDates.civilDateTime(exercise.getValidatedAt(), center);
         BigDecimal workingDays = workingDaysService.workingDaysPerYear(exercise.getId());
         BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup, workingDays);
         List<SupportRepositoryRow> rows = new ArrayList<>();
         for (ExerciseProductionSupportItem item : items) {
-            BigDecimal fte;
-            try {
-                fte = SupportWorkloadMath.derive(item, workingDays, fteHours).supportFte();
-            } catch (IllegalArgumentException ignored) {
-                continue;
-            }
+            BigDecimal fte = SupportWorkloadMath.derive(item, workingDays, fteHours).supportFte();
             rows.add(new SupportRepositoryRow(
                     exercise.getExerciseCode(),
                     exercise.getId(),

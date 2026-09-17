@@ -34,6 +34,27 @@ class SupportWorkloadMathTests {
     }
 
     @Test
+    void aliasesNormalizeToStoredCodes() {
+        assertThat(SupportWorkloadMath.canonicalFrequency("day")).isEqualTo("DAILY");
+        assertThat(SupportWorkloadMath.canonicalFrequency("WEEK")).isEqualTo("WEEKLY");
+        assertThat(SupportWorkloadMath.canonicalFrequency("month")).isEqualTo("MONTHLY");
+        assertThat(SupportWorkloadMath.canonicalFrequency("DAILY")).isEqualTo("DAILY");
+        ExerciseProductionSupportItem item = ExerciseProductionSupportItem.create(
+                UUID.randomUUID(),
+                null,
+                "Admin",
+                "Mail",
+                "week",
+                BigDecimal.ONE,
+                "Cases",
+                new BigDecimal("30"),
+                null,
+                "u",
+                Instant.now());
+        assertThat(item.getFrequencyCode()).isEqualTo("WEEKLY");
+    }
+
+    @Test
     void fteAnnualHoursIsNullWhenTeamSetupIsIncomplete() {
         assertThat(SupportWorkloadMath.fteAnnualHours(null, new BigDecimal("261"))).isNull();
         ExerciseTeamSetup empty = ExerciseTeamSetup.emptyShell(UUID.randomUUID(), "u", Instant.now());

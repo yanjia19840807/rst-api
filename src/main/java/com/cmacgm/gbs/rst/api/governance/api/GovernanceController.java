@@ -173,6 +173,7 @@ public class GovernanceController {
      * Support repository activity rows for APPROVED Exercises, filtered on the server.
      * Totals and category mix follow the filtered rows; dropdown options do not shrink.
      *
+     * @param exerciseCode optional Exercise No contains match
      * @param center optional exact GBS Center
      * @param domain optional exact domain
      * @param pl3Name optional exact PL3 name
@@ -188,6 +189,7 @@ public class GovernanceController {
     @GetMapping("/support-repository")
     @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public SupportRepositoryView supportRepository(
+            @RequestParam(required = false) String exerciseCode,
             @RequestParam(required = false) String center,
             @RequestParam(required = false) String domain,
             @RequestParam(required = false) String pl3Name,
@@ -204,6 +206,7 @@ public class GovernanceController {
             @RequestParam(defaultValue = "10") int pageSize) {
         return supportRepositoryService.listApproved(
                 new SupportRepositoryQuery(
+                        exerciseCode,
                         center,
                         domain,
                         pl3Name,
@@ -222,6 +225,7 @@ public class GovernanceController {
     @GetMapping("/support-repository/export")
     @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public ResponseEntity<byte[]> exportSupportRepository(
+            @RequestParam(required = false) String exerciseCode,
             @RequestParam(required = false) String center,
             @RequestParam(required = false) String domain,
             @RequestParam(required = false) String pl3Name,
@@ -237,6 +241,7 @@ public class GovernanceController {
         return excelResponse(
                 excel.exportSupportRepository(supportRepositoryService.listApprovedAll(
                         new SupportRepositoryQuery(
+                                exerciseCode,
                                 center,
                                 domain,
                                 pl3Name,
@@ -256,6 +261,7 @@ public class GovernanceController {
      * @param pl1 optional exact PL1
      * @param pl2 optional exact PL2
      * @param pl3Code required exact PL3 code for like-for-like rows
+     * @param sizingMonth optional exact sizing month ({@code YYYY-MM})
      * @param validatedFrom optional validated date from
      * @param validatedTo optional validated date to
      * @param page 1-based page
@@ -269,6 +275,7 @@ public class GovernanceController {
             @RequestParam(required = false) String pl1,
             @RequestParam(required = false) String pl2,
             @RequestParam(required = false) String pl3Code,
+            @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
                     LocalDate validatedFrom,
@@ -278,7 +285,8 @@ public class GovernanceController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         return benchmarkingService.listApproved(
-                new BenchmarkingQuery(domain, pl1, pl2, pl3Code, validatedFrom, validatedTo),
+                new BenchmarkingQuery(
+                        domain, pl1, pl2, pl3Code, sizingMonth, validatedFrom, validatedTo),
                 page,
                 pageSize);
     }
@@ -293,6 +301,7 @@ public class GovernanceController {
             @RequestParam(required = false) String pl1,
             @RequestParam(required = false) String pl2,
             @RequestParam(required = false) String pl3Code,
+            @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
                     LocalDate validatedFrom,
@@ -302,7 +311,7 @@ public class GovernanceController {
         return excelResponse(
                 excel.exportBenchmarking(benchmarkingService.listApprovedAll(
                         new BenchmarkingQuery(
-                                domain, pl1, pl2, pl3Code, validatedFrom, validatedTo))),
+                                domain, pl1, pl2, pl3Code, sizingMonth, validatedFrom, validatedTo))),
                 "benchmarking.xlsx");
     }
 
@@ -315,6 +324,7 @@ public class GovernanceController {
      * @param domain optional exact domain
      * @param pl3Name optional exact PL3 name
      * @param toolkitName optional exact toolkit name
+     * @param sizingMonth optional exact sizing month ({@code YYYY-MM})
      * @param agingMinDays optional minimum current-step wait in days
      * @param submittedFrom optional submitted date from
      * @param submittedTo optional submitted date to
@@ -330,6 +340,7 @@ public class GovernanceController {
             @RequestParam(required = false) String domain,
             @RequestParam(required = false) String pl3Name,
             @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false) Integer agingMinDays,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
@@ -346,6 +357,7 @@ public class GovernanceController {
                         domain,
                         pl3Name,
                         toolkitName,
+                        sizingMonth,
                         agingMinDays,
                         submittedFrom,
                         submittedTo),

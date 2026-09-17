@@ -10,6 +10,7 @@ import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphPaths;
  * @param site SharePoint site web URL
  * @param library document library display name
  * @param root library-relative RST folder, for example {@code 4.RST/2.UAT}
+ *             ({@code 0.DEV} / {@code 1.SIT} / {@code 2.UAT} / {@code 2.5.PRE} / {@code 3.Production})
  */
 @ConfigurationProperties(prefix = "timesheet.sharepoint")
 public record TimesheetSharePointProperties(String site, String library, String root) {
@@ -44,6 +45,30 @@ public record TimesheetSharePointProperties(String site, String library, String 
 
     public String manualFolder() {
         return MicrosoftGraphPaths.folderPath(root, "Manual");
+    }
+
+    public String manualTimesheetFolder() {
+        return manualModuleFolder("Timesheet");
+    }
+
+    public String manualVolumeFolder() {
+        return manualModuleFolder("Volume");
+    }
+
+    public String manualCalendarFolder() {
+        return manualModuleFolder("Calendar");
+    }
+
+    public String manualSupportFolder() {
+        return manualModuleFolder("Support");
+    }
+
+    public String manualCycleTimeFolder() {
+        return manualModuleFolder("CycleTime");
+    }
+
+    public String manualModuleFolder(String module) {
+        return MicrosoftGraphPaths.folderPath(manualFolder(), module);
     }
 
     private static String blankToDefault(String value, String fallback) {

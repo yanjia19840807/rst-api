@@ -57,6 +57,10 @@ class RepositoryRowFiltersTests {
         assertThat(RepositoryRowFilters.matches(
                 row, query(null, null, null, null, null, null, null, LocalDate.parse("2026-03-09"))))
                 .isFalse();
+        RepositoryRow timed = row("EX-1", "Shanghai", "OPS", "PL3-A", "TK-1", "2026-06", "2026-03-10T16:45:00");
+        assertThat(RepositoryRowFilters.matches(
+                timed, query(null, null, null, null, null, null, LocalDate.parse("2026-03-10"), LocalDate.parse("2026-03-10"))))
+                .isTrue();
     }
 
     @Test

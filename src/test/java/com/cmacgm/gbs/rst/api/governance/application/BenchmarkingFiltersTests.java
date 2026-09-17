@@ -16,11 +16,11 @@ class BenchmarkingFiltersTests {
     @Test
     void requiresPl3Code() {
         BenchmarkRow row = row("PL3-BANK", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
-        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, null, null, null)))
+        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, null, null, null, null)))
                 .isFalse();
-        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, "PL3-BANK", null, null)))
+        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, "PL3-BANK", null, null, null)))
                 .isTrue();
-        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, "PL3-OTHER", null, null)))
+        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, "PL3-OTHER", null, null, null)))
                 .isFalse();
     }
 
@@ -28,32 +28,43 @@ class BenchmarkingFiltersTests {
     void exactFiltersMustMatch() {
         BenchmarkRow row = row("PL3-BANK", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
         assertThat(BenchmarkingFilters.matches(
-                row, query("FINANCE", "R2R", "Bank Rec", "PL3-BANK", null, null)))
+                row, query("FINANCE", "R2R", "Bank Rec", "PL3-BANK", null, null, null)))
                 .isTrue();
         assertThat(BenchmarkingFilters.matches(
-                row, query("OPS", null, null, "PL3-BANK", null, null)))
+                row, query("OPS", null, null, "PL3-BANK", null, null, null)))
                 .isFalse();
         assertThat(BenchmarkingFilters.matches(
-                row, query(null, "P2P", null, "PL3-BANK", null, null)))
+                row, query(null, "P2P", null, "PL3-BANK", null, null, null)))
                 .isFalse();
         assertThat(BenchmarkingFilters.matches(
-                row, query(null, null, "AP", "PL3-BANK", null, null)))
+                row, query(null, null, "AP", "PL3-BANK", null, null, null)))
                 .isFalse();
+        assertThat(BenchmarkingFilters.matches(
+                row, query(null, null, null, "PL3-BANK", "2026-05", null, null)))
+                .isFalse();
+        assertThat(BenchmarkingFilters.matches(
+                row, query(null, null, null, "PL3-BANK", "2026-06", null, null)))
+                .isTrue();
     }
 
     @Test
     void validatedDateIsInclusive() {
         BenchmarkRow row = row("PL3-BANK", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
         assertThat(BenchmarkingFilters.matches(
-                row, query(null, null, null, "PL3-BANK",
+                row, query(null, null, null, "PL3-BANK", null,
                         LocalDate.parse("2026-03-10"), LocalDate.parse("2026-03-10"))))
                 .isTrue();
         assertThat(BenchmarkingFilters.matches(
-                row, query(null, null, null, "PL3-BANK", LocalDate.parse("2026-03-11"), null)))
+                row, query(null, null, null, "PL3-BANK", null, LocalDate.parse("2026-03-11"), null)))
                 .isFalse();
         assertThat(BenchmarkingFilters.matches(
-                row, query(null, null, null, "PL3-BANK", null, LocalDate.parse("2026-03-09"))))
+                row, query(null, null, null, "PL3-BANK", null, null, LocalDate.parse("2026-03-09"))))
                 .isFalse();
+        BenchmarkRow timed = row("PL3-BANK", "FINANCE", "R2R", "Bank Rec", "2026-03-10T16:45:00");
+        assertThat(BenchmarkingFilters.matches(
+                timed, query(null, null, null, "PL3-BANK", null,
+                        LocalDate.parse("2026-03-10"), LocalDate.parse("2026-03-10"))))
+                .isTrue();
     }
 
     @Test
@@ -73,9 +84,11 @@ class BenchmarkingFiltersTests {
             String pl1,
             String pl2,
             String pl3Code,
+            String sizingMonth,
             LocalDate validatedFrom,
             LocalDate validatedTo) {
-        return new BenchmarkingQuery(domain, pl1, pl2, pl3Code, validatedFrom, validatedTo);
+        return new BenchmarkingQuery(
+                domain, pl1, pl2, pl3Code, sizingMonth, validatedFrom, validatedTo);
     }
 
     private static BenchmarkRow row(
@@ -100,6 +113,7 @@ class BenchmarkingFiltersTests {
                 BigDecimal.ZERO,
                 BigDecimal.ONE,
                 BigDecimal.ZERO,
+                "2026-06",
                 validatedDate);
     }
 }

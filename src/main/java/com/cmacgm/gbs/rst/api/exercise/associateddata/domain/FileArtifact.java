@@ -124,7 +124,50 @@ public class FileArtifact {
         return artifact;
     }
 
+    /**
+     * Creates an AVAILABLE artifact that points at a real SharePoint drive item.
+     *
+     * @param artifactType artifact classification
+     * @param businessObjectType owning business type
+     * @param businessObjectId owning business id
+     * @param sharepointDriveItemId Graph drive item id
+     * @param webUrl browser URL
+     * @param fileName stored file name
+     * @param mimeType MIME type
+     * @param sizeBytes optional byte size
+     * @param actorCcgid creating user
+     * @param now creation timestamp
+     * @return new file artifact
+     */
+    public static FileArtifact createStored(
+            String artifactType,
+            String businessObjectType,
+            UUID businessObjectId,
+            String sharepointDriveItemId,
+            String webUrl,
+            String fileName,
+            String mimeType,
+            Long sizeBytes,
+            String actorCcgid,
+            Instant now) {
+        FileArtifact artifact = new FileArtifact();
+        artifact.id = UUID.randomUUID();
+        artifact.artifactType = artifactType;
+        artifact.businessObjectType = businessObjectType;
+        artifact.businessObjectId = businessObjectId;
+        artifact.sharepointDriveItemId = sharepointDriveItemId;
+        artifact.webUrl = webUrl;
+        artifact.fileName = fileName;
+        artifact.mimeType = mimeType;
+        artifact.sizeBytes = sizeBytes;
+        artifact.status = "AVAILABLE";
+        artifact.createdAt = now;
+        artifact.createdBy = actorCcgid;
+        return artifact;
+    }
+
     public UUID getId() { return id; }
+    public String getSharepointDriveItemId() { return sharepointDriveItemId; }
     public String getArtifactType() { return artifactType; }
     public String getBusinessObjectType() { return businessObjectType; }
     public UUID getBusinessObjectId() { return businessObjectId; }

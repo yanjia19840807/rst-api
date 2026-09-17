@@ -123,7 +123,7 @@ public class TimesheetSyncService {
     }
 
     /**
-     * Uploads to Manual then parses. The file is stored even when parse fails.
+     * Uploads to Manual/Timesheet then parses. The file is stored even when parse fails.
      *
      * @param fileName original name
      * @param content file bytes

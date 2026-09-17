@@ -40,6 +40,17 @@ class BenchmarkingExercisesTests {
                 .containsExactly("EX-OK");
     }
 
+    @Test
+    void keepsFirstWhenValidatedAtIsEqual() {
+        Instant sameTime = Instant.parse("2026-09-09T02:14:55Z");
+        RstExercise first = exercise("EX-A", "GBS CHINA", "175344", "367", sameTime);
+        RstExercise laterCode = exercise("EX-Z", "GBS CHINA", "175344", "367", sameTime);
+
+        assertThat(BenchmarkingExercises.latestApprovedPerScope(List.of(first, laterCode)))
+                .extracting(RstExercise::getExerciseCode)
+                .containsExactly("EX-A");
+    }
+
     private static RstExercise exercise(
             String code, String center, String supervisor, String pl3Code, Instant validatedAt) {
         Instant now = Instant.parse("2026-09-01T00:00:00Z");

@@ -176,7 +176,7 @@ public final class DashboardMath {
         String completionValue = percentLabel(total.thisQuarter, total.applicable);
         return List.of(
                 new DashboardMetric(
-                        "RST completion",
+                        "RST completion (%)",
                         completionValue,
                         counts(total.thisQuarter) + " / " + counts(total.applicable)
                                 + " applicable PL3 completed this quarter",
@@ -192,12 +192,12 @@ public final class DashboardMath {
                         "Completed but not validated",
                         stuckUnderReview > 0 ? "warn" : "good"),
                 new DashboardMetric(
-                        "Capacity Creation YTD",
+                        "Capacity Creation YTD (HC)",
                         signedHc(capacityYtd),
                         "HC created through validated RST",
                         toneForSigned(capacityYtd)),
                 new DashboardMetric(
-                        "YTD % vs Actual Delivery HC",
+                        "YTD vs Actual Delivery HC (%)",
                         ratioPct(capacityYtd, deliveryHc),
                         "Capacity Creation YTD / actual delivery HC",
                         toneForSigned(capacityYtd)));

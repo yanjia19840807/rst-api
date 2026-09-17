@@ -16,5 +16,6 @@ public record BenchmarkingView(
         int pageSize,
         long total,
         int totalPages,
-        List<BenchmarkProcessPath> processPaths) {
+        List<BenchmarkProcessPath> processPaths,
+        List<BenchmarkCenterComparison> centerComparisons) {
 }

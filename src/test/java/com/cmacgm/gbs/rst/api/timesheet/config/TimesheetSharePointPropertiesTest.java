@@ -13,6 +13,11 @@ class TimesheetSharePointPropertiesTest {
         assertEquals("4.RST/2.UAT/Monthly", folders.monthlyFolder());
         assertEquals("4.RST/2.UAT/Template", folders.templateFolder());
         assertEquals("4.RST/2.UAT/Manual", folders.manualFolder());
+        assertEquals("4.RST/2.UAT/Manual/Timesheet", folders.manualTimesheetFolder());
+        assertEquals("4.RST/2.UAT/Manual/Volume", folders.manualVolumeFolder());
+        assertEquals("4.RST/2.UAT/Manual/Calendar", folders.manualCalendarFolder());
+        assertEquals("4.RST/2.UAT/Manual/Support", folders.manualSupportFolder());
+        assertEquals("4.RST/2.UAT/Manual/CycleTime", folders.manualCycleTimeFolder());
     }
 
     @Test

@@ -172,7 +172,7 @@ public class TimesheetSyncAdminService {
     }
 
     /**
-     * Stores the file on SharePoint Manual and syncs immediately.
+     * Stores the file on SharePoint Manual/Timesheet and syncs immediately.
      *
      * @param principal LTH
      * @param file upload

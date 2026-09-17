@@ -1,13 +1,13 @@
 package com.cmacgm.gbs.rst.api.governance.application;
 
 import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.cmacgm.gbs.rst.api.common.time.CenterDates;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkProcessPath;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkRow;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingQuery;
@@ -44,7 +44,10 @@ public final class BenchmarkingFilters {
         if (hasText(query.pl2()) && !query.pl2().equals(row.pl2())) {
             return false;
         }
-        LocalDate validated = dateOf(row.validatedDate());
+        if (hasText(query.sizingMonth()) && !query.sizingMonth().trim().equals(row.sizingMonth())) {
+            return false;
+        }
+        LocalDate validated = CenterDates.civilDateOf(row.validatedDate());
         if (query.validatedFrom() != null
                 && (validated == null || validated.isBefore(query.validatedFrom()))) {
             return false;
@@ -90,14 +93,4 @@ public final class BenchmarkingFilters {
         return value != null && !value.isBlank();
     }
 
-    private static LocalDate dateOf(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return LocalDate.parse(value);
-        } catch (DateTimeParseException ignored) {
-            return null;
-        }
-    }
 }

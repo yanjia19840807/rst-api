@@ -11,6 +11,7 @@ public record ValidationWorkflowQuery(
         String domain,
         String pl3Name,
         String toolkitName,
+        String sizingMonth,
         Integer agingMinDays,
         LocalDate submittedFrom,
         LocalDate submittedTo) {

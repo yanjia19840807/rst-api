@@ -176,7 +176,7 @@ public class ExerciseAssociatedDataController {
             @PathVariable UUID exerciseId,
             @RequestParam("file") MultipartFile file) throws Exception {
         return service.importSupportExcel(
-                principal.ccgid(), exerciseId, file.getInputStream(), file.getOriginalFilename());
+                principal.ccgid(), exerciseId, file.getBytes(), file.getOriginalFilename());
     }
 
     /**
@@ -230,7 +230,7 @@ public class ExerciseAssociatedDataController {
             @PathVariable UUID exerciseId,
             @RequestParam("file") MultipartFile file) throws Exception {
         return service.importCalendarExcel(
-                principal.ccgid(), exerciseId, file.getInputStream(), file.getOriginalFilename());
+                principal.ccgid(), exerciseId, file.getBytes(), file.getOriginalFilename());
     }
 
     /**
@@ -368,7 +368,7 @@ public class ExerciseAssociatedDataController {
             @PathVariable UUID exerciseId,
             @RequestParam("file") MultipartFile file) throws Exception {
         return service.importMonthlyExcel(
-                principal.ccgid(), exerciseId, file.getInputStream(), file.getOriginalFilename());
+                principal.ccgid(), exerciseId, file.getBytes(), file.getOriginalFilename());
     }
 
     @GetMapping("/volumes/daily/export-template")
@@ -401,7 +401,7 @@ public class ExerciseAssociatedDataController {
             @PathVariable UUID exerciseId,
             @RequestParam("file") MultipartFile file) throws Exception {
         return service.importDailyExcel(
-                principal.ccgid(), exerciseId, file.getInputStream(), file.getOriginalFilename());
+                principal.ccgid(), exerciseId, file.getBytes(), file.getOriginalFilename());
     }
 
     @GetMapping("/volumes/slot/export-template")
@@ -434,7 +434,7 @@ public class ExerciseAssociatedDataController {
             @PathVariable UUID exerciseId,
             @RequestParam("file") MultipartFile file) throws Exception {
         return service.importSlotExcel(
-                principal.ccgid(), exerciseId, file.getInputStream(), file.getOriginalFilename());
+                principal.ccgid(), exerciseId, file.getBytes(), file.getOriginalFilename());
     }
 
     private static ResponseEntity<byte[]> excelResponse(byte[] body, String filename) {

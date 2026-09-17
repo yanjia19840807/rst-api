@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.exercise.associateddata.application;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -93,6 +94,7 @@ public class AssociatedDataService {
     private final HolidayExcelService holidayExcel;
     private final SupportExcelService supportExcel;
     private final ImportTemplateService importTemplates;
+    private final ManualImportStore importFiles;
     private final ToolkitVolumeService toolkitVolumes;
     private final FileArtifactRepository fileArtifacts;
     private final DataImportBatchRepository importBatches;
@@ -119,6 +121,7 @@ public class AssociatedDataService {
             HolidayExcelService holidayExcel,
             SupportExcelService supportExcel,
             ImportTemplateService importTemplates,
+            ManualImportStore importFiles,
             ToolkitVolumeService toolkitVolumes,
             FileArtifactRepository fileArtifacts,
             DataImportBatchRepository importBatches,
@@ -140,6 +143,7 @@ public class AssociatedDataService {
         this.holidayExcel = holidayExcel;
         this.supportExcel = supportExcel;
         this.importTemplates = importTemplates;
+        this.importFiles = importFiles;
         this.toolkitVolumes = toolkitVolumes;
         this.fileArtifacts = fileArtifacts;
         this.importBatches = importBatches;
@@ -218,7 +222,7 @@ public class AssociatedDataService {
                 category.categoryId(),
                 category.categoryName(),
                 request.activity(),
-                request.frequencyCode(),
+                SupportWorkloadMath.canonicalFrequency(request.frequencyCode()),
                 request.volume(), request.unitOfMeasure(), request.workloadPerUnitMinutes(),
                 request.comments(), ownerCcgid, now);
         supportItems.save(item);
@@ -249,7 +253,7 @@ public class AssociatedDataService {
                 category.categoryId(),
                 category.categoryName(),
                 request.activity(),
-                request.frequencyCode(), request.volume(),
+                SupportWorkloadMath.canonicalFrequency(request.frequencyCode()), request.volume(),
                 request.unitOfMeasure(), request.workloadPerUnitMinutes(),
                 request.comments(), ownerCcgid, now);
         supportItems.save(item);
@@ -295,9 +299,9 @@ public class AssociatedDataService {
      */
     @Transactional
     public List<SupportItemView> importSupportExcel(
-            String ownerCcgid, UUID exerciseId, InputStream input, String fileName) {
+            String ownerCcgid, UUID exerciseId, byte[] content, String fileName) {
         editable(ownerCcgid, exerciseId);
-        List<SupportExcelService.ParsedRow> parsed = supportExcel.parse(input);
+        List<SupportExcelService.ParsedRow> parsed = supportExcel.parse(new ByteArrayInputStream(content));
         if (parsed.isEmpty()) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY, "invalid-excel", "No support rows found.");
@@ -359,9 +363,11 @@ public class AssociatedDataService {
                 exerciseId,
                 "SUPPORT",
                 fileName,
+                content,
                 accepted,
                 "SUPPORT_IMPORT",
-                "support-import.xlsx");
+                "support-import.xlsx",
+                ManualImportStore.Module.SUPPORT);
         return listSupport(ownerCcgid, exerciseId);
     }
 
@@ -462,9 +468,9 @@ public class AssociatedDataService {
      */
     @Transactional
     public CalendarView importCalendarExcel(
-            String ownerCcgid, UUID exerciseId, InputStream input, String fileName) {
+            String ownerCcgid, UUID exerciseId, byte[] content, String fileName) {
         editable(ownerCcgid, exerciseId);
-        List<HolidayRequest> parsed = holidayExcel.parse(input);
+        List<HolidayRequest> parsed = holidayExcel.parse(new ByteArrayInputStream(content));
         if (parsed.isEmpty()) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY, "invalid-excel", "No holiday rows found.");
@@ -474,9 +480,11 @@ public class AssociatedDataService {
                 exerciseId,
                 "HOLIDAY",
                 fileName,
+                content,
                 parsed.size(),
                 "HOLIDAY_IMPORT",
-                "holiday-import.xlsx");
+                "holiday-import.xlsx",
+                ManualImportStore.Module.CALENDAR);
         return putCalendar(ownerCcgid, exerciseId, new CalendarRequest(parsed));
     }
 
@@ -572,11 +580,11 @@ public class AssociatedDataService {
      */
     @Transactional
     public List<MonthlyVolumeView> importMonthlyExcel(
-            String ownerCcgid, UUID exerciseId, InputStream input, String fileName) {
+            String ownerCcgid, UUID exerciseId, byte[] content, String fileName) {
         RstExercise exercise = editable(ownerCcgid, exerciseId);
-        List<MonthlyVolumeRequest> parsed = volumeExcel.parseMonthly(input);
+        List<MonthlyVolumeRequest> parsed = volumeExcel.parseMonthly(new ByteArrayInputStream(content));
         MonthlyImportPlan plan = planMonthlyImport(exercise, parsed);
-        UUID batchId = recordImportBatch(ownerCcgid, exerciseId, "MONTHLY_VOLUME", fileName, parsed.size());
+        UUID batchId = recordImportBatch(ownerCcgid, exerciseId, "MONTHLY_VOLUME", fileName, content, parsed.size());
         return replaceMonthlyVolumes(ownerCcgid, exerciseId, plan.merged(), "IMPORT", batchId);
     }
 
@@ -652,11 +660,11 @@ public class AssociatedDataService {
      */
     @Transactional
     public List<DailyVolumeView> importDailyExcel(
-            String ownerCcgid, UUID exerciseId, InputStream input, String fileName) {
+            String ownerCcgid, UUID exerciseId, byte[] content, String fileName) {
         RstExercise exercise = editable(ownerCcgid, exerciseId);
-        List<DailyVolumeRequest> parsed = volumeExcel.parseDaily(input);
+        List<DailyVolumeRequest> parsed = volumeExcel.parseDaily(new ByteArrayInputStream(content));
         DailyImportPlan plan = planDailyImport(exercise, parsed);
-        UUID batchId = recordImportBatch(ownerCcgid, exerciseId, "DAILY_VOLUME", fileName, parsed.size());
+        UUID batchId = recordImportBatch(ownerCcgid, exerciseId, "DAILY_VOLUME", fileName, content, parsed.size());
         return replaceDailyVolumes(ownerCcgid, exerciseId, plan.merged(), "IMPORT", batchId);
     }
 
@@ -747,13 +755,13 @@ public class AssociatedDataService {
      */
     @Transactional
     public SlotImportResult importSlotExcel(
-            String ownerCcgid, UUID exerciseId, InputStream input, String fileName) {
+            String ownerCcgid, UUID exerciseId, byte[] content, String fileName) {
         RstExercise exercise = editable(ownerCcgid, exerciseId);
-        SlotImportPlan plan = volumeValidator.planSlotImport(volumeExcel.parseSlot(input));
+        SlotImportPlan plan = volumeValidator.planSlotImport(volumeExcel.parseSlot(new ByteArrayInputStream(content)));
         Instant now = clock.instant();
         exercise.updateSlotPeriod(plan.startDate(), plan.weeks(), ownerCcgid, now);
         exerciseRepository.saveAndFlush(exercise);
-        UUID batchId = recordImportBatch(ownerCcgid, exerciseId, "SLOT_VOLUME", fileName, plan.fileRowCount());
+        UUID batchId = recordImportBatch(ownerCcgid, exerciseId, "SLOT_VOLUME", fileName, content, plan.fileRowCount());
         List<SlotVolumeView> volumes = replaceSlotVolumes(
                 ownerCcgid, exerciseId, plan.grid(), "IMPORT", batchId);
         int cleared = scenarioCommits.clearSlotResultsForExercise(exerciseId);
@@ -991,10 +999,10 @@ public class AssociatedDataService {
     }
 
     private UUID recordImportBatch(
-            String ownerCcgid, UUID exerciseId, String importType, String fileName, int rowCount) {
+            String ownerCcgid, UUID exerciseId, String importType, String fileName, byte[] content, int rowCount) {
         return recordImportBatch(
-                ownerCcgid, exerciseId, importType, fileName, rowCount,
-                "VOLUME_IMPORT", "volume-import.xlsx");
+                ownerCcgid, exerciseId, importType, fileName, content, rowCount,
+                "VOLUME_IMPORT", "volume-import.xlsx", ManualImportStore.Module.VOLUME);
     }
 
     private UUID recordImportBatch(
@@ -1002,16 +1010,20 @@ public class AssociatedDataService {
             UUID exerciseId,
             String importType,
             String fileName,
+            byte[] content,
             int rowCount,
             String artifactType,
-            String defaultFileName) {
+            String defaultFileName,
+            ManualImportStore.Module module) {
         Instant now = clock.instant();
-        FileArtifact artifact = fileArtifacts.save(FileArtifact.createStub(
+        FileArtifact artifact = fileArtifacts.save(importFiles.store(
+                module,
                 artifactType,
                 "EXERCISE",
                 exerciseId,
                 fileName == null || fileName.isBlank() ? defaultFileName : fileName,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                content,
                 ownerCcgid,
                 now));
         DataImportBatch batch = importBatches.save(DataImportBatch.create(
@@ -1100,12 +1112,7 @@ public class AssociatedDataService {
         ExerciseTeamSetup setup = teamSetups.findById(exerciseId).orElse(null);
         BigDecimal workingDays = workingDaysService.workingDaysPerYear(exerciseId);
         BigDecimal fteHours = SupportWorkloadMath.fteAnnualHours(setup, workingDays);
-        SupportWorkloadMath.Derived derived;
-        try {
-            derived = SupportWorkloadMath.derive(item, workingDays, fteHours);
-        } catch (IllegalArgumentException ex) {
-            derived = new SupportWorkloadMath.Derived(null, null, null);
-        }
+        SupportWorkloadMath.Derived derived = SupportWorkloadMath.derive(item, workingDays, fteHours);
         return new SupportItemView(
                 item.getId(), item.getLineageId(), item.getCategoryId(), item.getCategory(),
                 item.getActivity(),

@@ -85,6 +85,7 @@ timesheet:
   sharepoint:
     site: ${TIMESHEET_SHAREPOINT_SITE:https://cmacgmgroup.sharepoint.com/sites/CMA-SharedKPIAutomation}
     library: ${TIMESHEET_SHAREPOINT_LIBRARY:Timesheet}
+    # 4.RST/0.DEV · 1.SIT · 2.UAT · 2.5.PRE · 3.Production
     root: ${TIMESHEET_SHAREPOINT_ROOT:4.RST/2.UAT}
   sync:
     daily:

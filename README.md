@@ -77,7 +77,7 @@ JUnit uses `application-test.yml` only.
 | `SSO_ENV` | UAT / PRE / PROD | Must match `CMACGM_APP_RST_{NAME}_{ENV}` |
 | `MS_GRAPH_CLIENT_ID` | empty (dev default set) | Graph application (client) id |
 | `MS_GRAPH_CLIENT_SECRET` | empty | Graph client secret; never commit |
-| `TIMESHEET_SHAREPOINT_ROOT` | `4.RST/2.UAT` (`4.RST/2.PRE` in pre, `4.RST/3.Production` in prod) | Timesheet library RST folder |
+| `TIMESHEET_SHAREPOINT_ROOT` | `4.RST/2.UAT` (`0.DEV` / `1.SIT` / `2.UAT` / `2.5.PRE` / `3.Production`) | Timesheet library RST folder |
 | `FORECAST_BASE_URL` | `http://localhost:8000` | Python forecast service |
 | `FORECAST_ENABLED` | `true` | Enable forecast HTTP calls |
 | `MAIL_ENABLED` | `true` in runtime profiles | Send workflow / Timesheet-fail mail |
@@ -155,7 +155,7 @@ ACTIVE.
 Automatic sync picks the file whose **name** has the latest business date
 (`Daily Report of yyyyMMdd(GBS CHINA).xlsx` /
 `Monthly Report of yyyyMM(GBS CHINA).xlsx`). Two files on the same date fail
-with `AMBIGUOUS_SOURCE`. LTH uploads land in `{root}/Manual` and activate
+with `AMBIGUOUS_SOURCE`. LTH uploads land in `{root}/Manual/Timesheet` and activate
 immediately when valid; they do not pause the Quartz schedule.
 
 Recurring sync uses Quartz when `timesheet.sync.daily.enabled` or
@@ -165,7 +165,7 @@ Recurring sync uses Quartz when `timesheet.sync.daily.enabled` or
 | --- | --- | --- |
 | `timesheet.sharepoint.site` | `…/sites/CMA-SharedKPIAutomation` | Timesheet document-library site |
 | `timesheet.sharepoint.library` | `Timesheet` | Document library display name |
-| `timesheet.sharepoint.root` | `4.RST/2.UAT` / `4.RST/2.PRE` / `4.RST/3.Production` | RST folder (`Daily`, `Monthly`, `Manual`, `Template`) |
+| `timesheet.sharepoint.root` | `4.RST/0.DEV` / `1.SIT` / `2.UAT` / `2.5.PRE` / `3.Production` | RST folder (`Daily`, `Monthly`, `Manual/{Timesheet,Volume,Calendar,Support,CycleTime}`, `Template`) |
 | `timesheet.sync.daily.enabled` | `false` | Register Daily Quartz job |
 | `timesheet.sync.daily.cron` | `0 0 6 * * ?` | Daily Quartz cron |
 | `timesheet.sync.monthly.enabled` | `false` | Register Monthly Quartz job |

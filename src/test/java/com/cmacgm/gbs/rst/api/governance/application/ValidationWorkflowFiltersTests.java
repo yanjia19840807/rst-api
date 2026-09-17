@@ -16,43 +16,45 @@ class ValidationWorkflowFiltersTests {
     void matchesAllWhenQueryIsEmpty() {
         assertThat(ValidationWorkflowFilters.matches(
                 row("EX-1", "GBS LEBANON", "OPS", "PL3-A", "TK-1", 9, "2026-03-01"),
-                query(null, null, null, null, null, null, null, null))).isTrue();
+                query(null, null, null, null, null, null, null, null, null))).isTrue();
     }
 
     @Test
     void exerciseCodeIsCaseInsensitiveContains() {
         ValidationWorkflowRow row = row("EX-ABC-01", "GBS LEBANON", "OPS", "PL3-A", "TK-1", 9, "2026-03-01");
         assertThat(ValidationWorkflowFilters.matches(
-                row, query("abc", null, null, null, null, null, null, null))).isTrue();
+                row, query("abc", null, null, null, null, null, null, null, null))).isTrue();
         assertThat(ValidationWorkflowFilters.matches(
-                row, query("zzz", null, null, null, null, null, null, null))).isFalse();
+                row, query("zzz", null, null, null, null, null, null, null, null))).isFalse();
     }
 
     @Test
     void exactFiltersMustMatch() {
         ValidationWorkflowRow row = row("EX-1", "GBS LEBANON", "OPS", "PL3-A", "TK-1", 9, "2026-03-01");
         assertThat(ValidationWorkflowFilters.matches(
-                row, query(null, "GBS LEBANON", "OPS", "PL3-A", "TK-1", null, null, null))).isTrue();
+                row, query(null, "GBS LEBANON", "OPS", "PL3-A", "TK-1", "2026-03", null, null, null))).isTrue();
         assertThat(ValidationWorkflowFilters.matches(
-                row, query(null, "GBS INDIA", null, null, null, null, null, null))).isFalse();
+                row, query(null, "GBS INDIA", null, null, null, null, null, null, null))).isFalse();
         assertThat(ValidationWorkflowFilters.matches(
-                row, query(null, null, "FIN", null, null, null, null, null))).isFalse();
+                row, query(null, null, "FIN", null, null, null, null, null, null))).isFalse();
         assertThat(ValidationWorkflowFilters.matches(
-                row, query(null, null, null, "PL3-B", null, null, null, null))).isFalse();
+                row, query(null, null, null, "PL3-B", null, null, null, null, null))).isFalse();
         assertThat(ValidationWorkflowFilters.matches(
-                row, query(null, null, null, null, "TK-2", null, null, null))).isFalse();
+                row, query(null, null, null, null, "TK-2", null, null, null, null))).isFalse();
+        assertThat(ValidationWorkflowFilters.matches(
+                row, query(null, null, null, null, null, "2026-05", null, null, null))).isFalse();
     }
 
     @Test
     void agingIsAtLeastMinDays() {
         ValidationWorkflowRow row = row("EX-1", "GBS LEBANON", "OPS", "PL3-A", "TK-1", 14, "2026-03-01");
         assertThat(ValidationWorkflowFilters.matches(
-                row, query(null, null, null, null, null, 14, null, null))).isTrue();
+                row, query(null, null, null, null, null, null, 14, null, null))).isTrue();
         assertThat(ValidationWorkflowFilters.matches(
-                row, query(null, null, null, null, null, 15, null, null))).isFalse();
+                row, query(null, null, null, null, null, null, 15, null, null))).isFalse();
         assertThat(ValidationWorkflowFilters.matches(
                 row("EX-2", "GBS LEBANON", "OPS", "PL3-A", "TK-1", null, "2026-03-01"),
-                query(null, null, null, null, null, 0, null, null))).isFalse();
+                query(null, null, null, null, null, null, 0, null, null))).isFalse();
     }
 
     @Test
@@ -60,15 +62,21 @@ class ValidationWorkflowFiltersTests {
         ValidationWorkflowRow row = row("EX-1", "GBS LEBANON", "OPS", "PL3-A", "TK-1", 9, "2026-03-10");
         assertThat(ValidationWorkflowFilters.matches(
                 row,
-                query(null, null, null, null, null, null,
+                query(null, null, null, null, null, null, null,
                         LocalDate.parse("2026-03-10"), LocalDate.parse("2026-03-10"))))
                 .isTrue();
         assertThat(ValidationWorkflowFilters.matches(
-                row, query(null, null, null, null, null, null, LocalDate.parse("2026-03-11"), null)))
+                row, query(null, null, null, null, null, null, null, LocalDate.parse("2026-03-11"), null)))
                 .isFalse();
         assertThat(ValidationWorkflowFilters.matches(
-                row, query(null, null, null, null, null, null, null, LocalDate.parse("2026-03-09"))))
+                row, query(null, null, null, null, null, null, null, null, LocalDate.parse("2026-03-09"))))
                 .isFalse();
+        ValidationWorkflowRow timed = row("EX-1", "GBS LEBANON", "OPS", "PL3-A", "TK-1", 9, "2026-03-10T16:45:00");
+        assertThat(ValidationWorkflowFilters.matches(
+                timed,
+                query(null, null, null, null, null, null, null,
+                        LocalDate.parse("2026-03-10"), LocalDate.parse("2026-03-10"))))
+                .isTrue();
     }
 
     @Test
@@ -89,6 +97,7 @@ class ValidationWorkflowFiltersTests {
             String domain,
             String pl3Name,
             String toolkitName,
+            String sizingMonth,
             Integer agingMinDays,
             LocalDate submittedFrom,
             LocalDate submittedTo) {
@@ -98,6 +107,7 @@ class ValidationWorkflowFiltersTests {
                 domain,
                 pl3Name,
                 toolkitName,
+                sizingMonth,
                 agingMinDays,
                 submittedFrom,
                 submittedTo);
@@ -126,6 +136,7 @@ class ValidationWorkflowFiltersTests {
                 BigDecimal.ONE,
                 BigDecimal.TEN,
                 "",
+                "2026-03",
                 submittedDate);
     }
 }

@@ -27,15 +27,30 @@ import com.cmacgm.gbs.rst.api.timesheet.config.TimesheetSharePointProperties;
  * Live Graph write into the UAT RST output folders. Skips when tenant/secret are absent.
  *
  * <p>SharePoint:
- * {@code /sites/CMA-SharedKPIAutomation/Timesheet/4.RST/2.UAT}
+ * {@code /sites/CMA-SharedKPIAutomation/Timesheet/4.RST/{0.DEV,1.SIT,2.UAT,2.5.PRE,3.Production}}
  */
 class MicrosoftGraphRstFolderIT {
 
+    static final List<String> ENV_ROOTS = List.of(
+            "4.RST/0.DEV",
+            "4.RST/1.SIT",
+            "4.RST/2.UAT",
+            "4.RST/2.5.PRE",
+            "4.RST/3.Production");
+    static final List<String> ENV_SUBFOLDERS = List.of(
+            "Daily",
+            "Monthly",
+            "Template",
+            "Manual/Timesheet",
+            "Manual/Volume",
+            "Manual/Calendar",
+            "Manual/Support",
+            "Manual/CycleTime");
     static final String DAILY_FOLDER = "4.RST/2.UAT/Daily";
     static final String MONTHLY_FOLDER = "4.RST/2.UAT/Monthly";
-    static final String UAT_TEMPLATE_FOLDER = "4.RST/2.UAT/Template";
-    static final String PROD_TEMPLATE_FOLDER = "4.RST/3.Production/Template";
-    static final List<String> TEMPLATE_FOLDERS = List.of(UAT_TEMPLATE_FOLDER, PROD_TEMPLATE_FOLDER);
+    static final List<String> TEMPLATE_FOLDERS = ENV_ROOTS.stream()
+            .map(root -> root + "/Template")
+            .toList();
     static final String DAILY_FILE = "Daily Report of 20260727(GBS CHINA).xlsx";
     static final String MONTHLY_FILE = "Monthly Report of 202606(GBS CHINA).xlsx";
     static final MediaType XLSX = MediaType.parseMediaType(
@@ -72,7 +87,7 @@ class MicrosoftGraphRstFolderIT {
         assumeTrue(graph != null, "Microsoft Graph credentials are incomplete.");
 
         TimesheetSharePointProperties sharePoint = liveSharePoint();
-        String folder = sharePoint.manualFolder();
+        String folder = sharePoint.manualTimesheetFolder();
         GraphDriveItem folderItem = graph.ensureFolder(folder);
         assertThat(folderItem.isFolder()).as(folder + " must be a folder").isTrue();
 
@@ -127,6 +142,13 @@ class MicrosoftGraphRstFolderIT {
     void createsTemplateFolderAndUploadsImportTemplates() {
         MicrosoftGraphService graph = liveGraph();
         assumeTrue(graph != null, "Microsoft Graph credentials are incomplete.");
+
+        for (String root : ENV_ROOTS) {
+            for (String sub : ENV_SUBFOLDERS) {
+                GraphDriveItem folder = graph.ensureFolder(root + "/" + sub);
+                assertThat(folder.isFolder()).as(root + "/" + sub + " must be a folder").isTrue();
+            }
+        }
 
         HolidayExcelService holidays = new HolidayExcelService();
         VolumeExcelService volumes = new VolumeExcelService();

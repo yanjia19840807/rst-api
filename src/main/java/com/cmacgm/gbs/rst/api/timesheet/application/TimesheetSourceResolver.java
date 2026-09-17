@@ -18,7 +18,7 @@ import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportName.Parsed;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 
 /**
- * Resolves Daily / Monthly files from SharePoint and stores LTH uploads under Manual.
+ * Resolves Daily / Monthly files from SharePoint and stores LTH uploads under Manual/Timesheet.
  */
 @Component
 public class TimesheetSourceResolver {
@@ -63,9 +63,9 @@ public class TimesheetSourceResolver {
      * @return stored source
      */
     public Source storeManual(String fileName, byte[] content) {
-        graph.ensureFolder(sharePoint.manualFolder());
+        graph.ensureFolder(sharePoint.manualTimesheetFolder());
         GraphDriveItem stored = graph.putDriveItemContent(
-                sharePoint.manualFolder(),
+                sharePoint.manualTimesheetFolder(),
                 fileName,
                 content,
                 MediaType.parseMediaType(

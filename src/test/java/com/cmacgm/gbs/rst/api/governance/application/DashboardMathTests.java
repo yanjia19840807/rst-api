@@ -94,11 +94,11 @@ class DashboardMathTests {
                 new BigDecimal("128.44"),
                 new BigDecimal("3000"));
         assertThat(metrics).extracting(DashboardMetric::label).containsExactly(
-                "RST completion",
+                "RST completion (%)",
                 "Never done",
                 "Stuck in validation",
-                "Capacity Creation YTD",
-                "YTD % vs Actual Delivery HC");
+                "Capacity Creation YTD (HC)",
+                "YTD vs Actual Delivery HC (%)");
         assertThat(metrics.get(0).value()).isEqualTo("50%");
         assertThat(metrics.get(0).hint()).isEqualTo("1 / 2 applicable PL3 completed this quarter");
         assertThat(metrics.get(1).value()).isEqualTo("1");

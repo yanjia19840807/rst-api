@@ -1,11 +1,11 @@
 package com.cmacgm.gbs.rst.api.governance.application;
 
 import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Function;
 
+import com.cmacgm.gbs.rst.api.common.time.CenterDates;
 import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryListQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryRow;
 
@@ -50,7 +50,7 @@ public final class RepositoryRowFilters {
         if (hasText(query.sizingMonth()) && !query.sizingMonth().trim().equals(row.sizingMonth())) {
             return false;
         }
-        LocalDate validated = dateOf(row.validatedDate());
+        LocalDate validated = CenterDates.civilDateOf(row.validatedDate());
         if (query.validatedFrom() != null
                 && (validated == null || validated.isBefore(query.validatedFrom()))) {
             return false;
@@ -82,14 +82,4 @@ public final class RepositoryRowFilters {
         return value != null && !value.isBlank();
     }
 
-    private static LocalDate dateOf(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return LocalDate.parse(value);
-        } catch (DateTimeParseException ignored) {
-            return null;
-        }
-    }
 }
