@@ -18,6 +18,7 @@ import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.supportcategory.api.dto.CreateSupportCategoryRequest;
 import com.cmacgm.gbs.rst.api.supportcategory.api.dto.ReorderSupportCategoriesRequest;
 import com.cmacgm.gbs.rst.api.supportcategory.api.dto.SupportCategoryAdminRow;
+import com.cmacgm.gbs.rst.api.supportcategory.api.dto.SupportCategoryOption;
 import com.cmacgm.gbs.rst.api.supportcategory.api.dto.UpdateSupportCategoryRequest;
 import com.cmacgm.gbs.rst.api.supportcategory.domain.SupportCategory;
 import com.cmacgm.gbs.rst.api.supportcategory.persistence.SupportCategoryRepository;
@@ -55,7 +56,7 @@ class SupportCategoryServiceTests {
         SupportCategoryAdminRow moved = service.update(
                 second.getId(),
                 admin(),
-                new UpdateSupportCategoryRequest("Weekly Reporting", SupportCategory.STATUS_ACTIVE, 1));
+                new UpdateSupportCategoryRequest("Weekly Reporting", 1));
 
         assertThat(moved.name()).isEqualTo("Weekly Reporting");
         assertThat(moved.displayOrder()).isEqualTo(1);
@@ -63,30 +64,16 @@ class SupportCategoryServiceTests {
     }
 
     @Test
-    void updateRejectsUnknownStatus() {
-        List<SupportCategory> store = new ArrayList<>();
-        SupportCategory category = SupportCategory.create("Training", 1, "S1", NOW);
-        store.add(category);
-        SupportCategoryService service = service(store);
-
-        assertThatThrownBy(() -> service.update(
-                        category.getId(),
-                        admin(),
-                        new UpdateSupportCategoryRequest("Training", "ARCHIVED", 1)))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("ACTIVE or INACTIVE");
-    }
-
-    @Test
-    void listAdminIncludesInactive() {
+    void leftoverInactiveCategoriesStayInTheCatalog() {
         List<SupportCategory> store = new ArrayList<>();
         SupportCategory category = SupportCategory.create("Training", 1, "S1", NOW);
         category.setStatus(SupportCategory.STATUS_INACTIVE, "S1", NOW);
         store.add(category);
         SupportCategoryService service = service(store);
 
-        assertThat(service.listActive()).isEmpty();
+        assertThat(service.listActive()).extracting(SupportCategoryOption::name).containsExactly("Training");
         assertThat(service.listAdmin()).extracting(SupportCategoryAdminRow::name).containsExactly("Training");
+        assertThat(service.resolveActiveByName("Training").categoryName()).isEqualTo("Training");
     }
 
     @Test
@@ -145,19 +132,12 @@ class SupportCategoryServiceTests {
     }
 
     @Test
-    void resolveActiveByNameRejectsUnknownAndInactive() {
+    void resolveActiveByNameRejectsUnknown() {
         List<SupportCategory> store = new ArrayList<>();
-        SupportCategory active = SupportCategory.create("Training", 1, "S1", NOW);
-        SupportCategory inactive = SupportCategory.create("Meetings", 2, "S1", NOW);
-        inactive.setStatus(SupportCategory.STATUS_INACTIVE, "S1", NOW);
-        store.add(active);
-        store.add(inactive);
+        store.add(SupportCategory.create("Training", 1, "S1", NOW));
         SupportCategoryService service = service(store);
 
         assertThat(service.resolveActiveByName(" training ").categoryName()).isEqualTo("Training");
-        assertThatThrownBy(() -> service.resolveActiveByName("Meetings"))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("not active");
         assertThatThrownBy(() -> service.resolveActiveByName("Unknown"))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("Unknown Category");

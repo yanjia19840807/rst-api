@@ -73,9 +73,10 @@ public class BenchmarkingService {
     }
 
     /**
-     * Lists Shared KPI rows from the latest APPROVED Exercise per Center × Supervisor × PL3.
-     * Detail Cycle time / capacity / Support ratio are split onto each KPI line by
-     * Delivery HC share. Cards and Center charts still HC-weight the Exercise-level rates.
+     * Lists Shared KPI rows from the latest Sizing Month APPROVED Exercise that matches
+     * the filters, per Center × Supervisor × PL3. Detail Cycle time / capacity / Support
+     * ratio are split onto each KPI line by Delivery HC share. Cards and Center charts
+     * still HC-weight the Exercise-level rates.
      *
      * @param query field filters; {@code pl3Code} is required for rows
      * @param page 1-based page
@@ -119,18 +120,23 @@ public class BenchmarkingService {
     }
 
     private FilteredBenchmarking filteredRows(BenchmarkingQuery query) {
-        List<RstExercise> approved = BenchmarkingExercises.latestApprovedPerScope(
-                exercises.findApprovedRepositoryExercises());
-        if (approved.isEmpty()) {
+        List<RstExercise> approved = exercises.findApprovedRepositoryExercises();
+        List<RstExercise> latestAll = BenchmarkingExercises.latestApprovedPerScope(approved);
+        if (latestAll.isEmpty()) {
             return new FilteredBenchmarking(List.of(), List.of(), List.of(), List.of());
         }
-        Map<UUID, BigDecimal> rightSizingByExercise = rightSizingByExercise(approved);
-        Map<UUID, BigDecimal> supportByExercise = supportByExercise(approved);
-        Map<UUID, BigDecimal> cycleTimeByExercise = cycleTimeByExercise(approved);
-        Map<UUID, ExerciseTeamSetup> setups = setupsByExercise(approved);
-        List<BenchmarkRow> source = new ArrayList<>();
+        List<RstExercise> selected = BenchmarkingExercises.latestApprovedPerScope(
+                approved, exercise -> BenchmarkingFilters.matchesExercise(exercise, query));
+        List<RstExercise> scoped = mergeExercises(latestAll, selected);
+        Map<UUID, BigDecimal> rightSizingByExercise = rightSizingByExercise(scoped);
+        Map<UUID, BigDecimal> supportByExercise = supportByExercise(scoped);
+        Map<UUID, BigDecimal> cycleTimeByExercise = cycleTimeByExercise(scoped);
+        Map<UUID, ExerciseTeamSetup> setups = setupsByExercise(scoped);
+        List<BenchmarkRow> source = expand(
+                latestAll, rightSizingByExercise, supportByExercise, cycleTimeByExercise, setups);
         Map<BenchmarkRow, BigDecimal> totals = new IdentityHashMap<>();
-        for (RstExercise exercise : approved) {
+        List<BenchmarkRow> items = new ArrayList<>();
+        for (RstExercise exercise : selected) {
             BigDecimal totalDelivery = deliveryHc(exercise);
             for (BenchmarkRow row : rowsFor(
                     exercise,
@@ -138,25 +144,58 @@ public class BenchmarkingService {
                     supportByExercise.get(exercise.getId()),
                     cycleTimeByExercise.get(exercise.getId()),
                     setups.get(exercise.getId()))) {
-                source.add(row);
-                totals.put(row, totalDelivery);
+                if (BenchmarkingFilters.matches(row, query)) {
+                    items.add(row);
+                    totals.put(row, totalDelivery);
+                }
             }
         }
-        source.sort(Comparator
+        items.sort(rowOrder());
+        List<BenchmarkRow> allocatedItems = items.stream()
+                .map(row -> BenchmarkingMath.shareRates(row, totals.get(row)))
+                .toList();
+        return new FilteredBenchmarking(
+                source, List.copyOf(items), allocatedItems, BenchmarkingFilters.distinctPaths(source));
+    }
+
+    private List<BenchmarkRow> expand(
+            List<RstExercise> exercises,
+            Map<UUID, BigDecimal> rightSizingByExercise,
+            Map<UUID, BigDecimal> supportByExercise,
+            Map<UUID, BigDecimal> cycleTimeByExercise,
+            Map<UUID, ExerciseTeamSetup> setups) {
+        List<BenchmarkRow> rows = new ArrayList<>();
+        for (RstExercise exercise : exercises) {
+            rows.addAll(rowsFor(
+                    exercise,
+                    rightSizingByExercise.get(exercise.getId()),
+                    supportByExercise.get(exercise.getId()),
+                    cycleTimeByExercise.get(exercise.getId()),
+                    setups.get(exercise.getId())));
+        }
+        rows.sort(rowOrder());
+        return rows;
+    }
+
+    private static Comparator<BenchmarkRow> rowOrder() {
+        return Comparator
                 .comparing(BenchmarkRow::gbs, Comparator.nullsLast(String::compareTo))
                 .thenComparing(BenchmarkRow::carrier, Comparator.nullsLast(String::compareTo))
                 .thenComparing(BenchmarkRow::site, Comparator.nullsLast(String::compareTo))
                 .thenComparing(BenchmarkRow::sharedKpiLine, Comparator.nullsLast(String::compareTo))
                 .thenComparing(BenchmarkRow::domain, Comparator.nullsLast(String::compareTo))
-                .thenComparing(BenchmarkRow::pl3, Comparator.nullsLast(String::compareTo)));
-        List<BenchmarkProcessPath> processPaths = BenchmarkingFilters.distinctPaths(source);
-        List<BenchmarkRow> items = source.stream()
-                .filter(row -> BenchmarkingFilters.matches(row, query))
-                .toList();
-        List<BenchmarkRow> allocatedItems = items.stream()
-                .map(row -> BenchmarkingMath.shareRates(row, totals.get(row)))
-                .toList();
-        return new FilteredBenchmarking(source, items, allocatedItems, processPaths);
+                .thenComparing(BenchmarkRow::pl3, Comparator.nullsLast(String::compareTo));
+    }
+
+    private static List<RstExercise> mergeExercises(List<RstExercise> first, List<RstExercise> second) {
+        Map<UUID, RstExercise> merged = new HashMap<>();
+        for (RstExercise exercise : first) {
+            merged.put(exercise.getId(), exercise);
+        }
+        for (RstExercise exercise : second) {
+            merged.put(exercise.getId(), exercise);
+        }
+        return List.copyOf(merged.values());
     }
 
     private record FilteredBenchmarking(

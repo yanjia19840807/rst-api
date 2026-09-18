@@ -8,6 +8,10 @@ import java.util.List;
 import java.util.Map;
 
 import com.cmacgm.gbs.rst.api.common.time.CenterDates;
+import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
+import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
+import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
+import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkProcessPath;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkRow;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkingQuery;
@@ -54,6 +58,63 @@ public final class BenchmarkingFilters {
         }
         if (query.validatedTo() != null
                 && (validated == null || validated.isAfter(query.validatedTo()))) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Returns whether an Exercise can enter the latest-per-scope pick for this query.
+     * Needs a matching Shared KPI line plus Exercise-level Sizing Month / Validated Date.
+     *
+     * @param exercise APPROVED Exercise
+     * @param query list filters; {@code pl3Code} is required
+     * @return true when this Exercise is eligible
+     */
+    public static boolean matchesExercise(RstExercise exercise, BenchmarkingQuery query) {
+        if (exercise == null || query == null || !hasText(query.pl3Code()) || exercise.getValidatedAt() == null) {
+            return false;
+        }
+        ExerciseToolkitSnapshot snapshot = exercise.getToolkitSnapshot();
+        if (snapshot == null) {
+            return false;
+        }
+        String sizingMonth = MonthKeys.formatYearMonth(exercise.getSizingMonth());
+        if (hasText(query.sizingMonth())
+                && !query.sizingMonth().trim().equals(sizingMonth == null ? "" : sizingMonth)) {
+            return false;
+        }
+        LocalDate validated = CenterDates.dateOf(exercise.getValidatedAt(), snapshot.getCenter());
+        if (query.validatedFrom() != null
+                && (validated == null || validated.isBefore(query.validatedFrom()))) {
+            return false;
+        }
+        if (query.validatedTo() != null
+                && (validated == null || validated.isAfter(query.validatedTo()))) {
+            return false;
+        }
+        for (ExerciseSharedKpiLine line : exercise.getSharedKpiLines()) {
+            if (matchesLine(line, query)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean matchesLine(ExerciseSharedKpiLine line, BenchmarkingQuery query) {
+        if (line == null || !hasText(line.getPl3Code())) {
+            return false;
+        }
+        if (!query.pl3Code().equals(line.getPl3Code().trim())) {
+            return false;
+        }
+        if (hasText(query.domain()) && !query.domain().equals(line.getDomain())) {
+            return false;
+        }
+        if (hasText(query.pl1()) && !query.pl1().equals(line.getPl1())) {
+            return false;
+        }
+        if (hasText(query.pl2()) && !query.pl2().equals(line.getPl2())) {
             return false;
         }
         return true;

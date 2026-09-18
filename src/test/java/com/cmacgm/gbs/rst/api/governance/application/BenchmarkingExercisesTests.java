@@ -13,18 +13,45 @@ import org.junit.jupiter.api.Test;
 class BenchmarkingExercisesTests {
 
     @Test
-    void keepsLatestValidatedPerCenterSupervisorPl3() {
+    void keepsLatestSizingMonthPerCenterSupervisorPl3() {
+        RstExercise olderMonth = exercise(
+                "EX-JUN",
+                "GBS CHINA",
+                "175344",
+                "367",
+                LocalDate.of(2026, 6, 1),
+                Instant.parse("2026-09-20T02:00:00Z"));
+        RstExercise newerMonth = exercise(
+                "EX-SEP",
+                "GBS CHINA",
+                "175344",
+                "367",
+                LocalDate.of(2026, 9, 1),
+                Instant.parse("2026-09-05T02:00:00Z"));
+        RstExercise otherCenter = exercise(
+                "EX-LB",
+                "GBS LEBANON",
+                "175344",
+                "367",
+                LocalDate.of(2026, 6, 1),
+                Instant.parse("2026-09-01T00:00:00Z"));
+
+        List<RstExercise> latest = BenchmarkingExercises.latestApprovedPerScope(
+                List.of(olderMonth, newerMonth, otherCenter));
+
+        assertThat(latest).extracting(RstExercise::getExerciseCode).containsExactlyInAnyOrder("EX-SEP", "EX-LB");
+    }
+
+    @Test
+    void sameSizingMonthFallsBackToLaterValidatedAt() {
         RstExercise older = exercise(
                 "EX-OLD", "GBS CHINA", "175344", "367", Instant.parse("2026-09-04T09:53:19Z"));
         RstExercise newer = exercise(
                 "EX-NEW", "GBS CHINA", "175344", "367", Instant.parse("2026-09-09T02:14:55Z"));
-        RstExercise otherCenter = exercise(
-                "EX-LB", "GBS LEBANON", "175344", "367", Instant.parse("2026-09-01T00:00:00Z"));
 
-        List<RstExercise> latest = BenchmarkingExercises.latestApprovedPerScope(
-                List.of(older, newer, otherCenter));
-
-        assertThat(latest).extracting(RstExercise::getExerciseCode).containsExactlyInAnyOrder("EX-NEW", "EX-LB");
+        assertThat(BenchmarkingExercises.latestApprovedPerScope(List.of(older, newer)))
+                .extracting(RstExercise::getExerciseCode)
+                .containsExactly("EX-NEW");
     }
 
     @Test
@@ -41,6 +68,32 @@ class BenchmarkingExercisesTests {
     }
 
     @Test
+    void picksLatestAmongExercisesThatMatchFilter() {
+        RstExercise older = exercise(
+                "EX-OLD", "GBS CHINA", "175344", "367", Instant.parse("2026-06-10T02:00:00Z"));
+        RstExercise newer = exercise(
+                "EX-NEW", "GBS CHINA", "175344", "367", Instant.parse("2026-09-10T02:00:00Z"));
+
+        List<RstExercise> latest = BenchmarkingExercises.latestApprovedPerScope(
+                List.of(older, newer),
+                exercise -> "EX-OLD".equals(exercise.getExerciseCode()));
+
+        assertThat(latest).extracting(RstExercise::getExerciseCode).containsExactly("EX-OLD");
+    }
+
+    @Test
+    void keepsLatestPerSupervisorOnTheSamePl3() {
+        RstExercise supervisorA = exercise(
+                "EX-A", "GBS CHINA", "175344", "367", Instant.parse("2026-06-10T02:00:00Z"));
+        RstExercise supervisorB = exercise(
+                "EX-B", "GBS CHINA", "188001", "367", Instant.parse("2026-03-10T02:00:00Z"));
+
+        assertThat(BenchmarkingExercises.latestApprovedPerScope(List.of(supervisorA, supervisorB)))
+                .extracting(RstExercise::getExerciseCode)
+                .containsExactlyInAnyOrder("EX-A", "EX-B");
+    }
+
+    @Test
     void keepsFirstWhenValidatedAtIsEqual() {
         Instant sameTime = Instant.parse("2026-09-09T02:14:55Z");
         RstExercise first = exercise("EX-A", "GBS CHINA", "175344", "367", sameTime);
@@ -53,13 +106,23 @@ class BenchmarkingExercisesTests {
 
     private static RstExercise exercise(
             String code, String center, String supervisor, String pl3Code, Instant validatedAt) {
+        return exercise(code, center, supervisor, pl3Code, LocalDate.of(2026, 6, 1), validatedAt);
+    }
+
+    private static RstExercise exercise(
+            String code,
+            String center,
+            String supervisor,
+            String pl3Code,
+            LocalDate sizingMonth,
+            Instant validatedAt) {
         Instant now = Instant.parse("2026-09-01T00:00:00Z");
         RstExercise exercise = RstExercise.create(
                 UUID.randomUUID(),
                 code,
                 UUID.randomUUID(),
                 "SUP1",
-                LocalDate.of(2026, 6, 1),
+                sizingMonth,
                 null,
                 null,
                 null,

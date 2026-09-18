@@ -300,7 +300,7 @@ public final class DashboardMath {
     }
 
     private static String toneForSigned(BigDecimal value) {
-        if (value == null) {
+        if (value == null || value.signum() == 0) {
             return "neutral";
         }
         return value.signum() < 0 ? "bad" : "good";

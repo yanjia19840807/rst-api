@@ -4,7 +4,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -38,19 +37,18 @@ public class SupportCategoryService {
     }
 
     /**
-     * Active categories for Workload Registry and Support Repository dropdowns.
+     * Catalog categories for Workload Registry and Support Repository dropdowns.
      */
     @Transactional(readOnly = true)
     public List<SupportCategoryOption> listActive() {
         return categories.findByDeletedAtIsNullOrderByDisplayOrderAscNameAsc().stream()
-                .filter(SupportCategory::isActive)
                 .map(category -> new SupportCategoryOption(category.getId(), category.getName()))
                 .toList();
     }
 
     /**
      * Resolves a Category for Workload Registry writes and snapshots the current name.
-     * Keeping the row's existing category is allowed even if it was later inactivated.
+     * Keeping the row's existing category is allowed even if it was later deleted.
      *
      * @param categoryId selected category
      * @param currentCategoryId category already stored on the row being edited, or null on create
@@ -69,14 +67,11 @@ public class SupportCategoryService {
             throw new ApiException(
                     HttpStatus.NOT_FOUND, "category-not-found", "The Category was not found.");
         }
-        if (!keepingCurrent && !category.isActive()) {
-            throw unprocessable("inactive-category", "The selected Category is not active.");
-        }
         return new ResolvedCategory(category.getId(), category.getName());
     }
 
     /**
-     * Resolves an active Category by display name for Excel import.
+     * Resolves a catalog Category by display name for Excel import.
      *
      * @param name catalog name
      * @return id plus live catalog name
@@ -90,14 +85,11 @@ public class SupportCategoryService {
         SupportCategory category = categories.findByDeletedAtIsNullAndNameIgnoreCase(normalized)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "category-not-found", "Unknown Category: " + normalized + "."));
-        if (!category.isActive()) {
-            throw unprocessable("inactive-category", "Category is not active: " + category.getName() + ".");
-        }
         return new ResolvedCategory(category.getId(), category.getName());
     }
 
     /**
-     * All non-deleted categories, including INACTIVE, for Admin maintenance.
+     * All non-deleted categories for Admin maintenance.
      */
     @Transactional(readOnly = true)
     public List<SupportCategoryAdminRow> listAdmin() {
@@ -124,7 +116,7 @@ public class SupportCategoryService {
     }
 
     /**
-     * Replaces name, status, and display order. Adjacent order targets are swapped.
+     * Replaces name and display order. Adjacent order targets are swapped.
      *
      * @param id category
      * @param principal Admin
@@ -142,7 +134,6 @@ public class SupportCategoryService {
                         HttpStatus.NOT_FOUND, "category-not-found", "The Category was not found."));
         String name = normalizeName(request.name());
         assertNameAvailable(name, id);
-        String status = normalizeStatus(request.status());
         if (request.displayOrder() < 0) {
             throw unprocessable("invalid-category-order", "Display order must be zero or greater.");
         }
@@ -151,8 +142,8 @@ public class SupportCategoryService {
         if (!name.equals(category.getName())) {
             category.rename(name, actor, now);
         }
-        if (!status.equals(category.getStatus())) {
-            category.setStatus(status, actor, now);
+        if (!category.isActive()) {
+            category.setStatus(SupportCategory.STATUS_ACTIVE, actor, now);
         }
         int nextOrder = request.displayOrder();
         if (nextOrder != category.getDisplayOrder()) {
@@ -251,15 +242,6 @@ public class SupportCategoryService {
             throw unprocessable("invalid-category", "Name must be 120 characters or fewer.");
         }
         return name;
-    }
-
-    private static String normalizeStatus(String raw) {
-        String status = raw == null ? "" : raw.trim().toUpperCase(Locale.ROOT);
-        if (!SupportCategory.STATUS_ACTIVE.equals(status)
-                && !SupportCategory.STATUS_INACTIVE.equals(status)) {
-            throw unprocessable("invalid-category-status", "Status must be ACTIVE or INACTIVE.");
-        }
-        return status;
     }
 
     private static String actorCcgid(RstPrincipal principal) {

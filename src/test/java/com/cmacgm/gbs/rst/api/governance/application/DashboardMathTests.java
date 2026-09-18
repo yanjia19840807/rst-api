@@ -124,7 +124,20 @@ class DashboardMathTests {
         assertThat(metrics.get(2).value()).isEqualTo("3");
         assertThat(metrics.get(2).tone()).isEqualTo("warn");
         assertThat(metrics.get(3).value()).isEqualTo("+128.4");
+        assertThat(metrics.get(3).tone()).isEqualTo("good");
         assertThat(metrics.get(4).value()).isEqualTo("4.3%");
+        assertThat(metrics.get(4).tone()).isEqualTo("good");
+    }
+
+    @Test
+    void capacityCardsStayNeutralAtZeroAndBadWhenNegative() {
+        List<DashboardMetric> zero = DashboardMath.metrics(List.of(), 0, BigDecimal.ZERO, new BigDecimal("10"));
+        assertThat(zero.get(3).tone()).isEqualTo("neutral");
+        assertThat(zero.get(4).tone()).isEqualTo("neutral");
+        List<DashboardMetric> loss = DashboardMath.metrics(
+                List.of(), 0, new BigDecimal("-2.4"), new BigDecimal("10"));
+        assertThat(loss.get(3).tone()).isEqualTo("bad");
+        assertThat(loss.get(4).tone()).isEqualTo("bad");
     }
 
     @Test
