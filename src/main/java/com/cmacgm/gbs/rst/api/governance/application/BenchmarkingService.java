@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -73,8 +74,8 @@ public class BenchmarkingService {
 
     /**
      * Lists Shared KPI rows from the latest APPROVED Exercise per Center × Supervisor × PL3.
-     * Detail Cycle time / capacity / Support ratio are Delivery-HC weighted per Center.
-     * Cards use the same weights across all filtered matches.
+     * Detail Cycle time / capacity / Support ratio are split onto each KPI line by
+     * Delivery HC share. Cards and Center charts still HC-weight the Exercise-level rates.
      *
      * @param query field filters; {@code pl3Code} is required for rows
      * @param page 1-based page
@@ -87,11 +88,11 @@ public class BenchmarkingService {
         if (rows.source().isEmpty()) {
             return emptyView(page, pageSize);
         }
-        List<BenchmarkRow> items = BenchmarkingMath.weightDetailByCenter(rows.items());
+        List<BenchmarkRow> items = rows.items();
         List<BenchmarkProcessPath> processPaths = rows.processPaths();
         String selectedPl3 = selectedPl3Name(query, processPaths);
         BenchmarkingMath.Summary summary = BenchmarkingMath.summarize(selectedPl3, items);
-        PageResponse<BenchmarkRow> paged = PageResponse.ofList(items, page, pageSize);
+        PageResponse<BenchmarkRow> paged = PageResponse.ofList(rows.allocatedItems(), page, pageSize);
         return new BenchmarkingView(
                 summary.selectedPl3(),
                 summary.dailyCapacityPerAgent(),
@@ -114,27 +115,32 @@ public class BenchmarkingService {
      */
     @Transactional(readOnly = true)
     public List<BenchmarkRow> listApprovedAll(BenchmarkingQuery query) {
-        return BenchmarkingMath.weightDetailByCenter(filteredRows(query).items());
+        return filteredRows(query).allocatedItems();
     }
 
     private FilteredBenchmarking filteredRows(BenchmarkingQuery query) {
         List<RstExercise> approved = BenchmarkingExercises.latestApprovedPerScope(
                 exercises.findApprovedRepositoryExercises());
         if (approved.isEmpty()) {
-            return new FilteredBenchmarking(List.of(), List.of(), List.of());
+            return new FilteredBenchmarking(List.of(), List.of(), List.of(), List.of());
         }
         Map<UUID, BigDecimal> rightSizingByExercise = rightSizingByExercise(approved);
         Map<UUID, BigDecimal> supportByExercise = supportByExercise(approved);
         Map<UUID, BigDecimal> cycleTimeByExercise = cycleTimeByExercise(approved);
         Map<UUID, ExerciseTeamSetup> setups = setupsByExercise(approved);
         List<BenchmarkRow> source = new ArrayList<>();
+        Map<BenchmarkRow, BigDecimal> totals = new IdentityHashMap<>();
         for (RstExercise exercise : approved) {
-            source.addAll(rowsFor(
+            BigDecimal totalDelivery = deliveryHc(exercise);
+            for (BenchmarkRow row : rowsFor(
                     exercise,
                     rightSizingByExercise.get(exercise.getId()),
                     supportByExercise.get(exercise.getId()),
                     cycleTimeByExercise.get(exercise.getId()),
-                    setups.get(exercise.getId())));
+                    setups.get(exercise.getId()))) {
+                source.add(row);
+                totals.put(row, totalDelivery);
+            }
         }
         source.sort(Comparator
                 .comparing(BenchmarkRow::gbs, Comparator.nullsLast(String::compareTo))
@@ -147,12 +153,16 @@ public class BenchmarkingService {
         List<BenchmarkRow> items = source.stream()
                 .filter(row -> BenchmarkingFilters.matches(row, query))
                 .toList();
-        return new FilteredBenchmarking(source, items, processPaths);
+        List<BenchmarkRow> allocatedItems = items.stream()
+                .map(row -> BenchmarkingMath.shareRates(row, totals.get(row)))
+                .toList();
+        return new FilteredBenchmarking(source, items, allocatedItems, processPaths);
     }
 
     private record FilteredBenchmarking(
             List<BenchmarkRow> source,
             List<BenchmarkRow> items,
+            List<BenchmarkRow> allocatedItems,
             List<BenchmarkProcessPath> processPaths) {
     }
 

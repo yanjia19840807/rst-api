@@ -3,7 +3,6 @@ package com.cmacgm.gbs.rst.api.governance.application;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -13,7 +12,7 @@ import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkCenterComparison;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkRow;
 
 /**
- * Delivery-HC weighted cards and Center-level metrics on Shared KPI detail rows.
+ * Delivery-HC weighted cards and Center comparison; table rates are shared onto KPI lines.
  */
 public final class BenchmarkingMath {
 
@@ -28,7 +27,7 @@ public final class BenchmarkingMath {
      * one-to-one; Support ratio is Σ Support / Σ Delivery HC.
      *
      * @param selectedPl3 display name of the required PL3 filter
-     * @param items filtered Shared KPI rows
+     * @param items filtered Shared KPI rows with Exercise-level rates
      * @return card values; nulls when there is nothing to compare
      */
     public static Summary summarize(String selectedPl3, List<BenchmarkRow> items) {
@@ -44,38 +43,35 @@ public final class BenchmarkingMath {
     }
 
     /**
-     * Keeps one Shared KPI row per country / carrier / site, but writes
-     * Center × PL3 Delivery-HC weighted Cycle time, matching daily capacity,
-     * and Support ratio onto every line in that Center.
+     * Splits Exercise-level Cycle time, daily capacity / agent, and Support ratio
+     * onto one KPI line by that line's Delivery HC share.
      *
-     * @param items filtered Shared KPI rows
-     * @return same grain, Center-weighted productivity columns
+     * @param row Shared KPI row with Exercise-level rates
+     * @param totalDeliveryHc sum of Delivery HC on the same Exercise
+     * @return the same row with the three rates multiplied by {@code lineHC / totalHC}
      */
-    public static List<BenchmarkRow> weightDetailByCenter(List<BenchmarkRow> items) {
-        if (items == null || items.isEmpty()) {
-            return List.of();
+    public static BenchmarkRow shareRates(BenchmarkRow row, BigDecimal totalDeliveryHc) {
+        if (row == null) {
+            return null;
         }
-        Map<String, List<BenchmarkRow>> groups = new LinkedHashMap<>();
-        for (BenchmarkRow row : items) {
-            groups.computeIfAbsent(centerKey(row), ignored -> new ArrayList<>()).add(row);
+        BigDecimal total = nz(totalDeliveryHc);
+        if (total.signum() <= 0) {
+            return withMetrics(row, null, null, null);
         }
-        List<BenchmarkRow> weighted = new ArrayList<>();
-        for (List<BenchmarkRow> group : groups.values()) {
-            BigDecimal cycleTime = weightedAverage(group, BenchmarkRow::cycleTimeSeconds, 6);
-            BigDecimal dailyCapacity = capacityFromCycleTime(weightedWorkSecondsPerDay(group), cycleTime);
-            BigDecimal supportRatio = weightedSupportRatioPct(group);
-            for (BenchmarkRow row : group) {
-                weighted.add(withMetrics(row, cycleTime, dailyCapacity, supportRatio));
-            }
-        }
-        return List.copyOf(weighted);
+        BigDecimal share = nz(row.deliveryHc()).divide(total, 16, RoundingMode.HALF_UP);
+        return withMetrics(
+                row,
+                scaleRate(row.cycleTimeSeconds(), share, 6),
+                scaleRate(row.dailyCapacityPerAgent(), share, 6),
+                scaleRate(row.productionSupportRatioPct(), share, 1));
     }
 
     /**
-     * One bar per GBS Center from already Center-weighted detail rows.
-     * Capacity Creation is summed; the other three metrics are taken from the Center group.
+     * One bar per GBS Center from Shared KPI rows.
+     * Cycle time / daily capacity / Support ratio are Delivery-HC weighted;
+     * Capacity Creation is summed.
      *
-     * @param items filtered rows after {@link #weightDetailByCenter}
+     * @param items filtered Shared KPI rows with Exercise-level rates
      * @return centers sorted by name
      */
     public static List<BenchmarkCenterComparison> compareByCenter(List<BenchmarkRow> items) {
@@ -93,25 +89,15 @@ public final class BenchmarkingMath {
         List<BenchmarkCenterComparison> comparisons = new ArrayList<>();
         for (Map.Entry<String, List<BenchmarkRow>> entry : groups.entrySet()) {
             List<BenchmarkRow> group = entry.getValue();
+            BigDecimal cycleTime = weightedAverage(group, BenchmarkRow::cycleTimeSeconds, 6);
             comparisons.add(new BenchmarkCenterComparison(
                     entry.getKey(),
-                    first(group, BenchmarkRow::cycleTimeSeconds),
-                    first(group, BenchmarkRow::dailyCapacityPerAgent),
-                    first(group, BenchmarkRow::productionSupportRatioPct),
+                    cycleTime,
+                    capacityFromCycleTime(weightedWorkSecondsPerDay(group), cycleTime),
+                    weightedSupportRatioPct(group),
                     sumCapacity(group)));
         }
         return List.copyOf(comparisons);
-    }
-
-    private static BigDecimal first(
-            List<BenchmarkRow> items, Function<BenchmarkRow, BigDecimal> getter) {
-        for (BenchmarkRow row : items) {
-            BigDecimal value = getter.apply(row);
-            if (value != null) {
-                return value;
-            }
-        }
-        return null;
     }
 
     private static BigDecimal sumCapacity(List<BenchmarkRow> items) {
@@ -219,8 +205,8 @@ public final class BenchmarkingMath {
                 row.validatedDate());
     }
 
-    private static String centerKey(BenchmarkRow row) {
-        return blank(row.gbs()) + "\n" + blank(row.pl3Code());
+    private static BigDecimal scaleRate(BigDecimal value, BigDecimal share, int scale) {
+        return value == null ? null : value.multiply(share).setScale(scale, RoundingMode.HALF_UP);
     }
 
     private static BigDecimal nz(BigDecimal value) {
