@@ -144,7 +144,13 @@ public class TimesheetSnapshotBrowseService {
 
     private PersonView toPerson(TimesheetPerson row) {
         return new PersonView(
-                row.getCcgid(), row.getEmpId(), row.getName(), row.getEmail(), row.getCenter(), row.getPositionId());
+                row.getCcgid(),
+                row.getEmpId(),
+                row.getName(),
+                row.getEmail(),
+                row.getCenter(),
+                row.getPositionId(),
+                row.getJobRole());
     }
 
     private PositionView toPosition(
@@ -303,7 +309,13 @@ public class TimesheetSnapshotBrowseService {
      * Daily person row.
      */
     public record PersonView(
-            String ccgid, String empId, String name, String email, String center, String positionId) {
+            String ccgid,
+            String empId,
+            String name,
+            String email,
+            String center,
+            String positionId,
+            String jobRole) {
     }
 
     /**

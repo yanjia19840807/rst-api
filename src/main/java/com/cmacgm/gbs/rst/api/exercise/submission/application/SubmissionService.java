@@ -481,7 +481,7 @@ public class SubmissionService {
                     TimesheetAlignment.evaluate(false, null, keys, Map.of()));
         }
         return TimesheetAlignmentView.from(timesheet.align(
-                snapshot.getSupervisorPositionId(), snapshot.getPl3Code(), keys));
+                snapshot.getCenter(), snapshot.getSupervisorPositionId(), snapshot.getPl3Code(), keys));
     }
 
     private static boolean remarksRequired(List<ValidationFinding> findings) {

@@ -33,6 +33,10 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
               and daily.kind = 'DAILY'
               and daily.status = 'ACTIVE'
               and p.positionId = s.id.supervisorPositionId
+              and daily.center = monthly.center
+              and p.center = s.id.center
+              and s.id.center = monthly.center
+              and p.center = daily.center
               and upper(p.id.ccgid) = upper(:ccgid)
             order by s.id.supervisorPositionId, s.id.center, s.id.pl3Code
             """)
@@ -56,6 +60,11 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
               and daily.kind = 'DAILY'
               and daily.status = 'ACTIVE'
               and p.positionId = s.id.supervisorPositionId
+              and daily.center = monthly.center
+              and daily.center = :center
+              and monthly.center = :center
+              and p.center = :center
+              and s.id.center = :center
               and upper(p.id.ccgid) = upper(:ccgid)
               and s.id.supervisorPositionId = :positionId
               and s.id.pl3Code = :pl3Code
@@ -63,7 +72,8 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
     boolean existsActiveForSupervisor(
             @Param("ccgid") String ccgid,
             @Param("positionId") String positionId,
-            @Param("pl3Code") String pl3Code);
+            @Param("pl3Code") String pl3Code,
+            @Param("center") String center);
 
     /**
      * Whether this Supervisor position × PL3 still exists in ACTIVE Monthly.
@@ -78,11 +88,15 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
             where s.id.syncRunId = r.id
               and r.kind = 'MONTHLY'
               and r.status = 'ACTIVE'
+              and r.center = :center
+              and s.id.center = :center
               and s.id.supervisorPositionId = :positionId
               and s.id.pl3Code = :pl3Code
             """)
     boolean existsActiveScope(
-            @Param("positionId") String positionId, @Param("pl3Code") String pl3Code);
+            @Param("positionId") String positionId,
+            @Param("pl3Code") String pl3Code,
+            @Param("center") String center);
 
     /**
      * Whether the Agent's Daily seat reports to this Supervisor and the
@@ -110,11 +124,17 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
               and pos.parentPositionId = :positionId
               and s.id.supervisorPositionId = pos.parentPositionId
               and s.id.pl3Code = :pl3Code
+              and daily.center = monthly.center
+              and daily.center = :center
+              and monthly.center = :center
+              and p.center = :center
+              and s.id.center = :center
             """)
     boolean existsActiveForAgent(
             @Param("ccgid") String ccgid,
             @Param("positionId") String positionId,
-            @Param("pl3Code") String pl3Code);
+            @Param("pl3Code") String pl3Code,
+            @Param("center") String center);
 
     /**
      * Dashboard obligations: Center × Supervisor position × PL3.
@@ -127,6 +147,7 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
             where s.id.syncRunId = r.id
               and r.kind = 'MONTHLY'
               and r.status = 'ACTIVE'
+              and s.id.center = r.center
             order by s.id.center, s.id.supervisorPositionId, s.id.pl3Code
             """)
     List<TimesheetScope> findActiveDashboardObligations();
@@ -143,6 +164,7 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
             where s.id.syncRunId = r.id
               and r.kind = 'MONTHLY'
               and r.status = 'ACTIVE'
+              and r.center = :center
               and s.id.center = :center
             order by s.domain
             """)
@@ -164,6 +186,7 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
                     where s.id.syncRunId = r.id
                       and r.kind = 'MONTHLY'
                       and r.status = 'ACTIVE'
+                      and s.id.center = r.center
                       and (:center = '' or s.id.center = :center)
                       and (:supervisor = ''
                            or lower(s.id.supervisorPositionId) like lower(concat('%', :supervisor, '%'))
@@ -173,6 +196,8 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
                                 where occupant.id.syncRunId = occupantRun.id
                                   and occupantRun.kind = 'DAILY'
                                   and occupantRun.status = 'ACTIVE'
+                                  and occupantRun.center = r.center
+                                  and occupant.center = s.id.center
                                   and occupant.positionId = s.id.supervisorPositionId
                                   and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
                       and (:pl3Code = ''
@@ -186,6 +211,7 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
                     where s.id.syncRunId = r.id
                       and r.kind = 'MONTHLY'
                       and r.status = 'ACTIVE'
+                      and s.id.center = r.center
                       and (:center = '' or s.id.center = :center)
                       and (:supervisor = ''
                            or lower(s.id.supervisorPositionId) like lower(concat('%', :supervisor, '%'))
@@ -195,6 +221,8 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
                                 where occupant.id.syncRunId = occupantRun.id
                                   and occupantRun.kind = 'DAILY'
                                   and occupantRun.status = 'ACTIVE'
+                                  and occupantRun.center = r.center
+                                  and occupant.center = s.id.center
                                   and occupant.positionId = s.id.supervisorPositionId
                                   and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
                       and (:pl3Code = ''
@@ -219,6 +247,7 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
             where s.id.syncRunId = r.id
               and r.kind = 'MONTHLY'
               and r.status = 'ACTIVE'
+              and s.id.center = r.center
               and s.id.supervisorPositionId in :supervisorPositionIds
             """)
     List<TimesheetScope> findActiveBySupervisorPositionIdIn(
@@ -235,6 +264,7 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
             where s.id.syncRunId = r.id
               and r.kind = 'MONTHLY'
               and r.status = 'ACTIVE'
+              and s.id.center = r.center
               and s.id.center is not null
               and s.id.center <> ''
             order by s.id.center
@@ -252,6 +282,7 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
             where s.id.syncRunId = r.id
               and r.kind = 'MONTHLY'
               and r.status = 'ACTIVE'
+              and s.id.center = r.center
               and s.domain is not null
               and s.domain <> ''
             order by s.domain
@@ -259,12 +290,21 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
     List<String> findActiveDomains();
 
     /**
-     * Drops Monthly scope rows that are not the kept snapshot.
+     * Drops Monthly scope rows for other runs of this kind and Center.
      *
+     * @param kind MONTHLY
+     * @param center GBS center
      * @param keepRunId ACTIVE Monthly run to keep
      * @return deleted rows
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("delete from TimesheetScope s where s.id.syncRunId <> :keepRunId")
-    int deleteBySyncRunIdNot(@Param("keepRunId") UUID keepRunId);
+    @Query("""
+            delete from TimesheetScope s
+            where s.id.syncRunId in (
+                select r.id from TimesheetSyncRun r
+                where r.kind = :kind and r.center = :center and r.id <> :keepRunId
+            )
+            """)
+    int deleteStaleForCenter(
+            @Param("kind") String kind, @Param("center") String center, @Param("keepRunId") UUID keepRunId);
 }

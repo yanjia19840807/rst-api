@@ -86,8 +86,8 @@ public class TimesheetController {
                 .map(HierarchyCandidate::supervisorPositionId)
                 .distinct()
                 .toList();
-        String resolvedPosition = supervisorPositionId;
-        if (resolvedPosition == null || resolvedPosition.isBlank()) {
+        String resolvedPosition;
+        if (supervisorPositionId == null || supervisorPositionId.isBlank()) {
             if (positions.size() != 1) {
                 throw new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
@@ -95,6 +95,8 @@ public class TimesheetController {
                         "supervisorPositionId is required when PL3 belongs to multiple positions.");
             }
             resolvedPosition = positions.getFirst();
+        } else {
+            resolvedPosition = supervisorPositionId;
         }
         if (!positions.contains(resolvedPosition)) {
             throw new ApiException(
@@ -102,14 +104,20 @@ public class TimesheetController {
                     "timesheet-out-of-scope",
                     "The requested Timesheet scope is not owned by the current Supervisor.");
         }
-        var countries = service.countries(resolvedPosition, pl3Code);
+        String center = service.supervisorHierarchy(principal.ccgid()).stream()
+                .filter(item -> item.supervisorPositionId().equals(resolvedPosition)
+                        && item.pl3Code().equals(pl3Code))
+                .map(HierarchyCandidate::center)
+                .findFirst()
+                .orElse(principal.center());
+        var countries = service.countries(center, resolvedPosition, pl3Code);
         var selected = customerCountries == null ? List.<String>of() : customerCountries;
-        var items = service.kpis(resolvedPosition, pl3Code, selected).stream()
+        var items = service.kpis(center, resolvedPosition, pl3Code, selected).stream()
                 .map(item -> new SharedKpiItem(
                         item.carrier(), item.site(), item.customerCountry(), item.deliveryHc()))
                 .toList();
         return new SharedKpiCandidates(
-                service.activeMonthly().syncDate(), countries, items);
+                service.activeMonthly(center).syncDate(), countries, items);
     }
 
     public record SharedKpiCandidates(

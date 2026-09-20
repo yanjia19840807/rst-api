@@ -5,6 +5,8 @@ import com.cmacgm.gbs.rst.api.mail.application.SsoProfileService;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.security.api.dto.CurrentUserResponse;
 import com.cmacgm.gbs.rst.api.security.dev.DevIdentityProperties;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -21,15 +23,20 @@ public class MeController {
 
     private final SsoProfileService profiles;
     private final ObjectProvider<DevIdentityProperties> devIdentity;
+    private final TimesheetReadService timesheet;
 
     /**
      * @param profiles SSO directory
      * @param devIdentity optional dev-identity settings ({@code dev}/{@code test} only)
+     * @param timesheet ACTIVE Daily people
      */
     public MeController(
-            SsoProfileService profiles, ObjectProvider<DevIdentityProperties> devIdentity) {
+            SsoProfileService profiles,
+            ObjectProvider<DevIdentityProperties> devIdentity,
+            TimesheetReadService timesheet) {
         this.profiles = profiles;
         this.devIdentity = devIdentity;
+        this.timesheet = timesheet;
     }
 
     /**
@@ -47,6 +54,10 @@ public class MeController {
         profiles.touch(principal);
         DevIdentityProperties properties = devIdentity.getIfAvailable();
         Boolean overrideEnabled = properties == null ? null : properties.isOverrideEnabled();
-        return CurrentUserResponse.from(principal, overrideEnabled);
+        String jobRole = timesheet.findActivePerson(principal.ccgid())
+                .map(TimesheetPerson::getJobRole)
+                .filter(value -> value != null && !value.isBlank())
+                .orElse(null);
+        return CurrentUserResponse.from(principal, overrideEnabled, jobRole);
     }
 }

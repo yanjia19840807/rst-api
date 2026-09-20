@@ -98,6 +98,9 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
               and agent.id.syncRunId = daily.id
               and daily.kind = 'DAILY'
               and daily.status = 'ACTIVE'
+              and supervisor.center = daily.center
+              and agent.center = daily.center
+              and supervisor.center = agent.center
               and upper(supervisor.id.ccgid) = upper(:supervisorCcgid)
               and child.parentPositionId = supervisor.positionId
               and child.roleType = 'AGENT'
@@ -158,6 +161,7 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
             where p.id.syncRunId = r.id
               and r.kind = 'DAILY'
               and r.status = 'ACTIVE'
+              and r.center = :center
               and p.positionId = :positionId
               and p.center = :center
             """)
@@ -179,6 +183,7 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                     where p.id.syncRunId = r.id
                       and r.kind = 'DAILY'
                       and r.status = 'ACTIVE'
+                      and r.center = :center
                       and p.center = :center
                       and p.positionId is not null
                       and p.positionId <> ''
@@ -194,6 +199,7 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                     where p.id.syncRunId = r.id
                       and r.kind = 'DAILY'
                       and r.status = 'ACTIVE'
+                      and r.center = :center
                       and p.center = :center
                       and p.positionId is not null
                       and p.positionId <> ''
@@ -219,6 +225,7 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                     where p.id.syncRunId = r.id
                       and r.kind = 'DAILY'
                       and r.status = 'ACTIVE'
+                      and p.center = r.center
                       and p.positionId is not null
                       and p.positionId <> ''
                       and (:query = ''
@@ -233,6 +240,7 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                     where p.id.syncRunId = r.id
                       and r.kind = 'DAILY'
                       and r.status = 'ACTIVE'
+                      and p.center = r.center
                       and p.positionId is not null
                       and p.positionId <> ''
                       and (:query = ''
@@ -255,6 +263,7 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
             where p.id.syncRunId = r.id
               and r.kind = 'DAILY'
               and r.status = 'ACTIVE'
+              and r.center = :center
               and upper(p.id.ccgid) = upper(:ccgid)
               and p.center = :center
             """)
@@ -275,6 +284,7 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                     where p.id.syncRunId = r.id
                       and r.kind = 'DAILY'
                       and r.status = 'ACTIVE'
+                      and p.center = r.center
                       and (:center = '' or p.center = :center)
                       and (:q = ''
                            or lower(p.name) like lower(concat('%', :q, '%'))
@@ -290,6 +300,7 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                     where p.id.syncRunId = r.id
                       and r.kind = 'DAILY'
                       and r.status = 'ACTIVE'
+                      and p.center = r.center
                       and (:center = '' or p.center = :center)
                       and (:q = ''
                            or lower(p.name) like lower(concat('%', :q, '%'))
@@ -312,6 +323,7 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
             where p.id.syncRunId = r.id
               and r.kind = 'DAILY'
               and r.status = 'ACTIVE'
+              and p.center = r.center
               and p.center is not null
               and p.center <> ''
             order by p.center
@@ -319,12 +331,21 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
     List<String> findActiveCenters();
 
     /**
-     * Drops Daily person rows that are not the kept snapshot.
+     * Drops Daily person rows for other runs of this kind and Center.
      *
+     * @param kind DAILY
+     * @param center GBS center
      * @param keepRunId ACTIVE Daily run to keep
      * @return deleted rows
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("delete from TimesheetPerson p where p.id.syncRunId <> :keepRunId")
-    int deleteBySyncRunIdNot(@Param("keepRunId") UUID keepRunId);
+    @Query("""
+            delete from TimesheetPerson p
+            where p.id.syncRunId in (
+                select r.id from TimesheetSyncRun r
+                where r.kind = :kind and r.center = :center and r.id <> :keepRunId
+            )
+            """)
+    int deleteStaleForCenter(
+            @Param("kind") String kind, @Param("center") String center, @Param("keepRunId") UUID keepRunId);
 }

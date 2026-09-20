@@ -57,7 +57,7 @@ public class TmsSessionCommandService {
                         "toolkit-not-found",
                         "The Toolkit was not found."));
         if (!timesheet.agentCanUse(
-                agentCcgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code())) {
+                agentCcgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), toolkit.getCenter())) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
                     "toolkit-out-of-scope",
@@ -132,7 +132,7 @@ public class TmsSessionCommandService {
                         "The TMS session was not found."));
         Toolkit toolkit = session.getToolkit();
         if (!timesheet.supervisorOwnsScope(
-                supervisorCcgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code())) {
+                supervisorCcgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), toolkit.getCenter())) {
             throw new ApiException(
                     HttpStatus.NOT_FOUND,
                     "tms-session-not-found",

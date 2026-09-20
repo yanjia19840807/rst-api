@@ -7,6 +7,7 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.List;
 
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -78,5 +79,47 @@ class TimesheetReportParserTests {
 
         assertThat(row.month()).isEqualTo(YearMonth.of(2026, 7).atDay(1));
         assertThat(TimesheetRowValidator.rowDate(row)).isEqualTo(LocalDate.of(2026, 7, 31));
+    }
+
+    @Test
+    void keepsUnreadableOrNegativeHcWithoutFailingTheFile() {
+        String csv = HEADERS
+                + "\n202607"
+                + BODY.replace(",1,", ",n/a,")
+                + "\n202607"
+                + BODY.replace(",1,", ",-1,")
+                + "\n";
+
+        List<TimesheetReportParser.ReportRow> rows = parser.parse(
+                new ByteArrayInputStream(csv.getBytes(StandardCharsets.UTF_8)), "monthly.csv");
+
+        assertThat(rows).hasSize(2);
+        assertThat(rows).allMatch(row -> row.hc().invalid());
+        assertThat(rows).allMatch(row -> row.hc().value() == null);
+    }
+
+    @Test
+    void allowsFileWithoutHcHeader() {
+        String csv = HEADERS.replace(",hc,", ",") + "\n202607" + BODY.replace(",1,", ",") + "\n";
+
+        TimesheetReportParser.ReportRow row = parser.parse(
+                        new ByteArrayInputStream(csv.getBytes(StandardCharsets.UTF_8)),
+                        "Daily Raw Data of 2026-07-27 - GBS INDIA.csv")
+                .getFirst();
+
+        assertThat(row.hc().value()).isNull();
+        assertThat(row.hc().invalid()).isFalse();
+    }
+
+    @Test
+    void readsOptionalEmpJobRole() {
+        String csv = HEADERS + ",emp_job_role\n202607" + BODY + ",Billing Clerk\n";
+
+        TimesheetReportParser.ReportRow row = parser.parse(
+                        new ByteArrayInputStream(csv.getBytes(StandardCharsets.UTF_8)),
+                        "Daily Raw Data of 2026-07-27 - GBS INDIA.csv")
+                .getFirst();
+
+        assertThat(row.empJobRole()).isEqualTo("Billing Clerk");
     }
 }

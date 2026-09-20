@@ -8,6 +8,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
@@ -104,21 +105,24 @@ public class TimesheetSyncService {
     }
 
     /**
-     * Syncs both kinds.
+     * Syncs both kinds, every Center found in SharePoint.
      *
      * @return daily then monthly results
      */
     public List<SyncResult> syncAll() {
-        return List.of(sync("DAILY"), sync("MONTHLY"));
+        List<SyncResult> results = new ArrayList<>();
+        results.addAll(sync("DAILY"));
+        results.addAll(sync("MONTHLY"));
+        return results;
     }
 
     /**
-     * Syncs one kind from the configured source.
+     * Syncs one kind from SharePoint. Each Center file is a separate snapshot.
      *
      * @param kind DAILY or MONTHLY
-     * @return result
+     * @return one result per Center
      */
-    public SyncResult sync(String kind) {
+    public List<SyncResult> sync(String kind) {
         return syncFromSharePoint(kind, "SYSTEM");
     }
 
@@ -139,18 +143,18 @@ public class TimesheetSyncService {
     }
 
     /**
-     * Syncs one kind from SharePoint.
+     * Syncs every Center file of one kind from SharePoint.
      *
      * @param kind DAILY or MONTHLY
      * @param actorCcgid SYSTEM or a person
-     * @return result
+     * @return one result per Center
      */
-    public SyncResult syncFromSharePoint(String kind, String actorCcgid) {
+    public List<SyncResult> syncFromSharePoint(String kind, String actorCcgid) {
         String normalized = normalizeKind(kind);
         String actor = actorCcgid == null ? "SYSTEM" : actorCcgid;
-        Source source;
+        List<Source> files;
         try {
-            source = sources.open(normalized);
+            files = sources.openAll(normalized);
         } catch (ApiException ex) {
             failWithoutRows(
                     normalized,
@@ -160,22 +164,27 @@ public class TimesheetSyncService {
                     ex.getMessage());
             throw ex;
         }
-        return syncFromSource(normalized, source, actor);
+        List<SyncResult> results = new ArrayList<>();
+        for (Source source : files) {
+            results.add(syncFromSource(normalized, source, actor));
+        }
+        return results;
     }
 
     private SyncResult syncFromSource(String kind, Source source, String actorCcgid) {
-        if (syncRuns.findByKindAndStatus(kind, "LOADING").isPresent()) {
+        String center = resolveCenter(source);
+        if (syncRuns.findByKindAndStatusAndCenter(kind, "LOADING", center).isPresent()) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
                     TimesheetSyncErrorCode.SYNC_IN_PROGRESS.code(),
-                    "A " + kind + " Timesheet sync is already running.");
+                    "A " + kind + " Timesheet sync is already running for " + displayCenter(center) + ".");
         }
-        var active = syncRuns.findByKindAndStatus(kind, "ACTIVE");
+        var active = syncRuns.findByKindAndStatusAndCenter(kind, "ACTIVE", center);
         if (!isManual(source)
                 && source.filenameDate() != null
                 && active.isPresent()
                 && source.filenameDate().isBefore(active.get().getSyncDate())) {
-            log.info("Timesheet {} stale file skipped: {}", kind, source.fileName());
+            log.info("Timesheet {} {} stale file skipped: {}", kind, center, source.fileName());
             return toResult(active.get());
         }
         if (!isManual(source)
@@ -186,8 +195,8 @@ public class TimesheetSyncService {
                 && source.etag() != null) {
             var same = syncRuns.findByKindAndStatusAndSourceDriveItemIdAndSourceEtag(
                     kind, "ACTIVE", source.driveItemId(), source.etag());
-            if (same.isPresent()) {
-                log.info("Timesheet {} unchanged: id={}", kind, same.get().getId());
+            if (same.isPresent() && center.equals(same.get().getCenter())) {
+                log.info("Timesheet {} {} unchanged: id={}", kind, center, same.get().getId());
                 return toResult(same.get());
             }
         }
@@ -211,15 +220,16 @@ public class TimesheetSyncService {
     private SyncResult persist(String kind, Source source, List<ReportRow> rows, String actorCcgid) {
         Instant now = clock.instant();
         String hash = hashRows(rows);
-        var unchanged = syncRuns.findByKindAndStatus(kind, "ACTIVE")
+        String center = resolveCenter(source);
+        var unchanged = syncRuns.findByKindAndStatusAndCenter(kind, "ACTIVE", center)
                 .filter(active -> hash.equals(active.getDataHash()));
         if (unchanged.isPresent() && !isManual(source)) {
-            log.info("Timesheet {} hash unchanged: id={}", kind, unchanged.get().getId());
+            log.info("Timesheet {} {} hash unchanged: id={}", kind, center, unchanged.get().getId());
             return toResult(unchanged.get());
         }
         LocalDate previewDate = source.filenameDate() != null ? source.filenameDate() : previewDate(kind, rows);
         TimesheetSyncRun run = TimesheetSyncRun.startLoading(
-                kind, previewDate, nextAttemptNo(kind, previewDate), now);
+                kind, previewDate, nextAttemptNo(kind, center, previewDate), now);
         run.setSource(
                 source.driveItemId(),
                 source.etag(),
@@ -231,15 +241,15 @@ public class TimesheetSyncService {
         try {
             GbsProcessCatalog catalog = processCatalogs.load();
             if ("DAILY".equals(kind)) {
-                TimesheetDailyCalculator.Result computed =
-                        dailyCalculator.compute(run.getId(), rows, now, source.filenameDate(), catalog);
+                TimesheetDailyCalculator.Result computed = dailyCalculator.compute(
+                        run.getId(), rows, now, source.filenameDate(), catalog, resolveCenter(source));
                 return activateOrFail(run, rows.size(), hash, computed.issues(), () -> {
                     people.saveAll(computed.people());
                     positions.saveAll(computed.positions());
                 });
             }
-            TimesheetMonthlyCalculator.Result computed =
-                    monthlyCalculator.compute(run.getId(), rows, now, source.filenameDate(), catalog);
+            TimesheetMonthlyCalculator.Result computed = monthlyCalculator.compute(
+                    run.getId(), rows, now, source.filenameDate(), catalog, resolveCenter(source));
             return activateOrFail(run, rows.size(), hash, computed.issues(), () -> {
                 scopes.saveAll(computed.scopes());
                 kpis.saveAll(computed.kpis());
@@ -288,7 +298,7 @@ public class TimesheetSyncService {
             issues.saveAll(computedIssues);
         }
         List<TimesheetSyncIssue> blocking = computedIssues.stream()
-                .filter(issue -> !TimesheetRowValidator.isAdvisory(issue))
+                .filter(issue -> !TimesheetRowValidator.isAdvisory(issue, run.getKind()))
                 .toList();
         if (!blocking.isEmpty()) {
             markFailed(run.getId(), blocking.getFirst().getCode(), blocking.getFirst().getMessage());
@@ -298,11 +308,12 @@ public class TimesheetSyncService {
                     blocking.getFirst().getMessage());
         }
         persistRows.run();
-        activate(run.getId(), run.getKind(), rowCount, dataHash);
+        activate(run.getId(), run.getKind(), run.getCenter(), rowCount, dataHash);
         TimesheetSyncRun active = syncRuns.findById(run.getId()).orElseThrow();
         log.info(
-                "Timesheet {} activated: id={} syncDate={} rows={}",
+                "Timesheet {} {} activated: id={} syncDate={} rows={}",
                 active.getKind(),
+                active.getCenter(),
                 active.getId(),
                 active.getSyncDate(),
                 active.getRowCount());
@@ -316,7 +327,7 @@ public class TimesheetSyncService {
                 active.getDataHash());
     }
 
-    private void activate(UUID runId, String kind, int rowCount, String dataHash) {
+    private void activate(UUID runId, String kind, String center, int rowCount, String dataHash) {
         transactionTemplate.executeWithoutResult(status -> {
             Instant now = clock.instant();
             TimesheetSyncRun run = syncRuns.findById(runId)
@@ -324,28 +335,30 @@ public class TimesheetSyncService {
                             HttpStatus.CONFLICT,
                             TimesheetSyncErrorCode.COUNT_MISMATCH.code(),
                             "Sync run disappeared before activation."));
-            syncRuns.archiveOtherActive(kind, run.getId(), now);
+            syncRuns.archiveOtherActive(kind, center, run.getId(), now);
             run.markActive(rowCount, dataHash, now);
             syncRuns.saveAndFlush(run);
-            dropStaleComputed(kind, run.getId());
+            dropStaleComputed(kind, center, run.getId());
         });
     }
 
-    private void dropStaleComputed(String kind, UUID keepRunId) {
+    private void dropStaleComputed(String kind, String center, UUID keepRunId) {
         if ("DAILY".equals(kind)) {
-            int peopleDropped = people.deleteBySyncRunIdNot(keepRunId);
-            int positionsDropped = positions.deleteBySyncRunIdNot(keepRunId);
+            int peopleDropped = people.deleteStaleForCenter(kind, center, keepRunId);
+            int positionsDropped = positions.deleteStaleForCenter(kind, center, keepRunId);
             log.info(
-                    "Timesheet DAILY kept computed rows for {}; dropped people={} positions={}",
+                    "Timesheet DAILY {} kept computed rows for {}; dropped people={} positions={}",
+                    center,
                     keepRunId,
                     peopleDropped,
                     positionsDropped);
             return;
         }
-        int scopesDropped = scopes.deleteBySyncRunIdNot(keepRunId);
-        int kpisDropped = kpis.deleteBySyncRunIdNot(keepRunId);
+        int scopesDropped = scopes.deleteStaleForCenter(kind, center, keepRunId);
+        int kpisDropped = kpis.deleteStaleForCenter(kind, center, keepRunId);
         log.info(
-                "Timesheet MONTHLY kept computed rows for {}; dropped scopes={} kpis={}",
+                "Timesheet MONTHLY {} kept computed rows for {}; dropped scopes={} kpis={}",
+                center,
                 keepRunId,
                 scopesDropped,
                 kpisDropped);
@@ -354,7 +367,8 @@ public class TimesheetSyncService {
     private void failWithoutRows(String kind, Source source, String actorCcgid, String code, String message) {
         Instant now = clock.instant();
         LocalDate date = source.filenameDate() != null ? source.filenameDate() : LocalDate.now(clock);
-        TimesheetSyncRun run = TimesheetSyncRun.startLoading(kind, date, nextAttemptNo(kind, date), now);
+        TimesheetSyncRun run = TimesheetSyncRun.startLoading(
+                kind, date, nextAttemptNo(kind, resolveCenter(source), date), now);
         run.setSource(
                 source.driveItemId(), source.etag(), source.sourceType(), source.fileName(), actorCcgid);
         run.setCenter(resolveCenter(source));
@@ -394,6 +408,10 @@ public class TimesheetSyncService {
                 .orElse("");
     }
 
+    private static String displayCenter(String center) {
+        return center == null || center.isBlank() ? "unknown Center" : center;
+    }
+
     private static boolean isManual(Source source) {
         return source != null && "MANUAL".equalsIgnoreCase(source.sourceType());
     }
@@ -424,8 +442,8 @@ public class TimesheetSyncService {
         });
     }
 
-    private short nextAttemptNo(String kind, LocalDate syncDate) {
-        Short max = syncRuns.findMaxAttemptNo(kind, syncDate);
+    private short nextAttemptNo(String kind, String center, LocalDate syncDate) {
+        Short max = syncRuns.findMaxAttemptNo(kind, center, syncDate);
         int next = (max == null ? 0 : max) + 1;
         if (next > Short.MAX_VALUE) {
             throw new ApiException(
@@ -447,6 +465,8 @@ public class TimesheetSyncService {
                 digest.update(String.valueOf(row.month()).getBytes(StandardCharsets.UTF_8));
                 digest.update((byte) '|');
                 digest.update(String.valueOf(row.empCcgid()).getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) '|');
+                digest.update(String.valueOf(row.empJobRole()).getBytes(StandardCharsets.UTF_8));
                 digest.update((byte) '|');
                 digest.update(String.valueOf(row.empPositionId()).getBytes(StandardCharsets.UTF_8));
                 digest.update((byte) '|');
@@ -502,7 +522,8 @@ public class TimesheetSyncService {
     private static boolean isActiveConstraint(Throwable ex) {
         for (Throwable current = ex; current != null; current = current.getCause()) {
             String text = current.getMessage() == null ? "" : current.getMessage();
-            if (text.contains("uk_timesheet_one_active_run_per_kind")) {
+            if (text.contains("uk_timesheet_one_active_run_per_kind_center")
+                    || text.contains("uk_timesheet_one_active_run_per_kind")) {
                 return true;
             }
         }
@@ -513,7 +534,9 @@ public class TimesheetSyncService {
         if (message == null) {
             return "Timesheet sync failed.";
         }
-        if (message.contains("uk_timesheet_one_active_run_per_kind") || looksLikeSql(message)) {
+        if (message.contains("uk_timesheet_one_active_run_per_kind_center")
+                || message.contains("uk_timesheet_one_active_run_per_kind")
+                || looksLikeSql(message)) {
             return "Timesheet sync failed unexpectedly.";
         }
         return message.length() > 1000 ? message.substring(0, 1000) : message;

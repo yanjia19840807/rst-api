@@ -668,7 +668,7 @@ public class ExerciseService {
                         item.getCarrier(), item.getSite(), item.getCustomerCountry()))
                 .toList();
         return TimesheetAlignmentView.from(timesheet.align(
-                snapshot.getSupervisorPositionId(), snapshot.getPl3Code(), keys));
+                snapshot.getCenter(), snapshot.getSupervisorPositionId(), snapshot.getPl3Code(), keys));
     }
 
     private ProcessInstance processOf(UUID exerciseId) {

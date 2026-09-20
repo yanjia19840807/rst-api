@@ -54,14 +54,14 @@ public final class ExerciseFreeze {
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "toolkit-not-found", "The Toolkit was not found."));
         if (!timesheet.supervisorOwnsScope(
-                ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code())) {
+                ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), toolkit.getCenter())) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN, "toolkit-out-of-scope",
                     "The current Supervisor does not own the Toolkit scope.");
         }
-        // Create still requires ACTIVE Daily org; freeze provenance is Monthly only.
-        timesheet.activeDaily();
-        ActiveSnapshot kpi = timesheet.activeMonthly();
+        // Create still requires ACTIVE Daily org for the Toolkit Center; freeze is Monthly.
+        timesheet.activeDaily(toolkit.getCenter());
+        ActiveSnapshot kpi = timesheet.activeMonthly(toolkit.getCenter());
         List<ToolkitSharedKpiSelection> selections = toolkit.getSharedKpiSelections().stream()
                 .filter(selection -> selection.getDeletedAt() == null)
                 .toList();
@@ -76,7 +76,7 @@ public final class ExerciseFreeze {
                 .distinct()
                 .toList();
         Map<KpiBusinessKey, KpiCandidate> candidatesByKey = timesheet
-                .kpis(toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), countries)
+                .kpis(toolkit.getCenter(), toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), countries)
                 .stream()
                 .collect(Collectors.toMap(
                         candidate -> new KpiBusinessKey(

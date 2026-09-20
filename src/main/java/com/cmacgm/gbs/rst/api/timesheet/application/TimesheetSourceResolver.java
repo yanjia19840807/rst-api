@@ -3,8 +3,11 @@ package com.cmacgm.gbs.rst.api.timesheet.application;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -36,23 +39,15 @@ public class TimesheetSourceResolver {
     }
 
     /**
-     * Opens the newest named report in the Daily or Monthly folder.
+     * Opens the newest named report for every Center in the Daily or Monthly folder.
      *
      * @param kind DAILY or MONTHLY
-     * @return opened source
+     * @return one source per Center
      */
-    public Source open(String kind) {
+    public List<Source> openAll(String kind) {
         String folder = "DAILY".equals(kind) ? sharePoint.dailyFolder() : sharePoint.monthlyFolder();
         List<GraphDriveItem> children = graph.getChildrenByFolderPath(folder);
-        NamedFile chosen = choose(kind, children, folder);
-        GraphDriveItem item = chosen.item();
-        return new Source(
-                item.name(),
-                graph.getDriveItemContentById(item.id()),
-                item.id(),
-                item.eTag() == null ? null : item.eTag(),
-                "SHAREPOINT",
-                chosen.parsed().syncDate());
+        return chooseAll(kind, children, folder).stream().map(this::toSource).toList();
     }
 
     /**
@@ -99,7 +94,7 @@ public class TimesheetSourceResolver {
             LocalDate filenameDate) {
     }
 
-    static NamedFile choose(String kind, List<GraphDriveItem> children, String folder) {
+    static List<NamedFile> chooseAll(String kind, List<GraphDriveItem> children, String folder) {
         List<NamedFile> named = children.stream()
                 .filter(GraphDriveItem::isFile)
                 .map(item -> TimesheetReportName.parse(item.name())
@@ -114,14 +109,35 @@ public class TimesheetSourceResolver {
                     TimesheetSyncErrorCode.SOURCE_UNAVAILABLE.code(),
                     "No Timesheet file found in " + folder);
         }
-        return named.stream()
-                .max(Comparator.comparing((NamedFile file) -> file.parsed().syncDate())
-                        .thenComparingInt(file -> file.parsed().revision())
-                        .thenComparing(
-                                file -> file.item().lastModifiedDateTime(),
-                                Comparator.nullsLast(Comparator.naturalOrder()))
-                        .thenComparing(file -> file.item().name(), Comparator.nullsLast(String::compareTo)))
-                .orElseThrow();
+        Map<String, NamedFile> newestByCenter = new LinkedHashMap<>();
+        for (NamedFile file : named) {
+            String center = file.parsed().region();
+            NamedFile current = newestByCenter.get(center);
+            if (current == null || newestFile().compare(file, current) > 0) {
+                newestByCenter.put(center, file);
+            }
+        }
+        return new ArrayList<>(newestByCenter.values());
+    }
+
+    private Source toSource(NamedFile chosen) {
+        GraphDriveItem item = chosen.item();
+        return new Source(
+                item.name(),
+                graph.getDriveItemContentById(item.id()),
+                item.id(),
+                item.eTag() == null ? null : item.eTag(),
+                "SHAREPOINT",
+                chosen.parsed().syncDate());
+    }
+
+    private static Comparator<NamedFile> newestFile() {
+        return Comparator.comparing((NamedFile file) -> file.parsed().syncDate())
+                .thenComparingInt(file -> file.parsed().revision())
+                .thenComparing(
+                        file -> file.item().lastModifiedDateTime(),
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(file -> file.item().name(), Comparator.nullsLast(String::compareTo));
     }
 
     record NamedFile(GraphDriveItem item, Parsed parsed) {

@@ -30,12 +30,16 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
             where k.id.syncRunId = r.id
               and r.kind = 'MONTHLY'
               and r.status = 'ACTIVE'
+              and r.center = :center
+              and k.id.center = :center
               and k.id.supervisorPositionId = :positionId
               and k.id.pl3Code = :pl3Code
             order by k.id.customerCountry
             """)
     List<String> findActiveCountries(
-            @Param("positionId") String positionId, @Param("pl3Code") String pl3Code);
+            @Param("positionId") String positionId,
+            @Param("pl3Code") String pl3Code,
+            @Param("center") String center);
 
     /**
      * KPI rows for selected countries.
@@ -51,6 +55,8 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
             where k.id.syncRunId = r.id
               and r.kind = 'MONTHLY'
               and r.status = 'ACTIVE'
+              and r.center = :center
+              and k.id.center = :center
               and k.id.supervisorPositionId = :positionId
               and k.id.pl3Code = :pl3Code
               and k.id.customerCountry in :countries
@@ -59,7 +65,8 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
     List<TimesheetKpi> findActiveKpis(
             @Param("positionId") String positionId,
             @Param("pl3Code") String pl3Code,
-            @Param("countries") List<String> countries);
+            @Param("countries") List<String> countries,
+            @Param("center") String center);
 
     /**
      * All ACTIVE Monthly KPI rows for a Supervisor position and PL3.
@@ -74,11 +81,15 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
             where k.id.syncRunId = r.id
               and r.kind = 'MONTHLY'
               and r.status = 'ACTIVE'
+              and r.center = :center
+              and k.id.center = :center
               and k.id.supervisorPositionId = :positionId
               and k.id.pl3Code = :pl3Code
             """)
     List<TimesheetKpi> findActiveKpis(
-            @Param("positionId") String positionId, @Param("pl3Code") String pl3Code);
+            @Param("positionId") String positionId,
+            @Param("pl3Code") String pl3Code,
+            @Param("center") String center);
 
     /**
      * Sums Delivery HC for one KPI key.
@@ -96,6 +107,8 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
             where k.id.syncRunId = r.id
               and r.kind = 'MONTHLY'
               and r.status = 'ACTIVE'
+              and r.center = :center
+              and k.id.center = :center
               and k.id.supervisorPositionId = :positionId
               and k.id.pl3Code = :pl3Code
               and k.id.carrier = :carrier
@@ -107,7 +120,8 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
             @Param("pl3Code") String pl3Code,
             @Param("carrier") String carrier,
             @Param("site") String site,
-            @Param("country") String country);
+            @Param("country") String country,
+            @Param("center") String center);
 
     /**
      * Total Delivery HC in the ACTIVE Monthly snapshot.
@@ -120,6 +134,7 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
             where k.id.syncRunId = r.id
               and r.kind = 'MONTHLY'
               and r.status = 'ACTIVE'
+              and k.id.center = r.center
             """)
     BigDecimal sumActiveHeadcount();
 
@@ -134,6 +149,7 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
             where k.id.syncRunId = r.id
               and r.kind = 'MONTHLY'
               and r.status = 'ACTIVE'
+              and k.id.center = r.center
             order by k.id.center, k.id.supervisorPositionId, k.id.pl3Code,
                      k.id.carrier, k.id.site, k.id.customerCountry
             """)
@@ -155,6 +171,7 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
                     where k.id.syncRunId = r.id
                       and r.kind = 'MONTHLY'
                       and r.status = 'ACTIVE'
+                      and k.id.center = r.center
                       and (:center = '' or k.id.center = :center)
                       and (:supervisor = ''
                            or lower(k.id.supervisorPositionId) like lower(concat('%', :supervisor, '%'))
@@ -164,6 +181,8 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
                                 where occupant.id.syncRunId = occupantRun.id
                                   and occupantRun.kind = 'DAILY'
                                   and occupantRun.status = 'ACTIVE'
+                                  and occupantRun.center = r.center
+                                  and occupant.center = k.id.center
                                   and occupant.positionId = k.id.supervisorPositionId
                                   and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
                       and (:pl3Code = ''
@@ -184,6 +203,7 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
                     where k.id.syncRunId = r.id
                       and r.kind = 'MONTHLY'
                       and r.status = 'ACTIVE'
+                      and k.id.center = r.center
                       and (:center = '' or k.id.center = :center)
                       and (:supervisor = ''
                            or lower(k.id.supervisorPositionId) like lower(concat('%', :supervisor, '%'))
@@ -193,6 +213,8 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
                                 where occupant.id.syncRunId = occupantRun.id
                                   and occupantRun.kind = 'DAILY'
                                   and occupantRun.status = 'ACTIVE'
+                                  and occupantRun.center = r.center
+                                  and occupant.center = k.id.center
                                   and occupant.positionId = k.id.supervisorPositionId
                                   and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
                       and (:pl3Code = ''
@@ -213,12 +235,21 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
             Pageable pageable);
 
     /**
-     * Drops Monthly KPI rows that are not the kept snapshot.
+     * Drops Monthly KPI rows for other runs of this kind and Center.
      *
+     * @param kind MONTHLY
+     * @param center GBS center
      * @param keepRunId ACTIVE Monthly run to keep
      * @return deleted rows
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("delete from TimesheetKpi k where k.id.syncRunId <> :keepRunId")
-    int deleteBySyncRunIdNot(@Param("keepRunId") UUID keepRunId);
+    @Query("""
+            delete from TimesheetKpi k
+            where k.id.syncRunId in (
+                select r.id from TimesheetSyncRun r
+                where r.kind = :kind and r.center = :center and r.id <> :keepRunId
+            )
+            """)
+    int deleteStaleForCenter(
+            @Param("kind") String kind, @Param("center") String center, @Param("keepRunId") UUID keepRunId);
 }

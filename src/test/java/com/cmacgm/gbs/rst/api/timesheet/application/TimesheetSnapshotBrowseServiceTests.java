@@ -45,7 +45,14 @@ class TimesheetSnapshotBrowseServiceTests {
         when(people.searchActive(eq(""), eq("anna"), any()))
                 .thenReturn(new PageImpl<>(
                         List.of(TimesheetPerson.create(
-                                runId, "S00000001", "EMP-1", "GBS INDIA", "TIAN Anna", "a@cma-cgm.com", "748595")),
+                                runId,
+                                "S00000001",
+                                "EMP-1",
+                                "GBS INDIA",
+                                "TIAN Anna",
+                                "a@cma-cgm.com",
+                                "748595",
+                                "Billing Clerk")),
                         PageRequest.of(0, 10),
                         1));
 
@@ -56,8 +63,10 @@ class TimesheetSnapshotBrowseServiceTests {
                 .extracting(
                         TimesheetSnapshotBrowseService.PersonView::ccgid,
                         TimesheetSnapshotBrowseService.PersonView::center,
-                        TimesheetSnapshotBrowseService.PersonView::positionId)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("S00000001", "GBS INDIA", "748595"));
+                        TimesheetSnapshotBrowseService.PersonView::positionId,
+                        TimesheetSnapshotBrowseService.PersonView::jobRole)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(
+                        "S00000001", "GBS INDIA", "748595", "Billing Clerk"));
     }
 
     @Test

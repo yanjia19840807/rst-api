@@ -2,6 +2,7 @@ package com.cmacgm.gbs.rst.api.timesheet.persistence;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,27 +20,39 @@ public interface TimesheetSyncRunRepository
         extends JpaRepository<TimesheetSyncRun, UUID>, JpaSpecificationExecutor<TimesheetSyncRun> {
 
     /**
-     * Finds a run by kind and status.
+     * Finds runs by kind and status. There may be one ACTIVE per Center.
      *
      * @param kind DAILY or MONTHLY
      * @param status status
-     * @return optional run
+     * @return matching runs
      */
-    Optional<TimesheetSyncRun> findByKindAndStatus(String kind, String status);
+    List<TimesheetSyncRun> findByKindAndStatus(String kind, String status);
 
     /**
-     * Highest attempt for a kind and business date.
+     * Finds the run for one Center.
      *
      * @param kind DAILY or MONTHLY
+     * @param status status
+     * @param center GBS center
+     * @return optional run
+     */
+    Optional<TimesheetSyncRun> findByKindAndStatusAndCenter(String kind, String status, String center);
+
+    /**
+     * Highest attempt for a kind, Center, and business date.
+     *
+     * @param kind DAILY or MONTHLY
+     * @param center GBS center
      * @param syncDate business date
      * @return max attempt or null
      */
     @Query("""
             select max(r.attemptNo)
             from TimesheetSyncRun r
-            where r.kind = :kind and r.syncDate = :syncDate
+            where r.kind = :kind and r.center = :center and r.syncDate = :syncDate
             """)
-    Short findMaxAttemptNo(@Param("kind") String kind, @Param("syncDate") LocalDate syncDate);
+    Short findMaxAttemptNo(
+            @Param("kind") String kind, @Param("center") String center, @Param("syncDate") LocalDate syncDate);
 
     /**
      * Latest ACTIVE run for a SharePoint file identity.
@@ -53,10 +66,10 @@ public interface TimesheetSyncRunRepository
             String kind, String status, String driveItemId, String etag);
 
     /**
-     * Archives every other ACTIVE run of this kind so the unique index can
-     * accept the incoming snapshot.
+     * Archives every other ACTIVE run of this kind and Center.
      *
      * @param kind DAILY or MONTHLY
+     * @param center GBS center
      * @param runId run that will become ACTIVE
      * @param completedAt archive time when the previous row has none
      * @return archived rows
@@ -66,8 +79,14 @@ public interface TimesheetSyncRunRepository
             update TimesheetSyncRun r
             set r.status = 'ARCHIVED',
                 r.completedAt = coalesce(r.completedAt, :completedAt)
-            where r.kind = :kind and r.status = 'ACTIVE' and r.id <> :runId
+            where r.kind = :kind
+              and r.center = :center
+              and r.status = 'ACTIVE'
+              and r.id <> :runId
             """)
     int archiveOtherActive(
-            @Param("kind") String kind, @Param("runId") UUID runId, @Param("completedAt") Instant completedAt);
+            @Param("kind") String kind,
+            @Param("center") String center,
+            @Param("runId") UUID runId,
+            @Param("completedAt") Instant completedAt);
 }

@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -81,8 +80,8 @@ public class TimesheetSyncAdminService {
         int safePageSize = Math.min(100, Math.max(1, pageSize));
         int safePage = Math.max(1, page);
         return new Overview(
-                snapshot("DAILY").orElse(null),
-                snapshot("MONTHLY").orElse(null),
+                snapshots("DAILY"),
+                snapshots("MONTHLY"),
                 PageResponse.from(
                         syncRuns.findAll(
                                 TimesheetSyncRunSpecification.filtered(kind, status, dateFrom, dateTo),
@@ -198,8 +197,10 @@ public class TimesheetSyncAdminService {
         }
     }
 
-    private Optional<RunHeader> snapshot(String kind) {
-        return syncRuns.findByKindAndStatus(kind, "ACTIVE").map(this::toHeader);
+    private List<RunHeader> snapshots(String kind) {
+        return syncRuns.findByKindAndStatus(kind, "ACTIVE").stream()
+                .map(this::toHeader)
+                .toList();
     }
 
     private RunHeader toHeader(TimesheetSyncRun run) {
@@ -279,7 +280,7 @@ public class TimesheetSyncAdminService {
         return List.copyOf(recipients);
     }
 
-    public record Overview(RunHeader daily, RunHeader monthly, PageResponse<RunHeader> runs) {
+    public record Overview(List<RunHeader> daily, List<RunHeader> monthly, PageResponse<RunHeader> runs) {
     }
 
     public record AlertConfig(boolean enabled, List<String> recipients) {

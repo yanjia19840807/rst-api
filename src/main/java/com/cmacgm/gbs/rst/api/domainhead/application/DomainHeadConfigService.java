@@ -201,8 +201,8 @@ public class DomainHeadConfigService {
     }
 
     private DomainHeadPageView page(String center, Integer remountedCount) {
-        boolean dailyAvailable = timesheet.findActiveDaily().isPresent();
-        boolean monthlyAvailable = timesheet.findActiveMonthly().isPresent();
+        boolean dailyAvailable = timesheet.findActiveDaily(center).isPresent();
+        boolean monthlyAvailable = timesheet.findActiveMonthly(center).isPresent();
         CenterRoleAssigneeView lth = toLthView(center, dailyAvailable && monthlyAvailable);
         if (!hasText(center) || !dailyAvailable || !monthlyAvailable) {
             return new DomainHeadPageView(

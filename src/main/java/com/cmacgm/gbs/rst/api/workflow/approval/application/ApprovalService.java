@@ -596,7 +596,7 @@ public class ApprovalService {
                 .map(item -> new TimesheetAlignment.Key(
                         item.getCarrier(), item.getSite(), item.getCustomerCountry()))
                 .toList();
-        return timesheet.align(snapshot.getSupervisorPositionId(), snapshot.getPl3Code(), keys)
+        return timesheet.align(snapshot.getCenter(), snapshot.getSupervisorPositionId(), snapshot.getPl3Code(), keys)
                 .structuralDrift();
     }
 

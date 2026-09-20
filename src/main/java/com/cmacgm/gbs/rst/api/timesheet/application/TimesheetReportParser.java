@@ -63,8 +63,7 @@ public class TimesheetReportParser {
             "pl3_code",
             "pl3",
             "carrier",
-            "customer_country",
-            "hc");
+            "customer_country");
 
     private final DataFormatter formatter = new DataFormatter(Locale.ROOT);
 
@@ -217,9 +216,10 @@ public class TimesheetReportParser {
                 optionalText(excelValue(excelRow, headers, "pl3")),
                 optionalText(excelValue(excelRow, headers, "carrier")),
                 optionalText(excelValue(excelRow, headers, "customer_country")),
-                parseHc(excelValue(excelRow, headers, "hc"), rowNumber),
-                optionalText(excelValue(excelRow, headers, "management_or_production")),
-                optionalText(excelValue(excelRow, headers, "cost_type")));
+                parseHc(excelValue(excelRow, headers, "hc")),
+            optionalText(excelValue(excelRow, headers, "management_or_production")),
+            optionalText(excelValue(excelRow, headers, "cost_type")),
+            optionalText(excelValue(excelRow, headers, "emp_job_role")));
     }
 
     private ReportRow mapCsv(List<String> cells, Map<String, Integer> headers, int rowNumber) {
@@ -253,9 +253,10 @@ public class TimesheetReportParser {
                 optionalText(csvValue(cells, headers, "pl3")),
                 optionalText(csvValue(cells, headers, "carrier")),
                 optionalText(csvValue(cells, headers, "customer_country")),
-                parseHc(csvValue(cells, headers, "hc"), rowNumber),
-                optionalText(csvValue(cells, headers, "management_or_production")),
-                optionalText(csvValue(cells, headers, "cost_type")));
+                parseHc(csvValue(cells, headers, "hc")),
+            optionalText(csvValue(cells, headers, "management_or_production")),
+            optionalText(csvValue(cells, headers, "cost_type")),
+            optionalText(csvValue(cells, headers, "emp_job_role")));
     }
 
     private boolean isBlankExcel(Row excelRow, Map<String, Integer> headers) {
@@ -360,7 +361,7 @@ public class TimesheetReportParser {
         return LocalDate.of(year, month, 1);
     }
 
-    private HcValue parseHc(String text, int rowNumber) {
+    private HcValue parseHc(String text) {
         String value = optionalText(text);
         if (value == null) {
             return new HcValue(null, false);
@@ -368,11 +369,11 @@ public class TimesheetReportParser {
         try {
             BigDecimal hc = new BigDecimal(value.replace(",", "")).setScale(6, RoundingMode.HALF_UP);
             if (hc.compareTo(BigDecimal.ZERO) < 0) {
-                throw conflict(TimesheetSyncErrorCode.INVALID_HC, "Row " + rowNumber + " has negative hc.");
+                return new HcValue(null, true);
             }
             return new HcValue(hc, false);
         } catch (NumberFormatException ex) {
-            throw conflict(TimesheetSyncErrorCode.INVALID_HC, "Row " + rowNumber + " has invalid hc: " + value);
+            return new HcValue(null, true);
         }
     }
 
@@ -461,14 +462,16 @@ public class TimesheetReportParser {
             String customerCountry,
             HcValue hc,
             String managementOrProduction,
-            String costType) {
+            String costType,
+            String empJobRole) {
     }
 
     /**
-     * Parsed HC.
+     * Parsed HC. Unreadable or negative values set {@code invalid} and leave
+     * {@code value} empty so row validation can decide.
      *
      * @param value numeric hc
-     * @param invalid unused; invalid values throw
+     * @param invalid true when the cell had a value that was not a non-negative number
      */
     public record HcValue(BigDecimal value, boolean invalid) {
     }

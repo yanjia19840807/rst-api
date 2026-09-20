@@ -61,42 +61,59 @@ class TimesheetMonthlyCalculatorTests {
     }
 
     @Test
-    void writesMissingFieldOnIncompleteRowsRegardlessOfType() {
+    void writesMissingFieldOnIncompleteRstRows() {
         UUID runId = UUID.randomUUID();
         TimesheetMonthlyCalculator.Result result = calculator.compute(
                 runId,
                 List.of(
                         row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS INDIA", "1"),
-                        row("S00000002", "EMP-2", "POS-SUP-1", "", "GBS INDIA", "1", "management", "non-productive")),
+                        row("", "EMP-2", "POS-SUP-1", "PL3", "GBS INDIA", "1", "management", "non-productive")),
                 Instant.parse("2026-08-24T00:00:00Z"),
                 null,
                 RST_YES);
 
         assertThat(result.issues())
                 .extracting(TimesheetSyncIssue::getMessage)
-                .contains("Missing pl3_code.");
+                .contains("Missing emp_ccgid.");
+        assertThat(result.issues()).allMatch(issue -> !TimesheetRowValidator.isAdvisory(issue, "MONTHLY"));
         assertThat(result.scopes())
                 .extracting(TimesheetScope::getSupervisorPositionId)
                 .containsExactly("POS-SUP-1");
     }
 
     @Test
-    void requiresFieldsOnProductionLines() {
+    void requiresFieldsOnRstRows() {
         UUID runId = UUID.randomUUID();
         TimesheetMonthlyCalculator.Result result = calculator.compute(
                 runId,
-                List.of(row("S00000001", "EMP-1", "POS-SUP-1", "", "GBS INDIA", "1", "production", "productive")),
+                List.of(row("S00000001", "EMP-1", "", "PL3", "GBS INDIA", "1", "production", "productive")),
                 Instant.parse("2026-08-24T00:00:00Z"),
                 null,
                 RST_YES);
 
         assertThat(result.issues())
                 .extracting(TimesheetSyncIssue::getMessage)
-                .contains("Missing pl3_code.");
+                .contains("Missing supervisor_position_id.");
     }
 
     @Test
-    void rejectsUnconfiguredCenter() {
+    void skipsNonRstRowsBeforeFieldAndCenterChecks() {
+        UUID runId = UUID.randomUUID();
+        TimesheetMonthlyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(
+                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS INDIA", "1"),
+                        row("", "EMP-2", "", "SKIP", "GBS VIETNAM", "1")),
+                Instant.parse("2026-08-24T00:00:00Z"),
+                java.time.LocalDate.of(2026, 6, 30),
+                RST_YES);
+
+        assertThat(result.issues()).isEmpty();
+        assertThat(result.scopes()).extracting(TimesheetScope::getPl3Code).containsExactly("PL3");
+    }
+
+    @Test
+    void acceptsCenterFromTheFileWithoutCatalogCheck() {
         UUID runId = UUID.randomUUID();
         TimesheetMonthlyCalculator.Result result = calculator.compute(
                 runId,
@@ -105,11 +122,8 @@ class TimesheetMonthlyCalculatorTests {
                 null,
                 RST_YES);
 
-        assertThat(result.issues())
-                .extracting(TimesheetSyncIssue::getCode, TimesheetSyncIssue::getMessage)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple(
-                        "UNKNOWN_CENTER",
-                        "Center 'GBS VIETNAM' is not configured. Add it to the Center catalog before importing."));
+        assertThat(result.issues()).isEmpty();
+        assertThat(result.scopes()).extracting(TimesheetScope::getCenter).containsExactly("GBS VIETNAM");
     }
 
     @Test
@@ -173,6 +187,69 @@ class TimesheetMonthlyCalculatorTests {
         assertThat(result.kpis()).extracting(TimesheetKpi::getPl3Code).containsExactly("PL3");
     }
 
+    @Test
+    void ignoresFilenameDateOnRstRows() {
+        UUID runId = UUID.randomUUID();
+        TimesheetMonthlyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS INDIA", "1")),
+                Instant.parse("2026-08-24T00:00:00Z"),
+                java.time.LocalDate.of(2026, 7, 31),
+                RST_YES);
+
+        assertThat(result.issues()).isEmpty();
+        assertThat(result.syncDate()).isEqualTo(java.time.LocalDate.of(2026, 7, 31));
+        assertThat(result.scopes()).extracting(TimesheetScope::getPl3Code).containsExactly("PL3");
+    }
+
+    @Test
+    void usesFilenameCenterInsteadOfRowCenter() {
+        UUID runId = UUID.randomUUID();
+        TimesheetMonthlyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS VIETNAM", "1")),
+                Instant.parse("2026-08-24T00:00:00Z"),
+                java.time.LocalDate.of(2026, 6, 30),
+                RST_YES,
+                "GBS INDIA");
+
+        assertThat(result.issues()).isEmpty();
+        assertThat(result.scopes()).extracting(TimesheetScope::getCenter).containsExactly("GBS INDIA");
+        assertThat(result.kpis()).extracting(TimesheetKpi::getCenter).containsExactly("GBS INDIA");
+    }
+
+    @Test
+    void flagsInvalidHcOnRstRows() {
+        UUID runId = UUID.randomUUID();
+        TimesheetMonthlyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS INDIA", new HcValue(null, true))),
+                Instant.parse("2026-08-24T00:00:00Z"),
+                null,
+                RST_YES);
+
+        assertThat(result.issues())
+                .extracting(TimesheetSyncIssue::getCode, TimesheetSyncIssue::getMessage)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("INVALID_HC", "hc is not a valid number."));
+        assertThat(result.kpis()).isEmpty();
+    }
+
+    @Test
+    void skipsInvalidHcOnNonRstRows() {
+        UUID runId = UUID.randomUUID();
+        TimesheetMonthlyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(
+                        row("S00000001", "EMP-1", "POS-SUP-1", "PL3", "GBS INDIA", "1"),
+                        row("S00000002", "EMP-2", "POS-SUP-1", "SKIP", "GBS INDIA", new HcValue(null, true))),
+                Instant.parse("2026-08-24T00:00:00Z"),
+                null,
+                RST_YES);
+
+        assertThat(result.issues()).isEmpty();
+        assertThat(result.kpis()).extracting(TimesheetKpi::getPl3Code).containsExactly("PL3");
+    }
+
     private static ReportRow row(
             String empCcgid,
             String empId,
@@ -180,6 +257,16 @@ class TimesheetMonthlyCalculatorTests {
             String pl3Code,
             String center,
             String hc) {
+        return row(empCcgid, empId, supervisorPositionId, pl3Code, center, new HcValue(new BigDecimal(hc), false));
+    }
+
+    private static ReportRow row(
+            String empCcgid,
+            String empId,
+            String supervisorPositionId,
+            String pl3Code,
+            String center,
+            HcValue hc) {
         return row(empCcgid, empId, supervisorPositionId, pl3Code, center, hc, "production", "productive");
     }
 
@@ -192,6 +279,26 @@ class TimesheetMonthlyCalculatorTests {
             String hc,
             String managementOrProduction,
             String costType) {
+        return row(
+                empCcgid,
+                empId,
+                supervisorPositionId,
+                pl3Code,
+                center,
+                new HcValue(new BigDecimal(hc), false),
+                managementOrProduction,
+                costType);
+    }
+
+    private static ReportRow row(
+            String empCcgid,
+            String empId,
+            String supervisorPositionId,
+            String pl3Code,
+            String center,
+            HcValue hc,
+            String managementOrProduction,
+            String costType) {
         return new ReportRow(
                 2,
                 null,
@@ -199,7 +306,7 @@ class TimesheetMonthlyCalculatorTests {
                 empId,
                 empCcgid,
                 "Agent",
-                empCcgid.toLowerCase() + "@dev.local",
+                (empCcgid == null || empCcgid.isBlank() ? "missing" : empCcgid.toLowerCase()) + "@dev.local",
                 empId,
                 "SUP-1",
                 "S00000002",
@@ -222,8 +329,9 @@ class TimesheetMonthlyCalculatorTests {
                 "PL3 Name",
                 "CMA",
                 "MY",
-                new HcValue(new BigDecimal(hc), false),
+                hc,
                 managementOrProduction,
-                costType);
+                costType,
+                null);
     }
 }

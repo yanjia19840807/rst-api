@@ -19,8 +19,10 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 
 /**
  * Builds Monthly scope and Delivery HC from every complete RST-applicable
- * row. Agent access is derived at read time from Daily positions and these
- * scopes.
+ * row. After Process filtering, Monthly only checks required cells and
+ * typed {@code hc}. Date and Center come from the file name. A missing
+ * or invalid required cell on an RST row fails the whole run. Agent
+ * access is derived at read time from Daily positions and these scopes.
  */
 @Component
 public class TimesheetMonthlyCalculator {
@@ -72,12 +74,35 @@ public class TimesheetMonthlyCalculator {
      */
     public Result compute(
             UUID runId, List<ReportRow> rows, Instant now, LocalDate expectedDate, GbsProcessCatalog catalog) {
+        return compute(runId, rows, now, expectedDate, catalog, null);
+    }
+
+    /**
+     * Aggregates Monthly scope and Delivery HC. Date and Center come from
+     * the file name when present.
+     *
+     * @param runId Monthly run
+     * @param rows parsed rows
+     * @param now issue timestamp
+     * @param expectedDate date from the file name
+     * @param catalog RST-applicable PL3 codes
+     * @param center Center from the file name
+     * @return result
+     */
+    public Result compute(
+            UUID runId,
+            List<ReportRow> rows,
+            Instant now,
+            LocalDate expectedDate,
+            GbsProcessCatalog catalog,
+            String center) {
         GbsProcessCatalog processes = catalog == null ? GbsProcessCatalog.allowing() : catalog;
         List<TimesheetSyncIssue> issues = new ArrayList<>(
                 TimesheetRowValidator.validate(runId, "MONTHLY", expectedDate, rows, now, processes));
         Map<String, ScopeDraft> scopes = new LinkedHashMap<>();
         Map<String, KpiDraft> totals = new LinkedHashMap<>();
         LocalDate syncDate = expectedDate;
+        String snapshotCenter = hasText(center) ? center.trim() : null;
         for (ReportRow row : rows) {
             if (syncDate == null) {
                 syncDate = TimesheetRowValidator.rowDate(row);
@@ -85,12 +110,13 @@ public class TimesheetMonthlyCalculator {
             if (!TimesheetRowValidator.isCompleteMonthly(row) || !processes.applies(row.pl3Code())) {
                 continue;
             }
+            String rowCenter = firstText(snapshotCenter, row.center());
             scopes.putIfAbsent(
-                    key(row.supervisorPositionId(), row.pl3Code(), row.center()),
+                    key(row.supervisorPositionId(), row.pl3Code(), rowCenter),
                     new ScopeDraft(
                             row.supervisorPositionId(),
                             row.pl3Code(),
-                            row.center(),
+                            rowCenter,
                             row.pl3Name(),
                             row.domain(),
                             row.pl1(),
@@ -102,7 +128,7 @@ public class TimesheetMonthlyCalculator {
                     "|",
                     row.supervisorPositionId(),
                     row.pl3Code(),
-                    row.center(),
+                    rowCenter,
                     row.carrier(),
                     row.site(),
                     row.customerCountry());
@@ -111,7 +137,7 @@ public class TimesheetMonthlyCalculator {
                     new KpiDraft(
                             row.supervisorPositionId(),
                             row.pl3Code(),
-                            row.center(),
+                            rowCenter,
                             row.carrier(),
                             row.site(),
                             row.customerCountry(),
@@ -174,6 +200,14 @@ public class TimesheetMonthlyCalculator {
                                 draft.hc))
                         .toList(),
                 issues);
+    }
+
+    private static String firstText(String left, String right) {
+        return hasText(left) ? left : right;
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private static String key(String... parts) {

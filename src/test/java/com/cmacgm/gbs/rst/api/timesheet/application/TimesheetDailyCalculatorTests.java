@@ -56,6 +56,37 @@ class TimesheetDailyCalculatorTests {
     }
 
     @Test
+    void persistsEmpJobRoleOnTheEmployee() {
+        UUID runId = UUID.randomUUID();
+        TimesheetDailyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(row(
+                        "S00000001",
+                        "EMP-1",
+                        "Agent One",
+                        "EMP-POS-1",
+                        "production",
+                        "productive",
+                        "SRM-1",
+                        "GBS INDIA",
+                        "POS-SUP-1",
+                        "Billing Clerk")),
+                Instant.parse("2026-08-23T00:00:00Z"),
+                null,
+                RST_YES);
+
+        assertThat(result.issues()).isEmpty();
+        assertThat(result.people())
+                .filteredOn(person -> "S00000001".equals(person.getCcgid()))
+                .extracting(TimesheetPerson::getJobRole)
+                .containsExactly("Billing Clerk");
+        assertThat(result.people())
+                .filteredOn(person -> !"S00000001".equals(person.getCcgid()))
+                .extracting(TimesheetPerson::getJobRole)
+                .containsOnly((String) null);
+    }
+
+    @Test
     void skipsRowsWhenPl3IsNotRstApplicable() {
         UUID runId = UUID.randomUUID();
         TimesheetDailyCalculator.Result result = calculator.compute(
@@ -67,7 +98,10 @@ class TimesheetDailyCalculatorTests {
 
         assertThat(result.people())
                 .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getPositionId)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("S00000002", "POS-SUP-1"));
+                .contains(
+                        org.assertj.core.groups.Tuple.tuple("S00000002", "POS-SUP-1"),
+                        org.assertj.core.groups.Tuple.tuple("S00000003", "POS-SRM-1"),
+                        org.assertj.core.groups.Tuple.tuple("S00000004", "POS-DH-1"));
         assertThat(result.positions()).isEmpty();
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("EMPTY_FILE");
     }
@@ -84,7 +118,11 @@ class TimesheetDailyCalculatorTests {
 
         assertThat(result.people())
                 .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getPositionId)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-1"));
+                .contains(
+                        org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-1"),
+                        org.assertj.core.groups.Tuple.tuple("S00000002", "POS-SUP-1"),
+                        org.assertj.core.groups.Tuple.tuple("S00000003", "POS-SRM-1"),
+                        org.assertj.core.groups.Tuple.tuple("S00000004", "POS-DH-1"));
         assertThat(result.positions()).isEmpty();
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("MISSING_FIELD");
     }
@@ -99,9 +137,7 @@ class TimesheetDailyCalculatorTests {
                 null,
                 GbsProcessCatalog.allowing("OTHER"));
 
-        assertThat(result.people())
-                .extracting(TimesheetPerson::getCcgid)
-                .containsExactly("S00000002");
+        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S00000002");
         assertThat(result.positions()).isEmpty();
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("MISSING_FIELD");
     }
@@ -119,17 +155,13 @@ class TimesheetDailyCalculatorTests {
         assertThat(result.issues())
                 .extracting(TimesheetSyncIssue::getCode, TimesheetSyncIssue::getMessage)
                 .contains(org.assertj.core.groups.Tuple.tuple("MISSING_FIELD", "Missing sr_manager_emp_id."));
+        assertThat(result.issues()).allMatch(issue -> !TimesheetRowValidator.isAdvisory(issue, "DAILY"));
         assertThat(result.issues())
                 .extracting(TimesheetSyncIssue::getMessage)
                 .noneMatch(message -> message.contains("domain_head"));
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("EMPTY_FILE");
         assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S00000001");
-        assertThat(result.positions())
-                .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
-                .contains(
-                        org.assertj.core.groups.Tuple.tuple("EMP-POS-1", "AGENT"),
-                        org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "SUPERVISOR"),
-                        org.assertj.core.groups.Tuple.tuple("POS-DH-1", "DOMAIN_HEAD"));
+        assertThat(result.positions()).isEmpty();
     }
 
     @Test
@@ -167,7 +199,8 @@ class TimesheetDailyCalculatorTests {
                 "MY",
                 new HcValue(BigDecimal.ONE, false),
                 "production",
-                "productive");
+                "productive",
+                null);
 
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId, List.of(withoutDomainHead), Instant.parse("2026-08-23T00:00:00Z"), null, RST_YES);
@@ -188,7 +221,54 @@ class TimesheetDailyCalculatorTests {
     }
 
     @Test
-    void persistsPersonWhenHierarchyIsIncomplete() {
+    void ignoresHcOnDailyRows() {
+        UUID runId = UUID.randomUUID();
+        ReportRow withInvalidHc = row("S00000001", "EMP-1", "Agent One", "EMP-POS-1", "production", "productive");
+        withInvalidHc = new ReportRow(
+                withInvalidHc.sourceRow(),
+                withInvalidHc.date(),
+                withInvalidHc.month(),
+                withInvalidHc.empId(),
+                withInvalidHc.empCcgid(),
+                withInvalidHc.empName(),
+                withInvalidHc.empEmail(),
+                withInvalidHc.empPositionId(),
+                withInvalidHc.supervisorId(),
+                withInvalidHc.supervisorCcgid(),
+                withInvalidHc.supervisorName(),
+                withInvalidHc.supervisorPositionId(),
+                withInvalidHc.srManagerId(),
+                withInvalidHc.srManagerCcgid(),
+                withInvalidHc.srManagerName(),
+                withInvalidHc.srManagerPositionId(),
+                withInvalidHc.domainHeadId(),
+                withInvalidHc.domainHeadCcgid(),
+                withInvalidHc.domainHeadName(),
+                withInvalidHc.domainHeadPositionId(),
+                withInvalidHc.center(),
+                withInvalidHc.site(),
+                withInvalidHc.domain(),
+                withInvalidHc.pl1(),
+                withInvalidHc.pl2(),
+                withInvalidHc.pl3Code(),
+                withInvalidHc.pl3Name(),
+                withInvalidHc.carrier(),
+                withInvalidHc.customerCountry(),
+                new HcValue(null, true),
+                withInvalidHc.managementOrProduction(),
+                withInvalidHc.costType(),
+                withInvalidHc.empJobRole());
+
+        TimesheetDailyCalculator.Result result = calculator.compute(
+                runId, List.of(withInvalidHc), Instant.parse("2026-08-23T00:00:00Z"), null, RST_YES);
+
+        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("INVALID_HC", "MISSING_FIELD");
+        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S00000001");
+        assertThat(result.positions()).isNotEmpty();
+    }
+
+    @Test
+    void skipsPositionsWhenHierarchyIsIncomplete() {
         UUID runId = UUID.randomUUID();
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId,
@@ -200,50 +280,65 @@ class TimesheetDailyCalculatorTests {
                 RST_YES);
 
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).contains("MISSING_FIELD");
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("EMPTY_FILE");
+        assertThat(result.issues()).allMatch(issue -> !TimesheetRowValidator.isAdvisory(issue, "DAILY"));
         assertThat(result.people())
                 .extracting(TimesheetPerson::getCcgid)
                 .contains("S00000001", "S00000006");
+        assertThat(result.positions()).isEmpty();
     }
 
     @Test
-    void rejectsUnconfiguredCenter() {
+    void usesFilenameCenterInsteadOfRowCenter() {
         UUID runId = UUID.randomUUID();
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId,
-                List.of(
-                        row(
-                                "S00000001",
-                                "EMP-1",
-                                "Agent One",
-                                "EMP-POS-1",
-                                "production",
-                                "productive",
-                                "SRM-1",
-                                "GBS VIETNAM"),
-                        row(
-                                "S00000007",
-                                "EMP-7",
-                                "Agent Seven",
-                                "EMP-POS-7",
-                                "production",
-                                "productive",
-                                "SRM-1",
-                                "GBS VIETNAM")),
+                List.of(row(
+                        "S00000001",
+                        "EMP-1",
+                        "Agent One",
+                        "EMP-POS-1",
+                        "production",
+                        "productive",
+                        "SRM-1",
+                        "GBS VIETNAM")),
                 Instant.parse("2026-08-23T00:00:00Z"),
-                null,
-                RST_YES);
+                LocalDate.of(2026, 7, 27),
+                RST_YES,
+                "GBS INDIA");
 
-        assertThat(result.issues())
-                .extracting(TimesheetSyncIssue::getCode, TimesheetSyncIssue::getMessage)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple(
-                        "UNKNOWN_CENTER",
-                        "Center 'GBS VIETNAM' is not configured. Add it to the Center catalog before importing."));
-        assertThat(TimesheetRowValidator.isAdvisory(result.issues().getFirst())).isFalse();
+        assertThat(result.issues()).isEmpty();
+        assertThat(result.syncDate()).isEqualTo(LocalDate.of(2026, 7, 27));
+        assertThat(result.people())
+                .filteredOn(person -> "S00000001".equals(person.getCcgid()))
+                .extracting(TimesheetPerson::getCenter)
+                .containsExactly("GBS INDIA");
+        assertThat(result.positions()).allMatch(position -> "GBS INDIA".equals(position.getCenter()));
     }
 
     @Test
-    void flagsDateMismatchAgainstFileName() {
+    void skipsUnknownCenterWhenPl3IsNotRstApplicable() {
+        UUID runId = UUID.randomUUID();
+        TimesheetDailyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(row(
+                        "S00000001",
+                        "EMP-1",
+                        "Agent One",
+                        "EMP-POS-1",
+                        "production",
+                        "productive",
+                        "SRM-1",
+                        "GBS VIETNAM")),
+                Instant.parse("2026-08-23T00:00:00Z"),
+                null,
+                GbsProcessCatalog.allowing("OTHER"));
+
+        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("UNKNOWN_CENTER");
+        assertThat(result.positions()).isEmpty();
+    }
+
+    @Test
+    void ignoresRowDateAndUsesFilenameDate() {
         UUID runId = UUID.randomUUID();
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId,
@@ -252,7 +347,10 @@ class TimesheetDailyCalculatorTests {
                 LocalDate.of(2026, 7, 26),
                 RST_YES);
 
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).contains("DATE_MISMATCH");
+        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("DATE_MISMATCH");
+        assertThat(result.syncDate()).isEqualTo(LocalDate.of(2026, 7, 26));
+        assertThat(result.people()).isNotEmpty();
+        assertThat(result.positions()).isNotEmpty();
     }
 
     @Test
@@ -270,7 +368,7 @@ class TimesheetDailyCalculatorTests {
         assertThat(result.issues())
                 .extracting(TimesheetSyncIssue::getCode)
                 .contains("PERSON_POSITION_CONFLICT");
-        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).doesNotContain("S00000001");
+        assertThat(result.positions()).isEmpty();
     }
 
     @Test
@@ -332,6 +430,7 @@ class TimesheetDailyCalculatorTests {
                 .contains(org.assertj.core.groups.Tuple.tuple(
                         "HIERARCHY_CONFLICT",
                         "position_id EMP-POS-1 maps to multiple parent_position_id: POS-SUP-1, POS-SUP-2"));
+        assertThat(result.positions()).isEmpty();
     }
 
     @Test
@@ -386,6 +485,79 @@ class TimesheetDailyCalculatorTests {
     }
 
     @Test
+    void collectsHierarchyPeopleFromNonProductionRowsWithoutPositions() {
+        UUID runId = UUID.randomUUID();
+        TimesheetDailyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(row("S00000001", "EMP-1", "Agent One", "EMP-POS-1", "management", "non-productive")),
+                Instant.parse("2026-08-23T00:00:00Z"),
+                null,
+                RST_YES);
+
+        assertThat(result.people())
+                .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getPositionId)
+                .contains(
+                        org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-1"),
+                        org.assertj.core.groups.Tuple.tuple("S00000002", "POS-SUP-1"),
+                        org.assertj.core.groups.Tuple.tuple("S00000003", "POS-SRM-1"),
+                        org.assertj.core.groups.Tuple.tuple("S00000004", "POS-DH-1"));
+        assertThat(result.positions()).isEmpty();
+        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("MISSING_FIELD");
+    }
+
+    @Test
+    void requiresPersonFieldsOnNonProductionRows() {
+        UUID runId = UUID.randomUUID();
+        ReportRow missingEmp = row("S00000001", "EMP-1", "Agent One", "EMP-POS-1", "management", "non-productive");
+        missingEmp = new ReportRow(
+                missingEmp.sourceRow(),
+                missingEmp.date(),
+                missingEmp.month(),
+                missingEmp.empId(),
+                "",
+                missingEmp.empName(),
+                missingEmp.empEmail(),
+                missingEmp.empPositionId(),
+                missingEmp.supervisorId(),
+                missingEmp.supervisorCcgid(),
+                missingEmp.supervisorName(),
+                missingEmp.supervisorPositionId(),
+                missingEmp.srManagerId(),
+                missingEmp.srManagerCcgid(),
+                missingEmp.srManagerName(),
+                missingEmp.srManagerPositionId(),
+                missingEmp.domainHeadId(),
+                missingEmp.domainHeadCcgid(),
+                missingEmp.domainHeadName(),
+                missingEmp.domainHeadPositionId(),
+                missingEmp.center(),
+                missingEmp.site(),
+                missingEmp.domain(),
+                missingEmp.pl1(),
+                missingEmp.pl2(),
+                missingEmp.pl3Code(),
+                missingEmp.pl3Name(),
+                missingEmp.carrier(),
+                missingEmp.customerCountry(),
+                missingEmp.hc(),
+                missingEmp.managementOrProduction(),
+                missingEmp.costType(),
+                missingEmp.empJobRole());
+
+        TimesheetDailyCalculator.Result result = calculator.compute(
+                runId, List.of(missingEmp), Instant.parse("2026-08-23T00:00:00Z"), null, RST_YES);
+
+        assertThat(result.issues())
+                .extracting(TimesheetSyncIssue::getCode, TimesheetSyncIssue::getMessage)
+                .contains(org.assertj.core.groups.Tuple.tuple("MISSING_FIELD", "Missing emp_ccgid."));
+        assertThat(result.issues())
+                .extracting(TimesheetSyncIssue::getMessage)
+                .noneMatch(message -> message.contains("supervisor") || message.contains("sr_manager"));
+        assertThat(result.people()).isEmpty();
+        assertThat(result.positions()).isEmpty();
+    }
+
+    @Test
     void fillsSupervisorFromProductionColumnsWhenMissingOwnRow() {
         UUID runId = UUID.randomUUID();
         ReportRow agent = new ReportRow(
@@ -420,7 +592,8 @@ class TimesheetDailyCalculatorTests {
                 "MY",
                 new HcValue(BigDecimal.ONE, false),
                 "production",
-                "productive");
+                "productive",
+                null);
 
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId, List.of(agent), Instant.parse("2026-08-23T00:00:00Z"), null, RST_YES);
@@ -521,6 +694,30 @@ class TimesheetDailyCalculatorTests {
             String srManagerId,
             String center,
             String supervisorPositionId) {
+        return row(
+                empCcgid,
+                empId,
+                empName,
+                empPositionId,
+                managementOrProduction,
+                costType,
+                srManagerId,
+                center,
+                supervisorPositionId,
+                null);
+    }
+
+    private static ReportRow row(
+            String empCcgid,
+            String empId,
+            String empName,
+            String empPositionId,
+            String managementOrProduction,
+            String costType,
+            String srManagerId,
+            String center,
+            String supervisorPositionId,
+            String empJobRole) {
         return new ReportRow(
                 2,
                 LocalDate.of(2026, 7, 27),
@@ -553,6 +750,7 @@ class TimesheetDailyCalculatorTests {
                 "MY",
                 new HcValue(BigDecimal.ONE, false),
                 managementOrProduction,
-                costType);
+                costType,
+                empJobRole);
     }
 }

@@ -46,10 +46,40 @@ class TimesheetReportNameTests {
     }
 
     @Test
-    void rejectsOldNamesOtherRegionAndCsv() {
+    void acceptsAnyConfiguredCenter() {
+        TimesheetReportName.Parsed daily = TimesheetReportName.parse(
+                        "Daily Raw Data of 2026-08-31 - GBS INDIA.xlsx")
+                .orElseThrow();
+        assertThat(daily.kind()).isEqualTo("DAILY");
+        assertThat(daily.region()).isEqualTo("GBS INDIA");
+
+        TimesheetReportName.Parsed monthly = TimesheetReportName.parse(
+                        "Monthly Report of 202607(GBS PHILIPPINES).xlsx")
+                .orElseThrow();
+        assertThat(monthly.kind()).isEqualTo("MONTHLY");
+        assertThat(monthly.region()).isEqualTo("GBS PHILIPPINES");
+        assertThat(TimesheetReportName.parse("Daily Raw Data of 2026-08-31 - gbs costa rica.xlsx")
+                        .orElseThrow()
+                        .region())
+                .isEqualTo("GBS COSTA RICA");
+    }
+
+    @Test
+    void acceptsConventionCsv() {
+        assertThat(TimesheetReportName.parse("Daily Raw Data of 2026-08-31 - GBS CHINA.csv")
+                        .orElseThrow()
+                        .kind())
+                .isEqualTo("DAILY");
+        assertThat(TimesheetReportName.parse("Monthly Report of 202606(GBS INDIA).csv")
+                        .orElseThrow()
+                        .region())
+                .isEqualTo("GBS INDIA");
+    }
+
+    @Test
+    void rejectsOldNamesUnknownCenterAndRandomNames() {
         assertThat(TimesheetReportName.parse("Daily Report of 20260727(GBS CHINA).xlsx")).isEmpty();
-        assertThat(TimesheetReportName.parse("Daily Raw Data of 2026-08-31 - GBS INDIA.xlsx")).isEmpty();
-        assertThat(TimesheetReportName.parse("Daily Raw Data of 2026-08-31 - GBS CHINA.csv")).isEmpty();
+        assertThat(TimesheetReportName.parse("Daily Raw Data of 2026-08-31 - GBS MARS.xlsx")).isEmpty();
         assertThat(TimesheetReportName.parse("timesheet.xlsx")).isEmpty();
     }
 }

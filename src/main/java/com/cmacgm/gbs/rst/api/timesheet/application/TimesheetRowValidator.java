@@ -2,19 +2,28 @@ package com.cmacgm.gbs.rst.api.timesheet.application;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
-import java.util.Set;
 import java.util.UUID;
 
-import com.cmacgm.gbs.rst.api.security.RstCenters;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 
 /**
- * Shared required-field and filename-date checks for Daily / Monthly rows.
+ * Shared row checks for Daily / Monthly.
+ *
+ * <p>Monthly checks RST-applicable rows only: required cells and typed
+ * {@code hc}. Date and Center come from the file name.
+ *
+ * <p>Daily person fields are checked on every row before people are
+ * collected. Supervisor / Sr Manager fields, unique parent chain and
+ * one-person-one-seat apply before positions are built (RST-applicable
+ * Production + Productive). Daily date and Center come from the file
+ * name. Daily never validates {@code hc}.
+ *
+ * <p>{@code MISSING_FIELD}, Monthly {@code INVALID_HC}, and Daily org
+ * conflicts fail the run. Historical {@code ASSIGNMENT_CONFLICT} stays
+ * advisory.
  */
 final class TimesheetRowValidator {
 
@@ -27,8 +36,7 @@ final class TimesheetRowValidator {
     }
 
     /**
-     * Validates rows. Daily required-field checks apply to RST-applicable
-     * Production + Productive rows.
+     * Validates RST-in-scope rows. Out-of-scope rows are skipped.
      *
      * @param runId sync run
      * @param kind DAILY or MONTHLY
@@ -47,53 +55,85 @@ final class TimesheetRowValidator {
             GbsProcessCatalog catalog) {
         GbsProcessCatalog processes = catalog == null ? GbsProcessCatalog.allowing() : catalog;
         List<TimesheetSyncIssue> issues = new ArrayList<>();
-        Set<String> unknownCenters = new LinkedHashSet<>();
         for (ReportRow row : rows) {
-            rejectUnknownCenter(issues, unknownCenters, runId, now, row);
-            if ("DAILY".equals(kind)
-                    && (!processes.applies(row.pl3Code()) || !isProductionLine(row))) {
+            if ("DAILY".equals(kind)) {
+                issues.addAll(validateDailyPeople(runId, List.of(row), now));
+                issues.addAll(validateDailyPositions(runId, List.of(row), now, processes));
                 continue;
             }
-            if ("DAILY".equals(kind)) {
-                require(issues, runId, now, row, "date", row.date() != null);
-                require(issues, runId, now, row, "emp_emp_id", hasText(row.empId()));
-                require(issues, runId, now, row, "emp_ccgid", hasText(row.empCcgid()));
-                require(issues, runId, now, row, "emp_name", hasText(row.empName()));
-                require(issues, runId, now, row, "emp_position_id", hasText(row.empPositionId()));
-                require(issues, runId, now, row, "supervisor_emp_id", hasText(row.supervisorId()));
-                require(issues, runId, now, row, "supervisor_ccgid", hasText(row.supervisorCcgid()));
-                require(issues, runId, now, row, "supervisor_name", hasText(row.supervisorName()));
-                require(issues, runId, now, row, "supervisor_position_id", hasText(row.supervisorPositionId()));
-                require(issues, runId, now, row, "sr_manager_emp_id", hasText(row.srManagerId()));
-                require(issues, runId, now, row, "sr_manager_ccgid", hasText(row.srManagerCcgid()));
-                require(issues, runId, now, row, "sr_manager_name", hasText(row.srManagerName()));
-                require(issues, runId, now, row, "sr_manager_position_id", hasText(row.srManagerPositionId()));
-                require(issues, runId, now, row, "center", hasText(row.center()));
-                if (expectedDate != null && row.date() != null && !expectedDate.equals(row.date())) {
-                    issues.add(mismatch(runId, now, row, expectedDate, row.date()));
-                }
-            } else {
-                LocalDate rowDate = rowDate(row);
-                require(issues, runId, now, row, "month", rowDate != null);
-                require(issues, runId, now, row, "emp_emp_id", hasText(row.empId()));
-                require(issues, runId, now, row, "emp_ccgid", hasText(row.empCcgid()));
-                require(issues, runId, now, row, "supervisor_position_id", hasText(row.supervisorPositionId()));
-                require(issues, runId, now, row, "pl3_code", hasText(row.pl3Code()));
-                require(issues, runId, now, row, "pl3", hasText(row.pl3Name()));
-                require(issues, runId, now, row, "center", hasText(row.center()));
-                require(issues, runId, now, row, "gbs_domain", hasText(row.domain()));
-                require(issues, runId, now, row, "pl1", hasText(row.pl1()));
-                require(issues, runId, now, row, "pl2", hasText(row.pl2()));
-                require(issues, runId, now, row, "carrier", hasText(row.carrier()));
-                require(issues, runId, now, row, "site", hasText(row.site()));
-                require(issues, runId, now, row, "customer_country", hasText(row.customerCountry()));
-                require(issues, runId, now, row, "hc", row.hc() != null && row.hc().value() != null);
-                if (expectedDate != null && rowDate != null && !expectedDate.equals(rowDate)) {
-                    issues.add(mismatch(runId, now, row, expectedDate, rowDate));
-                }
+            if (!inScope(kind, row, processes)) {
+                continue;
             }
+            require(issues, runId, now, row, "emp_emp_id", hasText(row.empId()));
+            require(issues, runId, now, row, "emp_ccgid", hasText(row.empCcgid()));
+            require(issues, runId, now, row, "supervisor_position_id", hasText(row.supervisorPositionId()));
+            require(issues, runId, now, row, "pl3_code", hasText(row.pl3Code()));
+            require(issues, runId, now, row, "pl3", hasText(row.pl3Name()));
+            require(issues, runId, now, row, "gbs_domain", hasText(row.domain()));
+            require(issues, runId, now, row, "pl1", hasText(row.pl1()));
+            require(issues, runId, now, row, "pl2", hasText(row.pl2()));
+            require(issues, runId, now, row, "carrier", hasText(row.carrier()));
+            require(issues, runId, now, row, "site", hasText(row.site()));
+            require(issues, runId, now, row, "customer_country", hasText(row.customerCountry()));
+            requireHc(issues, runId, now, row);
         }
         return issues;
+    }
+
+    /**
+     * Required person cells on every Daily row. Date and Center come from
+     * the file name.
+     *
+     * @param runId sync run
+     * @param rows parsed rows
+     * @param now issue timestamp
+     * @return person-field issues
+     */
+    static List<TimesheetSyncIssue> validateDailyPeople(UUID runId, List<ReportRow> rows, java.time.Instant now) {
+        List<TimesheetSyncIssue> issues = new ArrayList<>();
+        for (ReportRow row : rows) {
+            requireDailyPerson(issues, runId, now, row);
+        }
+        return issues;
+    }
+
+    /**
+     * Required hierarchy cells on Daily position rows. Date and Center
+     * come from the file name.
+     *
+     * @param runId sync run
+     * @param rows parsed rows
+     * @param now issue timestamp
+     * @param catalog RST-applicable PL3 codes
+     * @return position-field issues
+     */
+    static List<TimesheetSyncIssue> validateDailyPositions(
+            UUID runId, List<ReportRow> rows, java.time.Instant now, GbsProcessCatalog catalog) {
+        List<TimesheetSyncIssue> issues = new ArrayList<>();
+        for (ReportRow row : rows) {
+            if (!inScope("DAILY", row, catalog)) {
+                continue;
+            }
+            requireDailyHierarchy(issues, runId, now, row);
+        }
+        return issues;
+    }
+
+    /**
+     * Whether this row is used for Daily positions / Monthly scope.
+     * Daily person fields are checked even when this is false.
+     *
+     * @param kind DAILY or MONTHLY
+     * @param row parsed row
+     * @param catalog RST-applicable PL3 codes
+     * @return true when the row is kept for RST validation
+     */
+    static boolean inScope(String kind, ReportRow row, GbsProcessCatalog catalog) {
+        GbsProcessCatalog processes = catalog == null ? GbsProcessCatalog.allowing() : catalog;
+        if (!processes.applies(row.pl3Code())) {
+            return false;
+        }
+        return !"DAILY".equals(kind) || isProductionLine(row);
     }
 
     /**
@@ -117,42 +157,71 @@ final class TimesheetRowValidator {
         return hasText(row.empCcgid()) && hasText(row.empName()) && hasText(row.empPositionId());
     }
 
+    private static void requireDailyPerson(
+            List<TimesheetSyncIssue> issues, UUID runId, java.time.Instant now, ReportRow row) {
+        require(issues, runId, now, row, "emp_emp_id", hasText(row.empId()));
+        require(issues, runId, now, row, "emp_ccgid", hasText(row.empCcgid()));
+        require(issues, runId, now, row, "emp_name", hasText(row.empName()));
+        require(issues, runId, now, row, "emp_position_id", hasText(row.empPositionId()));
+    }
+
+    private static void requireDailyHierarchy(
+            List<TimesheetSyncIssue> issues, UUID runId, java.time.Instant now, ReportRow row) {
+        require(issues, runId, now, row, "supervisor_emp_id", hasText(row.supervisorId()));
+        require(issues, runId, now, row, "supervisor_ccgid", hasText(row.supervisorCcgid()));
+        require(issues, runId, now, row, "supervisor_name", hasText(row.supervisorName()));
+        require(issues, runId, now, row, "supervisor_position_id", hasText(row.supervisorPositionId()));
+        require(issues, runId, now, row, "sr_manager_emp_id", hasText(row.srManagerId()));
+        require(issues, runId, now, row, "sr_manager_ccgid", hasText(row.srManagerCcgid()));
+        require(issues, runId, now, row, "sr_manager_name", hasText(row.srManagerName()));
+        require(issues, runId, now, row, "sr_manager_position_id", hasText(row.srManagerPositionId()));
+    }
+
     /**
-     * Whether a Monthly row has every required cell. Applies to every
-     * management / cost-type combination.
+     * Whether a Monthly row has every required cell. Date and Center come
+     * from the file name. Applies to every management / cost-type
+     * combination.
      *
      * @param row parsed row
      * @return true when the row can be persisted
      */
     static boolean isCompleteMonthly(ReportRow row) {
-        return rowDate(row) != null
-                && hasText(row.empId())
+        return hasText(row.empId())
                 && hasText(row.empCcgid())
                 && hasText(row.supervisorPositionId())
                 && hasText(row.pl3Code())
                 && hasText(row.pl3Name())
-                && hasText(row.center())
                 && hasText(row.domain())
                 && hasText(row.pl1())
                 && hasText(row.pl2())
                 && hasText(row.carrier())
                 && hasText(row.site())
                 && hasText(row.customerCountry())
-                && row.hc() != null
-                && row.hc().value() != null;
+                && hasUsableHc(row);
     }
 
     /**
-     * {@code MISSING_FIELD} is recorded but does not fail the run.
-     * Historical {@code ASSIGNMENT_CONFLICT} rows stay advisory.
+     * Whether this issue should be stored without failing the run.
+     * Historical {@code ASSIGNMENT_CONFLICT} stays advisory.
+     * {@code MISSING_FIELD} fails both Daily and Monthly runs.
      *
      * @param issue persisted or computed issue
-     * @return true when the code is advisory
+     * @return true when the code is advisory for Daily
      */
     static boolean isAdvisory(TimesheetSyncIssue issue) {
+        return isAdvisory(issue, "DAILY");
+    }
+
+    /**
+     * Whether this issue should be stored without failing the run.
+     *
+     * @param issue persisted or computed issue
+     * @param kind DAILY or MONTHLY
+     * @return true when the code is advisory for this kind
+     */
+    static boolean isAdvisory(TimesheetSyncIssue issue, String kind) {
         String code = issue.getCode();
-        return TimesheetSyncErrorCode.MISSING_FIELD.code().equals(code)
-                || TimesheetSyncErrorCode.ASSIGNMENT_CONFLICT.code().equals(code);
+        return TimesheetSyncErrorCode.ASSIGNMENT_CONFLICT.code().equals(code);
     }
 
     static LocalDate rowDate(ReportRow row) {
@@ -165,29 +234,26 @@ final class TimesheetRowValidator {
         return null;
     }
 
-    private static void rejectUnknownCenter(
-            List<TimesheetSyncIssue> issues,
-            Set<String> unknownCenters,
-            UUID runId,
-            java.time.Instant now,
-            ReportRow row) {
-        if (!hasText(row.center()) || RstCenters.isKnown(row.center())) {
+    private static void requireHc(
+            List<TimesheetSyncIssue> issues, UUID runId, java.time.Instant now, ReportRow row) {
+        if (row.hc() != null && row.hc().invalid()) {
+            issues.add(TimesheetSyncIssue.error(
+                    runId,
+                    TimesheetSyncErrorCode.INVALID_HC,
+                    "hc is not a valid number.",
+                    row.empId(),
+                    row.empCcgid(),
+                    row.empPositionId(),
+                    row.pl3Code(),
+                    row.sourceRow(),
+                    now));
             return;
         }
-        String raw = row.center().trim();
-        if (!unknownCenters.add(raw.toUpperCase(Locale.ROOT))) {
-            return;
-        }
-        issues.add(TimesheetSyncIssue.error(
-                runId,
-                TimesheetSyncErrorCode.UNKNOWN_CENTER,
-                "Center '" + raw + "' is not configured. Add it to the Center catalog before importing.",
-                row.empId(),
-                row.empCcgid(),
-                row.empPositionId(),
-                row.pl3Code(),
-                row.sourceRow(),
-                now));
+        require(issues, runId, now, row, "hc", hasUsableHc(row));
+    }
+
+    private static boolean hasUsableHc(ReportRow row) {
+        return row.hc() != null && !row.hc().invalid() && row.hc().value() != null;
     }
 
     private static void require(
@@ -210,20 +276,6 @@ final class TimesheetRowValidator {
                 row.pl3Code(),
                 row.sourceRow(),
                 now));
-    }
-
-    private static TimesheetSyncIssue mismatch(
-            UUID runId, java.time.Instant now, ReportRow row, LocalDate expected, LocalDate actual) {
-        return TimesheetSyncIssue.error(
-                runId,
-                TimesheetSyncErrorCode.DATE_MISMATCH,
-                "Date " + actual + " does not match file " + expected + ".",
-                row.empId(),
-                row.empCcgid(),
-                row.empPositionId(),
-                row.pl3Code(),
-                row.sourceRow(),
-                now);
     }
 
     private static boolean hasText(String value) {

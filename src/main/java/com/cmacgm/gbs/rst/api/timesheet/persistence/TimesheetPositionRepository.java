@@ -54,6 +54,7 @@ public interface TimesheetPositionRepository
                      and supervisor.id.positionId = agent.parentPositionId
                     where r.kind = 'DAILY'
                       and r.status = 'ACTIVE'
+                      and agent.center = r.center
                       and agent.roleType = 'AGENT'
                       and (:center = '' or agent.center = :center)
                       and (:q = ''
@@ -66,6 +67,8 @@ public interface TimesheetPositionRepository
                                 where occupant.id.syncRunId = occupantRun.id
                                   and occupantRun.kind = 'DAILY'
                                   and occupantRun.status = 'ACTIVE'
+                                  and occupantRun.center = r.center
+                                  and occupant.center = r.center
                                   and occupant.positionId in (
                                         agent.id.positionId,
                                         agent.parentPositionId,
@@ -82,6 +85,7 @@ public interface TimesheetPositionRepository
                      and supervisor.id.positionId = agent.parentPositionId
                     where r.kind = 'DAILY'
                       and r.status = 'ACTIVE'
+                      and agent.center = r.center
                       and agent.roleType = 'AGENT'
                       and (:center = '' or agent.center = :center)
                       and (:q = ''
@@ -94,6 +98,8 @@ public interface TimesheetPositionRepository
                                 where occupant.id.syncRunId = occupantRun.id
                                   and occupantRun.kind = 'DAILY'
                                   and occupantRun.status = 'ACTIVE'
+                                  and occupantRun.center = r.center
+                                  and occupant.center = r.center
                                   and occupant.positionId in (
                                         agent.id.positionId,
                                         agent.parentPositionId,
@@ -126,9 +132,13 @@ public interface TimesheetPositionRepository
                     where agent.id.syncRunId = daily.id
                       and daily.kind = 'DAILY'
                       and daily.status = 'ACTIVE'
+                      and agent.center = daily.center
                       and scope.id.syncRunId = monthly.id
                       and monthly.kind = 'MONTHLY'
                       and monthly.status = 'ACTIVE'
+                      and scope.id.center = monthly.center
+                      and daily.center = monthly.center
+                      and agent.center = scope.id.center
                       and agent.roleType = 'AGENT'
                       and agent.parentPositionId = scope.id.supervisorPositionId
                       and (:center = '' or scope.id.center = :center)
@@ -140,6 +150,8 @@ public interface TimesheetPositionRepository
                                 where occupant.id.syncRunId = occupantRun.id
                                   and occupantRun.kind = 'DAILY'
                                   and occupantRun.status = 'ACTIVE'
+                                  and occupantRun.center = daily.center
+                                  and occupant.center = daily.center
                                   and occupant.positionId = agent.id.positionId
                                   and lower(occupant.name) like lower(concat('%', :agent, '%'))))
                       and (:supervisor = ''
@@ -150,6 +162,8 @@ public interface TimesheetPositionRepository
                                 where occupant.id.syncRunId = occupantRun.id
                                   and occupantRun.kind = 'DAILY'
                                   and occupantRun.status = 'ACTIVE'
+                                  and occupantRun.center = daily.center
+                                  and occupant.center = daily.center
                                   and occupant.positionId = agent.parentPositionId
                                   and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
                       and (:pl3Code = ''
@@ -164,9 +178,13 @@ public interface TimesheetPositionRepository
                     where agent.id.syncRunId = daily.id
                       and daily.kind = 'DAILY'
                       and daily.status = 'ACTIVE'
+                      and agent.center = daily.center
                       and scope.id.syncRunId = monthly.id
                       and monthly.kind = 'MONTHLY'
                       and monthly.status = 'ACTIVE'
+                      and scope.id.center = monthly.center
+                      and daily.center = monthly.center
+                      and agent.center = scope.id.center
                       and agent.roleType = 'AGENT'
                       and agent.parentPositionId = scope.id.supervisorPositionId
                       and (:center = '' or scope.id.center = :center)
@@ -178,6 +196,8 @@ public interface TimesheetPositionRepository
                                 where occupant.id.syncRunId = occupantRun.id
                                   and occupantRun.kind = 'DAILY'
                                   and occupantRun.status = 'ACTIVE'
+                                  and occupantRun.center = daily.center
+                                  and occupant.center = daily.center
                                   and occupant.positionId = agent.id.positionId
                                   and lower(occupant.name) like lower(concat('%', :agent, '%'))))
                       and (:supervisor = ''
@@ -188,6 +208,8 @@ public interface TimesheetPositionRepository
                                 where occupant.id.syncRunId = occupantRun.id
                                   and occupantRun.kind = 'DAILY'
                                   and occupantRun.status = 'ACTIVE'
+                                  and occupantRun.center = daily.center
+                                  and occupant.center = daily.center
                                   and occupant.positionId = agent.parentPositionId
                                   and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
                       and (:pl3Code = ''
@@ -230,12 +252,21 @@ public interface TimesheetPositionRepository
     }
 
     /**
-     * Drops Daily position rows that are not the kept snapshot.
+     * Drops Daily position rows for other runs of this kind and Center.
      *
+     * @param kind DAILY
+     * @param center GBS center
      * @param keepRunId ACTIVE Daily run to keep
      * @return deleted rows
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("delete from TimesheetPosition p where p.id.syncRunId <> :keepRunId")
-    int deleteBySyncRunIdNot(@Param("keepRunId") UUID keepRunId);
+    @Query("""
+            delete from TimesheetPosition p
+            where p.id.syncRunId in (
+                select r.id from TimesheetSyncRun r
+                where r.kind = :kind and r.center = :center and r.id <> :keepRunId
+            )
+            """)
+    int deleteStaleForCenter(
+            @Param("kind") String kind, @Param("center") String center, @Param("keepRunId") UUID keepRunId);
 }

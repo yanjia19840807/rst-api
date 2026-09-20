@@ -14,7 +14,8 @@ import jakarta.persistence.Transient;
 import org.springframework.data.domain.Persistable;
 
 /**
- * One ERROR from a Timesheet sync. {@code MISSING_FIELD} is advisory.
+ * One ERROR from a Timesheet sync. {@code MISSING_FIELD} and Monthly
+ * {@code INVALID_HC} fail the run.
  */
 @Entity
 @Table(name = "timesheet_sync_issue")

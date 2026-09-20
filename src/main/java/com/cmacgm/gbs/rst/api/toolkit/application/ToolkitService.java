@@ -109,9 +109,9 @@ public class ToolkitService {
         Toolkit toolkit = toolkits.findExistingById(id)
                 .orElseThrow(() -> notFound("toolkit-not-found", "The Toolkit was not found."));
         boolean supervisor = timesheet.supervisorOwnsScope(
-                ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code());
+                ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), toolkit.getCenter());
         boolean agent = timesheet.agentCanUse(
-                ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code());
+                ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), toolkit.getCenter());
         if (!supervisor && !agent) {
             throw forbidden("toolkit-out-of-scope",
                     "The Toolkit is outside the current Timesheet scope.");
@@ -215,7 +215,8 @@ public class ToolkitService {
                 .filter(toolkit -> timesheet.supervisorOwnsScope(
                         ccgid,
                         toolkit.getSupervisorPositionId(),
-                        toolkit.getPrimaryPl3Code()))
+                        toolkit.getPrimaryPl3Code(),
+                        toolkit.getCenter()))
                 .toList();
     }
 
@@ -231,7 +232,7 @@ public class ToolkitService {
         Toolkit toolkit = toolkits.findExistingById(toolkitId)
                 .orElseThrow(() -> notFound("toolkit-not-found", "The Toolkit was not found."));
         if (!timesheet.supervisorOwnsScope(
-                ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code())) {
+                ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), toolkit.getCenter())) {
             throw forbidden("toolkit-out-of-scope",
                     "The current Supervisor no longer owns this Toolkit scope.");
         }
@@ -293,7 +294,7 @@ public class ToolkitService {
                 .distinct()
                 .toList();
         var candidates = timesheet.kpis(
-                toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), countries);
+                toolkit.getCenter(), toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), countries);
         var seen = new HashSet<String>();
         for (SharedKpiSelectionRequest item : requested) {
             String key = item.carrier() + "\u0000" + item.site() + "\u0000" + item.customerCountry();
@@ -318,7 +319,7 @@ public class ToolkitService {
                         selection.getCarrier(), selection.getSite(), selection.getCustomerCountry()))
                 .toList();
         TimesheetAlignmentView alignment = TimesheetAlignmentView.from(timesheet.align(
-                toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), keys));
+                toolkit.getCenter(), toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), keys));
         SessionImpact toolkitImpact = new SessionImpact(
                 (int) tmsSessions.countByToolkit_IdAndEnabled(toolkit.getId(), true),
                 (int) tmsSessions.countByToolkit_IdAndEnabled(toolkit.getId(), false));

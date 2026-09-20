@@ -62,38 +62,62 @@ public class TimesheetReadService {
     }
 
     /**
-     * @return ACTIVE Daily and Monthly headers
+     * @return ACTIVE Daily and Monthly headers, one per Center
      */
     @Transactional(readOnly = true)
     public ActiveSnapshots activeSnapshots() {
-        return new ActiveSnapshots(requireActive("DAILY"), requireActive("MONTHLY"));
+        return new ActiveSnapshots(findActive("DAILY"), findActive("MONTHLY"));
     }
 
     /**
-     * @return ACTIVE Daily snapshot
+     * Requires an ACTIVE Daily snapshot for the Center.
+     *
+     * @param center GBS center
+     * @return Daily header
      */
     @Transactional(readOnly = true)
-    public ActiveSnapshot activeDaily() {
-        return requireActive("DAILY");
+    public ActiveSnapshot activeDaily(String center) {
+        return requireActive("DAILY", center);
     }
 
     /**
-     * @return ACTIVE Monthly snapshot
+     * Requires an ACTIVE Monthly snapshot for the Center.
+     *
+     * @param center GBS center
+     * @return Monthly header
      */
     @Transactional(readOnly = true)
-    public ActiveSnapshot activeMonthly() {
-        return requireActive("MONTHLY");
+    public ActiveSnapshot activeMonthly(String center) {
+        return requireActive("MONTHLY", center);
     }
 
-    private ActiveSnapshot requireActive(String kind) {
-        TimesheetSyncRun run = syncRuns.findByKindAndStatus(kind, "ACTIVE")
+    private ActiveSnapshot requireActive(String kind, String center) {
+        return findActive(kind, center)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.CONFLICT,
                         "DAILY".equals(kind) ? "active-timesheet-org-missing" : "active-timesheet-kpi-missing",
-                        "No ACTIVE " + kind + " Timesheet snapshot is available."));
+                        "No ACTIVE " + kind + " Timesheet snapshot is available"
+                                + (center == null || center.isBlank() ? "." : " for " + center + ".")));
+    }
+
+    private Optional<ActiveSnapshot> findActive(String kind, String center) {
+        if (center == null || center.isBlank()) {
+            return Optional.empty();
+        }
+        return syncRuns.findByKindAndStatusAndCenter(kind, "ACTIVE", center.trim()).map(this::toSnapshot);
+    }
+
+    private List<ActiveSnapshot> findActive(String kind) {
+        return syncRuns.findByKindAndStatus(kind, "ACTIVE").stream()
+                .map(this::toSnapshot)
+                .toList();
+    }
+
+    private ActiveSnapshot toSnapshot(TimesheetSyncRun run) {
         return new ActiveSnapshot(
                 run.getId(),
                 run.getKind(),
+                run.getCenter(),
                 run.getSyncDate(),
                 run.getRowCount() == null ? 0 : run.getRowCount());
     }
@@ -121,18 +145,23 @@ public class TimesheetReadService {
     /**
      * Shared KPI countries from Monthly.
      *
+     * @param center GBS center
      * @param supervisorPositionId supervisor position
      * @param pl3Code PL3
      * @return countries
      */
     @Transactional(readOnly = true)
-    public List<String> countries(String supervisorPositionId, String pl3Code) {
-        return kpis.findActiveCountries(supervisorPositionId, pl3Code);
+    public List<String> countries(String center, String supervisorPositionId, String pl3Code) {
+        if (center == null || center.isBlank()) {
+            return List.of();
+        }
+        return kpis.findActiveCountries(supervisorPositionId, pl3Code, center.trim());
     }
 
     /**
      * Structural alignment of persisted KPI keys against ACTIVE Monthly.
      *
+     * @param center GBS center
      * @param supervisorPositionId supervisor position
      * @param pl3Code PL3
      * @param keys persisted or frozen keys
@@ -140,16 +169,16 @@ public class TimesheetReadService {
      */
     @Transactional(readOnly = true)
     public TimesheetAlignment align(
-            String supervisorPositionId, String pl3Code, List<TimesheetAlignment.Key> keys) {
-        boolean monthlyPresent = syncRuns.findByKindAndStatus("MONTHLY", "ACTIVE").isPresent();
+            String center, String supervisorPositionId, String pl3Code, List<TimesheetAlignment.Key> keys) {
+        boolean monthlyPresent = findActive("MONTHLY", center).isPresent();
         boolean scopePresent = monthlyPresent
                 && supervisorPositionId != null
                 && pl3Code != null
-                && scopes.existsActiveScope(supervisorPositionId, pl3Code);
-        LocalDate syncDate = findActiveMonthly().map(ActiveSnapshot::syncDate).orElse(null);
+                && scopes.existsActiveScope(supervisorPositionId, pl3Code, center.trim());
+        LocalDate syncDate = findActiveMonthlySyncDate(center, supervisorPositionId, pl3Code);
         Map<TimesheetAlignment.Key, BigDecimal> current = new LinkedHashMap<>();
         if (scopePresent) {
-            for (var row : kpis.findActiveKpis(supervisorPositionId, pl3Code)) {
+            for (var row : kpis.findActiveKpis(supervisorPositionId, pl3Code, center.trim())) {
                 TimesheetAlignment.Key key = new TimesheetAlignment.Key(
                         row.getCarrier(), row.getSite(), row.getCustomerCountry());
                 current.merge(key, row.getHc() == null ? BigDecimal.ZERO : row.getHc(), BigDecimal::add);
@@ -161,6 +190,7 @@ public class TimesheetReadService {
     /**
      * Shared KPI rows from Monthly.
      *
+     * @param center GBS center
      * @param supervisorPositionId supervisor position
      * @param pl3Code PL3
      * @param countries selected countries
@@ -168,11 +198,11 @@ public class TimesheetReadService {
      */
     @Transactional(readOnly = true)
     public List<KpiCandidate> kpis(
-            String supervisorPositionId, String pl3Code, List<String> countries) {
-        if (countries == null || countries.isEmpty()) {
+            String center, String supervisorPositionId, String pl3Code, List<String> countries) {
+        if (center == null || center.isBlank() || countries == null || countries.isEmpty()) {
             return List.of();
         }
-        return kpis.findActiveKpis(supervisorPositionId, pl3Code, countries).stream()
+        return kpis.findActiveKpis(supervisorPositionId, pl3Code, countries, center.trim()).stream()
                 .map(row -> new KpiCandidate(
                         row.getCarrier(), row.getSite(), row.getCustomerCountry(), row.getHc()))
                 .toList();
@@ -182,25 +212,33 @@ public class TimesheetReadService {
      * @param ccgid supervisor
      * @param supervisorPositionId position
      * @param pl3Code PL3
+     * @param center GBS center
      * @return true when Monthly scope is owned
      */
     @Transactional(readOnly = true)
     public boolean supervisorOwnsScope(
-            String ccgid, String supervisorPositionId, String pl3Code) {
-        return scopes.existsActiveForSupervisor(ccgid, supervisorPositionId, pl3Code);
+            String ccgid, String supervisorPositionId, String pl3Code, String center) {
+        if (center == null || center.isBlank()) {
+            return false;
+        }
+        return scopes.existsActiveForSupervisor(ccgid, supervisorPositionId, pl3Code, center.trim());
     }
 
     /**
      * @param ccgid agent
      * @param supervisorPositionId toolkit supervisor position
      * @param pl3Code toolkit PL3
+     * @param center GBS center
      * @return true when the Daily seat reports to this Supervisor and Monthly
      *     scope owns the PL3
      */
     @Transactional(readOnly = true)
     public boolean agentCanUse(
-            String ccgid, String supervisorPositionId, String pl3Code) {
-        return scopes.existsActiveForAgent(ccgid, supervisorPositionId, pl3Code);
+            String ccgid, String supervisorPositionId, String pl3Code, String center) {
+        if (center == null || center.isBlank()) {
+            return false;
+        }
+        return scopes.existsActiveForAgent(ccgid, supervisorPositionId, pl3Code, center.trim());
     }
 
     /**
@@ -519,33 +557,37 @@ public class TimesheetReadService {
     }
 
     /**
-     * ACTIVE Daily header when one exists.
+     * ACTIVE Daily header for a Center when one exists.
      *
+     * @param center GBS center
      * @return daily snapshot, or empty
      */
     @Transactional(readOnly = true)
-    public Optional<ActiveSnapshot> findActiveDaily() {
-        return syncRuns.findByKindAndStatus("DAILY", "ACTIVE")
-                .map(run -> new ActiveSnapshot(
-                        run.getId(),
-                        run.getKind(),
-                        run.getSyncDate(),
-                        run.getRowCount() == null ? 0 : run.getRowCount()));
+    public Optional<ActiveSnapshot> findActiveDaily(String center) {
+        return findActive("DAILY", center);
     }
 
     /**
-     * ACTIVE Monthly header when one exists.
+     * ACTIVE Monthly header for a Center when one exists.
      *
+     * @param center GBS center
      * @return monthly snapshot, or empty
      */
     @Transactional(readOnly = true)
-    public Optional<ActiveSnapshot> findActiveMonthly() {
-        return syncRuns.findByKindAndStatus("MONTHLY", "ACTIVE")
-                .map(run -> new ActiveSnapshot(
-                        run.getId(),
-                        run.getKind(),
-                        run.getSyncDate(),
-                        run.getRowCount() == null ? 0 : run.getRowCount()));
+    public Optional<ActiveSnapshot> findActiveMonthly(String center) {
+        return findActive("MONTHLY", center);
+    }
+
+    private LocalDate findActiveMonthlySyncDate(String center, String supervisorPositionId, String pl3Code) {
+        if (center == null || center.isBlank() || supervisorPositionId == null || pl3Code == null) {
+            return null;
+        }
+        return kpis.findActiveKpis(supervisorPositionId, pl3Code, center.trim()).stream()
+                .map(TimesheetKpi::getSyncRunId)
+                .findFirst()
+                .flatMap(syncRuns::findById)
+                .map(TimesheetSyncRun::getSyncDate)
+                .orElse(null);
     }
 
     /**
@@ -592,10 +634,10 @@ public class TimesheetReadService {
         return total == null ? BigDecimal.ZERO : total;
     }
 
-    public record ActiveSnapshots(ActiveSnapshot org, ActiveSnapshot kpi) {
+    public record ActiveSnapshots(List<ActiveSnapshot> org, List<ActiveSnapshot> kpi) {
     }
 
-    public record ActiveSnapshot(UUID id, String kind, LocalDate syncDate, int rowCount) {
+    public record ActiveSnapshot(UUID id, String kind, String center, LocalDate syncDate, int rowCount) {
     }
 
     public record TeamAgent(String ccgid, String name, String email) {
