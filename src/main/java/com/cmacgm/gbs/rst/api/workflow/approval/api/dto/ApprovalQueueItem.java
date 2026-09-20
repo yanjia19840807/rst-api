@@ -2,6 +2,7 @@ package com.cmacgm.gbs.rst.api.workflow.approval.api.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -15,8 +16,14 @@ public record ApprovalQueueItem(
         String exerciseCode,
         String center,
         String domain,
+        String pl1,
+        String pl2,
         String pl3Name,
         String toolkitName,
+        String sizingMonth,
+        List<String> carriers,
+        List<String> sites,
+        List<String> customerCountries,
         String supervisor,
         BigDecimal deliveryHc,
         BigDecimal rightSizingHc,

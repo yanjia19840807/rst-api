@@ -6,6 +6,7 @@ import java.math.BigDecimal;
  * One benchmarking row: a frozen Shared KPI line on an APPROVED Exercise.
  */
 public record BenchmarkRow(
+        String exerciseNo,
         String gbs,
         String carrier,
         String site,

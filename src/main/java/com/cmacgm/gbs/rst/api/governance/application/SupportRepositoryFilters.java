@@ -50,6 +50,15 @@ public final class SupportRepositoryFilters {
         if (hasText(query.toolkitName()) && !query.toolkitName().equals(row.toolkit())) {
             return false;
         }
+        if (hasText(query.carrier()) && !containsValue(row.carriers(), query.carrier())) {
+            return false;
+        }
+        if (hasText(query.site()) && !containsValue(row.sites(), query.site())) {
+            return false;
+        }
+        if (hasText(query.customerCountry()) && !containsValue(row.customerCountries(), query.customerCountry())) {
+            return false;
+        }
         if (hasText(query.sizingMonth()) && !query.sizingMonth().trim().equals(row.sizingMonth())) {
             return false;
         }
@@ -80,6 +89,39 @@ public final class SupportRepositoryFilters {
                 .distinct()
                 .sorted()
                 .toList();
+    }
+
+    /**
+     * Distinct values from Exercise-level 1:N scope lists, for dropdowns.
+     *
+     * @param rows source rows (unfiltered)
+     * @param getter list accessor
+     * @return sorted distinct names
+     */
+    public static List<String> distinctValues(
+            List<SupportRepositoryRow> rows, Function<SupportRepositoryRow, List<String>> getter) {
+        return rows.stream()
+                .map(getter)
+                .filter(values -> values != null && !values.isEmpty())
+                .flatMap(List::stream)
+                .filter(name -> name != null && !name.isBlank())
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    /**
+     * Splits each value on commas, trims, and keeps first-seen literals.
+     *
+     * @param values raw country names
+     * @return distinct tokens in first-seen order
+     */
+    public static List<String> distinctCommaTokens(List<String> values) {
+        return CommaTokens.distinct(values);
+    }
+
+    private static boolean containsValue(List<String> values, String selected) {
+        return values != null && values.contains(selected);
     }
 
     private static boolean hasText(String value) {

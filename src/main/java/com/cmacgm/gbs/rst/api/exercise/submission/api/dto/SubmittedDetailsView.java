@@ -27,5 +27,6 @@ public record SubmittedDetailsView(
         List<ScopeView> scopes,
         List<StepView> steps,
         List<ActionView> actions,
-        ApprovalWorkspaceView workspace) {
+        ApprovalWorkspaceView workspace,
+        List<ValidationFinding> findings) {
 }

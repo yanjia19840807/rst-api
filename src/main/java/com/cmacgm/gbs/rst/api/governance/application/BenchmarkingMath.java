@@ -3,6 +3,7 @@ package com.cmacgm.gbs.rst.api.governance.application;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -12,7 +13,7 @@ import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkCenterComparison;
 import com.cmacgm.gbs.rst.api.governance.api.dto.BenchmarkRow;
 
 /**
- * Delivery-HC weighted cards and Center comparison; table rates are shared onto KPI lines.
+ * Cards and Center charts roll up the same filtered KPI-line shares as the table.
  */
 public final class BenchmarkingMath {
 
@@ -24,10 +25,10 @@ public final class BenchmarkingMath {
     /**
      * Builds header cards from all filtered Shared KPI rows (not the current page).
      * Cycle time is Delivery-HC weighted; daily capacity follows that cycle time
-     * one-to-one; Support ratio is Σ Support / Σ Delivery HC.
+     * one-to-one; Support ratio prefers the row ratio, else Σ Support / Σ Delivery HC.
      *
      * @param selectedPl3 display name of the required PL3 filter
-     * @param items filtered Shared KPI rows with Exercise-level rates
+     * @param items filtered rows after {@link #collapseShares(List)} so they match the table
      * @return card values; nulls when there is nothing to compare
      */
     public static Summary summarize(String selectedPl3, List<BenchmarkRow> items) {
@@ -39,7 +40,34 @@ public final class BenchmarkingMath {
                 blank(selectedPl3),
                 capacityFromCycleTime(weightedWorkSecondsPerDay(items), cycleTime),
                 cycleTime,
-                weightedSupportRatioPct(items));
+                cardSupportRatioPct(items));
+    }
+
+    /**
+     * Adds KPI-line shares back to one row per Exercise × Center × PL3 so cards and
+     * charts match the sum of the filtered table rows. Unfiltered shares reconstruct
+     * the Exercise-level rates; a Country / Carrier / Site slice keeps that slice.
+     *
+     * @param allocated filtered rows after {@link #shareRates(BenchmarkRow, BigDecimal)}
+     * @return one row per Exercise × Center × PL3
+     */
+    public static List<BenchmarkRow> collapseShares(List<BenchmarkRow> allocated) {
+        if (allocated == null || allocated.isEmpty()) {
+            return List.of();
+        }
+        Map<String, List<BenchmarkRow>> groups = new LinkedHashMap<>();
+        for (BenchmarkRow row : allocated) {
+            if (row == null) {
+                continue;
+            }
+            String key = blank(row.exerciseNo()) + '\0' + blank(row.gbs()) + '\0' + blank(row.pl3Code());
+            groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(row);
+        }
+        List<BenchmarkRow> collapsed = new ArrayList<>();
+        for (List<BenchmarkRow> group : groups.values()) {
+            collapsed.add(sumShares(group));
+        }
+        return List.copyOf(collapsed);
     }
 
     /**
@@ -71,7 +99,7 @@ public final class BenchmarkingMath {
      * Cycle time / daily capacity / Support ratio are Delivery-HC weighted;
      * Capacity Creation is summed.
      *
-     * @param items filtered Shared KPI rows with Exercise-level rates
+     * @param items filtered rows after {@link #collapseShares(List)}
      * @return centers sorted by name
      */
     public static List<BenchmarkCenterComparison> compareByCenter(List<BenchmarkRow> items) {
@@ -94,7 +122,7 @@ public final class BenchmarkingMath {
                     entry.getKey(),
                     cycleTime,
                     capacityFromCycleTime(weightedWorkSecondsPerDay(group), cycleTime),
-                    weightedSupportRatioPct(group),
+                    cardSupportRatioPct(group),
                     sumCapacity(group)));
         }
         return List.copyOf(comparisons);
@@ -110,6 +138,65 @@ public final class BenchmarkingMath {
             }
         }
         return any ? sum.setScale(2, RoundingMode.HALF_UP) : null;
+    }
+
+    private static BenchmarkRow sumShares(List<BenchmarkRow> group) {
+        BenchmarkRow first = group.get(0);
+        return new BenchmarkRow(
+                first.exerciseNo(),
+                first.gbs(),
+                first.carrier(),
+                first.site(),
+                first.sharedKpiLine(),
+                first.domain(),
+                first.pl1(),
+                first.pl2(),
+                first.pl3(),
+                first.pl3Code(),
+                sumNullable(group, BenchmarkRow::cycleTimeSeconds),
+                sumNullable(group, BenchmarkRow::dailyCapacityPerAgent),
+                sumNullable(group, BenchmarkRow::productionSupportRatioPct),
+                sumNullable(group, BenchmarkRow::capacityCreation),
+                sumNullable(group, BenchmarkRow::deliveryHc),
+                sumNullable(group, BenchmarkRow::productionSupport),
+                first.sizingMonth(),
+                first.validatedDate());
+    }
+
+    private static BigDecimal sumNullable(
+            List<BenchmarkRow> rows, Function<BenchmarkRow, BigDecimal> getter) {
+        BigDecimal sum = BigDecimal.ZERO;
+        boolean any = false;
+        for (BenchmarkRow row : rows) {
+            BigDecimal value = getter.apply(row);
+            if (value != null) {
+                sum = sum.add(value);
+                any = true;
+            }
+        }
+        return any ? sum : null;
+    }
+
+    static BigDecimal cardSupportRatioPct(List<BenchmarkRow> items) {
+        if (hasRatioOnWeightedRows(items)) {
+            return weightedAverage(items, BenchmarkRow::productionSupportRatioPct, 1);
+        }
+        return weightedSupportRatioPct(items);
+    }
+
+    private static boolean hasRatioOnWeightedRows(List<BenchmarkRow> items) {
+        boolean any = false;
+        for (BenchmarkRow row : items) {
+            BigDecimal hc = row.deliveryHc();
+            if (hc == null || hc.signum() <= 0) {
+                continue;
+            }
+            if (row.productionSupportRatioPct() == null) {
+                return false;
+            }
+            any = true;
+        }
+        return any;
     }
 
     static BigDecimal weightedSupportRatioPct(List<BenchmarkRow> items) {
@@ -186,6 +273,7 @@ public final class BenchmarkingMath {
             BigDecimal dailyCapacityPerAgent,
             BigDecimal productionSupportRatioPct) {
         return new BenchmarkRow(
+                row.exerciseNo(),
                 row.gbs(),
                 row.carrier(),
                 row.site(),

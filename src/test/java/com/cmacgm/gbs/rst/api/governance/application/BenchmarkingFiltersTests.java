@@ -19,11 +19,11 @@ class BenchmarkingFiltersTests {
     @Test
     void requiresPl3Code() {
         BenchmarkRow row = row("PL3-BANK", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
-        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, null, null, null, null)))
+        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, null, null, null, null, null, null, null, null, null)))
                 .isFalse();
-        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, "PL3-BANK", null, null, null)))
+        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, null, null, "PL3-BANK", null, null, null, null, null, null)))
                 .isTrue();
-        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, "PL3-OTHER", null, null, null)))
+        assertThat(BenchmarkingFilters.matches(row, query(null, null, null, null, null, "PL3-OTHER", null, null, null, null, null, null)))
                 .isFalse();
     }
 
@@ -31,41 +31,98 @@ class BenchmarkingFiltersTests {
     void exactFiltersMustMatch() {
         BenchmarkRow row = row("PL3-BANK", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
         assertThat(BenchmarkingFilters.matches(
-                row, query("FINANCE", "R2R", "Bank Rec", "PL3-BANK", null, null, null)))
+                row, query(null, null, "FINANCE", "R2R", "Bank Rec", "PL3-BANK", null, null, null, null, null, null)))
                 .isTrue();
         assertThat(BenchmarkingFilters.matches(
-                row, query("OPS", null, null, "PL3-BANK", null, null, null)))
+                row, query(null, null, "OPS", null, null, "PL3-BANK", null, null, null, null, null, null)))
                 .isFalse();
         assertThat(BenchmarkingFilters.matches(
-                row, query(null, "P2P", null, "PL3-BANK", null, null, null)))
+                row, query(null, null, null, "P2P", null, "PL3-BANK", null, null, null, null, null, null)))
                 .isFalse();
         assertThat(BenchmarkingFilters.matches(
-                row, query(null, null, "AP", "PL3-BANK", null, null, null)))
+                row, query(null, null, null, null, "AP", "PL3-BANK", null, null, null, null, null, null)))
                 .isFalse();
         assertThat(BenchmarkingFilters.matches(
-                row, query(null, null, null, "PL3-BANK", "2026-05", null, null)))
+                row, query(null, "GBS INDIA", null, null, null, "PL3-BANK", null, null, null, null, null, null)))
                 .isFalse();
         assertThat(BenchmarkingFilters.matches(
-                row, query(null, null, null, "PL3-BANK", "2026-06", null, null)))
+                row, query(null, null, null, null, null, "PL3-BANK", "MSC", null, null, null, null, null)))
+                .isFalse();
+        assertThat(BenchmarkingFilters.matches(
+                row, query(null, null, null, null, null, "PL3-BANK", null, "OTHER", null, null, null, null)))
+                .isFalse();
+        assertThat(BenchmarkingFilters.matches(
+                row, query(null, null, null, null, null, "PL3-BANK", null, null, "FRANCE", null, null, null)))
+                .isFalse();
+        assertThat(BenchmarkingFilters.matches(
+                row, query(null, null, null, null, null, "PL3-BANK", null, null, null, "2026-05", null, null)))
+                .isFalse();
+        assertThat(BenchmarkingFilters.matches(
+                row, query(null, null, null, null, null, "PL3-BANK", null, null, null, "2026-06", null, null)))
                 .isTrue();
+    }
+
+    @Test
+    void customerCountryFilterMatchesCommaTokens() {
+        BenchmarkRow row = new BenchmarkRow(
+                "EX-1",
+                "GBS LEBANON",
+                "CMA CGM",
+                "SHA",
+                "HONG KONG SAR, CHINA",
+                "FINANCE",
+                "R2R",
+                "Bank Rec",
+                "Bank Rec",
+                "PL3-BANK",
+                new BigDecimal("120"),
+                new BigDecimal("180"),
+                new BigDecimal("13.0"),
+                BigDecimal.ZERO,
+                BigDecimal.ONE,
+                BigDecimal.ZERO,
+                "2026-06",
+                "2026-03-10");
+        assertThat(BenchmarkingFilters.matches(
+                row, query(null, null, null, null, null, "PL3-BANK", null, null, "CHINA", null, null, null)))
+                .isTrue();
+        assertThat(BenchmarkingFilters.matches(
+                row, query(null, null, null, null, null, "PL3-BANK", null, null, "HONG KONG SAR", null, null, null)))
+                .isTrue();
+        assertThat(BenchmarkingFilters.matches(
+                row, query(null, null, null, null, null, "PL3-BANK", null, null, "FRANCE", null, null, null)))
+                .isFalse();
+    }
+
+    @Test
+    void exerciseCodeIsCaseInsensitiveContains() {
+        BenchmarkRow row = row("PL3-BANK", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
+        assertThat(BenchmarkingFilters.matches(
+                row, query("ex-1", null, null, null, null, "PL3-BANK", null, null, null, null, null, null)))
+                .isTrue();
+        assertThat(BenchmarkingFilters.matches(
+                row, query("EX-9", null, null, null, null, "PL3-BANK", null, null, null, null, null, null)))
+                .isFalse();
     }
 
     @Test
     void validatedDateIsInclusive() {
         BenchmarkRow row = row("PL3-BANK", "FINANCE", "R2R", "Bank Rec", "2026-03-10");
         assertThat(BenchmarkingFilters.matches(
-                row, query(null, null, null, "PL3-BANK", null,
+                row, query(null, null, null, null, null, "PL3-BANK", null, null, null, null,
                         LocalDate.parse("2026-03-10"), LocalDate.parse("2026-03-10"))))
                 .isTrue();
         assertThat(BenchmarkingFilters.matches(
-                row, query(null, null, null, "PL3-BANK", null, LocalDate.parse("2026-03-11"), null)))
+                row, query(null, null, null, null, null, "PL3-BANK", null, null, null, null,
+                        LocalDate.parse("2026-03-11"), null)))
                 .isFalse();
         assertThat(BenchmarkingFilters.matches(
-                row, query(null, null, null, "PL3-BANK", null, null, LocalDate.parse("2026-03-09"))))
+                row, query(null, null, null, null, null, "PL3-BANK", null, null, null, null,
+                        null, LocalDate.parse("2026-03-09"))))
                 .isFalse();
         BenchmarkRow timed = row("PL3-BANK", "FINANCE", "R2R", "Bank Rec", "2026-03-10T16:45:00");
         assertThat(BenchmarkingFilters.matches(
-                timed, query(null, null, null, "PL3-BANK", null,
+                timed, query(null, null, null, null, null, "PL3-BANK", null, null, null, null,
                         LocalDate.parse("2026-03-10"), LocalDate.parse("2026-03-10"))))
                 .isTrue();
     }
@@ -78,26 +135,37 @@ class BenchmarkingFiltersTests {
                 LocalDate.of(2026, 9, 1), Instant.parse("2026-09-10T02:00:00Z"), "PL3-BANK");
 
         assertThat(BenchmarkingFilters.matchesExercise(
-                june, query("FINANCE", "R2R", "Bank Rec", "PL3-BANK", null, null, null)))
+                june, query(null, null, "FINANCE", "R2R", "Bank Rec", "PL3-BANK", null, null, null, null, null, null)))
                 .isTrue();
         assertThat(BenchmarkingFilters.matchesExercise(
-                september, query(null, null, null, "PL3-BANK", "2026-06", null, null)))
+                september, query(null, null, null, null, null, "PL3-BANK", null, null, null, "2026-06", null, null)))
                 .isFalse();
         assertThat(BenchmarkingFilters.matchesExercise(
-                june, query(null, null, null, "PL3-BANK", "2026-06", null, null)))
+                june, query(null, null, null, null, null, "PL3-BANK", null, null, null, "2026-06", null, null)))
                 .isTrue();
         assertThat(BenchmarkingFilters.matchesExercise(
-                september, query(null, null, null, "PL3-BANK", null, null, LocalDate.parse("2026-06-30"))))
+                september, query(null, null, null, null, null, "PL3-BANK", null, null, null, null, null,
+                        LocalDate.parse("2026-06-30"))))
                 .isFalse();
         assertThat(BenchmarkingFilters.matchesExercise(
-                june, query(null, null, null, "PL3-BANK", null, null, LocalDate.parse("2026-06-30"))))
+                june, query(null, null, null, null, null, "PL3-BANK", null, null, null, null, null,
+                        LocalDate.parse("2026-06-30"))))
                 .isTrue();
         assertThat(BenchmarkingFilters.matchesExercise(
-                june, query(null, null, null, "PL3-OTHER", null, null, null)))
+                june, query(null, null, null, null, null, "PL3-OTHER", null, null, null, null, null, null)))
                 .isFalse();
         assertThat(BenchmarkingFilters.matchesExercise(
-                june, query(null, null, null, null, null, null, null)))
+                june, query(null, null, null, null, null, null, null, null, null, null, null, null)))
                 .isFalse();
+        assertThat(BenchmarkingFilters.matchesExercise(
+                june, query("EX-PL3", null, null, null, null, "PL3-BANK", null, null, null, null, null, null)))
+                .isTrue();
+        assertThat(BenchmarkingFilters.matchesExercise(
+                june, query(null, "GBS INDIA", null, null, null, "PL3-BANK", null, null, null, null, null, null)))
+                .isFalse();
+        assertThat(BenchmarkingFilters.matchesExercise(
+                june, query(null, null, null, null, null, "PL3-BANK", null, null, "China", null, null, null)))
+                .isTrue();
     }
 
     @Test
@@ -113,15 +181,31 @@ class BenchmarkingFiltersTests {
     }
 
     private static BenchmarkingQuery query(
+            String exerciseCode,
+            String center,
             String domain,
             String pl1,
             String pl2,
             String pl3Code,
+            String carrier,
+            String site,
+            String customerCountry,
             String sizingMonth,
             LocalDate validatedFrom,
             LocalDate validatedTo) {
         return new BenchmarkingQuery(
-                domain, pl1, pl2, pl3Code, sizingMonth, validatedFrom, validatedTo);
+                exerciseCode,
+                center,
+                domain,
+                pl1,
+                pl2,
+                pl3Code,
+                carrier,
+                site,
+                customerCountry,
+                sizingMonth,
+                validatedFrom,
+                validatedTo);
     }
 
     private static BenchmarkRow row(
@@ -131,6 +215,7 @@ class BenchmarkingFiltersTests {
             String pl2,
             String validatedDate) {
         return new BenchmarkRow(
+                "EX-1",
                 "GBS LEBANON",
                 "CMA CGM",
                 "SHA",

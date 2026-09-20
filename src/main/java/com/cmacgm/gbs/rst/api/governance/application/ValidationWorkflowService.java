@@ -7,11 +7,13 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.time.CenterDates;
@@ -30,6 +32,7 @@ import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
+import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationPersonOption;
 import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationWorkflowQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationWorkflowRow;
 import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationWorkflowView;
@@ -139,7 +142,12 @@ public class ValidationWorkflowService {
                 ValidationWorkflowFilters.distinct(source, ValidationWorkflowRow::gbs),
                 ValidationWorkflowFilters.distinct(source, ValidationWorkflowRow::domain),
                 ValidationWorkflowFilters.distinct(source, ValidationWorkflowRow::pl3),
-                ValidationWorkflowFilters.distinct(source, ValidationWorkflowRow::toolkit));
+                ValidationWorkflowFilters.distinct(source, ValidationWorkflowRow::toolkit),
+                ValidationWorkflowFilters.distinctValues(source, ValidationWorkflowRow::carriers),
+                ValidationWorkflowFilters.distinctValues(source, ValidationWorkflowRow::sites),
+                ValidationWorkflowFilters.distinctValues(source, ValidationWorkflowRow::customerCountries),
+                ValidationWorkflowFilters.distinct(source, ValidationWorkflowRow::currentStep),
+                ValidationWorkflowFilters.distinctOwners(source));
     }
 
     /**
@@ -213,6 +221,10 @@ public class ValidationWorkflowService {
         Integer agingDays = agingFrom == null || center == null || center.isBlank()
                 ? null
                 : WorkflowAging.daysBetween(agingFrom, clock.instant(), center);
+        List<String> carriers = distinctScope(exercise.getSharedKpiLines(), ExerciseSharedKpiLine::getCarrier);
+        List<String> sites = distinctScope(exercise.getSharedKpiLines(), ExerciseSharedKpiLine::getSite);
+        List<String> customerCountries = CommaTokens.distinct(
+                distinctScope(exercise.getSharedKpiLines(), ExerciseSharedKpiLine::getCustomerCountry));
         return new ValidationWorkflowRow(
                 blankToEmpty(exercise.getExerciseCode()),
                 exercise.getId().toString(),
@@ -222,8 +234,12 @@ public class ValidationWorkflowService {
                 snapshot == null ? "" : blankToEmpty(snapshot.getPl2()),
                 snapshot == null ? "" : blankToEmpty(snapshot.getPl3Name()),
                 snapshot == null ? "" : blankToEmpty(snapshot.getToolkitName()),
+                carriers,
+                sites,
+                customerCountries,
                 review == null ? "" : blankToEmpty(reviewStageLabel(review.requiredRole())),
                 review == null ? "" : blankToEmpty(review.currentOwner()),
+                review == null ? "" : blankToEmpty(review.currentOwnerCcgid()),
                 agingDays,
                 capacity,
                 ValidationWorkflowMath.capacityPct(capacity, actualHc),
@@ -250,13 +266,14 @@ public class ValidationWorkflowService {
                     ? ready.getNode().roleCode()
                     : (workflow == null ? null : roleForStep(workflow.getCurrentStep()));
             String positionId = pending == null ? null : pending.getPositionId();
+            String ownerCcgid = pending == null ? null : pending.getCcgid();
             String owner = ready == null || pending == null
                     ? null
                     : firstNonBlank(
                             workflowRouter.occupantName(ready.getNode().roleCode(), positionId),
-                            displayName(names, pending.getCcgid()));
+                            displayName(names, ownerCcgid));
             Instant agingFrom = WorkflowAging.currentStepStartedAt(workflow, exercise.getSubmittedAt());
-            result.put(exercise.getId(), new ReviewState(role, owner, agingFrom));
+            result.put(exercise.getId(), new ReviewState(role, owner, ownerCcgid, agingFrom));
         }
         return result;
     }
@@ -339,8 +356,32 @@ public class ValidationWorkflowService {
         return result;
     }
 
+    private static List<String> distinctScope(
+            List<ExerciseSharedKpiLine> lines, Function<ExerciseSharedKpiLine, String> getter) {
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+        for (ExerciseSharedKpiLine line : lines) {
+            String value = getter.apply(line);
+            if (value != null && !value.isBlank()) {
+                values.add(value);
+            }
+        }
+        return List.copyOf(values);
+    }
+
     private static ValidationWorkflowView emptyView(int page, int pageSize) {
-        return pagedView(List.of(), page, pageSize, List.of(), List.of(), List.of(), List.of());
+        return pagedView(
+                List.of(),
+                page,
+                pageSize,
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of());
     }
 
     private static ValidationWorkflowView pagedView(
@@ -350,7 +391,12 @@ public class ValidationWorkflowService {
             List<String> centers,
             List<String> domains,
             List<String> pl3Names,
-            List<String> toolkitNames) {
+            List<String> toolkitNames,
+            List<String> carriers,
+            List<String> sites,
+            List<String> customerCountries,
+            List<String> currentSteps,
+            List<ValidationPersonOption> currentOwners) {
         PageResponse<ValidationWorkflowRow> paged = PageResponse.ofList(items, page, pageSize);
         return new ValidationWorkflowView(
                 paged.items(),
@@ -361,7 +407,12 @@ public class ValidationWorkflowService {
                 centers,
                 domains,
                 pl3Names,
-                toolkitNames);
+                toolkitNames,
+                carriers,
+                sites,
+                customerCountries,
+                currentSteps,
+                currentOwners);
     }
 
     private static BigDecimal deliveryHc(RstExercise exercise) {
@@ -424,6 +475,7 @@ public class ValidationWorkflowService {
         return value == null ? "" : value;
     }
 
-    private record ReviewState(String requiredRole, String currentOwner, Instant agingFrom) {
+    private record ReviewState(
+            String requiredRole, String currentOwner, String currentOwnerCcgid, Instant agingFrom) {
     }
 }

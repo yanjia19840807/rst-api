@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 
 import com.cmacgm.gbs.rst.api.common.time.CenterZones;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -140,22 +141,33 @@ public class TmsSessionQueryService {
             LocalDate dateFrom,
             LocalDate dateTo,
             Boolean enabled,
+            UUID toolkitId,
+            String center,
+            String domain,
+            String pl3Code,
+            String carrier,
+            String site,
+            String customerCountry,
             int page,
             int pageSize,
             String dateCenter) {
         return pageSessions(
-                new Filter(
+                agentFilter(
                         agentCcgid,
-                        null,
-                        null,
-                        null,
-                        parseStatus(status),
+                        status,
                         sessionNo,
                         reference,
                         query,
                         dateFrom,
                         dateTo,
                         enabled,
+                        toolkitId,
+                        center,
+                        domain,
+                        pl3Code,
+                        carrier,
+                        site,
+                        customerCountry,
                         dateCenter),
                 page,
                 pageSize);
@@ -177,6 +189,11 @@ public class TmsSessionQueryService {
             LocalDate dateFrom,
             LocalDate dateTo,
             Boolean enabled,
+            String center,
+            String domain,
+            String carrier,
+            String site,
+            String customerCountry,
             int page,
             int pageSize,
             String dateCenter) {
@@ -192,6 +209,11 @@ public class TmsSessionQueryService {
                 dateFrom,
                 dateTo,
                 enabled,
+                center,
+                domain,
+                carrier,
+                site,
+                customerCountry,
                 dateCenter), page, pageSize);
     }
 
@@ -208,19 +230,30 @@ public class TmsSessionQueryService {
             LocalDate dateFrom,
             LocalDate dateTo,
             Boolean enabled,
+            UUID toolkitId,
+            String center,
+            String domain,
+            String pl3Code,
+            String carrier,
+            String site,
+            String customerCountry,
             String dateCenter) {
-        return excel.export(listSessions(new Filter(
+        return excel.export(listSessions(agentFilter(
                 agentCcgid,
-                null,
-                null,
-                null,
-                parseStatus(status),
+                status,
                 sessionNo,
                 reference,
                 query,
                 dateFrom,
                 dateTo,
                 enabled,
+                toolkitId,
+                center,
+                domain,
+                pl3Code,
+                carrier,
+                site,
+                customerCountry,
                 dateCenter)));
     }
 
@@ -240,6 +273,11 @@ public class TmsSessionQueryService {
             LocalDate dateFrom,
             LocalDate dateTo,
             Boolean enabled,
+            String center,
+            String domain,
+            String carrier,
+            String site,
+            String customerCountry,
             String dateCenter) {
         return excel.export(listSessions(teamFilter(
                 ccgid,
@@ -253,15 +291,29 @@ public class TmsSessionQueryService {
                 dateFrom,
                 dateTo,
                 enabled,
+                center,
+                domain,
+                carrier,
+                site,
+                customerCountry,
                 dateCenter)));
     }
 
     /**
-     * Lists team agents under the current principal for TMS filters.
+     * Lists agents who have completed sessions in the managed Toolkit scope.
      */
     @Transactional(readOnly = true)
     public List<TeamAgent> teamAgents(String ccgid) {
-        return timesheet.teamAgents(ccgid);
+        return sessionAgentCcgids(ccgid).stream()
+                .map(agentCcgid -> {
+                    String name = timesheet.displayNameByCcgid(agentCcgid);
+                    return new TeamAgent(
+                            agentCcgid,
+                            name == null || name.isBlank() ? agentCcgid : name,
+                            null);
+                })
+                .sorted((left, right) -> left.name().compareToIgnoreCase(right.name()))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -284,6 +336,57 @@ public class TmsSessionQueryService {
                 sessionRepository.countByAgentCcgidAndStatus(agentCcgid, TmsSessionStatus.PAUSED));
     }
 
+    private Filter agentFilter(
+            String agentCcgid,
+            String status,
+            String sessionNo,
+            String reference,
+            String query,
+            LocalDate dateFrom,
+            LocalDate dateTo,
+            Boolean enabled,
+            UUID toolkitId,
+            String center,
+            String domain,
+            String pl3Code,
+            String carrier,
+            String site,
+            String customerCountry,
+            String dateCenter) {
+        Collection<UUID> toolkitIds = null;
+        if (TmsToolkitScope.hasScopeFilter(
+                toolkitId, center, domain, pl3Code, carrier, site, customerCountry)) {
+            toolkitIds = TmsToolkitScope.matchingIds(
+                    toolkits.listAvailable(agentCcgid),
+                    null,
+                    toolkitId,
+                    center,
+                    domain,
+                    pl3Code,
+                    carrier,
+                    site,
+                    customerCountry);
+        }
+        return new Filter(
+                agentCcgid,
+                toolkitIds,
+                toolkitId,
+                pl3Code,
+                parseStatus(status),
+                sessionNo,
+                reference,
+                query,
+                dateFrom,
+                dateTo,
+                enabled,
+                dateCenter,
+                center,
+                domain,
+                carrier,
+                site,
+                customerCountry);
+    }
+
     private Filter teamFilter(
             String ccgid,
             String agentCcgid,
@@ -296,8 +399,16 @@ public class TmsSessionQueryService {
             LocalDate dateFrom,
             LocalDate dateTo,
             Boolean enabled,
+            String center,
+            String domain,
+            String carrier,
+            String site,
+            String customerCountry,
             String dateCenter) {
-        Set<UUID> scopedToolkitIds = scopedToolkitIds(ccgid);
+        List<ToolkitResponse> managed = toolkits.listManaged(ccgid);
+        Set<UUID> scopedToolkitIds = managed.stream()
+                .map(ToolkitResponse::id)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
         if (toolkitId != null && !scopedToolkitIds.contains(toolkitId)) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
@@ -308,20 +419,35 @@ public class TmsSessionQueryService {
         String filterAgentCcgid = null;
         if (agentCcgid != null && !agentCcgid.isBlank()) {
             String trimmed = agentCcgid.trim();
-            boolean onTeam = timesheet.teamAgents(ccgid).stream()
-                    .anyMatch(agent -> agent.ccgid().equalsIgnoreCase(trimmed));
-            if (!onTeam) {
+            boolean inScope = sessionAgentCcgids(ccgid).stream()
+                    .anyMatch(agent -> agent.equalsIgnoreCase(trimmed));
+            if (!inScope) {
                 throw new ApiException(
                         HttpStatus.FORBIDDEN,
                         "agent-out-of-scope",
-                        "The Agent is outside the current Timesheet team.");
+                        "The Agent is outside the current TMS session scope.");
             }
             filterAgentCcgid = trimmed;
         }
 
+        Collection<UUID> toolkitIds = scopedToolkitIds;
+        if (TmsToolkitScope.hasScopeFilter(
+                toolkitId, center, domain, pl3Code, carrier, site, customerCountry)) {
+            toolkitIds = TmsToolkitScope.matchingIds(
+                    managed,
+                    scopedToolkitIds,
+                    toolkitId,
+                    center,
+                    domain,
+                    pl3Code,
+                    carrier,
+                    site,
+                    customerCountry);
+        }
+
         return new Filter(
                 filterAgentCcgid,
-                scopedToolkitIds,
+                toolkitIds,
                 toolkitId,
                 pl3Code,
                 parseStatus(status),
@@ -331,7 +457,12 @@ public class TmsSessionQueryService {
                 dateFrom,
                 dateTo,
                 enabled,
-                dateCenter);
+                dateCenter,
+                center,
+                domain,
+                carrier,
+                site,
+                customerCountry);
     }
 
     private PageResponse<TmsSessionResponse> pageSessions(Filter filter, int page, int pageSize) {
@@ -384,6 +515,15 @@ public class TmsSessionQueryService {
         return toolkits.listManaged(ccgid).stream()
                 .map(ToolkitResponse::id)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private Set<String> sessionAgentCcgids(String ccgid) {
+        Set<UUID> toolkitIds = scopedToolkitIds(ccgid);
+        if (toolkitIds.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(sessionRepository.findDistinctAgentCcgids(
+                toolkitIds, TmsSessionStatus.COMPLETED));
     }
 
     private static PageResponse<TmsSessionResponse> emptyPage(int page, int pageSize) {

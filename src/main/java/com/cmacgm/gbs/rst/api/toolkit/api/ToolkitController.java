@@ -54,9 +54,10 @@ public class ToolkitController {
      * @param principal authenticated manager
      * @param name optional toolkit name contains
      * @param pl3Name optional exact PL3 name
+     * @param pl3Code optional exact PL3 code
      * @param page 1-based page
      * @param pageSize page size
-     * @return one page of toolkits and unfiltered PL3 options
+     * @return one page of toolkits and unfiltered scope options
      */
     @GetMapping("/managed")
     @PreAuthorize("hasRole('SUPERVISOR')")
@@ -64,10 +65,28 @@ public class ToolkitController {
             @AuthenticationPrincipal RstPrincipal principal,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String pl3Name,
+            @RequestParam(required = false) String pl3Code,
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String domain,
+            @RequestParam(required = false) String carrier,
+            @RequestParam(required = false) String site,
+            @RequestParam(required = false) String customerCountry,
             @RequestParam(required = false) Boolean enabled,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        return toolkits.listManaged(principal.ccgid(), name, pl3Name, enabled, page, pageSize);
+        return toolkits.listManaged(
+                principal.ccgid(),
+                name,
+                pl3Name,
+                pl3Code,
+                center,
+                domain,
+                carrier,
+                site,
+                customerCountry,
+                enabled,
+                page,
+                pageSize);
     }
 
     @GetMapping("/{id}/export")

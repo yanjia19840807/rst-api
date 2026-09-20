@@ -5,7 +5,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.function.Function;
 
 import com.cmacgm.gbs.rst.api.common.time.CenterDates;
 import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
@@ -39,6 +41,16 @@ public final class BenchmarkingFilters {
         if (!query.pl3Code().equals(row.pl3Code())) {
             return false;
         }
+        if (hasText(query.exerciseCode())) {
+            String code = row.exerciseNo() == null ? "" : row.exerciseNo();
+            if (!code.toLowerCase(Locale.ROOT)
+                    .contains(query.exerciseCode().trim().toLowerCase(Locale.ROOT))) {
+                return false;
+            }
+        }
+        if (hasText(query.center()) && !query.center().equals(row.gbs())) {
+            return false;
+        }
         if (hasText(query.domain()) && !query.domain().equals(row.domain())) {
             return false;
         }
@@ -46,6 +58,15 @@ public final class BenchmarkingFilters {
             return false;
         }
         if (hasText(query.pl2()) && !query.pl2().equals(row.pl2())) {
+            return false;
+        }
+        if (hasText(query.carrier()) && !query.carrier().equals(row.carrier())) {
+            return false;
+        }
+        if (hasText(query.site()) && !query.site().equals(row.site())) {
+            return false;
+        }
+        if (hasText(query.customerCountry()) && !CommaTokens.contains(row.sharedKpiLine(), query.customerCountry())) {
             return false;
         }
         if (hasText(query.sizingMonth()) && !query.sizingMonth().trim().equals(row.sizingMonth())) {
@@ -77,6 +98,16 @@ public final class BenchmarkingFilters {
         }
         ExerciseToolkitSnapshot snapshot = exercise.getToolkitSnapshot();
         if (snapshot == null) {
+            return false;
+        }
+        if (hasText(query.exerciseCode())) {
+            String code = exercise.getExerciseCode() == null ? "" : exercise.getExerciseCode();
+            if (!code.toLowerCase(Locale.ROOT)
+                    .contains(query.exerciseCode().trim().toLowerCase(Locale.ROOT))) {
+                return false;
+            }
+        }
+        if (hasText(query.center()) && !query.center().equals(snapshot.getCenter())) {
             return false;
         }
         String sizingMonth = MonthKeys.formatYearMonth(exercise.getSizingMonth());
@@ -117,6 +148,16 @@ public final class BenchmarkingFilters {
         if (hasText(query.pl2()) && !query.pl2().equals(line.getPl2())) {
             return false;
         }
+        if (hasText(query.carrier()) && !query.carrier().equals(line.getCarrier())) {
+            return false;
+        }
+        if (hasText(query.site()) && !query.site().equals(line.getSite())) {
+            return false;
+        }
+        if (hasText(query.customerCountry())
+                && !CommaTokens.contains(line.getCustomerCountry(), query.customerCountry())) {
+            return false;
+        }
         return true;
     }
 
@@ -148,6 +189,22 @@ public final class BenchmarkingFilters {
                 .thenComparing(BenchmarkProcessPath::pl3Name, String.CASE_INSENSITIVE_ORDER)
                 .thenComparing(BenchmarkProcessPath::pl3Code));
         return List.copyOf(paths);
+    }
+
+    /**
+     * Distinct non-blank values, sorted, for dropdown options.
+     *
+     * @param rows source rows (unfiltered)
+     * @param getter field accessor
+     * @return sorted distinct names
+     */
+    public static List<String> distinct(List<BenchmarkRow> rows, Function<BenchmarkRow, String> getter) {
+        return rows.stream()
+                .map(getter)
+                .filter(BenchmarkingFilters::hasText)
+                .distinct()
+                .sorted()
+                .toList();
     }
 
     static boolean hasText(String value) {

@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.exercise.submission.api.dto.ValidationFinding;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.ActionView;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.ScopeView;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.StepView;
@@ -27,5 +28,6 @@ public record ApprovalDetailView(
         List<StepView> steps,
         List<ActionView> actions,
         boolean canDecide,
-        ApprovalWorkspaceView workspace) {
+        ApprovalWorkspaceView workspace,
+        List<ValidationFinding> findings) {
 }

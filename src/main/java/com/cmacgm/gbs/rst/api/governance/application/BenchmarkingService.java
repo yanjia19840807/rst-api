@@ -74,9 +74,9 @@ public class BenchmarkingService {
 
     /**
      * Lists Shared KPI rows from the latest Sizing Month APPROVED Exercise that matches
-     * the filters, per Center × Supervisor × PL3. Detail Cycle time / capacity / Support
-     * ratio are split onto each KPI line by Delivery HC share. Cards and Center charts
-     * still HC-weight the Exercise-level rates.
+     * the filters, per Center × Supervisor × PL3. Cycle time / capacity / Support ratio
+     * are split onto each KPI line by Delivery HC share. Cards and Center charts roll
+     * up those same filtered shares, not the current page.
      *
      * @param query field filters; {@code pl3Code} is required for rows
      * @param page 1-based page
@@ -89,11 +89,12 @@ public class BenchmarkingService {
         if (rows.source().isEmpty()) {
             return emptyView(page, pageSize);
         }
-        List<BenchmarkRow> items = rows.items();
         List<BenchmarkProcessPath> processPaths = rows.processPaths();
         String selectedPl3 = selectedPl3Name(query, processPaths);
-        BenchmarkingMath.Summary summary = BenchmarkingMath.summarize(selectedPl3, items);
+        List<BenchmarkRow> statsRows = BenchmarkingMath.collapseShares(rows.allocatedItems());
+        BenchmarkingMath.Summary summary = BenchmarkingMath.summarize(selectedPl3, statsRows);
         PageResponse<BenchmarkRow> paged = PageResponse.ofList(rows.allocatedItems(), page, pageSize);
+        List<BenchmarkRow> source = rows.source();
         return new BenchmarkingView(
                 summary.selectedPl3(),
                 summary.dailyCapacityPerAgent(),
@@ -105,7 +106,11 @@ public class BenchmarkingService {
                 paged.total(),
                 paged.totalPages(),
                 processPaths,
-                BenchmarkingMath.compareByCenter(items));
+                BenchmarkingFilters.distinct(source, BenchmarkRow::gbs),
+                BenchmarkingFilters.distinct(source, BenchmarkRow::carrier),
+                BenchmarkingFilters.distinct(source, BenchmarkRow::site),
+                CommaTokens.distinctSorted(source.stream().map(BenchmarkRow::sharedKpiLine).toList()),
+                BenchmarkingMath.compareByCenter(statsRows));
     }
 
     /**
@@ -229,6 +234,7 @@ public class BenchmarkingService {
             RepositoryLineMath.LineMetrics metrics = RepositoryLineMath.allocate(
                     line.getDeliveryHc(), totalDelivery, actualHc, rightSizingHc, productionSupport);
             rows.add(new BenchmarkRow(
+                    blank(exercise.getExerciseCode()),
                     blank(line.getCenter()),
                     blank(line.getCarrier()),
                     blank(line.getSite()),
@@ -373,6 +379,10 @@ public class BenchmarkingService {
                 paged.pageSize(),
                 paged.total(),
                 paged.totalPages(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
                 List.of(),
                 List.of());
     }

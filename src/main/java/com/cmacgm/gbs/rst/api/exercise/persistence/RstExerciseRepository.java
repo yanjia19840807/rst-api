@@ -97,11 +97,11 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
     Optional<RstExercise> findApprovedRepositoryExerciseById(UUID id);
 
     /**
-     * APPROVED Exercises for Support Repository, with Toolkit snapshot only.
+     * APPROVED Exercises for Support Repository, with Toolkit snapshot and Shared KPI lines.
      *
      * @return approved exercises
      */
-    @EntityGraph(attributePaths = {"toolkitSnapshot"})
+    @EntityGraph(attributePaths = {"toolkitSnapshot", "sharedKpiLines"})
     @Query("""
             select e from RstExercise e
             where e.deletedAt is null

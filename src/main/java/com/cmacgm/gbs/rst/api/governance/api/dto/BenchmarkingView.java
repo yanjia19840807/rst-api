@@ -17,5 +17,9 @@ public record BenchmarkingView(
         long total,
         int totalPages,
         List<BenchmarkProcessPath> processPaths,
+        List<String> centers,
+        List<String> carriers,
+        List<String> sites,
+        List<String> customerCountries,
         List<BenchmarkCenterComparison> centerComparisons) {
 }

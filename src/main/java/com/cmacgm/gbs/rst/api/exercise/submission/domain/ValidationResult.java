@@ -76,9 +76,11 @@ public class ValidationResult {
     }
 
     public UUID getId() { return id; }
+    public UUID getExerciseId() { return exerciseId; }
     public ValidationRule getRuleCode() { return ruleCode; }
     public ValidationSeverity getSeverity() { return severity; }
     public Detail getDetail() { return detail; }
+    public Instant getEvaluatedAt() { return evaluatedAt; }
 
     /**
      * Structured rule payload stored in {@code detail_json}.

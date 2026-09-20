@@ -53,6 +53,33 @@ class BenchmarkingMathTests {
     }
 
     @Test
+    void cardsAndChartsFollowFilteredTableShares() {
+        BenchmarkRow china = row("GBS CHINA", "China", "9", "28800", "16.00", "2.320", "1.00", "14.5");
+        BenchmarkRow hongKong = row("GBS CHINA", "Hong Kong", "9", "28800", "4.00", "0.580", "0.25", "14.5");
+        BigDecimal totalHc = new BigDecimal("20.00");
+        BenchmarkRow chinaShare = BenchmarkingMath.shareRates(china, totalHc);
+        BenchmarkRow hongKongShare = BenchmarkingMath.shareRates(hongKong, totalHc);
+
+        BenchmarkingMath.Summary all = BenchmarkingMath.summarize(
+                "BANK REC", BenchmarkingMath.collapseShares(List.of(chinaShare, hongKongShare)));
+        assertThat(all.cycleTimeSeconds()).isEqualByComparingTo("9");
+        assertThat(all.dailyCapacityPerAgent()).isEqualByComparingTo("28800");
+        assertThat(all.productionSupportRatioPct()).isEqualByComparingTo("14.5");
+
+        BenchmarkingMath.Summary chinaOnly = BenchmarkingMath.summarize(
+                "BANK REC", BenchmarkingMath.collapseShares(List.of(chinaShare)));
+        assertThat(chinaOnly.cycleTimeSeconds()).isEqualByComparingTo(chinaShare.cycleTimeSeconds());
+        assertThat(chinaOnly.dailyCapacityPerAgent()).isEqualByComparingTo(chinaShare.dailyCapacityPerAgent());
+        assertThat(chinaOnly.productionSupportRatioPct()).isEqualByComparingTo(chinaShare.productionSupportRatioPct());
+
+        List<BenchmarkCenterComparison> chinaBars = BenchmarkingMath.compareByCenter(
+                BenchmarkingMath.collapseShares(List.of(chinaShare)));
+        assertThat(chinaBars).hasSize(1);
+        assertThat(chinaBars.get(0).cycleTimeSeconds()).isEqualByComparingTo(chinaShare.cycleTimeSeconds());
+        assertThat(chinaBars.get(0).capacityCreation()).isEqualByComparingTo("1.00");
+    }
+
+    @Test
     void skipsRateShareWhenExerciseHasNoDeliveryHc() {
         BenchmarkRow china = row("GBS CHINA", "China", "9", "28800", "16.00", "2.320", "1.00", "14.5");
         BenchmarkRow shared = BenchmarkingMath.shareRates(china, BigDecimal.ZERO);
@@ -119,6 +146,7 @@ class BenchmarkingMathTests {
             String capacityCreation,
             String supportRatio) {
         return new BenchmarkRow(
+                "EX-1",
                 gbs,
                 "CMA CGM",
                 "SHA",

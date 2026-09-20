@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -23,7 +24,9 @@ import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseProduc
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.time.CenterDates;
+import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
+import com.cmacgm.gbs.rst.api.governance.application.CommaTokens;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
@@ -32,6 +35,10 @@ import com.cmacgm.gbs.rst.api.exercise.associateddata.application.WorkingDaysSer
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
+import com.cmacgm.gbs.rst.api.exercise.submission.api.dto.ValidationFinding;
+import com.cmacgm.gbs.rst.api.exercise.submission.domain.ValidationResult;
+import com.cmacgm.gbs.rst.api.exercise.submission.domain.ValidationRule;
+import com.cmacgm.gbs.rst.api.exercise.submission.persistence.ValidationResultRepository;
 import com.cmacgm.gbs.rst.api.mail.application.MailNotificationService;
 import com.cmacgm.gbs.rst.api.mail.application.MailNotificationService.OwnerOutcome;
 import com.cmacgm.gbs.rst.api.security.Handler;
@@ -88,6 +95,7 @@ public class ApprovalService {
     private final ExerciseVolumeTrainingService volumeTraining;
     private final ToolkitAssociatedDataService toolkitAssociatedData;
     private final MailNotificationService mail;
+    private final ValidationResultRepository validations;
     private final Clock clock;
 
     /**
@@ -107,6 +115,7 @@ public class ApprovalService {
             ExerciseVolumeTrainingService volumeTraining,
             ToolkitAssociatedDataService toolkitAssociatedData,
             MailNotificationService mail,
+            ValidationResultRepository validations,
             Clock clock) {
         this.workflows = workflows;
         this.exercises = exercises;
@@ -121,6 +130,7 @@ public class ApprovalService {
         this.volumeTraining = volumeTraining;
         this.toolkitAssociatedData = toolkitAssociatedData;
         this.mail = mail;
+        this.validations = validations;
         this.clock = clock;
     }
 
@@ -169,7 +179,12 @@ public class ApprovalService {
                 paged.totalPages(),
                 toMetrics(awaiting),
                 distinctNames(source, ApprovalQueueItem::toolkitName),
-                distinctNames(source, ApprovalQueueItem::pl3Name));
+                distinctNames(source, ApprovalQueueItem::pl3Name),
+                distinctNames(source, ApprovalQueueItem::center),
+                distinctNames(source, ApprovalQueueItem::domain),
+                distinctValues(source, ApprovalQueueItem::carriers),
+                distinctValues(source, ApprovalQueueItem::sites),
+                distinctValues(source, ApprovalQueueItem::customerCountries));
     }
 
     private List<ApprovalQueueItem> listItems(
@@ -230,6 +245,22 @@ public class ApprovalService {
                 .toList();
     }
 
+    private static List<String> distinctValues(
+            List<ApprovalQueueItem> items, Function<ApprovalQueueItem, List<String>> getter) {
+        return items.stream()
+                .map(getter)
+                .filter(values -> values != null && !values.isEmpty())
+                .flatMap(List::stream)
+                .filter(name -> name != null && !name.isBlank())
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    private static boolean containsValue(List<String> values, String selected) {
+        return values != null && values.contains(selected);
+    }
+
     private static boolean matches(ApprovalQueueItem item, QueueQuery query) {
         if (hasText(query.exerciseCode())) {
             String code = item.exerciseCode() == null ? "" : item.exerciseCode();
@@ -241,7 +272,26 @@ public class ApprovalService {
         if (hasText(query.toolkitName()) && !query.toolkitName().equals(item.toolkitName())) {
             return false;
         }
+        if (hasText(query.center()) && !query.center().equals(item.center())) {
+            return false;
+        }
+        if (hasText(query.domain()) && !query.domain().equals(item.domain())) {
+            return false;
+        }
         if (hasText(query.pl3Name()) && !query.pl3Name().equals(item.pl3Name())) {
+            return false;
+        }
+        if (hasText(query.carrier()) && !containsValue(item.carriers(), query.carrier())) {
+            return false;
+        }
+        if (hasText(query.site()) && !containsValue(item.sites(), query.site())) {
+            return false;
+        }
+        if (hasText(query.customerCountry())
+                && !containsValue(item.customerCountries(), query.customerCountry())) {
+            return false;
+        }
+        if (hasText(query.sizingMonth()) && !query.sizingMonth().trim().equals(item.sizingMonth())) {
             return false;
         }
         LocalDate submitted = CenterDates.dateOf(item.submittedAt(), item.center());
@@ -501,7 +551,16 @@ public class ApprovalService {
                 steps,
                 actions,
                 canDecide,
-                workspace);
+                workspace,
+                latestFindings(loaded.exercise().getId()));
+    }
+
+    private List<ValidationFinding> latestFindings(UUID exerciseId) {
+        LinkedHashMap<ValidationRule, ValidationResult> latest = new LinkedHashMap<>();
+        for (ValidationResult row : validations.findByExerciseIdOrderByEvaluatedAtAscRuleCodeAsc(exerciseId)) {
+            latest.put(row.getRuleCode(), row);
+        }
+        return latest.values().stream().map(ValidationFinding::from).toList();
     }
 
     private ApprovalQueueItem toQueueItem(
@@ -520,9 +579,18 @@ public class ApprovalService {
             Instant submittedAt) {
         var snapshot = exercise.getToolkitSnapshot();
         String toolkitName = snapshot != null ? snapshot.getToolkitName() : "";
+        String pl1 = snapshot != null ? snapshot.getPl1() : "";
+        String pl2 = snapshot != null ? snapshot.getPl2() : "";
         String pl3Name = snapshot != null ? snapshot.getPl3Name() : "";
         String center = snapshot != null ? snapshot.getCenter() : "";
         String domain = snapshot != null ? snapshot.getDomain() : "";
+        String sizingMonth = MonthKeys.formatYearMonth(exercise.getSizingMonth());
+        List<String> carriers = distinctKpi(exercise, ExerciseSharedKpiLine::getCarrier);
+        List<String> sites = distinctKpi(exercise, ExerciseSharedKpiLine::getSite);
+        List<String> customerCountries = CommaTokens.distinct(
+                exercise.getSharedKpiLines().stream()
+                        .map(ExerciseSharedKpiLine::getCustomerCountry)
+                        .toList());
         String supervisor = displayName(exercise.getOwnerCcgid(), names);
 
         BigDecimal deliveryHc = deliveryHc(exercise);
@@ -565,8 +633,14 @@ public class ApprovalService {
                 exercise.getExerciseCode(),
                 center,
                 domain,
+                pl1,
+                pl2,
                 pl3Name,
                 toolkitName,
+                sizingMonth,
+                carriers,
+                sites,
+                customerCountries,
                 supervisor,
                 deliveryHc,
                 rightSizingHc,
@@ -598,6 +672,15 @@ public class ApprovalService {
                 .toList();
         return timesheet.align(snapshot.getCenter(), snapshot.getSupervisorPositionId(), snapshot.getPl3Code(), keys)
                 .structuralDrift();
+    }
+
+    private static List<String> distinctKpi(
+            RstExercise exercise, Function<ExerciseSharedKpiLine, String> getter) {
+        return exercise.getSharedKpiLines().stream()
+                .map(getter)
+                .filter(name -> name != null && !name.isBlank())
+                .distinct()
+                .toList();
     }
 
     private BigDecimal deliveryHc(RstExercise exercise) {

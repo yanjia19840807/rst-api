@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -148,7 +149,7 @@ public class SubmissionService {
                 remarksRequired(findings),
                 submitBlocked(findings),
                 alignment,
-                alignment.structuralDrift(),
+                false,
                 "Manager Review",
                 manager == null ? null : manager.positionId(),
                 manager == null ? null : manager.occupantName(),
@@ -208,14 +209,6 @@ public class SubmissionService {
                     "remarks-required",
                     "WARNING validation failures require remarks before Submit.");
         }
-        TimesheetAlignmentView alignment = align(exercise);
-        if (alignment.structuralDrift() && !Boolean.TRUE.equals(request.scopeAcknowledged())) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY,
-                    "scope-acknowledgement-required",
-                    "Confirm submitting with the frozen Shared KPI scope.");
-        }
-
         ProcessInstance existing = workflows.findByExerciseId(exerciseId).orElse(null);
         if (existing != null && existing.isAwaitingReview()) {
             return submittedDetails(ownerCcgid, exerciseId);
@@ -228,6 +221,8 @@ public class SubmissionService {
         }
 
         requireDomainHead(exercise);
+        validations.deleteByExerciseId(exerciseId);
+        validations.flush();
         validations.saveAll(evaluated);
         ProcessInstance workflow = ProcessInstance.start(
                 exerciseId, request.remarks(), handler, requestId, now);
@@ -260,6 +255,8 @@ public class SubmissionService {
         attachScopes(exercise, workflow);
 
         requireDomainHead(exercise);
+        validations.deleteByExerciseId(exercise.getId());
+        validations.flush();
         validations.saveAll(evaluated);
         workflow.recordSubmit(handler, remarks, requestId, now);
         String managerCcgid = openManager(workflow, exercise, now);
@@ -438,7 +435,8 @@ public class SubmissionService {
                 scopes,
                 steps,
                 actions,
-                workspace);
+                workspace,
+                latestFindings(exercise.getId()));
     }
 
     private Map<String, String> displayNames(ProcessInstance workflow) {
@@ -492,25 +490,16 @@ public class SubmissionService {
         return findings.stream().anyMatch(f -> f.severity().blocksSubmitWhenFailed());
     }
 
+    private List<ValidationFinding> latestFindings(UUID exerciseId) {
+        LinkedHashMap<ValidationRule, ValidationResult> latest = new LinkedHashMap<>();
+        for (ValidationResult row : validations.findByExerciseIdOrderByEvaluatedAtAscRuleCodeAsc(exerciseId)) {
+            latest.put(row.getRuleCode(), row);
+        }
+        return latest.values().stream().map(ValidationFinding::from).toList();
+    }
+
     private static ValidationFinding toFinding(ValidationResult result) {
-        ValidationResult.Detail detail = result.getDetail();
-        return new ValidationFinding(
-                result.getRuleCode(),
-                result.getSeverity(),
-                detail == null
-                        ? null
-                        : new ValidationFinding.Detail(
-                                detail.reason(),
-                                detail.comparedMonths(),
-                                detail.mismatches().stream()
-                                        .map(m -> new ValidationFinding.MonthMismatch(
-                                                m.month(), m.daily(), m.monthly()))
-                                        .toList(),
-                                detail.ratio(),
-                                detail.tmsVolumeSum(),
-                                detail.dailyVolumeSum(),
-                                detail.missingDateCount(),
-                                detail.threshold()));
+        return ValidationFinding.from(result);
     }
 
     private static String sha256(String value) {

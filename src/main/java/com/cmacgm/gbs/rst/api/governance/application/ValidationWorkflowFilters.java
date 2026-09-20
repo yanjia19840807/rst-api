@@ -1,11 +1,15 @@
 package com.cmacgm.gbs.rst.api.governance.application;
 
 import java.time.LocalDate;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.Function;
 
 import com.cmacgm.gbs.rst.api.common.time.CenterDates;
+import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationPersonOption;
 import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationWorkflowQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.ValidationWorkflowRow;
 
@@ -47,6 +51,21 @@ public final class ValidationWorkflowFilters {
         if (hasText(query.toolkitName()) && !query.toolkitName().equals(row.toolkit())) {
             return false;
         }
+        if (hasText(query.carrier()) && !containsValue(row.carriers(), query.carrier())) {
+            return false;
+        }
+        if (hasText(query.site()) && !containsValue(row.sites(), query.site())) {
+            return false;
+        }
+        if (hasText(query.customerCountry()) && !containsValue(row.customerCountries(), query.customerCountry())) {
+            return false;
+        }
+        if (hasText(query.currentStep()) && !query.currentStep().equals(row.currentStep())) {
+            return false;
+        }
+        if (hasText(query.currentOwner()) && !query.currentOwner().equals(row.currentOwnerCcgid())) {
+            return false;
+        }
         if (hasText(query.sizingMonth()) && !query.sizingMonth().trim().equals(row.sizingMonth())) {
             return false;
         }
@@ -81,6 +100,53 @@ public final class ValidationWorkflowFilters {
                 .distinct()
                 .sorted()
                 .toList();
+    }
+
+    /**
+     * Distinct values from Exercise-level 1:N scope lists, for dropdowns.
+     *
+     * @param rows source rows (unfiltered)
+     * @param getter list accessor
+     * @return sorted distinct names
+     */
+    public static List<String> distinctValues(
+            List<ValidationWorkflowRow> rows, Function<ValidationWorkflowRow, List<String>> getter) {
+        return rows.stream()
+                .map(getter)
+                .filter(values -> values != null && !values.isEmpty())
+                .flatMap(List::stream)
+                .filter(name -> name != null && !name.isBlank())
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    /**
+     * Distinct current owners by CCGID, sorted by display name.
+     *
+     * @param rows source rows (unfiltered)
+     * @return owner options
+     */
+    public static List<ValidationPersonOption> distinctOwners(List<ValidationWorkflowRow> rows) {
+        Map<String, String> owners = new LinkedHashMap<>();
+        for (ValidationWorkflowRow row : rows) {
+            if (row.currentOwnerCcgid() == null || row.currentOwnerCcgid().isBlank()) {
+                continue;
+            }
+            owners.putIfAbsent(
+                    row.currentOwnerCcgid(),
+                    row.currentOwner() == null ? "" : row.currentOwner());
+        }
+        return owners.entrySet().stream()
+                .map(entry -> new ValidationPersonOption(entry.getKey(), entry.getValue()))
+                .sorted(Comparator
+                        .comparing(ValidationPersonOption::name, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
+                        .thenComparing(ValidationPersonOption::ccgid, Comparator.nullsLast(String::compareTo)))
+                .toList();
+    }
+
+    private static boolean containsValue(List<String> values, String selected) {
+        return values != null && values.contains(selected);
     }
 
     private static boolean hasText(String value) {

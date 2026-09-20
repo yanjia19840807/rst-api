@@ -85,6 +85,17 @@ public interface TmsSessionRepository
     long countByAgentCcgidAndStatus(String agentCcgid, TmsSessionStatus status);
 
     @Query("""
+            select distinct session.agentCcgid
+            from TmsSession session
+            where session.toolkit.id in :toolkitIds
+              and session.status = :status
+            order by session.agentCcgid
+            """)
+    List<String> findDistinctAgentCcgids(
+            @Param("toolkitIds") Collection<UUID> toolkitIds,
+            @Param("status") TmsSessionStatus status);
+
+    @Query("""
             select sum(session.processedVolume)
             from TmsSession session
             where session.agentCcgid = :agentCcgid

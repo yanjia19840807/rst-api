@@ -25,6 +25,14 @@ public class TmsSessionExcelService {
             "Session No",
             "Agent",
             "Toolkit",
+            "GBS Center",
+            "Domain",
+            "PL1",
+            "PL2",
+            "PL3",
+            "Carrier",
+            "GBS Site",
+            "Customer Country",
             "Subtask",
             "Start",
             "End",
@@ -33,7 +41,7 @@ public class TmsSessionExcelService {
             "Reference",
             "Volume",
             "Remarks",
-            "Enabled");
+            "Status");
 
     /**
      * Writes the current filtered session list.
@@ -48,6 +56,14 @@ public class TmsSessionExcelService {
                     blank(session.id()),
                     blank(session.agentName()),
                     blank(session.toolkitName()),
+                    blank(session.center()),
+                    blank(session.domain()),
+                    blank(session.pl1()),
+                    blank(session.pl2()),
+                    blank(session.pl3()),
+                    joined(session.carriers()),
+                    joined(session.sites()),
+                    joined(session.customerCountries()),
                     dash(session.subtaskName()),
                     formatInstant(session.startedAt(), session.center()),
                     formatInstant(session.endedAt(), session.center()),
@@ -56,7 +72,7 @@ public class TmsSessionExcelService {
                     dash(session.reference()),
                     formatVolume(session.processedVolume()),
                     dash(session.remarks()),
-                    session.enabled() ? "Yes" : "No"));
+                    session.enabled() ? "Enabled" : "Disabled"));
         }
         return ExcelSheets.write("TMS Sessions", HEADERS, body);
     }
@@ -87,6 +103,13 @@ public class TmsSessionExcelService {
         long minutes = (seconds % 3600) / 60;
         long remainder = seconds % 60;
         return String.format("%02d:%02d:%02d", hours, minutes, remainder);
+    }
+
+    private static String joined(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return "";
+        }
+        return String.join(", ", values);
     }
 
     private static String blank(String value) {

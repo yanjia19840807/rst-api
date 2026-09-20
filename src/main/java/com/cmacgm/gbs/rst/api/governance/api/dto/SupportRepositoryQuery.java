@@ -13,6 +13,9 @@ public record SupportRepositoryQuery(
         String pl3Name,
         UUID categoryId,
         String toolkitName,
+        String carrier,
+        String site,
+        String customerCountry,
         String sizingMonth,
         LocalDate validatedFrom,
         LocalDate validatedTo) {

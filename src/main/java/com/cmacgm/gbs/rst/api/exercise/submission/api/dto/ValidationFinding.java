@@ -3,6 +3,7 @@ package com.cmacgm.gbs.rst.api.exercise.submission.api.dto;
 import java.math.BigDecimal;
 import java.util.List;
 
+import com.cmacgm.gbs.rst.api.exercise.submission.domain.ValidationResult;
 import com.cmacgm.gbs.rst.api.exercise.submission.domain.ValidationRule;
 import com.cmacgm.gbs.rst.api.exercise.submission.domain.ValidationSeverity;
 
@@ -15,6 +16,32 @@ public record ValidationFinding(
         ValidationRule ruleCode,
         ValidationSeverity severity,
         Detail detail) {
+
+    /**
+     * Maps a persisted submit-time finding.
+     *
+     * @param result stored row
+     * @return review/preview view
+     */
+    public static ValidationFinding from(ValidationResult result) {
+        ValidationResult.Detail detail = result.getDetail();
+        return new ValidationFinding(
+                result.getRuleCode(),
+                result.getSeverity(),
+                detail == null
+                        ? null
+                        : new Detail(
+                                detail.reason(),
+                                detail.comparedMonths(),
+                                detail.mismatches().stream()
+                                        .map(m -> new MonthMismatch(m.month(), m.daily(), m.monthly()))
+                                        .toList(),
+                                detail.ratio(),
+                                detail.tmsVolumeSum(),
+                                detail.dailyVolumeSum(),
+                                detail.missingDateCount(),
+                                detail.threshold()));
+    }
 
     /**
      * Structured rule payload shown in Submit preview.

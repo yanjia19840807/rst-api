@@ -81,7 +81,17 @@ public class RstRepositoryService {
     public RepositoryListView listApproved(RepositoryListQuery query, int page, int pageSize) {
         FilteredRepository rows = filteredRows(query);
         if (rows.source().isEmpty()) {
-            return pagedView(List.of(), page, pageSize, List.of(), List.of(), List.of(), List.of());
+            return pagedView(
+                    List.of(),
+                    page,
+                    pageSize,
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of());
         }
         return pagedView(
                 rows.items(),
@@ -90,7 +100,10 @@ public class RstRepositoryService {
                 RepositoryRowFilters.distinct(rows.source(), RepositoryRow::country),
                 RepositoryRowFilters.distinct(rows.source(), RepositoryRow::domain),
                 RepositoryRowFilters.distinct(rows.source(), RepositoryRow::pl3),
-                RepositoryRowFilters.distinct(rows.source(), RepositoryRow::toolkit));
+                RepositoryRowFilters.distinct(rows.source(), RepositoryRow::toolkit),
+                RepositoryRowFilters.distinct(rows.source(), RepositoryRow::carrier),
+                RepositoryRowFilters.distinct(rows.source(), RepositoryRow::site),
+                CommaTokens.distinctSorted(rows.source().stream().map(RepositoryRow::kpi).toList()));
     }
 
     /**
@@ -188,7 +201,10 @@ public class RstRepositoryService {
             List<String> centers,
             List<String> domains,
             List<String> pl3Names,
-            List<String> toolkitNames) {
+            List<String> toolkitNames,
+            List<String> carriers,
+            List<String> sites,
+            List<String> customerCountries) {
         PageResponse<RepositoryRow> paged = PageResponse.ofList(items, page, pageSize);
         RepositoryListMath.Totals totals = RepositoryListMath.summarize(items);
         return new RepositoryListView(
@@ -201,6 +217,9 @@ public class RstRepositoryService {
                 domains,
                 pl3Names,
                 toolkitNames,
+                carriers,
+                sites,
+                customerCountries,
                 totals.deliveryHc(),
                 totals.rightSizingHc(),
                 totals.support(),

@@ -47,10 +47,10 @@ public class TmsTeamController {
     }
 
     /**
-     * Lists team agents available for TMS filters.
+     * Lists agents who have completed TMS sessions in the managed Toolkit scope.
      *
      * @param principal authenticated manager
-     * @return team agents
+     * @return session agents
      */
     @GetMapping("/agents")
     public List<TeamAgent> teamAgents(@AuthenticationPrincipal RstPrincipal principal) {
@@ -91,6 +91,11 @@ public class TmsTeamController {
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
                     LocalDate dateTo,
             @RequestParam(required = false) Boolean enabled,
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String domain,
+            @RequestParam(required = false) String carrier,
+            @RequestParam(required = false) String site,
+            @RequestParam(required = false) String customerCountry,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         return queryService.sessionsForTeam(
@@ -105,6 +110,11 @@ public class TmsTeamController {
                 dateFrom,
                 dateTo,
                 enabled,
+                center,
+                domain,
+                carrier,
+                site,
+                customerCountry,
                 page,
                 pageSize,
                 principal.center());
@@ -129,7 +139,12 @@ public class TmsTeamController {
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
                     LocalDate dateTo,
-            @RequestParam(required = false) Boolean enabled) {
+            @RequestParam(required = false) Boolean enabled,
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String domain,
+            @RequestParam(required = false) String carrier,
+            @RequestParam(required = false) String site,
+            @RequestParam(required = false) String customerCountry) {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"tms-team-sessions.xlsx\"")
                 .contentType(MediaType.parseMediaType(
@@ -146,6 +161,11 @@ public class TmsTeamController {
                         dateFrom,
                         dateTo,
                         enabled,
+                        center,
+                        domain,
+                        carrier,
+                        site,
+                        customerCountry,
                         principal.center()));
     }
 

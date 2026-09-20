@@ -48,6 +48,7 @@ import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
+import com.cmacgm.gbs.rst.api.governance.application.CommaTokens;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.ScenarioCommitService;
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
@@ -203,6 +204,11 @@ public class ExerciseService {
                 paged.totalPages(),
                 distinctNames(source, item -> item.snapshot().toolkit().name()),
                 distinctNames(source, item -> item.snapshot().toolkit().pl3Name()),
+                distinctNames(source, item -> item.snapshot().toolkit().center()),
+                distinctNames(source, item -> item.snapshot().toolkit().domain()),
+                distinctKpiNames(source, ExerciseKpiView::carrier),
+                distinctKpiNames(source, ExerciseKpiView::site),
+                CommaTokens.distinctSorted(kpiRaw(source, ExerciseKpiView::customerCountry)),
                 reviewerOptions(progress));
     }
 
@@ -503,7 +509,26 @@ public class ExerciseService {
         if (hasText(query.toolkitName()) && !query.toolkitName().equals(item.snapshot().toolkit().name())) {
             return false;
         }
+        if (hasText(query.center()) && !query.center().equals(item.snapshot().toolkit().center())) {
+            return false;
+        }
+        if (hasText(query.domain()) && !query.domain().equals(item.snapshot().toolkit().domain())) {
+            return false;
+        }
         if (hasText(query.pl3Name()) && !query.pl3Name().equals(item.snapshot().toolkit().pl3Name())) {
+            return false;
+        }
+        if (hasText(query.carrier())
+                && kpiValues(item).stream().map(ExerciseKpiView::carrier).noneMatch(query.carrier()::equals)) {
+            return false;
+        }
+        if (hasText(query.site())
+                && kpiValues(item).stream().map(ExerciseKpiView::site).noneMatch(query.site()::equals)) {
+            return false;
+        }
+        if (hasText(query.customerCountry())
+                && kpiValues(item).stream()
+                        .noneMatch(kpi -> CommaTokens.contains(kpi.customerCountry(), query.customerCountry()))) {
             return false;
         }
         if (hasText(query.workflowStatus()) && !query.workflowStatus().equals(item.workflowStatus())) {
@@ -563,6 +588,32 @@ public class ExerciseService {
                 .distinct()
                 .sorted()
                 .toList();
+    }
+
+    private static List<String> distinctKpiNames(
+            List<ExerciseResponse> items, Function<ExerciseKpiView, String> getter) {
+        return items.stream()
+                .flatMap(item -> kpiValues(item).stream())
+                .map(getter)
+                .filter(name -> name != null && !name.isBlank())
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    private static List<String> kpiRaw(
+            List<ExerciseResponse> items, Function<ExerciseKpiView, String> getter) {
+        return items.stream()
+                .flatMap(item -> kpiValues(item).stream())
+                .map(getter)
+                .toList();
+    }
+
+    private static List<ExerciseKpiView> kpiValues(ExerciseResponse item) {
+        if (item.snapshot() == null || item.snapshot().sharedKpis() == null) {
+            return List.of();
+        }
+        return item.snapshot().sharedKpis();
     }
 
     private static boolean hasText(String value) {

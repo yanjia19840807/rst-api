@@ -47,6 +47,15 @@ public final class RepositoryRowFilters {
         if (hasText(query.toolkitName()) && !query.toolkitName().equals(row.toolkit())) {
             return false;
         }
+        if (hasText(query.carrier()) && !query.carrier().equals(row.carrier())) {
+            return false;
+        }
+        if (hasText(query.site()) && !query.site().equals(row.site())) {
+            return false;
+        }
+        if (hasText(query.customerCountry()) && !CommaTokens.contains(row.kpi(), query.customerCountry())) {
+            return false;
+        }
         if (hasText(query.sizingMonth()) && !query.sizingMonth().trim().equals(row.sizingMonth())) {
             return false;
         }

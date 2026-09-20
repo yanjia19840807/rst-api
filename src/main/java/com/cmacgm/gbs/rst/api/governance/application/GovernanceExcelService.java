@@ -19,16 +19,16 @@ public class GovernanceExcelService {
 
     private static final List<String> REPOSITORY_HEADERS = List.of(
             "Exercise No",
+            "Toolkit",
+            "Sizing Month",
+            "Validated Date",
             "GBS Center",
-            "Carrier",
-            "GBS Site",
             "Domain",
             "PL1",
             "PL2",
             "PL3",
-            "Toolkit",
-            "Sizing Month",
-            "Validated Date",
+            "Carrier",
+            "GBS Site",
             "Customer Country",
             "Delivery HC",
             "Right Sizing HC",
@@ -38,13 +38,18 @@ public class GovernanceExcelService {
             "Volume Increase YoY (%)");
 
     private static final List<String> SUPPORT_HEADERS = List.of(
-            "Exercise NO",
-            "GBS Center",
-            "Domain",
-            "PL3",
+            "Exercise No",
             "Toolkit",
             "Sizing Month",
             "Validated Date",
+            "GBS Center",
+            "Domain",
+            "PL1",
+            "PL2",
+            "PL3",
+            "Carrier",
+            "GBS Site",
+            "Customer Country",
             "Standard Category",
             "Activity",
             "Frequency",
@@ -54,13 +59,17 @@ public class GovernanceExcelService {
             "Comments");
 
     private static final List<String> BENCHMARK_HEADERS = List.of(
+            "Exercise No",
+            "Sizing Month",
+            "Validated Date",
             "GBS Center",
+            "Domain",
+            "PL1",
+            "PL2",
+            "PL3",
             "Carrier",
             "GBS Site",
-            "Customer country",
-            "Domain",
-            "PL3",
-            "Sizing Month",
+            "Customer Country",
             "Cycle time (s)",
             "Daily Production Capacity / Agent (transactions)",
             "Production Support Ratio (%)",
@@ -77,16 +86,16 @@ public class GovernanceExcelService {
         for (RepositoryRow row : rows) {
             body.add(List.of(
                     blank(row.exerciseId()),
+                    blank(row.toolkit()),
+                    blank(row.sizingMonth()),
+                    dateTime(row.validatedDate()),
                     blank(row.country()),
-                    blank(row.carrier()),
-                    blank(row.site()),
                     blank(row.domain()),
                     blank(row.pl1()),
                     blank(row.pl2()),
                     blank(row.pl3()),
-                    blank(row.toolkit()),
-                    blank(row.sizingMonth()),
-                    dateTime(row.validatedDate()),
+                    blank(row.carrier()),
+                    blank(row.site()),
                     blank(row.kpi()),
                     decimal(row.deliveryHc()),
                     decimal(row.rsHc()),
@@ -109,12 +118,17 @@ public class GovernanceExcelService {
         for (SupportRepositoryRow row : rows) {
             body.add(List.of(
                     blank(row.exerciseNo()),
-                    blank(row.center()),
-                    blank(row.domain()),
-                    blank(row.pl3()),
                     blank(row.toolkit()),
                     blank(row.sizingMonth()),
                     dateTime(row.validatedDate()),
+                    blank(row.center()),
+                    blank(row.domain()),
+                    blank(row.pl1()),
+                    blank(row.pl2()),
+                    blank(row.pl3()),
+                    joined(row.carriers()),
+                    joined(row.sites()),
+                    joined(row.customerCountries()),
                     blank(row.standardCategory()),
                     blank(row.activity()),
                     blank(row.frequency()),
@@ -136,13 +150,17 @@ public class GovernanceExcelService {
         List<List<String>> body = new ArrayList<>();
         for (BenchmarkRow row : rows) {
             body.add(List.of(
+                    blank(row.exerciseNo()),
+                    blank(row.sizingMonth()),
+                    dateTime(row.validatedDate()),
                     blank(row.gbs()),
+                    blank(row.domain()),
+                    blank(row.pl1()),
+                    blank(row.pl2()),
+                    blank(row.pl3()),
                     blank(row.carrier()),
                     blank(row.site()),
                     blank(row.sharedKpiLine()),
-                    blank(row.domain()),
-                    blank(row.pl3()),
-                    blank(row.sizingMonth()),
                     decimal(row.cycleTimeSeconds()),
                     decimal(row.dailyCapacityPerAgent()),
                     decimal(row.productionSupportRatioPct()),
@@ -157,6 +175,13 @@ public class GovernanceExcelService {
 
     private static String blank(String value) {
         return value == null ? "" : value;
+    }
+
+    private static String joined(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return "";
+        }
+        return CommaTokens.joined(values);
     }
 
     private static String dateTime(String value) {

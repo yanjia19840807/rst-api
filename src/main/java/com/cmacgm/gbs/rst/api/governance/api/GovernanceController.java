@@ -87,6 +87,9 @@ public class GovernanceController {
      * @param domain optional exact domain
      * @param pl3Name optional exact PL3 name
      * @param toolkitName optional exact toolkit name
+     * @param carrier optional exact carrier
+     * @param site optional exact GBS Site
+     * @param customerCountry optional exact customer country
      * @param sizingMonth optional exact sizing month ({@code YYYY-MM})
      * @param validatedFrom optional validated date from
      * @param validatedTo optional validated date to
@@ -102,6 +105,9 @@ public class GovernanceController {
             @RequestParam(required = false) String domain,
             @RequestParam(required = false) String pl3Name,
             @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false) String carrier,
+            @RequestParam(required = false) String site,
+            @RequestParam(required = false) String customerCountry,
             @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
@@ -118,6 +124,9 @@ public class GovernanceController {
                         domain,
                         pl3Name,
                         toolkitName,
+                        carrier,
+                        site,
+                        customerCountry,
                         sizingMonth,
                         validatedFrom,
                         validatedTo),
@@ -136,6 +145,9 @@ public class GovernanceController {
             @RequestParam(required = false) String domain,
             @RequestParam(required = false) String pl3Name,
             @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false) String carrier,
+            @RequestParam(required = false) String site,
+            @RequestParam(required = false) String customerCountry,
             @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
@@ -151,6 +163,9 @@ public class GovernanceController {
                                 domain,
                                 pl3Name,
                                 toolkitName,
+                                carrier,
+                                site,
+                                customerCountry,
                                 sizingMonth,
                                 validatedFrom,
                                 validatedTo))),
@@ -179,6 +194,9 @@ public class GovernanceController {
      * @param pl3Name optional exact PL3 name
      * @param categoryId optional catalog Category id
      * @param toolkitName optional exact toolkit name
+     * @param carrier optional carrier contained in the Exercise KPI scope
+     * @param site optional GBS Site contained in the Exercise KPI scope
+     * @param customerCountry optional customer country contained in the Exercise KPI scope
      * @param sizingMonth optional exact sizing month ({@code YYYY-MM})
      * @param validatedFrom optional validated date from
      * @param validatedTo optional validated date to
@@ -195,6 +213,9 @@ public class GovernanceController {
             @RequestParam(required = false) String pl3Name,
             @RequestParam(required = false) UUID categoryId,
             @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false) String carrier,
+            @RequestParam(required = false) String site,
+            @RequestParam(required = false) String customerCountry,
             @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
@@ -212,6 +233,9 @@ public class GovernanceController {
                         pl3Name,
                         categoryId,
                         toolkitName,
+                        carrier,
+                        site,
+                        customerCountry,
                         sizingMonth,
                         validatedFrom,
                         validatedTo),
@@ -231,6 +255,9 @@ public class GovernanceController {
             @RequestParam(required = false) String pl3Name,
             @RequestParam(required = false) UUID categoryId,
             @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false) String carrier,
+            @RequestParam(required = false) String site,
+            @RequestParam(required = false) String customerCountry,
             @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
@@ -247,6 +274,9 @@ public class GovernanceController {
                                 pl3Name,
                                 categoryId,
                                 toolkitName,
+                                carrier,
+                                site,
+                                customerCountry,
                                 sizingMonth,
                                 validatedFrom,
                                 validatedTo))),
@@ -257,10 +287,15 @@ public class GovernanceController {
      * Same-PL3 benchmarking for the latest APPROVED Exercise per Center × Supervisor × PL3.
      * Cards follow all filtered matches; cascade paths do not shrink. Rows require {@code pl3Code}.
      *
+     * @param exerciseCode optional exercise code contains
+     * @param center optional exact GBS Center
      * @param domain optional exact domain
      * @param pl1 optional exact PL1
      * @param pl2 optional exact PL2
      * @param pl3Code required exact PL3 code for like-for-like rows
+     * @param carrier optional exact carrier
+     * @param site optional exact GBS Site
+     * @param customerCountry optional customer country token contained in the KPI country
      * @param sizingMonth optional exact sizing month ({@code YYYY-MM})
      * @param validatedFrom optional validated date from
      * @param validatedTo optional validated date to
@@ -271,10 +306,15 @@ public class GovernanceController {
     @GetMapping("/benchmarking")
     @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public BenchmarkingView benchmarking(
+            @RequestParam(required = false) String exerciseCode,
+            @RequestParam(required = false) String center,
             @RequestParam(required = false) String domain,
             @RequestParam(required = false) String pl1,
             @RequestParam(required = false) String pl2,
             @RequestParam(required = false) String pl3Code,
+            @RequestParam(required = false) String carrier,
+            @RequestParam(required = false) String site,
+            @RequestParam(required = false) String customerCountry,
             @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
@@ -286,7 +326,18 @@ public class GovernanceController {
             @RequestParam(defaultValue = "10") int pageSize) {
         return benchmarkingService.listApproved(
                 new BenchmarkingQuery(
-                        domain, pl1, pl2, pl3Code, sizingMonth, validatedFrom, validatedTo),
+                        exerciseCode,
+                        center,
+                        domain,
+                        pl1,
+                        pl2,
+                        pl3Code,
+                        carrier,
+                        site,
+                        customerCountry,
+                        sizingMonth,
+                        validatedFrom,
+                        validatedTo),
                 page,
                 pageSize);
     }
@@ -297,10 +348,15 @@ public class GovernanceController {
     @GetMapping("/benchmarking/export")
     @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public ResponseEntity<byte[]> exportBenchmarking(
+            @RequestParam(required = false) String exerciseCode,
+            @RequestParam(required = false) String center,
             @RequestParam(required = false) String domain,
             @RequestParam(required = false) String pl1,
             @RequestParam(required = false) String pl2,
             @RequestParam(required = false) String pl3Code,
+            @RequestParam(required = false) String carrier,
+            @RequestParam(required = false) String site,
+            @RequestParam(required = false) String customerCountry,
             @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
@@ -311,7 +367,18 @@ public class GovernanceController {
         return excelResponse(
                 excel.exportBenchmarking(benchmarkingService.listApprovedAll(
                         new BenchmarkingQuery(
-                                domain, pl1, pl2, pl3Code, sizingMonth, validatedFrom, validatedTo))),
+                                exerciseCode,
+                                center,
+                                domain,
+                                pl1,
+                                pl2,
+                                pl3Code,
+                                carrier,
+                                site,
+                                customerCountry,
+                                sizingMonth,
+                                validatedFrom,
+                                validatedTo))),
                 "benchmarking.xlsx");
     }
 
@@ -324,6 +391,11 @@ public class GovernanceController {
      * @param domain optional exact domain
      * @param pl3Name optional exact PL3 name
      * @param toolkitName optional exact toolkit name
+     * @param carrier optional carrier contained in the Exercise KPI scope
+     * @param site optional GBS Site contained in the Exercise KPI scope
+     * @param customerCountry optional customer country contained in the Exercise KPI scope
+     * @param currentStep optional exact current review step
+     * @param currentOwner optional exact current owner CCGID
      * @param sizingMonth optional exact sizing month ({@code YYYY-MM})
      * @param agingMinDays optional minimum current-step wait in days
      * @param submittedFrom optional submitted date from
@@ -340,6 +412,11 @@ public class GovernanceController {
             @RequestParam(required = false) String domain,
             @RequestParam(required = false) String pl3Name,
             @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false) String carrier,
+            @RequestParam(required = false) String site,
+            @RequestParam(required = false) String customerCountry,
+            @RequestParam(required = false) String currentStep,
+            @RequestParam(required = false) String currentOwner,
             @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false) Integer agingMinDays,
             @RequestParam(required = false)
@@ -357,6 +434,11 @@ public class GovernanceController {
                         domain,
                         pl3Name,
                         toolkitName,
+                        carrier,
+                        site,
+                        customerCountry,
+                        currentStep,
+                        currentOwner,
                         sizingMonth,
                         agingMinDays,
                         submittedFrom,

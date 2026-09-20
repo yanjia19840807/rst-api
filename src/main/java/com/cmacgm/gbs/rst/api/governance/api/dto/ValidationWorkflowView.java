@@ -14,5 +14,10 @@ public record ValidationWorkflowView(
         List<String> centers,
         List<String> domains,
         List<String> pl3Names,
-        List<String> toolkitNames) {
+        List<String> toolkitNames,
+        List<String> carriers,
+        List<String> sites,
+        List<String> customerCountries,
+        List<String> currentSteps,
+        List<ValidationPersonOption> currentOwners) {
 }

@@ -182,7 +182,14 @@ class SupervisorApiIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].name").value("Bank Reconciliation Toolkit"))
-                .andExpect(jsonPath("$.pl3Names[0]").value("Bank Reconciliation"));
+                .andExpect(jsonPath("$.pl3Names[0]").value("Bank Reconciliation"))
+                .andExpect(jsonPath("$.centers[0]").value("GBS INDIA"))
+                .andExpect(jsonPath("$.domains[0]").value("Finance"))
+                .andExpect(jsonPath("$.pl3s[0].code").value(PL3_CODE))
+                .andExpect(jsonPath("$.pl3s[0].name").value("Bank Reconciliation"))
+                .andExpect(jsonPath("$.carriers[0]").value("Carrier A"))
+                .andExpect(jsonPath("$.sites[0]").value("GBS INDIA"))
+                .andExpect(jsonPath("$.customerCountries[0]").value("Australia"));
 
         mockMvc.perform(get("/api/v1/toolkits/managed")
                         .header("X-Dev-Role", "SUPERVISOR")
@@ -208,6 +215,25 @@ class SupervisorApiIntegrationTests {
                         .queryParam("pl3Name", "Invoice Processing"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(0));
+
+        mockMvc.perform(get("/api/v1/toolkits/managed")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .queryParam("pl3Code", PL3_CODE)
+                        .queryParam("center", "GBS INDIA")
+                        .queryParam("domain", "Finance")
+                        .queryParam("carrier", "Carrier A")
+                        .queryParam("site", "GBS INDIA")
+                        .queryParam("customerCountry", "Australia"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.carriers[0]").value("Carrier A"));
+
+        mockMvc.perform(get("/api/v1/toolkits/managed")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .queryParam("customerCountry", "China"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0))
+                .andExpect(jsonPath("$.customerCountries[0]").value("Australia"));
     }
 
     @Test

@@ -286,7 +286,7 @@ public class MailNotificationService {
         List<String[]> rows = new ArrayList<>();
         rows.add(new String[] {"Exercise", exercise == null ? "—" : dash(exercise.getExerciseCode())});
         if (exercise != null && exercise.getToolkitSnapshot() != null) {
-            rows.add(new String[] {"Center", dash(exercise.getToolkitSnapshot().getCenter())});
+            rows.add(new String[] {"GBS Center", dash(exercise.getToolkitSnapshot().getCenter())});
             rows.add(new String[] {"Domain", dash(exercise.getToolkitSnapshot().getDomain())});
         }
         if (comments != null && !comments.isBlank()) {

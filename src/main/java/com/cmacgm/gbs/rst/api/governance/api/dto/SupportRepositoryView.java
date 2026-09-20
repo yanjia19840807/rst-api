@@ -22,5 +22,8 @@ public record SupportRepositoryView(
         List<String> domains,
         List<String> pl3Names,
         List<SupportCategoryOption> categories,
-        List<String> toolkitNames) {
+        List<String> toolkitNames,
+        List<String> carriers,
+        List<String> sites,
+        List<String> customerCountries) {
 }

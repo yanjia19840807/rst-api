@@ -64,7 +64,12 @@ public class ExerciseController {
      * @param tab {@code IN_PROGRESS} or {@code VALIDATED} ({@code ARCHIVED} still accepted)
      * @param exerciseCode optional exercise code contains
      * @param toolkitName optional exact toolkit name
+     * @param center optional exact GBS Center
+     * @param domain optional exact Domain
      * @param pl3Name optional exact PL3 name
+     * @param carrier optional exact Carrier on a frozen KPI line
+     * @param site optional exact GBS Site on a frozen KPI line
+     * @param customerCountry optional customer country token contained in a frozen KPI line
      * @param workflowStatus optional exact workflow status within the tab
      * @param reviewStage optional current step ({@code SUPERVISOR} / {@code MANAGER} / {@code CDH} / {@code LTH})
      * @param handler optional current reviewer display name (not CCGID)
@@ -87,7 +92,12 @@ public class ExerciseController {
             @RequestParam(required = false, defaultValue = "IN_PROGRESS") String tab,
             @RequestParam(required = false) String exerciseCode,
             @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String domain,
             @RequestParam(required = false) String pl3Name,
+            @RequestParam(required = false) String carrier,
+            @RequestParam(required = false) String site,
+            @RequestParam(required = false) String customerCountry,
             @RequestParam(required = false) String workflowStatus,
             @RequestParam(required = false) String reviewStage,
             @RequestParam(required = false) String handler,
@@ -118,7 +128,12 @@ public class ExerciseController {
                 tab,
                 exerciseCode,
                 toolkitName,
+                center,
+                domain,
                 pl3Name,
+                carrier,
+                site,
+                customerCountry,
                 workflowStatus,
                 reviewStage,
                 handler,

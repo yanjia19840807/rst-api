@@ -51,7 +51,13 @@ public class ApprovalController {
      * @param completed when true, list tasks this position has already Approved or Returned
      * @param exerciseCode optional exercise code contains
      * @param toolkitName optional exact toolkit name
+     * @param center optional exact GBS Center
+     * @param domain optional exact Domain
      * @param pl3Name optional exact PL3 name
+     * @param carrier optional exact Carrier on a frozen KPI line
+     * @param site optional exact GBS Site on a frozen KPI line
+     * @param customerCountry optional customer country token contained in a frozen KPI line
+     * @param sizingMonth optional exact sizing month ({@code YYYY-MM})
      * @param submittedFrom optional submitted date from
      * @param submittedTo optional submitted date to
      * @param completedFrom optional position-completion date from
@@ -68,7 +74,13 @@ public class ApprovalController {
             @RequestParam(required = false, defaultValue = "false") boolean completed,
             @RequestParam(required = false) String exerciseCode,
             @RequestParam(required = false) String toolkitName,
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String domain,
             @RequestParam(required = false) String pl3Name,
+            @RequestParam(required = false) String carrier,
+            @RequestParam(required = false) String site,
+            @RequestParam(required = false) String customerCountry,
+            @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
                     LocalDate submittedFrom,
@@ -90,7 +102,13 @@ public class ApprovalController {
                 completed,
                 exerciseCode,
                 toolkitName,
+                center,
+                domain,
                 pl3Name,
+                carrier,
+                site,
+                customerCountry,
+                sizingMonth,
                 submittedFrom,
                 submittedTo,
                 completedFrom,

@@ -4,9 +4,11 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 
 import com.cmacgm.gbs.rst.api.common.time.CenterDates;
 import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
@@ -16,6 +18,7 @@ import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseProductionSupportItemRepository;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseTeamSetupRepository;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
+import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
@@ -95,7 +98,10 @@ public class SupportRepositoryService {
                 SupportRepositoryFilters.distinct(source, SupportRepositoryRow::domain),
                 SupportRepositoryFilters.distinct(source, SupportRepositoryRow::pl3),
                 categoryOptions,
-                SupportRepositoryFilters.distinct(source, SupportRepositoryRow::toolkit));
+                SupportRepositoryFilters.distinct(source, SupportRepositoryRow::toolkit),
+                SupportRepositoryFilters.distinctValues(source, SupportRepositoryRow::carriers),
+                SupportRepositoryFilters.distinctValues(source, SupportRepositoryRow::sites),
+                SupportRepositoryFilters.distinctValues(source, SupportRepositoryRow::customerCountries));
     }
 
     /**
@@ -147,8 +153,14 @@ public class SupportRepositoryService {
         ExerciseToolkitSnapshot snapshot = exercise.getToolkitSnapshot();
         String center = snapshot == null ? "" : snapshot.getCenter();
         String domain = snapshot == null ? "" : snapshot.getDomain();
+        String pl1 = snapshot == null ? "" : snapshot.getPl1();
+        String pl2 = snapshot == null ? "" : snapshot.getPl2();
         String pl3 = snapshot == null ? "" : snapshot.getPl3Name();
         String toolkit = snapshot == null ? "" : snapshot.getToolkitName();
+        List<String> carriers = distinctScope(exercise.getSharedKpiLines(), ExerciseSharedKpiLine::getCarrier);
+        List<String> sites = distinctScope(exercise.getSharedKpiLines(), ExerciseSharedKpiLine::getSite);
+        List<String> customerCountries = CommaTokens.distinct(
+                distinctScope(exercise.getSharedKpiLines(), ExerciseSharedKpiLine::getCustomerCountry));
         String sizingMonth = MonthKeys.formatYearMonth(exercise.getSizingMonth());
         String validatedDate = exercise.getValidatedAt() == null || center == null || center.isBlank()
                 ? ""
@@ -163,8 +175,13 @@ public class SupportRepositoryService {
                     exercise.getId(),
                     center,
                     domain,
+                    pl1,
+                    pl2,
                     pl3,
                     toolkit,
+                    carriers,
+                    sites,
+                    customerCountries,
                     item.getCategoryId(),
                     item.getCategory(),
                     item.getActivity(),
@@ -177,6 +194,18 @@ public class SupportRepositoryService {
                     validatedDate));
         }
         return rows;
+    }
+
+    private static List<String> distinctScope(
+            List<ExerciseSharedKpiLine> lines, Function<ExerciseSharedKpiLine, String> getter) {
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+        for (ExerciseSharedKpiLine line : lines) {
+            String value = getter.apply(line);
+            if (value != null && !value.isBlank()) {
+                values.add(value);
+            }
+        }
+        return List.copyOf(values);
     }
 
     private Map<UUID, List<ExerciseProductionSupportItem>> itemsByExercise(List<RstExercise> approved) {
@@ -215,6 +244,9 @@ public class SupportRepositoryService {
                 List.of(),
                 List.of(),
                 supportCategories.listActive(),
+                List.of(),
+                List.of(),
+                List.of(),
                 List.of());
     }
 }

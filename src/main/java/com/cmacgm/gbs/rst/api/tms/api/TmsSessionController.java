@@ -79,7 +79,14 @@ public class TmsSessionController {
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
                     LocalDate dateTo,
-            @RequestParam(required = false) Boolean enabled) {
+            @RequestParam(required = false) Boolean enabled,
+            @RequestParam(required = false) UUID toolkitId,
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String domain,
+            @RequestParam(required = false) String pl3Code,
+            @RequestParam(required = false) String carrier,
+            @RequestParam(required = false) String site,
+            @RequestParam(required = false) String customerCountry) {
         return excelResponse(
                 queryService.exportSessions(
                         principal.ccgid(),
@@ -90,6 +97,13 @@ public class TmsSessionController {
                         dateFrom,
                         dateTo,
                         enabled,
+                        toolkitId,
+                        center,
+                        domain,
+                        pl3Code,
+                        carrier,
+                        site,
+                        customerCountry,
                         principal.center()),
                 "tms-sessions.xlsx");
     }
@@ -114,6 +128,13 @@ public class TmsSessionController {
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
                     LocalDate dateTo,
             @RequestParam(required = false) Boolean enabled,
+            @RequestParam(required = false) UUID toolkitId,
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String domain,
+            @RequestParam(required = false) String pl3Code,
+            @RequestParam(required = false) String carrier,
+            @RequestParam(required = false) String site,
+            @RequestParam(required = false) String customerCountry,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         return queryService.sessions(
@@ -125,6 +146,13 @@ public class TmsSessionController {
                 dateFrom,
                 dateTo,
                 enabled,
+                toolkitId,
+                center,
+                domain,
+                pl3Code,
+                carrier,
+                site,
+                customerCountry,
                 page,
                 pageSize,
                 principal.center());

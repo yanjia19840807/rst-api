@@ -13,5 +13,10 @@ public record ExerciseListView(
         int totalPages,
         List<String> toolkitNames,
         List<String> pl3Names,
+        List<String> centers,
+        List<String> domains,
+        List<String> carriers,
+        List<String> sites,
+        List<String> customerCountries,
         List<ExerciseReviewerOption> reviewers) {
 }

@@ -8,10 +8,13 @@ import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.time.CenterZones;
 
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSession;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSessionStatus;
+import com.cmacgm.gbs.rst.api.toolkit.domain.Toolkit;
 import org.springframework.data.jpa.domain.Specification;
 
 public final class TmsSessionSpecification {
@@ -54,6 +57,7 @@ public final class TmsSessionSpecification {
     public static Specification<TmsSession> filtered(Filter filter) {
         return (root, query, builder) -> {
             var predicates = new ArrayList<Predicate>();
+            Join<TmsSession, Toolkit> toolkit = null;
             if (filter.agentCcgid() != null) {
                 predicates.add(builder.equal(root.get("agentCcgid"), filter.agentCcgid()));
             }
@@ -61,15 +65,25 @@ public final class TmsSessionSpecification {
                 if (filter.toolkitIds().isEmpty()) {
                     predicates.add(builder.disjunction());
                 } else {
-                    predicates.add(root.get("toolkit").get("id").in(filter.toolkitIds()));
+                    toolkit = toolkitJoin(root, toolkit);
+                    predicates.add(toolkit.get("id").in(filter.toolkitIds()));
                 }
             }
             if (filter.toolkitId() != null) {
-                predicates.add(builder.equal(root.get("toolkit").get("id"), filter.toolkitId()));
+                toolkit = toolkitJoin(root, toolkit);
+                predicates.add(builder.equal(toolkit.get("id"), filter.toolkitId()));
             }
-            if (filter.pl3Code() != null && !filter.pl3Code().isBlank()) {
-                predicates.add(builder.equal(
-                        root.get("toolkit").get("primaryPl3Code"), filter.pl3Code().trim()));
+            if (hasText(filter.pl3Code())) {
+                toolkit = toolkitJoin(root, toolkit);
+                predicates.add(builder.equal(toolkit.get("primaryPl3Code"), filter.pl3Code().trim()));
+            }
+            if (hasText(filter.center())) {
+                toolkit = toolkitJoin(root, toolkit);
+                predicates.add(builder.equal(toolkit.get("center"), filter.center().trim()));
+            }
+            if (hasText(filter.domain())) {
+                toolkit = toolkitJoin(root, toolkit);
+                predicates.add(builder.equal(toolkit.get("domain"), filter.domain().trim()));
             }
             if (filter.status() != null) {
                 predicates.add(builder.equal(root.get("status"), filter.status()));
@@ -77,15 +91,15 @@ public final class TmsSessionSpecification {
             if (filter.enabled() != null) {
                 predicates.add(builder.equal(root.get("enabled"), filter.enabled()));
             }
-            if (filter.sessionNo() != null && !filter.sessionNo().isBlank()) {
+            if (hasText(filter.sessionNo())) {
                 String pattern = "%" + filter.sessionNo().trim().toLowerCase() + "%";
                 predicates.add(builder.like(builder.lower(root.get("sessionNo")), pattern));
             }
-            if (filter.reference() != null && !filter.reference().isBlank()) {
+            if (hasText(filter.reference())) {
                 String pattern = "%" + filter.reference().trim().toLowerCase() + "%";
                 predicates.add(builder.like(builder.lower(root.get("reference")), pattern));
             }
-            if (filter.queryText() != null && !filter.queryText().isBlank()) {
+            if (hasText(filter.queryText())) {
                 String pattern = "%" + filter.queryText().trim().toLowerCase() + "%";
                 predicates.add(builder.or(
                         builder.like(builder.lower(root.get("sessionNo")), pattern),
@@ -111,9 +125,9 @@ public final class TmsSessionSpecification {
      * Session list filter criteria.
      *
      * @param agentCcgid when set, restrict to this agent (Agent list or Supervisor agent filter)
-     * @param toolkitIds when set, restrict to these toolkits (Supervisor org scope)
+     * @param toolkitIds when set, restrict to these toolkits (Supervisor org scope or resolved filters)
      * @param toolkitId optional single toolkit filter within scope
-     * @param pl3Code optional PL3 code filter (current Toolkit PL3)
+     * @param pl3Code optional exact PL3 code
      * @param status optional status
      * @param sessionNo optional session number contains
      * @param reference optional reference contains
@@ -122,6 +136,11 @@ public final class TmsSessionSpecification {
      * @param dateTo optional started-at upper bound (inclusive day)
      * @param enabled when set, restrict to enabled or disabled completed samples
      * @param dateCenter Center whose IANA zone interprets dateFrom / dateTo
+     * @param center optional exact GBS Center on the live Toolkit
+     * @param domain optional exact Domain on the live Toolkit
+     * @param carrier unused by JPA; resolved to toolkitIds before query
+     * @param site unused by JPA; resolved to toolkitIds before query
+     * @param customerCountry unused by JPA; resolved to toolkitIds before query
      */
     public record Filter(
             String agentCcgid,
@@ -135,7 +154,12 @@ public final class TmsSessionSpecification {
             LocalDate dateFrom,
             LocalDate dateTo,
             Boolean enabled,
-            String dateCenter) {
+            String dateCenter,
+            String center,
+            String domain,
+            String carrier,
+            String site,
+            String customerCountry) {
         public Filter(
                 String agentCcgid,
                 Collection<UUID> toolkitIds,
@@ -158,6 +182,11 @@ public final class TmsSessionSpecification {
                     queryText,
                     dateFrom,
                     dateTo,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
                     null,
                     null);
         }
@@ -186,8 +215,55 @@ public final class TmsSessionSpecification {
                     dateFrom,
                     dateTo,
                     enabled,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
                     null);
         }
+
+        public Filter(
+                String agentCcgid,
+                Collection<UUID> toolkitIds,
+                UUID toolkitId,
+                String pl3Code,
+                TmsSessionStatus status,
+                String sessionNo,
+                String reference,
+                String queryText,
+                LocalDate dateFrom,
+                LocalDate dateTo,
+                Boolean enabled,
+                String dateCenter) {
+            this(
+                    agentCcgid,
+                    toolkitIds,
+                    toolkitId,
+                    pl3Code,
+                    status,
+                    sessionNo,
+                    reference,
+                    queryText,
+                    dateFrom,
+                    dateTo,
+                    enabled,
+                    dateCenter,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null);
+        }
+    }
+
+    private static Join<TmsSession, Toolkit> toolkitJoin(
+            jakarta.persistence.criteria.Root<TmsSession> root, Join<TmsSession, Toolkit> existing) {
+        return existing != null ? existing : root.join("toolkit", JoinType.INNER);
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private static ZoneId dateZone(Filter filter) {
