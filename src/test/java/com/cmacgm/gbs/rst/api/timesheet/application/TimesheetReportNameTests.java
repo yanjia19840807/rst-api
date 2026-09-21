@@ -77,9 +77,32 @@ class TimesheetReportNameTests {
     }
 
     @Test
+    void acceptsUniqueCenterDespiteDownloadSuffix() {
+        TimesheetReportName.Parsed daily = TimesheetReportName.parse(
+                        "Daily Raw Data of 2026-09-13 - GBS CHINA 20260914144004218 (2).xlsx")
+                .orElseThrow();
+        assertThat(daily.kind()).isEqualTo("DAILY");
+        assertThat(daily.syncDate()).isEqualTo(LocalDate.of(2026, 9, 13));
+        assertThat(daily.region()).isEqualTo("GBS CHINA");
+
+        TimesheetReportName.Parsed monthly = TimesheetReportName.parse(
+                        "Monthly Report of 202607(GBS INDIA) 20260831114937079 (2).xlsx")
+                .orElseThrow();
+        assertThat(monthly.kind()).isEqualTo("MONTHLY");
+        assertThat(monthly.syncDate()).isEqualTo(LocalDate.of(2026, 7, 31));
+        assertThat(monthly.region()).isEqualTo("GBS INDIA");
+        assertThat(TimesheetReportName.parse("Daily Raw Data of 2026-08-31 - GBS CHINA (2).xlsx")
+                        .orElseThrow()
+                        .region())
+                .isEqualTo("GBS CHINA");
+    }
+
+    @Test
     void rejectsOldNamesUnknownCenterAndRandomNames() {
         assertThat(TimesheetReportName.parse("Daily Report of 20260727(GBS CHINA).xlsx")).isEmpty();
         assertThat(TimesheetReportName.parse("Daily Raw Data of 2026-08-31 - GBS MARS.xlsx")).isEmpty();
+        assertThat(TimesheetReportName.parse("Daily Raw Data of 2026-08-31 - GBS CHINA GBS INDIA.xlsx"))
+                .isEmpty();
         assertThat(TimesheetReportName.parse("timesheet.xlsx")).isEmpty();
     }
 }

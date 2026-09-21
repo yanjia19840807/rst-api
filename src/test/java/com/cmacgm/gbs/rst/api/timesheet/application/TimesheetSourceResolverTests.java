@@ -38,6 +38,21 @@ class TimesheetSourceResolverTests {
     }
 
     @Test
+    void acceptsDownloadCopySuffixWhenCenterIsUnique() {
+        GraphDriveItem dailyCopy = file(
+                "Daily Raw Data of 2026-09-13 - GBS CHINA 20260914144004218 (2).xlsx", "daily-copy");
+        GraphDriveItem monthlyCopy = file(
+                "Monthly Report of 202607(GBS CHINA) 20260831114937079 (2).xlsx", "monthly-copy");
+
+        assertThat(TimesheetSourceResolver.chooseAll("DAILY", List.of(dailyCopy), "Daily"))
+                .extracting(file -> file.parsed().region(), file -> file.parsed().syncDate())
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("GBS CHINA", LocalDate.of(2026, 9, 13)));
+        assertThat(TimesheetSourceResolver.chooseAll("MONTHLY", List.of(monthlyCopy), "Monthly"))
+                .extracting(file -> file.parsed().region(), file -> file.parsed().syncDate())
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("GBS CHINA", LocalDate.of(2026, 7, 31)));
+    }
+
+    @Test
     void picksHighestMonthlyRevisionForTheSameMonth() {
         GraphDriveItem original = file("Monthly Report of 202607(GBS CHINA).xlsx", "base");
         GraphDriveItem revisionZero = file("Monthly Report of 202607 Revision(GBS CHINA).xlsx", "rev0");

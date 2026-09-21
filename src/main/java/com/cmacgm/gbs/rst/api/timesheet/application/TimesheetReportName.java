@@ -19,8 +19,10 @@ import com.cmacgm.gbs.rst.api.security.RstCenters;
  * <p>{@code Monthly Report of 202607 Revision(GBS CHINA).xlsx}
  * <p>{@code Monthly Report of 202607 Revision 1(GBS CHINA).xlsx}
  *
- * <p>The region must be a configured {@link RstCenters} name. A trailing
- * SharePoint/download timestamp is ignored.
+ * <p>Kind and date still come from this convention. The Center is the unique
+ * configured {@link RstCenters} name anywhere in the file name, so a trailing
+ * SharePoint timestamp or a download {@code (2)} suffix is ignored. Zero or
+ * two-plus Center names are rejected.
  */
 public final class TimesheetReportName {
 
@@ -64,10 +66,10 @@ public final class TimesheetReportName {
             return Optional.empty();
         }
         String name = fileName.trim();
+        String region = RstCenters.uniqueIn(name);
         Matcher daily = DAILY.matcher(name);
         if (daily.matches()) {
             LocalDate date = parseIsoDay(daily.group(1));
-            String region = RstCenters.canonicalize(daily.group(2));
             if (date == null || region == null) {
                 return Optional.empty();
             }
@@ -76,7 +78,6 @@ public final class TimesheetReportName {
         Matcher monthly = MONTHLY.matcher(name);
         if (monthly.matches()) {
             LocalDate date = parseMonthEnd(monthly.group(1));
-            String region = RstCenters.canonicalize(monthly.group(4));
             if (date == null || region == null) {
                 return Optional.empty();
             }

@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.security;
 
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -50,6 +51,32 @@ public final class RstCenters {
      */
     public static boolean isKnown(String value) {
         return canonicalize(value) != null;
+    }
+
+    /**
+     * Finds the Center when free text contains exactly one configured name.
+     * Extra tokens such as a SharePoint timestamp or a download {@code (2)}
+     * suffix are ignored. Zero or two-plus distinct Centers yield {@code null}.
+     *
+     * @param text file name or other free text
+     * @return canonical Center, or null
+     */
+    public static String uniqueIn(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        String haystack = text.toUpperCase(Locale.ROOT);
+        String found = null;
+        for (String center : ALL) {
+            if (!haystack.contains(center.toUpperCase(Locale.ROOT))) {
+                continue;
+            }
+            if (found != null) {
+                return null;
+            }
+            found = center;
+        }
+        return found;
     }
 
     /**

@@ -22,11 +22,12 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
  * Daily People come from every complete identity on the file, including
  * supervisor / Sr Manager / Domain Head columns on non-RST or non-Production
  * rows. Person required fields are checked first; a failure records issues
- * and skips both people and positions. Position required fields, unique
- * parent chain and one-person-one-seat are checked before the tree is
- * built from RST-applicable Production + Productive rows. Date and
- * Center come from the file name. Two people on one seat is allowed.
- * {@code hc} is ignored.
+ * and skips both people and positions. One person on two seats still
+ * blocks the run. Empty supervisor / Sr Manager cells and dual parents
+ * are advisory: the tree is still built from RST-applicable Production
+ * + Productive rows, and conflicted parents stay empty. Date and Center
+ * come from the file name. Two people on one seat is allowed. {@code hc}
+ * is ignored.
  */
 @Component
 public class TimesheetDailyCalculator {
@@ -121,7 +122,7 @@ public class TimesheetDailyCalculator {
         Map<String, Set<String>> childToParent = new LinkedHashMap<>();
         collectPositionGraph(rows, processes, personToPosition, childToParent);
         addSeatConflicts(issues, runId, now, personToPosition);
-        addHierarchyConflicts(issues, runId, now, childToParent);
+        Set<String> dualParentPositions = addHierarchyConflicts(issues, runId, now, childToParent);
         if (hasBlocking(issues)) {
             addEmptyFileIfNeeded(issues, runId, now, people, List.of());
             return toResult(runId, syncDate, people, List.of(), issues);
@@ -133,10 +134,28 @@ public class TimesheetDailyCalculator {
                 continue;
             }
             String positionCenter = firstText(snapshotCenter, row.center());
-            addPosition(positions, row.empPositionId(), "AGENT", row.supervisorPositionId(), positionCenter);
-            addPosition(positions, row.supervisorPositionId(), "SUPERVISOR", row.srManagerPositionId(), positionCenter);
-            addPosition(positions, row.srManagerPositionId(), "SR_MANAGER", row.domainHeadPositionId(), positionCenter);
-            addPosition(positions, row.domainHeadPositionId(), "DOMAIN_HEAD", null, positionCenter);
+            addPosition(
+                    positions,
+                    row.empPositionId(),
+                    "AGENT",
+                    row.supervisorPositionId(),
+                    positionCenter,
+                    dualParentPositions);
+            addPosition(
+                    positions,
+                    row.supervisorPositionId(),
+                    "SUPERVISOR",
+                    row.srManagerPositionId(),
+                    positionCenter,
+                    dualParentPositions);
+            addPosition(
+                    positions,
+                    row.srManagerPositionId(),
+                    "SR_MANAGER",
+                    row.domainHeadPositionId(),
+                    positionCenter,
+                    dualParentPositions);
+            addPosition(positions, row.domainHeadPositionId(), "DOMAIN_HEAD", null, positionCenter, dualParentPositions);
         }
 
         addFileDateIfMissing(issues, runId, now, syncDate);
@@ -356,12 +375,14 @@ public class TimesheetDailyCalculator {
         }
     }
 
-    private static void addHierarchyConflicts(
+    private static Set<String> addHierarchyConflicts(
             List<TimesheetSyncIssue> issues, UUID runId, Instant now, Map<String, Set<String>> childToParent) {
+        Set<String> dualParentPositions = new LinkedHashSet<>();
         for (Map.Entry<String, Set<String>> entry : childToParent.entrySet()) {
             if (entry.getValue().size() <= 1) {
                 continue;
             }
+            dualParentPositions.add(entry.getKey());
             issues.add(TimesheetSyncIssue.error(
                     runId,
                     TimesheetSyncErrorCode.HIERARCHY_CONFLICT,
@@ -374,6 +395,7 @@ public class TimesheetDailyCalculator {
                     null,
                     now));
         }
+        return dualParentPositions;
     }
 
     private static void addPosition(
@@ -381,14 +403,14 @@ public class TimesheetDailyCalculator {
             String positionId,
             String roleType,
             String parent,
-            String center) {
+            String center,
+            Set<String> dualParentPositions) {
         if (!hasText(positionId)) {
             return;
         }
+        String resolvedParent = dualParentPositions.contains(positionId) ? null : (hasText(parent) ? parent : null);
         positions.putIfAbsent(
-                positionId,
-                new PositionDraft(
-                        positionId, roleType, hasText(parent) ? parent : null, hasText(center) ? center : ""));
+                positionId, new PositionDraft(positionId, roleType, resolvedParent, hasText(center) ? center : ""));
     }
 
     private static String firstText(String left, String right) {

@@ -3,6 +3,7 @@ package com.cmacgm.gbs.rst.api.timesheet.application;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
@@ -21,11 +22,22 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
  * Production + Productive). Daily date and Center come from the file
  * name. Daily never validates {@code hc}.
  *
- * <p>{@code MISSING_FIELD}, Monthly {@code INVALID_HC}, and Daily org
- * conflicts fail the run. Historical {@code ASSIGNMENT_CONFLICT} stays
- * advisory.
+ * <p>Person identity {@code MISSING_FIELD}, Monthly {@code INVALID_HC},
+ * and Daily {@code PERSON_POSITION_CONFLICT} fail the run. Daily empty
+ * supervisor / Sr Manager cells and {@code HIERARCHY_CONFLICT} stay
+ * advisory. Historical {@code ASSIGNMENT_CONFLICT} stays advisory.
  */
 final class TimesheetRowValidator {
+
+    private static final Set<String> DAILY_ADVISORY_MISSING_FIELDS = Set.of(
+            "supervisor_emp_id",
+            "supervisor_ccgid",
+            "supervisor_name",
+            "supervisor_position_id",
+            "sr_manager_emp_id",
+            "sr_manager_ccgid",
+            "sr_manager_name",
+            "sr_manager_position_id");
 
     private TimesheetRowValidator() {
     }
@@ -202,8 +214,9 @@ final class TimesheetRowValidator {
 
     /**
      * Whether this issue should be stored without failing the run.
-     * Historical {@code ASSIGNMENT_CONFLICT} stays advisory.
-     * {@code MISSING_FIELD} fails both Daily and Monthly runs.
+     * Historical {@code ASSIGNMENT_CONFLICT} stays advisory. Daily empty
+     * hierarchy cells and dual parents are advisory; person identity
+     * {@code MISSING_FIELD} still fails the run.
      *
      * @param issue persisted or computed issue
      * @return true when the code is advisory for Daily
@@ -221,7 +234,25 @@ final class TimesheetRowValidator {
      */
     static boolean isAdvisory(TimesheetSyncIssue issue, String kind) {
         String code = issue.getCode();
-        return TimesheetSyncErrorCode.ASSIGNMENT_CONFLICT.code().equals(code);
+        if (TimesheetSyncErrorCode.ASSIGNMENT_CONFLICT.code().equals(code)) {
+            return true;
+        }
+        if (!"DAILY".equals(kind)) {
+            return false;
+        }
+        if (TimesheetSyncErrorCode.HIERARCHY_CONFLICT.code().equals(code)) {
+            return true;
+        }
+        return TimesheetSyncErrorCode.MISSING_FIELD.code().equals(code)
+                && isDailyHierarchyMissingField(issue.getMessage());
+    }
+
+    private static boolean isDailyHierarchyMissingField(String message) {
+        if (message == null || !message.startsWith("Missing ") || !message.endsWith(".")) {
+            return false;
+        }
+        String field = message.substring("Missing ".length(), message.length() - 1);
+        return DAILY_ADVISORY_MISSING_FIELDS.contains(field);
     }
 
     static LocalDate rowDate(ReportRow row) {
