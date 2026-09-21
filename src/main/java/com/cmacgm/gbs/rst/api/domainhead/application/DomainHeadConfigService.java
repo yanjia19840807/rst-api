@@ -347,7 +347,8 @@ public class DomainHeadConfigService {
     }
 
     private void requireCandidate(String center, String positionId) {
-        boolean allowed = timesheet.positionInCenter(center, positionId);
+        boolean allowed = timesheet.positionInCenter(center, positionId)
+                || timesheet.personInCenter(positionId, center);
         if (!allowed) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,

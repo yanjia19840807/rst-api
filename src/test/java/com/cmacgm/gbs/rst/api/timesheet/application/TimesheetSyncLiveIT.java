@@ -95,6 +95,7 @@ class TimesheetSyncLiveIT {
         assertThat(run.getSourceFileName()).isNotBlank();
         assertThat(count("timesheet_person", result.id())).isPositive();
         assertThat(count("timesheet_position", result.id())).isPositive();
+        assertThat(count("timesheet_person_position_role", result.id())).isPositive();
     }
 
     @Test

@@ -16,48 +16,34 @@ import jakarta.persistence.Transient;
 import org.springframework.data.domain.Persistable;
 
 /**
- * One Daily position node. The same Timesheet position id may exist once
- * per role (AGENT / SUPERVISOR / SR_MANAGER).
+ * One Daily occupancy: a person sits on one position node (position + role).
  */
 @Entity
-@Table(name = "timesheet_position")
-public class TimesheetPosition implements Persistable<TimesheetPosition.Id> {
+@Table(name = "timesheet_person_position_role")
+public class TimesheetPersonPositionRole implements Persistable<TimesheetPersonPositionRole.Id> {
 
     @EmbeddedId
     private Id id;
 
-    @Column(name = "parent_position_id", length = 80)
-    private String parentPositionId;
-
-    @Column(name = "parent_role_type", length = 20)
-    private String parentRoleType;
-
     @Transient
     private boolean isNew = true;
 
-    protected TimesheetPosition() {
+    protected TimesheetPersonPositionRole() {
     }
 
     /**
-     * Creates a position node.
+     * Creates an occupancy row.
      *
      * @param syncRunId Daily run
+     * @param ccgid occupant
      * @param positionId Timesheet position
      * @param roleType AGENT / SUPERVISOR / SR_MANAGER
-     * @param parentPositionId parent position
-     * @param parentRoleType parent role
      * @return row
      */
-    public static TimesheetPosition create(
-            UUID syncRunId,
-            String positionId,
-            String roleType,
-            String parentPositionId,
-            String parentRoleType) {
-        TimesheetPosition row = new TimesheetPosition();
-        row.id = new Id(syncRunId, positionId, roleType);
-        row.parentPositionId = parentPositionId;
-        row.parentRoleType = parentRoleType;
+    public static TimesheetPersonPositionRole create(
+            UUID syncRunId, String ccgid, String positionId, String roleType) {
+        TimesheetPersonPositionRole row = new TimesheetPersonPositionRole();
+        row.id = new Id(syncRunId, ccgid, positionId, roleType);
         row.isNew = true;
         return row;
     }
@@ -82,20 +68,16 @@ public class TimesheetPosition implements Persistable<TimesheetPosition.Id> {
         return id.syncRunId;
     }
 
+    public String getCcgid() {
+        return id.ccgid;
+    }
+
     public String getPositionId() {
         return id.positionId;
     }
 
     public String getRoleType() {
         return id.roleType;
-    }
-
-    public String getParentPositionId() {
-        return parentPositionId;
-    }
-
-    public String getParentRoleType() {
-        return parentRoleType;
     }
 
     /**
@@ -107,6 +89,9 @@ public class TimesheetPosition implements Persistable<TimesheetPosition.Id> {
         @Column(name = "sync_run_id", nullable = false)
         private UUID syncRunId;
 
+        @Column(nullable = false, length = 32)
+        private String ccgid;
+
         @Column(name = "position_id", nullable = false, length = 80)
         private String positionId;
 
@@ -116,8 +101,9 @@ public class TimesheetPosition implements Persistable<TimesheetPosition.Id> {
         protected Id() {
         }
 
-        public Id(UUID syncRunId, String positionId, String roleType) {
+        public Id(UUID syncRunId, String ccgid, String positionId, String roleType) {
             this.syncRunId = syncRunId;
+            this.ccgid = ccgid;
             this.positionId = positionId;
             this.roleType = roleType;
         }
@@ -131,13 +117,14 @@ public class TimesheetPosition implements Persistable<TimesheetPosition.Id> {
                 return false;
             }
             return Objects.equals(syncRunId, that.syncRunId)
+                    && Objects.equals(ccgid, that.ccgid)
                     && Objects.equals(positionId, that.positionId)
                     && Objects.equals(roleType, that.roleType);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(syncRunId, positionId, roleType);
+            return Objects.hash(syncRunId, ccgid, positionId, roleType);
         }
     }
 }

@@ -12,8 +12,10 @@ import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPersonPositionRole;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonPositionRoleRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
@@ -25,6 +27,7 @@ import org.springframework.data.domain.PageRequest;
 class TimesheetSnapshotBrowseServiceTests {
 
     private TimesheetPersonRepository people;
+    private TimesheetPersonPositionRoleRepository seats;
     private TimesheetPositionRepository positions;
     private TimesheetScopeRepository scopes;
     private TimesheetKpiRepository kpis;
@@ -33,10 +36,11 @@ class TimesheetSnapshotBrowseServiceTests {
     @BeforeEach
     void setUp() {
         people = mock(TimesheetPersonRepository.class);
+        seats = mock(TimesheetPersonPositionRoleRepository.class);
         positions = mock(TimesheetPositionRepository.class);
         scopes = mock(TimesheetScopeRepository.class);
         kpis = mock(TimesheetKpiRepository.class);
-        service = new TimesheetSnapshotBrowseService(people, positions, scopes, kpis);
+        service = new TimesheetSnapshotBrowseService(people, seats, positions, scopes, kpis);
     }
 
     @Test
@@ -51,11 +55,9 @@ class TimesheetSnapshotBrowseServiceTests {
                                 "GBS INDIA",
                                 "TIAN Anna",
                                 "a@cma-cgm.com",
-                                "748595",
                                 "Billing Clerk")),
                         PageRequest.of(0, 10),
                         1));
-
         var page = service.people(null, "anna", 1, 10);
 
         assertThat(page.total()).isEqualTo(1);
@@ -63,65 +65,60 @@ class TimesheetSnapshotBrowseServiceTests {
                 .extracting(
                         TimesheetSnapshotBrowseService.PersonView::ccgid,
                         TimesheetSnapshotBrowseService.PersonView::center,
-                        TimesheetSnapshotBrowseService.PersonView::positionId,
+                        TimesheetSnapshotBrowseService.PersonView::name,
                         TimesheetSnapshotBrowseService.PersonView::jobRole)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple(
-                        "S00000001", "GBS INDIA", "748595", "Billing Clerk"));
+                        "S00000001", "GBS INDIA", "TIAN Anna", "Billing Clerk"));
     }
 
     @Test
-    void mapsPositionChains() {
-        when(positions.searchActiveChains(eq("GBS INDIA"), eq("174"), any()))
+    void mapsPositionNodes() {
+        when(positions.searchActiveNodes(eq("GBS INDIA"), eq("174"), any()))
                 .thenReturn(new PageImpl<>(
-                        List.of(new TimesheetPositionRepository.PositionChain() {
-                            @Override
-                            public String getAgentPositionId() {
-                                return "172545";
-                            }
-
-                            @Override
-                            public String getSupervisorPositionId() {
-                                return "174055";
-                            }
-
-                            @Override
-                            public String getSrManagerPositionId() {
-                                return "174100";
-                            }
-
-                            @Override
-                            public String getCenter() {
-                                return "GBS INDIA";
-                            }
-                        }),
+                        List.of(
+                                node("174050", "SUPERVISOR", "173171", "SR_MANAGER", "GBS INDIA"),
+                                node("174050", "SR_MANAGER", null, null, "GBS INDIA")),
                         PageRequest.of(0, 10),
-                        1));
+                        2));
 
         UUID runId = UUID.randomUUID();
-        when(people.findActiveByPositionIdIn(any()))
-                .thenReturn(List.of(
-                        TimesheetPerson.create(
-                                runId, "S00000001", "EMP-1", "GBS INDIA", "TIAN Anna", "a@cma-cgm.com", "172545"),
-                        TimesheetPerson.create(
-                                runId, "S00000002", "EMP-2", "GBS INDIA", "TANG Lavender", "b@cma-cgm.com", "174055")));
+        stubOccupants(
+                runId,
+                TimesheetPersonPositionRole.create(runId, "S00000002", "174050", "SUPERVISOR"),
+                TimesheetPersonPositionRole.create(runId, "S00000002", "174050", "SR_MANAGER"));
 
         assertThat(service.positions("GBS INDIA", "174", 1, 10).items())
                 .extracting(
-                        TimesheetSnapshotBrowseService.PositionView::agentPositionId,
-                        TimesheetSnapshotBrowseService.PositionView::agentName,
-                        TimesheetSnapshotBrowseService.PositionView::supervisorPositionId,
-                        TimesheetSnapshotBrowseService.PositionView::supervisorName,
-                        TimesheetSnapshotBrowseService.PositionView::srManagerPositionId,
-                        TimesheetSnapshotBrowseService.PositionView::srManagerName,
+                        TimesheetSnapshotBrowseService.PositionView::positionId,
+                        TimesheetSnapshotBrowseService.PositionView::roleType,
+                        TimesheetSnapshotBrowseService.PositionView::parentPositionId,
+                        TimesheetSnapshotBrowseService.PositionView::occupantName,
                         TimesheetSnapshotBrowseService.PositionView::center)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple(
-                        "172545",
-                        "TIAN Anna",
-                        "174055",
-                        "TANG Lavender",
-                        "174100",
-                        null,
-                        "GBS INDIA"));
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(
+                                "174050", "SUPERVISOR", "173171", "TANG Lavender", "GBS INDIA"),
+                        org.assertj.core.groups.Tuple.tuple(
+                                "174050", "SR_MANAGER", null, "TANG Lavender", "GBS INDIA"));
+    }
+
+    @Test
+    void mapsOccupancies() {
+        when(seats.searchActive(eq(""), eq("donna"), any()))
+                .thenReturn(new PageImpl<>(
+                        List.of(
+                                occupancy("S00000002", "Donna", "174050", "SUPERVISOR", "GBS INDIA"),
+                                occupancy("S00000002", "Donna", "174050", "SR_MANAGER", "GBS INDIA")),
+                        PageRequest.of(0, 10),
+                        2));
+
+        assertThat(service.occupancies(null, "donna", 1, 10).items())
+                .extracting(
+                        TimesheetSnapshotBrowseService.OccupancyView::ccgid,
+                        TimesheetSnapshotBrowseService.OccupancyView::positionId,
+                        TimesheetSnapshotBrowseService.OccupancyView::roleType)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("S00000002", "174050", "SUPERVISOR"),
+                        org.assertj.core.groups.Tuple.tuple("S00000002", "174050", "SR_MANAGER"));
     }
 
     @Test
@@ -147,12 +144,10 @@ class TimesheetSnapshotBrowseServiceTests {
                                 runId, "POS-SUP-1", "PL3", "GBS INDIA", "CMA", "Site A", "MY", new BigDecimal("1.5"))),
                         PageRequest.of(0, 10),
                         1));
-        when(people.findActiveByPositionIdIn(any()))
-                .thenReturn(List.of(
-                        TimesheetPerson.create(
-                                runId, "S00000001", "EMP-1", "GBS INDIA", "TIAN Anna", "a@cma-cgm.com", "172545"),
-                        TimesheetPerson.create(
-                                runId, "S00000002", "EMP-2", "GBS INDIA", "TANG Lavender", "b@cma-cgm.com", "POS-SUP-1")));
+        stubOccupants(
+                runId,
+                TimesheetPersonPositionRole.create(runId, "S00000001", "172545", "AGENT"),
+                TimesheetPersonPositionRole.create(runId, "S00000002", "POS-SUP-1", "SUPERVISOR"));
 
         assertThat(service.scopes("GBS INDIA", null, null, 1, 10).items())
                 .extracting(
@@ -175,6 +170,79 @@ class TimesheetSnapshotBrowseServiceTests {
                         TimesheetSnapshotBrowseService.KpiView::hc)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple(
                         "TANG Lavender", "GBS INDIA", "PL3 Name", new BigDecimal("1.5")));
+    }
+
+    private void stubOccupants(UUID runId, TimesheetPersonPositionRole... occupied) {
+        when(seats.findActiveByPositionIdIn(any())).thenReturn(List.of(occupied));
+        when(people.findActiveByCcgidIn(any())).thenReturn(List.of(
+                TimesheetPerson.create(
+                        runId, "S00000001", "EMP-1", "GBS INDIA", "TIAN Anna", "a@cma-cgm.com", "Billing Clerk"),
+                TimesheetPerson.create(
+                        runId, "S00000002", "EMP-2", "GBS INDIA", "TANG Lavender", "b@cma-cgm.com", null)));
+    }
+
+    private static TimesheetPositionRepository.PositionNode node(
+            String positionId,
+            String roleType,
+            String parentPositionId,
+            String parentRoleType,
+            String center) {
+        return new TimesheetPositionRepository.PositionNode() {
+            @Override
+            public String getPositionId() {
+                return positionId;
+            }
+
+            @Override
+            public String getRoleType() {
+                return roleType;
+            }
+
+            @Override
+            public String getParentPositionId() {
+                return parentPositionId;
+            }
+
+            @Override
+            public String getParentRoleType() {
+                return parentRoleType;
+            }
+
+            @Override
+            public String getCenter() {
+                return center;
+            }
+        };
+    }
+
+    private static TimesheetPersonPositionRoleRepository.OccupancyRow occupancy(
+            String ccgid, String name, String positionId, String roleType, String center) {
+        return new TimesheetPersonPositionRoleRepository.OccupancyRow() {
+            @Override
+            public String getCcgid() {
+                return ccgid;
+            }
+
+            @Override
+            public String getName() {
+                return name;
+            }
+
+            @Override
+            public String getPositionId() {
+                return positionId;
+            }
+
+            @Override
+            public String getRoleType() {
+                return roleType;
+            }
+
+            @Override
+            public String getCenter() {
+                return center;
+            }
+        };
     }
 
     private static TimesheetPositionRepository.DerivedAssignment derived(

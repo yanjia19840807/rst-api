@@ -103,22 +103,26 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update("delete from timesheet_sync_issue");
         jdbcTemplate.update("delete from timesheet_kpi");
         jdbcTemplate.update("delete from timesheet_scope");
+        jdbcTemplate.update("delete from timesheet_person_position_role");
         jdbcTemplate.update("delete from timesheet_position");
         jdbcTemplate.update("delete from timesheet_person");
         jdbcTemplate.update("delete from timesheet_sync_run");
 
         insertSyncRun(DAILY_RUN_ID, "DAILY", 3);
         insertSyncRun(MONTHLY_RUN_ID, "MONTHLY", 2);
-        insertPerson(DAILY_RUN_ID, SUPERVISOR_CCGID, "Test Supervisor", SUPERVISOR_POSITION_ID);
-        insertPerson(DAILY_RUN_ID, "AGENT010", "Test Agent AGENT010", "AGENT010");
-        insertPerson(DAILY_RUN_ID, "AGENT011", "Test Agent AGENT011", "AGENT011");
-        insertPerson(DAILY_RUN_ID, "AGENT012", "Test Agent AGENT012", "AGENT012");
+        insertPerson(DAILY_RUN_ID, SUPERVISOR_CCGID, "Test Supervisor");
+        insertPerson(DAILY_RUN_ID, "AGENT010", "Test Agent AGENT010");
+        insertPerson(DAILY_RUN_ID, "AGENT011", "Test Agent AGENT011");
+        insertPerson(DAILY_RUN_ID, "AGENT012", "Test Agent AGENT012");
         insertPosition(DAILY_RUN_ID, SUPERVISOR_POSITION_ID, "SUPERVISOR", "POS-SRM-001");
-        insertPosition(DAILY_RUN_ID, "POS-SRM-001", "SR_MANAGER", "POS-DH-001");
-        insertPosition(DAILY_RUN_ID, "POS-DH-001", "DOMAIN_HEAD", null);
+        insertPosition(DAILY_RUN_ID, "POS-SRM-001", "SR_MANAGER", null);
         insertPosition(DAILY_RUN_ID, "AGENT010", "AGENT", SUPERVISOR_POSITION_ID);
         insertPosition(DAILY_RUN_ID, "AGENT011", "AGENT", SUPERVISOR_POSITION_ID);
         insertPosition(DAILY_RUN_ID, "AGENT012", "AGENT", SUPERVISOR_POSITION_ID);
+        insertSeat(DAILY_RUN_ID, SUPERVISOR_CCGID, SUPERVISOR_POSITION_ID, "SUPERVISOR");
+        insertSeat(DAILY_RUN_ID, "AGENT010", "AGENT010", "AGENT");
+        insertSeat(DAILY_RUN_ID, "AGENT011", "AGENT011", "AGENT");
+        insertSeat(DAILY_RUN_ID, "AGENT012", "AGENT012", "AGENT");
         insertScope(MONTHLY_RUN_ID);
         insertKpi(MONTHLY_RUN_ID, "Carrier A", "GBS INDIA", "Australia", "2.000000");
         insertKpi(MONTHLY_RUN_ID, "Carrier B", "Singapore", "Germany", "3.000000");
@@ -1344,28 +1348,52 @@ class SupervisorApiIntegrationTests {
                 NOW);
     }
 
-    private void insertPerson(UUID runId, String ccgid, String name, String positionId) {
+    private void insertPerson(UUID runId, String ccgid, String name) {
         jdbcTemplate.update(
-                "insert into timesheet_person (sync_run_id, ccgid, emp_id, name, position_id) values (?, ?, ?, ?, ?)",
+                "insert into timesheet_person (sync_run_id, ccgid, emp_id, name, center) values (?, ?, ?, ?, ?)",
                 runId,
                 ccgid,
                 ccgid,
                 name,
-                positionId);
+                "GBS INDIA");
     }
 
     private void insertPosition(UUID runId, String positionId, String roleType, String parentPositionId) {
         jdbcTemplate.update(
                 """
                 insert into timesheet_position
-                    (sync_run_id, position_id, role_type, parent_position_id, center)
+                    (sync_run_id, position_id, role_type, parent_position_id, parent_role_type)
                 values (?, ?, ?, ?, ?)
                 """,
                 runId,
                 positionId,
                 roleType,
                 parentPositionId,
-                "GBS INDIA");
+                parentRoleOf(roleType, parentPositionId));
+    }
+
+    private void insertSeat(UUID runId, String ccgid, String positionId, String roleType) {
+        jdbcTemplate.update(
+                """
+                insert into timesheet_person_position_role
+                    (sync_run_id, ccgid, position_id, role_type)
+                values (?, ?, ?, ?)
+                """,
+                runId,
+                ccgid,
+                positionId,
+                roleType);
+    }
+
+    private static String parentRoleOf(String roleType, String parentPositionId) {
+        if (parentPositionId == null || parentPositionId.isBlank()) {
+            return null;
+        }
+        return switch (roleType) {
+            case "AGENT" -> "SUPERVISOR";
+            case "SUPERVISOR" -> "SR_MANAGER";
+            default -> null;
+        };
     }
 
     private void insertScope(UUID runId) {

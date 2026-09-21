@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.springframework.data.domain.PageRequest;
@@ -37,6 +38,7 @@ import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunSpecificatio
 public class TimesheetSyncAdminService {
 
     private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+    private static final Pattern MISSING_FIELD = Pattern.compile("(?i)^Missing (.+)\\.$");
     private static final int MAX_RECIPIENTS = 20;
 
     private final TimesheetSyncRunRepository syncRuns;
@@ -104,15 +106,8 @@ public class TimesheetSyncAdminService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Timesheet sync run not found."));
         int safePageSize = Math.min(100, Math.max(1, pageSize));
         int safePage = Math.max(1, page);
-        PageResponse<IssueView> issuePage = PageResponse.from(
-                issues.findBySyncRunId(
-                        id,
-                        PageRequest.of(
-                                safePage - 1,
-                                safePageSize,
-                                Sort.by(Sort.Direction.ASC, "sourceRow")
-                                        .and(Sort.by(Sort.Direction.ASC, "createdAt")))),
-                this::toIssue);
+        List<IssueView> merged = mergeBySourceRow(issues.findBySyncRunIdOrderBySourceRowAscCreatedAtAsc(id));
+        PageResponse<IssueView> issuePage = PageResponse.ofList(merged, safePage, safePageSize);
         if (issuePage.total() == 0 && run.getErrorCode() != null) {
             issuePage = PageResponse.ofList(List.of(runLevelIssue(run)), 1, safePageSize);
         }
@@ -222,15 +217,121 @@ public class TimesheetSyncAdminService {
                 run.getCompletedAt());
     }
 
-    private IssueView toIssue(TimesheetSyncIssue issue) {
+    /**
+     * One display row per Excel source row. File-level issues stay separate.
+     *
+     * @param rows persisted issues in source-row order
+     * @return merged views
+     */
+    static List<IssueView> mergeBySourceRow(List<TimesheetSyncIssue> rows) {
+        List<IssueView> merged = new ArrayList<>();
+        List<TimesheetSyncIssue> bucket = new ArrayList<>();
+        Integer currentRow = null;
+        for (TimesheetSyncIssue issue : rows == null ? List.<TimesheetSyncIssue>of() : rows) {
+            Integer sourceRow = issue.getSourceRow();
+            if (sourceRow == null) {
+                flushMergedRow(merged, bucket);
+                currentRow = null;
+                merged.add(toIssueView(issue));
+                continue;
+            }
+            if (currentRow != null && !currentRow.equals(sourceRow)) {
+                flushMergedRow(merged, bucket);
+            }
+            currentRow = sourceRow;
+            bucket.add(issue);
+        }
+        flushMergedRow(merged, bucket);
+        return merged;
+    }
+
+    private static void flushMergedRow(List<IssueView> merged, List<TimesheetSyncIssue> bucket) {
+        if (bucket.isEmpty()) {
+            return;
+        }
+        merged.add(toMergedIssue(bucket));
+        bucket.clear();
+    }
+
+    private static IssueView toMergedIssue(List<TimesheetSyncIssue> bucket) {
+        TimesheetSyncIssue first = bucket.get(0);
+        if (bucket.size() == 1) {
+            return toIssueView(first);
+        }
+        Set<String> codes = new LinkedHashSet<>();
+        for (TimesheetSyncIssue issue : bucket) {
+            if (issue.getCode() != null && !issue.getCode().isBlank()) {
+                codes.add(issue.getCode());
+            }
+        }
+        return new IssueView(
+                first.getId(),
+                codes.isEmpty() ? first.getCode() : String.join(", ", codes),
+                mergeMessages(bucket),
+                firstNonBlank(bucket, TimesheetSyncIssue::getEmpCcgid),
+                firstNonBlank(bucket, TimesheetSyncIssue::getPositionId),
+                firstNonBlank(bucket, TimesheetSyncIssue::getPl3Code),
+                first.getSourceRow());
+    }
+
+    private static IssueView toIssueView(TimesheetSyncIssue issue) {
         return new IssueView(
                 issue.getId(),
                 issue.getCode(),
-                issue.getMessage(),
+                displayIssueMessage(issue),
                 issue.getEmpCcgid(),
                 issue.getPositionId(),
                 issue.getPl3Code(),
                 issue.getSourceRow());
+    }
+
+    private static String mergeMessages(List<TimesheetSyncIssue> bucket) {
+        List<String> missing = new ArrayList<>();
+        List<String> others = new ArrayList<>();
+        for (TimesheetSyncIssue issue : bucket) {
+            String text = displayIssueMessage(issue);
+            if (text.isBlank()) {
+                continue;
+            }
+            Matcher matcher = MISSING_FIELD.matcher(text);
+            if (matcher.matches()) {
+                String field = matcher.group(1).trim();
+                if (!field.isEmpty() && !missing.contains(field)) {
+                    missing.add(field);
+                }
+                continue;
+            }
+            if (!others.contains(text)) {
+                others.add(text);
+            }
+        }
+        List<String> parts = new ArrayList<>();
+        if (!missing.isEmpty()) {
+            parts.add("Missing " + String.join(", ", missing) + ".");
+        }
+        parts.addAll(others);
+        return String.join(" ", parts);
+    }
+
+    private static String displayIssueMessage(TimesheetSyncIssue issue) {
+        String text = issue.getMessage() == null ? "" : issue.getMessage().trim();
+        if (issue.getSourceRow() != null) {
+            text = text.replaceFirst("(?i)^Row\\s+" + issue.getSourceRow() + "\\s+", "");
+            text = text.replaceFirst("(?i)^is missing ", "Missing ");
+            text = text.replaceFirst("(?i)^date ", "Date ");
+        }
+        return text;
+    }
+
+    private static String firstNonBlank(
+            List<TimesheetSyncIssue> bucket, java.util.function.Function<TimesheetSyncIssue, String> getter) {
+        for (TimesheetSyncIssue issue : bucket) {
+            String value = getter.apply(issue);
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     static List<String> parseRecipients(String stored) {

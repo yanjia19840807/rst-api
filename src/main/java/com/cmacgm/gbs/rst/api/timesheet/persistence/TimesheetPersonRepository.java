@@ -67,18 +67,20 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
     List<TimesheetPerson> findActiveByCcgidIn(@Param("ccgids") Collection<String> ccgids);
 
     /**
-     * Occupant of a bindable position in the ACTIVE Daily snapshot.
+     * Occupants of a bindable position in the ACTIVE Daily snapshot.
      *
      * @param positionId occupied position
-     * @return person if present
+     * @return people
      */
     @Query("""
-            select p
-            from TimesheetPerson p, TimesheetSyncRun r
+            select distinct p
+            from TimesheetPerson p, TimesheetPersonPositionRole o, TimesheetSyncRun r
             where p.id.syncRunId = r.id
+              and o.id.syncRunId = r.id
+              and o.id.ccgid = p.id.ccgid
               and r.kind = 'DAILY'
               and r.status = 'ACTIVE'
-              and p.positionId = :positionId
+              and o.id.positionId = :positionId
             order by p.id.ccgid
             """)
     List<TimesheetPerson> findActiveByPositionId(@Param("positionId") String positionId);
@@ -91,20 +93,26 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
      */
     @Query("""
             select agent
-            from TimesheetPerson supervisor, TimesheetPosition child, TimesheetPerson agent,
+            from TimesheetPerson supervisor, TimesheetPersonPositionRole supervisorSeat,
+                 TimesheetPosition child, TimesheetPerson agent, TimesheetPersonPositionRole agentSeat,
                  TimesheetSyncRun daily
             where supervisor.id.syncRunId = daily.id
+              and supervisorSeat.id.syncRunId = daily.id
               and child.id.syncRunId = daily.id
               and agent.id.syncRunId = daily.id
+              and agentSeat.id.syncRunId = daily.id
               and daily.kind = 'DAILY'
               and daily.status = 'ACTIVE'
               and supervisor.center = daily.center
               and agent.center = daily.center
-              and supervisor.center = agent.center
               and upper(supervisor.id.ccgid) = upper(:supervisorCcgid)
-              and child.parentPositionId = supervisor.positionId
-              and child.roleType = 'AGENT'
-              and agent.positionId = child.id.positionId
+              and supervisorSeat.id.ccgid = supervisor.id.ccgid
+              and supervisorSeat.id.roleType = 'SUPERVISOR'
+              and child.parentPositionId = supervisorSeat.id.positionId
+              and child.id.roleType = 'AGENT'
+              and agentSeat.id.ccgid = agent.id.ccgid
+              and agentSeat.id.positionId = child.id.positionId
+              and agentSeat.id.roleType = 'AGENT'
             order by agent.name, agent.id.ccgid
             """)
     List<TimesheetPerson> findActiveReportsBySupervisorCcgid(
@@ -117,59 +125,20 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
      * @return people for those seats
      */
     @Query("""
-            select p
-            from TimesheetPerson p, TimesheetSyncRun r
+            select distinct p
+            from TimesheetPerson p, TimesheetPersonPositionRole o, TimesheetSyncRun r
             where p.id.syncRunId = r.id
+              and o.id.syncRunId = r.id
+              and o.id.ccgid = p.id.ccgid
               and r.kind = 'DAILY'
               and r.status = 'ACTIVE'
-              and p.positionId in :positionIds
-            order by p.positionId, p.id.ccgid
+              and o.id.positionId in :positionIds
+            order by p.id.ccgid
             """)
     List<TimesheetPerson> findActiveByPositionIdIn(@Param("positionIds") Collection<String> positionIds);
 
     /**
-     * Position occupied by this person when it has the given role.
-     *
-     * @param ccgid occupant
-     * @param roleType SUPERVISOR / SR_MANAGER
-     * @return position id when present
-     */
-    @Query("""
-            select p.positionId
-            from TimesheetPerson p, TimesheetPosition pos, TimesheetSyncRun r
-            where p.id.syncRunId = r.id
-              and pos.id.syncRunId = r.id
-              and pos.id.positionId = p.positionId
-              and r.kind = 'DAILY'
-              and r.status = 'ACTIVE'
-              and upper(p.id.ccgid) = upper(:ccgid)
-              and pos.roleType = :roleType
-            """)
-    Optional<String> findActivePositionIdByCcgidAndRole(
-            @Param("ccgid") String ccgid, @Param("roleType") String roleType);
-
-    /**
-     * Whether this bindable position belongs to the Center.
-     *
-     * @param positionId occupied position
-     * @param center GBS center
-     * @return true when present
-     */
-    @Query("""
-            select count(p) > 0
-            from TimesheetPerson p, TimesheetSyncRun r
-            where p.id.syncRunId = r.id
-              and r.kind = 'DAILY'
-              and r.status = 'ACTIVE'
-              and r.center = :center
-              and p.positionId = :positionId
-              and p.center = :center
-            """)
-    boolean existsActivePositionInCenter(
-            @Param("positionId") String positionId, @Param("center") String center);
-
-    /**
-     * People in this Center who occupy a bindable position.
+     * People in this Center in the ACTIVE Daily snapshot.
      *
      * @param center GBS center
      * @param name optional name / email / CCGID fragment; blank matches all
@@ -185,8 +154,6 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                       and r.status = 'ACTIVE'
                       and r.center = :center
                       and p.center = :center
-                      and p.positionId is not null
-                      and p.positionId <> ''
                       and (:name = ''
                            or lower(p.name) like lower(concat('%', :name, '%'))
                            or lower(p.id.ccgid) like lower(concat('%', :name, '%'))
@@ -201,8 +168,6 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                       and r.status = 'ACTIVE'
                       and r.center = :center
                       and p.center = :center
-                      and p.positionId is not null
-                      and p.positionId <> ''
                       and (:name = ''
                            or lower(p.name) like lower(concat('%', :name, '%'))
                            or lower(p.id.ccgid) like lower(concat('%', :name, '%'))
@@ -220,14 +185,14 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
      */
     @Query(
             value = """
-                    select p
-                    from TimesheetPerson p, TimesheetSyncRun r
+                    select distinct p
+                    from TimesheetPerson p, TimesheetPersonPositionRole o, TimesheetSyncRun r
                     where p.id.syncRunId = r.id
+                      and o.id.syncRunId = r.id
+                      and o.id.ccgid = p.id.ccgid
                       and r.kind = 'DAILY'
                       and r.status = 'ACTIVE'
                       and p.center = r.center
-                      and p.positionId is not null
-                      and p.positionId <> ''
                       and (:query = ''
                            or lower(p.name) like lower(concat('%', :query, '%'))
                            or lower(p.id.ccgid) like lower(concat('%', :query, '%'))
@@ -235,14 +200,14 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                     order by p.name, p.id.ccgid
                     """,
             countQuery = """
-                    select count(p)
-                    from TimesheetPerson p, TimesheetSyncRun r
+                    select count(distinct p)
+                    from TimesheetPerson p, TimesheetPersonPositionRole o, TimesheetSyncRun r
                     where p.id.syncRunId = r.id
+                      and o.id.syncRunId = r.id
+                      and o.id.ccgid = p.id.ccgid
                       and r.kind = 'DAILY'
                       and r.status = 'ACTIVE'
                       and p.center = r.center
-                      and p.positionId is not null
-                      and p.positionId <> ''
                       and (:query = ''
                            or lower(p.name) like lower(concat('%', :query, '%'))
                            or lower(p.id.ccgid) like lower(concat('%', :query, '%'))
@@ -273,7 +238,7 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
      * ACTIVE Daily people for the Timesheet Sync browser.
      *
      * @param center exact center; blank matches all
-     * @param q name / CCGID / emp id / email / position fragment; blank matches all
+     * @param q name / CCGID / emp id / email / job role / position fragment; blank matches all
      * @param pageable page
      * @return people
      */
@@ -291,7 +256,13 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                            or lower(p.id.ccgid) like lower(concat('%', :q, '%'))
                            or lower(coalesce(p.empId, '')) like lower(concat('%', :q, '%'))
                            or lower(coalesce(p.email, '')) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(p.positionId, '')) like lower(concat('%', :q, '%')))
+                           or lower(coalesce(p.jobRole, '')) like lower(concat('%', :q, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetPersonPositionRole o
+                                where o.id.syncRunId = r.id
+                                  and o.id.ccgid = p.id.ccgid
+                                  and lower(o.id.positionId) like lower(concat('%', :q, '%'))))
                     order by p.name, p.id.ccgid
                     """,
             countQuery = """
@@ -307,7 +278,13 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
                            or lower(p.id.ccgid) like lower(concat('%', :q, '%'))
                            or lower(coalesce(p.empId, '')) like lower(concat('%', :q, '%'))
                            or lower(coalesce(p.email, '')) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(p.positionId, '')) like lower(concat('%', :q, '%')))
+                           or lower(coalesce(p.jobRole, '')) like lower(concat('%', :q, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetPersonPositionRole o
+                                where o.id.syncRunId = r.id
+                                  and o.id.ccgid = p.id.ccgid
+                                  and lower(o.id.positionId) like lower(concat('%', :q, '%'))))
                     """)
     Page<TimesheetPerson> searchActive(
             @Param("center") String center, @Param("q") String q, Pageable pageable);

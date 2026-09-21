@@ -22,10 +22,11 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
  * Production + Productive). Daily date and Center come from the file
  * name. Daily never validates {@code hc}.
  *
- * <p>Person identity {@code MISSING_FIELD}, Monthly {@code INVALID_HC},
- * and Daily {@code PERSON_POSITION_CONFLICT} fail the run. Daily empty
- * supervisor / Sr Manager cells and {@code HIERARCHY_CONFLICT} stay
- * advisory. Historical {@code ASSIGNMENT_CONFLICT} stays advisory.
+ * <p>Person identity {@code MISSING_FIELD} and Monthly {@code INVALID_HC}
+ * fail the run. Daily empty supervisor / Sr Manager cells and
+ * {@code HIERARCHY_CONFLICT} stay advisory. Daily does not treat one
+ * person on two seats as a conflict. Historical {@code ASSIGNMENT_CONFLICT}
+ * stays advisory.
  */
 final class TimesheetRowValidator {
 

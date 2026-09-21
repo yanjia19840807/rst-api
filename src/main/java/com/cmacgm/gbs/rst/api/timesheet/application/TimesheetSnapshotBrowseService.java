@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -15,8 +16,10 @@ import org.springframework.transaction.annotation.Transactional;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPersonPositionRole;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonPositionRoleRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
@@ -28,22 +31,26 @@ import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
 public class TimesheetSnapshotBrowseService {
 
     private final TimesheetPersonRepository people;
+    private final TimesheetPersonPositionRoleRepository seats;
     private final TimesheetPositionRepository positions;
     private final TimesheetScopeRepository scopes;
     private final TimesheetKpiRepository kpis;
 
     /**
      * @param people Daily people
+     * @param seats Daily occupancies
      * @param positions Daily positions
      * @param scopes Monthly scopes
      * @param kpis Monthly Delivery HC
      */
     public TimesheetSnapshotBrowseService(
             TimesheetPersonRepository people,
+            TimesheetPersonPositionRoleRepository seats,
             TimesheetPositionRepository positions,
             TimesheetScopeRepository scopes,
             TimesheetKpiRepository kpis) {
         this.people = people;
+        this.seats = seats;
         this.positions = positions;
         this.scopes = scopes;
         this.kpis = kpis;
@@ -61,7 +68,7 @@ public class TimesheetSnapshotBrowseService {
 
     /**
      * @param center exact center
-     * @param q name / CCGID / emp id / email / position
+     * @param q name / CCGID / emp id / email / job role / position
      * @param page 1-based page
      * @param pageSize page size
      * @return people page
@@ -73,23 +80,30 @@ public class TimesheetSnapshotBrowseService {
     }
 
     /**
-     * @param center exact Agent-seat center
-     * @param q position id or occupant name on Agent, Supervisor or SR Manager
+     * @param center exact run center
+     * @param q position, parent, role or occupant name
      * @param page 1-based page
      * @param pageSize page size
-     * @return one row per AGENT position with the parent chain
+     * @return one row per position node
      */
     @Transactional(readOnly = true)
     public PageResponse<PositionView> positions(String center, String q, int page, int pageSize) {
-        var rows = positions.searchActiveChains(blank(center), blank(q), pageOf(page, pageSize));
-        Set<String> ids = new LinkedHashSet<>();
-        for (TimesheetPositionRepository.PositionChain row : rows.getContent()) {
-            addPositionId(ids, row.getAgentPositionId());
-            addPositionId(ids, row.getSupervisorPositionId());
-            addPositionId(ids, row.getSrManagerPositionId());
-        }
-        Map<String, String> names = occupantNames(ids);
+        var rows = positions.searchActiveNodes(blank(center), blank(q), pageOf(page, pageSize));
+        Map<String, String> names = occupantNamesByNode(rows.getContent());
         return PageResponse.from(rows, row -> toPosition(row, names));
+    }
+
+    /**
+     * @param center exact run center
+     * @param q name / CCGID / position / role
+     * @param page 1-based page
+     * @param pageSize page size
+     * @return occupancies
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<OccupancyView> occupancies(String center, String q, int page, int pageSize) {
+        return PageResponse.from(
+                seats.searchActive(blank(center), blank(q), pageOf(page, pageSize)), this::toOccupancy);
     }
 
     /**
@@ -144,25 +158,23 @@ public class TimesheetSnapshotBrowseService {
 
     private PersonView toPerson(TimesheetPerson row) {
         return new PersonView(
-                row.getCcgid(),
-                row.getEmpId(),
-                row.getName(),
-                row.getEmail(),
-                row.getCenter(),
-                row.getPositionId(),
-                row.getJobRole());
+                row.getCcgid(), row.getEmpId(), row.getName(), row.getEmail(), row.getJobRole(), row.getCenter());
     }
 
     private PositionView toPosition(
-            TimesheetPositionRepository.PositionChain row, Map<String, String> names) {
+            TimesheetPositionRepository.PositionNode row, Map<String, String> names) {
         return new PositionView(
-                row.getAgentPositionId(),
-                names.get(row.getAgentPositionId()),
-                row.getSupervisorPositionId(),
-                names.get(row.getSupervisorPositionId()),
-                row.getSrManagerPositionId(),
-                names.get(row.getSrManagerPositionId()),
+                row.getPositionId(),
+                row.getRoleType(),
+                row.getParentPositionId(),
+                row.getParentRoleType(),
+                names.get(nodeKey(row.getPositionId(), row.getRoleType())),
                 row.getCenter());
+    }
+
+    private OccupancyView toOccupancy(TimesheetPersonPositionRoleRepository.OccupancyRow row) {
+        return new OccupancyView(
+                row.getCcgid(), row.getName(), row.getPositionId(), row.getRoleType(), row.getCenter());
     }
 
     private Map<String, String> occupantNames(Set<String> ids) {
@@ -170,9 +182,21 @@ public class TimesheetSnapshotBrowseService {
             return Map.of();
         }
         Map<String, List<String>> grouped = new LinkedHashMap<>();
-        for (TimesheetPerson person : people.findActiveByPositionIdIn(ids)) {
-            String positionId = person.getPositionId();
-            String name = person.getName();
+        List<TimesheetPersonPositionRole> occupied = seats.findActiveByPositionIdIn(ids);
+        if (occupied.isEmpty()) {
+            return Map.of();
+        }
+        Set<String> ccgids = new LinkedHashSet<>();
+        for (TimesheetPersonPositionRole seat : occupied) {
+            ccgids.add(seat.getCcgid());
+        }
+        Map<String, String> nameByCcgid = new LinkedHashMap<>();
+        for (TimesheetPerson person : people.findActiveByCcgidIn(ccgids)) {
+            nameByCcgid.put(person.getCcgid().toUpperCase(Locale.ROOT), person.getName());
+        }
+        for (TimesheetPersonPositionRole seat : occupied) {
+            String positionId = seat.getPositionId();
+            String name = nameByCcgid.get(seat.getCcgid().toUpperCase(Locale.ROOT));
             if (positionId == null || positionId.isBlank() || name == null || name.isBlank()) {
                 continue;
             }
@@ -256,6 +280,47 @@ public class TimesheetSnapshotBrowseService {
         return ids;
     }
 
+    private Map<String, String> occupantNamesByNode(List<TimesheetPositionRepository.PositionNode> rows) {
+        Set<String> ids = new LinkedHashSet<>();
+        for (TimesheetPositionRepository.PositionNode row : rows) {
+            addPositionId(ids, row.getPositionId());
+        }
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, List<String>> grouped = new LinkedHashMap<>();
+        List<TimesheetPersonPositionRole> occupied = seats.findActiveByPositionIdIn(ids);
+        if (occupied.isEmpty()) {
+            return Map.of();
+        }
+        Set<String> ccgids = new LinkedHashSet<>();
+        for (TimesheetPersonPositionRole seat : occupied) {
+            ccgids.add(seat.getCcgid());
+        }
+        Map<String, String> nameByCcgid = new LinkedHashMap<>();
+        for (TimesheetPerson person : people.findActiveByCcgidIn(ccgids)) {
+            nameByCcgid.put(person.getCcgid().toUpperCase(Locale.ROOT), person.getName());
+        }
+        for (TimesheetPersonPositionRole seat : occupied) {
+            String name = nameByCcgid.get(seat.getCcgid().toUpperCase(Locale.ROOT));
+            if (name == null || name.isBlank()) {
+                continue;
+            }
+            List<String> names = grouped.computeIfAbsent(
+                    nodeKey(seat.getPositionId(), seat.getRoleType()), key -> new ArrayList<>());
+            if (!names.contains(name)) {
+                names.add(name);
+            }
+        }
+        Map<String, String> names = new LinkedHashMap<>();
+        grouped.forEach((key, occupants) -> names.put(key, String.join(", ", occupants)));
+        return names;
+    }
+
+    private static String nodeKey(String positionId, String roleType) {
+        return (positionId == null ? "" : positionId) + '|' + (roleType == null ? "" : roleType);
+    }
+
     private record AssignmentLookups(Map<String, String> names, Map<String, String> pl3Names) {
     }
 
@@ -306,29 +371,28 @@ public class TimesheetSnapshotBrowseService {
     }
 
     /**
-     * Daily person row.
+     * Daily person identity.
      */
-    public record PersonView(
-            String ccgid,
-            String empId,
-            String name,
-            String email,
-            String center,
-            String positionId,
-            String jobRole) {
+    public record PersonView(String ccgid, String empId, String name, String email, String jobRole, String center) {
     }
 
     /**
-     * Daily AGENT seat with the walked parent chain.
+     * Daily position node.
      */
     public record PositionView(
-            String agentPositionId,
-            String agentName,
-            String supervisorPositionId,
-            String supervisorName,
-            String srManagerPositionId,
-            String srManagerName,
+            String positionId,
+            String roleType,
+            String parentPositionId,
+            String parentRoleType,
+            String occupantName,
             String center) {
+    }
+
+    /**
+     * Daily occupancy.
+     */
+    public record OccupancyView(
+            String ccgid, String name, String positionId, String roleType, String center) {
     }
 
     /**

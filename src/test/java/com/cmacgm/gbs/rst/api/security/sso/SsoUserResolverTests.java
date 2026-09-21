@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import com.cmacgm.gbs.rst.api.security.RstRoles;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
@@ -26,7 +27,7 @@ class SsoUserResolverTests {
     void userReadsTimesheetSeat() {
         when(timesheet.findActiveProductSeat("S00596242"))
                 .thenReturn(Optional.of(new TimesheetReadService.ProductSeat(
-                        "SUPERVISOR", "GBS INDIA", "WU Bertie", "GSC.BERWU@cma-cgm.com")));
+                        Set.of("SUPERVISOR"), "GBS INDIA", "WU Bertie", "GSC.BERWU@cma-cgm.com")));
         SsoUserResolver resolver = new SsoUserResolver(timesheet, properties("UAT"));
 
         var principal = resolver.resolve(token(
@@ -40,6 +41,23 @@ class SsoUserResolverTests {
         assertThat(principal.roles()).containsExactly(RstRoles.SUPERVISOR);
         assertThat(principal.center()).isEqualTo("GBS INDIA");
         assertThat(principal.displayName()).isEqualTo("WU Bertie");
+    }
+
+    @Test
+    void userKeepsBothTimesheetRolesOnADualHatSeat() {
+        when(timesheet.findActiveProductSeat("S00596242"))
+                .thenReturn(Optional.of(new TimesheetReadService.ProductSeat(
+                        Set.of("SUPERVISOR", "SR_MANAGER"), "GBS INDIA", "WU Bertie", "GSC.BERWU@cma-cgm.com")));
+        SsoUserResolver resolver = new SsoUserResolver(timesheet, properties("UAT"));
+
+        var principal = resolver.resolve(token(
+                "S00596242",
+                List.of("CMACGM_APP_RST_USER_UAT"),
+                "WU Bertie",
+                "GSC.BERWU@cma-cgm.com",
+                null));
+
+        assertThat(principal.roles()).containsExactly(RstRoles.SUPERVISOR, RstRoles.SR_MANAGER);
     }
 
     @Test
@@ -99,7 +117,7 @@ class SsoUserResolverTests {
     void userTimesheetRoleMustBeProductSeat() {
         when(timesheet.findActiveProductSeat("S010"))
                 .thenReturn(Optional.of(new TimesheetReadService.ProductSeat(
-                        "ADMIN", "GBS INDIA", "Wrong", "w@cma-cgm.com")));
+                        Set.of("ADMIN"), "GBS INDIA", "Wrong", "w@cma-cgm.com")));
         SsoUserResolver resolver = new SsoUserResolver(timesheet, properties("UAT"));
 
         assertThatThrownBy(() -> resolver.resolve(token(
@@ -117,7 +135,7 @@ class SsoUserResolverTests {
     void userTimesheetCenterMustBeCanonical() {
         when(timesheet.findActiveProductSeat("S011"))
                 .thenReturn(Optional.of(new TimesheetReadService.ProductSeat(
-                        "AGENT", "Kuala Lumpur", "Agent", "a@cma-cgm.com")));
+                        Set.of("AGENT"), "Kuala Lumpur", "Agent", "a@cma-cgm.com")));
         SsoUserResolver resolver = new SsoUserResolver(timesheet, properties("UAT"));
 
         assertThatThrownBy(() -> resolver.resolve(token(

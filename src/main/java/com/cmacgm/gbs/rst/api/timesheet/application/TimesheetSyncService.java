@@ -28,6 +28,7 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonPositionRoleRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
@@ -50,6 +51,7 @@ public class TimesheetSyncService {
     private final TimesheetSyncRunRepository syncRuns;
     private final TimesheetPersonRepository people;
     private final TimesheetPositionRepository positions;
+    private final TimesheetPersonPositionRoleRepository seats;
     private final TimesheetScopeRepository scopes;
     private final TimesheetKpiRepository kpis;
     private final TimesheetSyncIssueRepository issues;
@@ -66,6 +68,7 @@ public class TimesheetSyncService {
      * @param syncRuns run repository
      * @param people person repository
      * @param positions position repository
+     * @param seats occupancy repository
      * @param scopes scope repository
      * @param kpis KPI repository
      * @param issues issue repository
@@ -82,6 +85,7 @@ public class TimesheetSyncService {
             TimesheetSyncRunRepository syncRuns,
             TimesheetPersonRepository people,
             TimesheetPositionRepository positions,
+            TimesheetPersonPositionRoleRepository seats,
             TimesheetScopeRepository scopes,
             TimesheetKpiRepository kpis,
             TimesheetSyncIssueRepository issues,
@@ -96,6 +100,7 @@ public class TimesheetSyncService {
         this.syncRuns = syncRuns;
         this.people = people;
         this.positions = positions;
+        this.seats = seats;
         this.scopes = scopes;
         this.kpis = kpis;
         this.issues = issues;
@@ -246,6 +251,7 @@ public class TimesheetSyncService {
                 return activateOrFail(run, rows.size(), hash, computed.issues(), () -> {
                     people.saveAll(computed.people());
                     positions.saveAll(computed.positions());
+                    seats.saveAll(computed.seats());
                 });
             }
             TimesheetMonthlyCalculator.Result computed = monthlyCalculator.compute(
@@ -344,12 +350,14 @@ public class TimesheetSyncService {
 
     private void dropStaleComputed(String kind, String center, UUID keepRunId) {
         if ("DAILY".equals(kind)) {
+            int seatsDropped = seats.deleteStaleForCenter(kind, center, keepRunId);
             int peopleDropped = people.deleteStaleForCenter(kind, center, keepRunId);
             int positionsDropped = positions.deleteStaleForCenter(kind, center, keepRunId);
             log.info(
-                    "Timesheet DAILY {} kept computed rows for {}; dropped people={} positions={}",
+                    "Timesheet DAILY {} kept computed rows for {}; dropped seats={} people={} positions={}",
                     center,
                     keepRunId,
+                    seatsDropped,
                     peopleDropped,
                     positionsDropped);
             return;

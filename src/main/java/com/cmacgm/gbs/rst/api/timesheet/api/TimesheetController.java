@@ -36,7 +36,7 @@ public class TimesheetController {
     }
 
     /**
-     * Pages people in a Center who have a bindable position.
+     * Pages people in a Center.
      *
      * @param principal current user
      * @param center optional Center; defaults to the identity Center

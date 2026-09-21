@@ -25,14 +25,18 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
      */
     @Query("""
             select s
-            from TimesheetScope s, TimesheetPerson p, TimesheetSyncRun monthly, TimesheetSyncRun daily
+            from TimesheetScope s, TimesheetPerson p, TimesheetPersonPositionRole o,
+                 TimesheetSyncRun monthly, TimesheetSyncRun daily
             where s.id.syncRunId = monthly.id
               and monthly.kind = 'MONTHLY'
               and monthly.status = 'ACTIVE'
               and p.id.syncRunId = daily.id
               and daily.kind = 'DAILY'
               and daily.status = 'ACTIVE'
-              and p.positionId = s.id.supervisorPositionId
+              and o.id.syncRunId = daily.id
+              and o.id.ccgid = p.id.ccgid
+              and o.id.positionId = s.id.supervisorPositionId
+              and o.id.roleType = 'SUPERVISOR'
               and daily.center = monthly.center
               and p.center = s.id.center
               and s.id.center = monthly.center
@@ -52,14 +56,18 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
      */
     @Query("""
             select count(s) > 0
-            from TimesheetScope s, TimesheetPerson p, TimesheetSyncRun monthly, TimesheetSyncRun daily
+            from TimesheetScope s, TimesheetPerson p, TimesheetPersonPositionRole o,
+                 TimesheetSyncRun monthly, TimesheetSyncRun daily
             where s.id.syncRunId = monthly.id
               and monthly.kind = 'MONTHLY'
               and monthly.status = 'ACTIVE'
               and p.id.syncRunId = daily.id
               and daily.kind = 'DAILY'
               and daily.status = 'ACTIVE'
-              and p.positionId = s.id.supervisorPositionId
+              and o.id.syncRunId = daily.id
+              and o.id.ccgid = p.id.ccgid
+              and o.id.positionId = s.id.supervisorPositionId
+              and o.id.roleType = 'SUPERVISOR'
               and daily.center = monthly.center
               and daily.center = :center
               and monthly.center = :center
@@ -109,18 +117,21 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
      */
     @Query("""
             select count(s) > 0
-            from TimesheetPerson p, TimesheetPosition pos, TimesheetScope s,
-                 TimesheetSyncRun daily, TimesheetSyncRun monthly
+            from TimesheetPerson p, TimesheetPersonPositionRole o, TimesheetPosition pos,
+                 TimesheetScope s, TimesheetSyncRun daily, TimesheetSyncRun monthly
             where p.id.syncRunId = daily.id
+              and o.id.syncRunId = daily.id
+              and o.id.ccgid = p.id.ccgid
               and pos.id.syncRunId = daily.id
-              and pos.id.positionId = p.positionId
+              and pos.id.positionId = o.id.positionId
+              and pos.id.roleType = o.id.roleType
               and daily.kind = 'DAILY'
               and daily.status = 'ACTIVE'
               and s.id.syncRunId = monthly.id
               and monthly.kind = 'MONTHLY'
               and monthly.status = 'ACTIVE'
               and upper(p.id.ccgid) = upper(:ccgid)
-              and pos.roleType = 'AGENT'
+              and pos.id.roleType = 'AGENT'
               and pos.parentPositionId = :positionId
               and s.id.supervisorPositionId = pos.parentPositionId
               and s.id.pl3Code = :pl3Code
@@ -192,13 +203,16 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
                            or lower(s.id.supervisorPositionId) like lower(concat('%', :supervisor, '%'))
                            or exists (
                                 select 1
-                                from TimesheetPerson occupant, TimesheetSyncRun occupantRun
+                                from TimesheetPerson occupant, TimesheetPersonPositionRole seat,
+                                     TimesheetSyncRun occupantRun
                                 where occupant.id.syncRunId = occupantRun.id
+                                  and seat.id.syncRunId = occupantRun.id
+                                  and seat.id.ccgid = occupant.id.ccgid
                                   and occupantRun.kind = 'DAILY'
                                   and occupantRun.status = 'ACTIVE'
                                   and occupantRun.center = r.center
                                   and occupant.center = s.id.center
-                                  and occupant.positionId = s.id.supervisorPositionId
+                                  and seat.id.positionId = s.id.supervisorPositionId
                                   and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
                       and (:pl3Code = ''
                            or lower(s.id.pl3Code) like lower(concat('%', :pl3Code, '%'))
@@ -217,13 +231,16 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
                            or lower(s.id.supervisorPositionId) like lower(concat('%', :supervisor, '%'))
                            or exists (
                                 select 1
-                                from TimesheetPerson occupant, TimesheetSyncRun occupantRun
+                                from TimesheetPerson occupant, TimesheetPersonPositionRole seat,
+                                     TimesheetSyncRun occupantRun
                                 where occupant.id.syncRunId = occupantRun.id
+                                  and seat.id.syncRunId = occupantRun.id
+                                  and seat.id.ccgid = occupant.id.ccgid
                                   and occupantRun.kind = 'DAILY'
                                   and occupantRun.status = 'ACTIVE'
                                   and occupantRun.center = r.center
                                   and occupant.center = s.id.center
-                                  and occupant.positionId = s.id.supervisorPositionId
+                                  and seat.id.positionId = s.id.supervisorPositionId
                                   and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
                       and (:pl3Code = ''
                            or lower(s.id.pl3Code) like lower(concat('%', :pl3Code, '%'))

@@ -16,7 +16,8 @@ import jakarta.persistence.Transient;
 import org.springframework.data.domain.Persistable;
 
 /**
- * One person identity in a Daily sync. One person occupies at most one position.
+ * One person identity in a Daily sync. Seats live on
+ * {@link TimesheetPersonPositionRole}.
  */
 @Entity
 @Table(name = "timesheet_person")
@@ -37,13 +38,9 @@ public class TimesheetPerson implements Persistable<TimesheetPerson.Id> {
     @Column(name = "emp_email", length = 254)
     private String email;
 
-    @Column(name = "position_id", length = 80)
-    private String positionId;
-
-    @Column(name = "emp_job_role", length = 200)
+    @Column(name = "job_role", length = 200)
     private String jobRole;
 
-    /** Assigned-id rows: true until first persist/load so saveAll does not merge+select. */
     @Transient
     private boolean isNew = true;
 
@@ -59,49 +56,17 @@ public class TimesheetPerson implements Persistable<TimesheetPerson.Id> {
      * @param center GBS center the person belongs to
      * @param name display name
      * @param email Timesheet emp_email
-     * @param positionId occupied bindable position; one person, one seat
-     * @return row
-     */
-    public static TimesheetPerson create(
-            UUID syncRunId,
-            String ccgid,
-            String empId,
-            String center,
-            String name,
-            String email,
-            String positionId) {
-        return create(syncRunId, ccgid, empId, center, name, email, positionId, null);
-    }
-
-    /**
-     * Creates a person row including Timesheet job role.
-     *
-     * @param syncRunId Daily run
-     * @param ccgid identity
-     * @param empId Timesheet person id
-     * @param center GBS center the person belongs to
-     * @param name display name
-     * @param email Timesheet emp_email
-     * @param positionId occupied bindable position
      * @param jobRole Timesheet emp_job_role
      * @return row
      */
     public static TimesheetPerson create(
-            UUID syncRunId,
-            String ccgid,
-            String empId,
-            String center,
-            String name,
-            String email,
-            String positionId,
-            String jobRole) {
+            UUID syncRunId, String ccgid, String empId, String center, String name, String email, String jobRole) {
         TimesheetPerson row = new TimesheetPerson();
         row.id = new Id(syncRunId, ccgid);
         row.empId = empId;
         row.center = center;
         row.name = name;
         row.email = email;
-        row.positionId = positionId;
         row.jobRole = jobRole;
         row.isNew = true;
         return row;
@@ -145,10 +110,6 @@ public class TimesheetPerson implements Persistable<TimesheetPerson.Id> {
 
     public String getEmail() {
         return email;
-    }
-
-    public String getPositionId() {
-        return positionId;
     }
 
     public String getJobRole() {

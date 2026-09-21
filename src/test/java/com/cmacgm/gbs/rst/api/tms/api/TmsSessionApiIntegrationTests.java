@@ -77,6 +77,7 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update("delete from timesheet_sync_issue");
         jdbcTemplate.update("delete from timesheet_kpi");
         jdbcTemplate.update("delete from timesheet_scope");
+        jdbcTemplate.update("delete from timesheet_person_position_role");
         jdbcTemplate.update("delete from timesheet_position");
         jdbcTemplate.update("delete from timesheet_person");
         jdbcTemplate.update("delete from timesheet_sync_run");
@@ -170,33 +171,47 @@ class TmsSessionApiIntegrationTests {
                 now);
         jdbcTemplate.update(
                 """
-                insert into timesheet_person (sync_run_id, ccgid, emp_id, name, position_id)
+                insert into timesheet_person (sync_run_id, ccgid, emp_id, name, center)
                 values (?, ?, ?, ?, ?)
                 """,
                 dailyRunId,
                 "SUPERVISOR001",
                 "SUPERVISOR001",
                 "Test Supervisor",
-                "POS-SUP-001");
+                "GBS INDIA");
         jdbcTemplate.update(
-                "insert into timesheet_person (sync_run_id, ccgid, emp_id, name, position_id) values (?, ?, ?, ?, ?)",
+                "insert into timesheet_person (sync_run_id, ccgid, emp_id, name, center) values (?, ?, ?, ?, ?)",
                 dailyRunId,
                 "AGENT001",
                 "AGENT001",
                 "Test Agent",
-                "POS-AGENT-001");
+                "GBS INDIA");
         jdbcTemplate.update(
                 """
                 insert into timesheet_position
-                    (sync_run_id, position_id, role_type, parent_position_id, center)
-                values (?, 'POS-SUP-001', 'SUPERVISOR', 'POS-SRM-001', 'GBS INDIA')
+                    (sync_run_id, position_id, role_type, parent_position_id, parent_role_type)
+                values (?, 'POS-SUP-001', 'SUPERVISOR', 'POS-SRM-001', 'SR_MANAGER')
                 """,
                 dailyRunId);
         jdbcTemplate.update(
                 """
                 insert into timesheet_position
-                    (sync_run_id, position_id, role_type, parent_position_id, center)
-                values (?, 'POS-AGENT-001', 'AGENT', 'POS-SUP-001', 'GBS INDIA')
+                    (sync_run_id, position_id, role_type, parent_position_id, parent_role_type)
+                values (?, 'POS-AGENT-001', 'AGENT', 'POS-SUP-001', 'SUPERVISOR')
+                """,
+                dailyRunId);
+        jdbcTemplate.update(
+                """
+                insert into timesheet_person_position_role
+                    (sync_run_id, ccgid, position_id, role_type)
+                values (?, 'SUPERVISOR001', 'POS-SUP-001', 'SUPERVISOR')
+                """,
+                dailyRunId);
+        jdbcTemplate.update(
+                """
+                insert into timesheet_person_position_role
+                    (sync_run_id, ccgid, position_id, role_type)
+                values (?, 'AGENT001', 'POS-AGENT-001', 'AGENT')
                 """,
                 dailyRunId);
         jdbcTemplate.update(

@@ -8,6 +8,7 @@ import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSnapshotBrowseService;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSnapshotBrowseService.AssignmentView;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSnapshotBrowseService.KpiView;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSnapshotBrowseService.OccupancyView;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSnapshotBrowseService.PersonView;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSnapshotBrowseService.PositionView;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSnapshotBrowseService.ScopeView;
@@ -83,6 +84,15 @@ public class TimesheetSyncController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         return snapshots.positions(center, q, page, pageSize);
+    }
+
+    @GetMapping("/tables/occupancies")
+    public PageResponse<OccupancyView> occupancies(
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        return snapshots.occupancies(center, q, page, pageSize);
     }
 
     @GetMapping("/tables/scopes")

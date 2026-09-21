@@ -50,6 +50,7 @@ class DelegationApiIntegrationTests {
         jdbcTemplate.update("delete from timesheet_sync_issue");
         jdbcTemplate.update("delete from timesheet_kpi");
         jdbcTemplate.update("delete from timesheet_scope");
+        jdbcTemplate.update("delete from timesheet_person_position_role");
         jdbcTemplate.update("delete from timesheet_position");
         jdbcTemplate.update("delete from timesheet_person");
         jdbcTemplate.update("delete from timesheet_sync_run");
@@ -63,12 +64,21 @@ class DelegationApiIntegrationTests {
                 DAILY_RUN_ID,
                 NOW,
                 NOW);
-        insertPerson("SUPERVISOR001", "Test Supervisor", "POS-SUP-001", "GBS INDIA");
-        insertPerson("SUPERVISOR002", "No Center Supervisor", "POS-SUP-002", "");
-        insertPosition("POS-SUP-002", "SUPERVISOR", "GBS INDIA");
-        insertPerson("AGENT010", "Test Agent AGENT010", "POS-AGT-010", "GBS INDIA");
-        insertPerson("AGENT011", "Test Agent AGENT011", "POS-AGT-011", "GBS INDIA");
-        insertPerson("AGENT099", "Other Center Agent", "POS-AGT-099", "GBS LEBANON");
+        insertPerson("SUPERVISOR001", "Test Supervisor", "GBS INDIA");
+        insertPerson("SUPERVISOR002", "No Center Supervisor", "");
+        insertPerson("AGENT010", "Test Agent AGENT010", "GBS INDIA");
+        insertPerson("AGENT011", "Test Agent AGENT011", "GBS INDIA");
+        insertPerson("AGENT099", "Other Center Agent", "GBS LEBANON");
+        insertPosition("POS-SUP-001", "SUPERVISOR");
+        insertPosition("POS-SUP-002", "SUPERVISOR");
+        insertPosition("POS-AGT-010", "AGENT");
+        insertPosition("POS-AGT-011", "AGENT");
+        insertPosition("POS-AGT-099", "AGENT");
+        insertSeat("SUPERVISOR001", "POS-SUP-001", "SUPERVISOR");
+        insertSeat("SUPERVISOR002", "POS-SUP-002", "SUPERVISOR");
+        insertSeat("AGENT010", "POS-AGT-010", "AGENT");
+        insertSeat("AGENT011", "POS-AGT-011", "AGENT");
+        insertSeat("AGENT099", "POS-AGT-099", "AGENT");
     }
 
     @Test
@@ -248,31 +258,42 @@ class DelegationApiIntegrationTests {
                 .doesNotContain("SUPERVISOR002", "AGENT099");
     }
 
-    private void insertPerson(String ccgid, String name, String positionId, String center) {
+    private void insertPerson(String ccgid, String name, String center) {
         jdbcTemplate.update(
                 """
                 insert into timesheet_person
-                    (sync_run_id, ccgid, emp_id, name, position_id, center)
-                values (?, ?, ?, ?, ?, ?)
+                    (sync_run_id, ccgid, emp_id, name, center)
+                values (?, ?, ?, ?, ?)
                 """,
                 DAILY_RUN_ID,
                 ccgid,
                 ccgid,
                 name,
-                positionId,
                 center);
     }
 
-    private void insertPosition(String positionId, String roleType, String center) {
+    private void insertPosition(String positionId, String roleType) {
         jdbcTemplate.update(
                 """
                 insert into timesheet_position
-                    (sync_run_id, position_id, role_type, parent_position_id, center)
-                values (?, ?, ?, null, ?)
+                    (sync_run_id, position_id, role_type, parent_position_id, parent_role_type)
+                values (?, ?, ?, null, null)
                 """,
                 DAILY_RUN_ID,
                 positionId,
-                roleType,
-                center);
+                roleType);
+    }
+
+    private void insertSeat(String ccgid, String positionId, String roleType) {
+        jdbcTemplate.update(
+                """
+                insert into timesheet_person_position_role
+                    (sync_run_id, ccgid, position_id, role_type)
+                values (?, ?, ?, ?)
+                """,
+                DAILY_RUN_ID,
+                ccgid,
+                positionId,
+                roleType);
     }
 }

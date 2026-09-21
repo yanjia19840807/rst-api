@@ -6,7 +6,6 @@ import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.security.api.dto.CurrentUserResponse;
 import com.cmacgm.gbs.rst.api.security.dev.DevIdentityProperties;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -54,10 +53,7 @@ public class MeController {
         profiles.touch(principal);
         DevIdentityProperties properties = devIdentity.getIfAvailable();
         Boolean overrideEnabled = properties == null ? null : properties.isOverrideEnabled();
-        String jobRole = timesheet.findActivePerson(principal.ccgid())
-                .map(TimesheetPerson::getJobRole)
-                .filter(value -> value != null && !value.isBlank())
-                .orElse(null);
+        String jobRole = timesheet.findActiveJobRole(principal.ccgid());
         return CurrentUserResponse.from(principal, overrideEnabled, jobRole);
     }
 }

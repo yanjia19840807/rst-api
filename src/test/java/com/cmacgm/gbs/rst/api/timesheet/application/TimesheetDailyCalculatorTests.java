@@ -11,6 +11,7 @@ import java.util.UUID;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.HcValue;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPersonPositionRole;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPosition;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 import org.junit.jupiter.api.Test;
@@ -33,30 +34,32 @@ class TimesheetDailyCalculatorTests {
 
         assertThat(result.issues()).isEmpty();
         assertThat(result.people())
-                .extracting(
-                        TimesheetPerson::getCcgid,
-                        TimesheetPerson::getCenter,
-                        TimesheetPerson::getEmail,
-                        TimesheetPerson::getPositionId)
-                .contains(org.assertj.core.groups.Tuple.tuple(
-                        "S00000001", "GBS INDIA", "s00000001@dev.local", "EMP-POS-1"));
+                .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getCenter, TimesheetPerson::getEmail)
+                .contains(org.assertj.core.groups.Tuple.tuple("S00000001", "GBS INDIA", "s00000001@dev.local"));
         assertThat(result.people())
-                .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getPositionId)
-                .contains(
-                        org.assertj.core.groups.Tuple.tuple("S00000002", "POS-SUP-1"),
-                        org.assertj.core.groups.Tuple.tuple("S00000003", "POS-SRM-1"),
-                        org.assertj.core.groups.Tuple.tuple("S00000004", "POS-DH-1"));
+                .extracting(TimesheetPerson::getCcgid)
+                .contains("S00000002", "S00000003")
+                .doesNotContain("S00000004");
         assertThat(result.positions())
                 .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
                 .contains(
                         org.assertj.core.groups.Tuple.tuple("EMP-POS-1", "AGENT"),
                         org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "SUPERVISOR"),
-                        org.assertj.core.groups.Tuple.tuple("POS-SRM-1", "SR_MANAGER"),
-                        org.assertj.core.groups.Tuple.tuple("POS-DH-1", "DOMAIN_HEAD"));
+                        org.assertj.core.groups.Tuple.tuple("POS-SRM-1", "SR_MANAGER"))
+                .doesNotContain(org.assertj.core.groups.Tuple.tuple("POS-DH-1", "DOMAIN_HEAD"));
+        assertThat(result.seats())
+                .extracting(
+                        TimesheetPersonPositionRole::getCcgid,
+                        TimesheetPersonPositionRole::getPositionId,
+                        TimesheetPersonPositionRole::getRoleType)
+                .contains(
+                        org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-1", "AGENT"),
+                        org.assertj.core.groups.Tuple.tuple("S00000002", "POS-SUP-1", "SUPERVISOR"),
+                        org.assertj.core.groups.Tuple.tuple("S00000003", "POS-SRM-1", "SR_MANAGER"));
     }
 
     @Test
-    void persistsEmpJobRoleOnTheEmployee() {
+    void persistsEmpJobRoleOnThePerson() {
         UUID runId = UUID.randomUUID();
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId,
@@ -97,12 +100,11 @@ class TimesheetDailyCalculatorTests {
                 GbsProcessCatalog.allowing("OTHER"));
 
         assertThat(result.people())
-                .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getPositionId)
-                .contains(
-                        org.assertj.core.groups.Tuple.tuple("S00000002", "POS-SUP-1"),
-                        org.assertj.core.groups.Tuple.tuple("S00000003", "POS-SRM-1"),
-                        org.assertj.core.groups.Tuple.tuple("S00000004", "POS-DH-1"));
+                .extracting(TimesheetPerson::getCcgid)
+                .contains("S00000002", "S00000003")
+                .doesNotContain("S00000004");
         assertThat(result.positions()).isEmpty();
+        assertThat(result.seats()).isEmpty();
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("EMPTY_FILE");
     }
 
@@ -117,13 +119,11 @@ class TimesheetDailyCalculatorTests {
                 RST_YES);
 
         assertThat(result.people())
-                .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getPositionId)
-                .contains(
-                        org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-1"),
-                        org.assertj.core.groups.Tuple.tuple("S00000002", "POS-SUP-1"),
-                        org.assertj.core.groups.Tuple.tuple("S00000003", "POS-SRM-1"),
-                        org.assertj.core.groups.Tuple.tuple("S00000004", "POS-DH-1"));
+                .extracting(TimesheetPerson::getCcgid)
+                .contains("S00000001", "S00000002", "S00000003")
+                .doesNotContain("S00000004");
         assertThat(result.positions()).isEmpty();
+        assertThat(result.seats()).isEmpty();
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("MISSING_FIELD");
     }
 
@@ -340,7 +340,9 @@ class TimesheetDailyCalculatorTests {
                         "Missing supervisor_name.");
         assertThat(result.issues()).allMatch(issue -> TimesheetRowValidator.isAdvisory(issue, "DAILY"));
         assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S00000001").doesNotContain("");
-        assertThat(result.people()).extracting(TimesheetPerson::getPositionId).doesNotContain("181664");
+        assertThat(result.seats())
+                .extracting(TimesheetPersonPositionRole::getPositionId)
+                .doesNotContain("181664");
         assertThat(result.positions())
                 .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
                 .contains(org.assertj.core.groups.Tuple.tuple("181664", "SUPERVISOR"));
@@ -375,7 +377,7 @@ class TimesheetDailyCalculatorTests {
                 .filteredOn(person -> "S00000001".equals(person.getCcgid()))
                 .extracting(TimesheetPerson::getCenter)
                 .containsExactly("GBS INDIA");
-        assertThat(result.positions()).allMatch(position -> "GBS INDIA".equals(position.getCenter()));
+        assertThat(result.positions()).isNotEmpty();
     }
 
     @Test
@@ -417,7 +419,7 @@ class TimesheetDailyCalculatorTests {
     }
 
     @Test
-    void samePersonOnTwoEmpPositionsIsAConflict() {
+    void samePersonOnTwoEmpPositionsKeepsBothSeats() {
         UUID runId = UUID.randomUUID();
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId,
@@ -428,11 +430,108 @@ class TimesheetDailyCalculatorTests {
                 null,
                 RST_YES);
 
-        assertThat(result.issues())
-                .extracting(TimesheetSyncIssue::getCode)
-                .contains("PERSON_POSITION_CONFLICT");
-        assertThat(result.issues()).anyMatch(issue -> !TimesheetRowValidator.isAdvisory(issue, "DAILY"));
-        assertThat(result.positions()).isEmpty();
+        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("PERSON_POSITION_CONFLICT");
+        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S00000001");
+        assertThat(result.seats())
+                .extracting(TimesheetPersonPositionRole::getCcgid, TimesheetPersonPositionRole::getPositionId)
+                .contains(
+                        org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-1"),
+                        org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-2"));
+    }
+
+    @Test
+    void keepsDualHatRolesOnTheSamePosition() {
+        UUID runId = UUID.randomUUID();
+        ReportRow asSupervisor = new ReportRow(
+                2,
+                LocalDate.of(2026, 7, 27),
+                null,
+                "EMP-1",
+                "S00000001",
+                "Agent One",
+                "s00000001@dev.local",
+                "EMP-POS-1",
+                "SUP-DONNA",
+                "S00000002",
+                "Donna",
+                "174050",
+                "SRM-1",
+                "S00000003",
+                "Manager One",
+                "173171",
+                "",
+                "",
+                "",
+                "",
+                "GBS INDIA",
+                "Site",
+                "Finance",
+                "PL1",
+                "PL2",
+                "PL3",
+                "PL3 Name",
+                "CMA",
+                "MY",
+                new HcValue(BigDecimal.ONE, false),
+                "production",
+                "productive",
+                null);
+        ReportRow asSrManager = new ReportRow(
+                3,
+                LocalDate.of(2026, 7, 27),
+                null,
+                "EMP-2",
+                "S00000010",
+                "Agent Two",
+                "s00000010@dev.local",
+                "EMP-POS-2",
+                "SUP-2",
+                "S00000007",
+                "Supervisor Two",
+                "POS-SUP-2",
+                "SRM-DONNA",
+                "S00000002",
+                "Donna",
+                "174050",
+                "",
+                "",
+                "",
+                "",
+                "GBS INDIA",
+                "Site",
+                "Finance",
+                "PL1",
+                "PL2",
+                "PL3",
+                "PL3 Name",
+                "CMA",
+                "MY",
+                new HcValue(BigDecimal.ONE, false),
+                "production",
+                "productive",
+                null);
+
+        TimesheetDailyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(asSupervisor, asSrManager),
+                Instant.parse("2026-08-23T00:00:00Z"),
+                null,
+                RST_YES);
+
+        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("PERSON_POSITION_CONFLICT");
+        assertThat(result.positions())
+                .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
+                .contains(
+                        org.assertj.core.groups.Tuple.tuple("174050", "SUPERVISOR"),
+                        org.assertj.core.groups.Tuple.tuple("174050", "SR_MANAGER"));
+        assertThat(result.seats())
+                .extracting(
+                        TimesheetPersonPositionRole::getCcgid,
+                        TimesheetPersonPositionRole::getPositionId,
+                        TimesheetPersonPositionRole::getRoleType)
+                .contains(
+                        org.assertj.core.groups.Tuple.tuple("S00000002", "174050", "SUPERVISOR"),
+                        org.assertj.core.groups.Tuple.tuple("S00000002", "174050", "SR_MANAGER"));
     }
 
     @Test
@@ -442,14 +541,15 @@ class TimesheetDailyCalculatorTests {
                 runId,
                 List.of(
                         row("S00000001", "EMP-1", "Agent One", "EMP-POS-1", "production", "productive"),
-                        row("S00000005", "EMP-5", "Agent Five", "EMP-POS-1", "management", "non-productive")),
+                        row("S00000005", "EMP-5", "Agent Five", "EMP-POS-1", "production", "productive")),
                 Instant.parse("2026-08-23T00:00:00Z"),
                 null,
                 RST_YES);
 
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("OCCUPANCY_CONFLICT");
-        assertThat(result.people())
-                .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getPositionId)
+        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S00000001", "S00000005");
+        assertThat(result.seats())
+                .extracting(TimesheetPersonPositionRole::getCcgid, TimesheetPersonPositionRole::getPositionId)
                 .contains(
                         org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-1"),
                         org.assertj.core.groups.Tuple.tuple("S00000005", "EMP-POS-1"));
@@ -468,8 +568,9 @@ class TimesheetDailyCalculatorTests {
                 RST_YES);
 
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("PERSON_POSITION_CONFLICT");
-        assertThat(result.people())
-                .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getPositionId)
+        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S00000001");
+        assertThat(result.seats())
+                .extracting(TimesheetPersonPositionRole::getCcgid, TimesheetPersonPositionRole::getPositionId)
                 .contains(org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-1"));
         assertThat(result.positions())
                 .extracting(TimesheetPosition::getPositionId)
@@ -493,7 +594,7 @@ class TimesheetDailyCalculatorTests {
                 .extracting(TimesheetSyncIssue::getCode, TimesheetSyncIssue::getMessage)
                 .contains(org.assertj.core.groups.Tuple.tuple(
                         "HIERARCHY_CONFLICT",
-                        "position_id EMP-POS-1 maps to multiple parent_position_id: POS-SUP-1, POS-SUP-2"));
+                        "position_id EMP-POS-1 role AGENT maps to multiple parent_position_id: POS-SUP-1, POS-SUP-2"));
         assertThat(result.issues()).allMatch(issue -> TimesheetRowValidator.isAdvisory(issue, "DAILY"));
         assertThat(result.positions())
                 .extracting(TimesheetPosition::getPositionId)
@@ -566,13 +667,11 @@ class TimesheetDailyCalculatorTests {
                 RST_YES);
 
         assertThat(result.people())
-                .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getPositionId)
-                .contains(
-                        org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-1"),
-                        org.assertj.core.groups.Tuple.tuple("S00000002", "POS-SUP-1"),
-                        org.assertj.core.groups.Tuple.tuple("S00000003", "POS-SRM-1"),
-                        org.assertj.core.groups.Tuple.tuple("S00000004", "POS-DH-1"));
+                .extracting(TimesheetPerson::getCcgid)
+                .contains("S00000001", "S00000002", "S00000003")
+                .doesNotContain("S00000004");
         assertThat(result.positions()).isEmpty();
+        assertThat(result.seats()).isEmpty();
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("MISSING_FIELD");
     }
 
@@ -670,8 +769,9 @@ class TimesheetDailyCalculatorTests {
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId, List.of(agent), Instant.parse("2026-08-23T00:00:00Z"), null, RST_YES);
 
-        assertThat(result.people())
-                .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getPositionId)
+        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S01031707");
+        assertThat(result.seats())
+                .extracting(TimesheetPersonPositionRole::getCcgid, TimesheetPersonPositionRole::getPositionId)
                 .contains(org.assertj.core.groups.Tuple.tuple("S01031707", "273656"));
         assertThat(result.positions())
                 .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)

@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.security.sso;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -66,8 +67,19 @@ public class SsoUserResolver {
                 .orElseThrow(() -> new SsoException(
                         "sso-timesheet-missing",
                         "CCGID is not in the ACTIVE Daily Timesheet."));
-        String role = seat.roleType() == null ? "" : seat.roleType().trim().toUpperCase(Locale.ROOT);
-        if (!RstRoles.TIMESHEET_USER_ROLES.contains(role)) {
+        Set<String> roles = new LinkedHashSet<>();
+        if (seat.roleTypes() != null) {
+            for (String roleType : seat.roleTypes()) {
+                if (roleType == null || roleType.isBlank()) {
+                    continue;
+                }
+                String role = roleType.trim().toUpperCase(Locale.ROOT);
+                if (RstRoles.TIMESHEET_USER_ROLES.contains(role)) {
+                    roles.add(role);
+                }
+            }
+        }
+        if (roles.isEmpty()) {
             throw new SsoException(
                     "sso-timesheet-role",
                     "Timesheet role is not AGENT, SUPERVISOR, SR_MANAGER, or DOMAIN_HEAD.");
@@ -82,7 +94,7 @@ public class SsoUserResolver {
                 ccgid,
                 firstNonBlank(seat.displayName(), displayName),
                 firstNonBlank(seat.email(), email),
-                Set.of(role),
+                Set.copyOf(roles),
                 Set.of(),
                 center);
     }
@@ -95,18 +107,12 @@ public class SsoUserResolver {
         return center;
     }
 
-    // TODO: remove this after testing
     private static String firstRole(Jwt jwt) {
-        return "CMACGM_APP_RST_ADMIN_UAT";
-
-        // List<String> roles = jwt.getClaimAsStringList("roles");
-        // if (roles == null || roles.isEmpty()) {
-        //     String single = jwt.getClaimAsString("roles");
-        //     return single;
-        // }
-
-        
-        // return roles.getFirst();
+        List<String> roles = jwt.getClaimAsStringList("roles");
+        if (roles == null || roles.isEmpty()) {
+            return jwt.getClaimAsString("roles");
+        }
+        return roles.getFirst();
     }
 
     private static String firstClaim(Jwt jwt, String first, String second) {

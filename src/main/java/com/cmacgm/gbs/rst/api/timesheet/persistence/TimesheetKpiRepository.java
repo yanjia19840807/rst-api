@@ -177,13 +177,16 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
                            or lower(k.id.supervisorPositionId) like lower(concat('%', :supervisor, '%'))
                            or exists (
                                 select 1
-                                from TimesheetPerson occupant, TimesheetSyncRun occupantRun
+                                from TimesheetPerson occupant, TimesheetPersonPositionRole seat,
+                                     TimesheetSyncRun occupantRun
                                 where occupant.id.syncRunId = occupantRun.id
+                                  and seat.id.syncRunId = occupantRun.id
+                                  and seat.id.ccgid = occupant.id.ccgid
                                   and occupantRun.kind = 'DAILY'
                                   and occupantRun.status = 'ACTIVE'
                                   and occupantRun.center = r.center
                                   and occupant.center = k.id.center
-                                  and occupant.positionId = k.id.supervisorPositionId
+                                  and seat.id.positionId = k.id.supervisorPositionId
                                   and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
                       and (:pl3Code = ''
                            or lower(k.id.pl3Code) like lower(concat('%', :pl3Code, '%'))
@@ -209,13 +212,16 @@ public interface TimesheetKpiRepository extends JpaRepository<TimesheetKpi, Time
                            or lower(k.id.supervisorPositionId) like lower(concat('%', :supervisor, '%'))
                            or exists (
                                 select 1
-                                from TimesheetPerson occupant, TimesheetSyncRun occupantRun
+                                from TimesheetPerson occupant, TimesheetPersonPositionRole seat,
+                                     TimesheetSyncRun occupantRun
                                 where occupant.id.syncRunId = occupantRun.id
+                                  and seat.id.syncRunId = occupantRun.id
+                                  and seat.id.ccgid = occupant.id.ccgid
                                   and occupantRun.kind = 'DAILY'
                                   and occupantRun.status = 'ACTIVE'
                                   and occupantRun.center = r.center
                                   and occupant.center = k.id.center
-                                  and occupant.positionId = k.id.supervisorPositionId
+                                  and seat.id.positionId = k.id.supervisorPositionId
                                   and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
                       and (:pl3Code = ''
                            or lower(k.id.pl3Code) like lower(concat('%', :pl3Code, '%'))
