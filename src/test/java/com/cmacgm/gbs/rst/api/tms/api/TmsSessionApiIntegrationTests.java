@@ -188,14 +188,32 @@ class TmsSessionApiIntegrationTests {
                 "GBS INDIA");
         jdbcTemplate.update(
                 """
-                insert into timesheet_position
+                insert into timesheet_position (sync_run_id, position_id, role_type)
+                values (?, 'POS-SRM-001', 'SR_MANAGER')
+                """,
+                dailyRunId);
+        jdbcTemplate.update(
+                """
+                insert into timesheet_position (sync_run_id, position_id, role_type)
+                values (?, 'POS-SUP-001', 'SUPERVISOR')
+                """,
+                dailyRunId);
+        jdbcTemplate.update(
+                """
+                insert into timesheet_position_parent
                     (sync_run_id, position_id, role_type, parent_position_id, parent_role_type)
                 values (?, 'POS-SUP-001', 'SUPERVISOR', 'POS-SRM-001', 'SR_MANAGER')
                 """,
                 dailyRunId);
         jdbcTemplate.update(
                 """
-                insert into timesheet_position
+                insert into timesheet_position (sync_run_id, position_id, role_type)
+                values (?, 'POS-AGENT-001', 'AGENT')
+                """,
+                dailyRunId);
+        jdbcTemplate.update(
+                """
+                insert into timesheet_position_parent
                     (sync_run_id, position_id, role_type, parent_position_id, parent_role_type)
                 values (?, 'POS-AGENT-001', 'AGENT', 'POS-SUP-001', 'SUPERVISOR')
                 """,

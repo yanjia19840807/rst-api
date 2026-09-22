@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -17,10 +18,12 @@ import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPersonPositionRole;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPositionParent;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonPositionRoleRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionParentRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
 
@@ -33,6 +36,7 @@ public class TimesheetSnapshotBrowseService {
     private final TimesheetPersonRepository people;
     private final TimesheetPersonPositionRoleRepository seats;
     private final TimesheetPositionRepository positions;
+    private final TimesheetPositionParentRepository parents;
     private final TimesheetScopeRepository scopes;
     private final TimesheetKpiRepository kpis;
 
@@ -40,6 +44,7 @@ public class TimesheetSnapshotBrowseService {
      * @param people Daily people
      * @param seats Daily occupancies
      * @param positions Daily positions
+     * @param parents Daily parent edges
      * @param scopes Monthly scopes
      * @param kpis Monthly Delivery HC
      */
@@ -47,11 +52,13 @@ public class TimesheetSnapshotBrowseService {
             TimesheetPersonRepository people,
             TimesheetPersonPositionRoleRepository seats,
             TimesheetPositionRepository positions,
+            TimesheetPositionParentRepository parents,
             TimesheetScopeRepository scopes,
             TimesheetKpiRepository kpis) {
         this.people = people;
         this.seats = seats;
         this.positions = positions;
+        this.parents = parents;
         this.scopes = scopes;
         this.kpis = kpis;
     }
@@ -90,7 +97,8 @@ public class TimesheetSnapshotBrowseService {
     public PageResponse<PositionView> positions(String center, String q, int page, int pageSize) {
         var rows = positions.searchActiveNodes(blank(center), blank(q), pageOf(page, pageSize));
         Map<String, String> names = occupantNamesByNode(rows.getContent());
-        return PageResponse.from(rows, row -> toPosition(row, names));
+        Map<String, List<TimesheetPositionParent>> edges = parentsByNode(blank(center), rows.getContent());
+        return PageResponse.from(rows, row -> toPosition(row, names, edges));
     }
 
     /**
@@ -162,14 +170,43 @@ public class TimesheetSnapshotBrowseService {
     }
 
     private PositionView toPosition(
-            TimesheetPositionRepository.PositionNode row, Map<String, String> names) {
+            TimesheetPositionRepository.PositionNode row,
+            Map<String, String> names,
+            Map<String, List<TimesheetPositionParent>> edges) {
+        List<TimesheetPositionParent> parentsOfNode =
+                edges.getOrDefault(nodeKey(row.getPositionId(), row.getRoleType()), List.of());
         return new PositionView(
                 row.getPositionId(),
                 row.getRoleType(),
-                row.getParentPositionId(),
-                row.getParentRoleType(),
+                joinParent(parentsOfNode, TimesheetPositionParent::getParentPositionId),
+                joinParent(parentsOfNode, TimesheetPositionParent::getParentRoleType),
                 names.get(nodeKey(row.getPositionId(), row.getRoleType())),
                 row.getCenter());
+    }
+
+    private Map<String, List<TimesheetPositionParent>> parentsByNode(
+            String center, List<TimesheetPositionRepository.PositionNode> rows) {
+        Set<String> ids = new LinkedHashSet<>();
+        for (TimesheetPositionRepository.PositionNode row : rows) {
+            addPositionId(ids, row.getPositionId());
+        }
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, List<TimesheetPositionParent>> grouped = new LinkedHashMap<>();
+        for (TimesheetPositionParent edge : parents.findActiveByPositionIdIn(center, ids)) {
+            grouped.computeIfAbsent(nodeKey(edge.getPositionId(), edge.getRoleType()), key -> new ArrayList<>())
+                    .add(edge);
+        }
+        return grouped;
+    }
+
+    private static String joinParent(
+            List<TimesheetPositionParent> edges,
+            java.util.function.Function<TimesheetPositionParent, String> value) {
+        String joined = edges.stream().map(value).filter(part -> part != null && !part.isBlank())
+                .collect(Collectors.joining(", "));
+        return joined.isBlank() ? null : joined;
     }
 
     private OccupancyView toOccupancy(TimesheetPersonPositionRoleRepository.OccupancyRow row) {

@@ -32,6 +32,7 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonPositionRoleRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionParentRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncIssueRepository;
@@ -82,6 +83,7 @@ class TimesheetSyncServiceTests {
                 syncRuns,
                 people,
                 positions,
+                unusedRepository(TimesheetPositionParentRepository.class),
                 unusedRepository(TimesheetPersonPositionRoleRepository.class),
                 scopes,
                 kpis,
@@ -155,6 +157,7 @@ class TimesheetSyncServiceTests {
                 syncRunRepository(),
                 unusedRepository(TimesheetPersonRepository.class),
                 unusedRepository(TimesheetPositionRepository.class),
+                unusedRepository(TimesheetPositionParentRepository.class),
                 unusedRepository(TimesheetPersonPositionRoleRepository.class),
                 capturingRepository(TimesheetScopeRepository.class, savedScopes),
                 capturingRepository(TimesheetKpiRepository.class, savedKpis),
@@ -226,6 +229,7 @@ class TimesheetSyncServiceTests {
                         }),
                 unusedRepository(TimesheetPersonRepository.class),
                 unusedRepository(TimesheetPositionRepository.class),
+                unusedRepository(TimesheetPositionParentRepository.class),
                 unusedRepository(TimesheetPersonPositionRoleRepository.class),
                 capturingRepository(TimesheetScopeRepository.class, savedScopes),
                 capturingRepository(TimesheetKpiRepository.class, savedKpis),
@@ -297,6 +301,7 @@ class TimesheetSyncServiceTests {
                         }),
                 unusedRepository(TimesheetPersonRepository.class),
                 unusedRepository(TimesheetPositionRepository.class),
+                unusedRepository(TimesheetPositionParentRepository.class),
                 unusedRepository(TimesheetPersonPositionRoleRepository.class),
                 capturingRepository(TimesheetScopeRepository.class, savedScopes),
                 capturingRepository(TimesheetKpiRepository.class, savedKpis),
@@ -386,6 +391,7 @@ class TimesheetSyncServiceTests {
                 syncRuns,
                 unusedRepository(TimesheetPersonRepository.class),
                 unusedRepository(TimesheetPositionRepository.class),
+                unusedRepository(TimesheetPositionParentRepository.class),
                 unusedRepository(TimesheetPersonPositionRoleRepository.class),
                 capturingRepository(TimesheetScopeRepository.class, savedScopes),
                 capturingRepository(TimesheetKpiRepository.class, savedKpis),
@@ -454,6 +460,7 @@ class TimesheetSyncServiceTests {
                         }),
                 unusedRepository(TimesheetPersonRepository.class),
                 unusedRepository(TimesheetPositionRepository.class),
+                unusedRepository(TimesheetPositionParentRepository.class),
                 unusedRepository(TimesheetPersonPositionRoleRepository.class),
                 capturingRepository(TimesheetScopeRepository.class, savedScopes),
                 capturingRepository(TimesheetKpiRepository.class, savedKpis),

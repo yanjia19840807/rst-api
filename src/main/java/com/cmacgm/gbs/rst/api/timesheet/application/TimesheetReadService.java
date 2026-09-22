@@ -24,6 +24,8 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonPositionRoleRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPositionParent;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionParentRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
@@ -43,6 +45,7 @@ public class TimesheetReadService {
     private final TimesheetPersonRepository people;
     private final TimesheetPersonPositionRoleRepository seats;
     private final TimesheetPositionRepository positions;
+    private final TimesheetPositionParentRepository parents;
     private final TimesheetScopeRepository scopes;
     private final TimesheetKpiRepository kpis;
 
@@ -51,6 +54,7 @@ public class TimesheetReadService {
      * @param people Daily people
      * @param seats Daily occupancies
      * @param positions Daily positions
+     * @param parents Daily parent edges
      * @param scopes Monthly scopes
      * @param kpis Monthly KPIs
      */
@@ -59,12 +63,14 @@ public class TimesheetReadService {
             TimesheetPersonRepository people,
             TimesheetPersonPositionRoleRepository seats,
             TimesheetPositionRepository positions,
+            TimesheetPositionParentRepository parents,
             TimesheetScopeRepository scopes,
             TimesheetKpiRepository kpis) {
         this.syncRuns = syncRuns;
         this.people = people;
         this.seats = seats;
         this.positions = positions;
+        this.parents = parents;
         this.scopes = scopes;
         this.kpis = kpis;
     }
@@ -333,7 +339,7 @@ public class TimesheetReadService {
      * Position occupied by a person for a role.
      *
      * @param ccgid occupant
-     * @param roleType SUPERVISOR / SR_MANAGER
+     * @param roleType SUPERVISOR / SR_MANAGER / DOMAIN_HEAD
      * @return position ids
      */
     @Transactional(readOnly = true)
@@ -626,17 +632,15 @@ public class TimesheetReadService {
         if (positionId == null || positionId.isBlank()) {
             return null;
         }
-        List<TimesheetPosition> nodes = positions.findActiveByPositionId(positionId.trim());
-        return nodes.stream()
-                .filter(position -> "SUPERVISOR".equals(position.getRoleType()))
-                .map(TimesheetPosition::getParentPositionId)
-                .filter(id -> id != null && !id.isBlank())
-                .findFirst()
-                .orElseGet(() -> nodes.stream()
-                        .map(TimesheetPosition::getParentPositionId)
-                        .filter(id -> id != null && !id.isBlank())
-                        .findFirst()
-                        .orElse(null));
+        List<TimesheetPositionParent> edges = parents.findActiveByPositionId(positionId.trim());
+        List<TimesheetPositionParent> supervisorEdges = edges.stream()
+                .filter(edge -> "SUPERVISOR".equals(edge.getRoleType()))
+                .toList();
+        List<TimesheetPositionParent> chosen = supervisorEdges.isEmpty() ? edges : supervisorEdges;
+        if (chosen.size() != 1) {
+            return null;
+        }
+        return chosen.getFirst().getParentPositionId();
     }
 
     /**

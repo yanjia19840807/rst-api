@@ -94,11 +94,13 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
     @Query("""
             select agent
             from TimesheetPerson supervisor, TimesheetPersonPositionRole supervisorSeat,
-                 TimesheetPosition child, TimesheetPerson agent, TimesheetPersonPositionRole agentSeat,
+                 TimesheetPosition child, TimesheetPositionParent edge,
+                 TimesheetPerson agent, TimesheetPersonPositionRole agentSeat,
                  TimesheetSyncRun daily
             where supervisor.id.syncRunId = daily.id
               and supervisorSeat.id.syncRunId = daily.id
               and child.id.syncRunId = daily.id
+              and edge.id.syncRunId = daily.id
               and agent.id.syncRunId = daily.id
               and agentSeat.id.syncRunId = daily.id
               and daily.kind = 'DAILY'
@@ -108,7 +110,10 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
               and upper(supervisor.id.ccgid) = upper(:supervisorCcgid)
               and supervisorSeat.id.ccgid = supervisor.id.ccgid
               and supervisorSeat.id.roleType = 'SUPERVISOR'
-              and child.parentPositionId = supervisorSeat.id.positionId
+              and edge.id.positionId = child.id.positionId
+              and edge.id.roleType = child.id.roleType
+              and edge.id.parentPositionId = supervisorSeat.id.positionId
+              and edge.id.parentRoleType = 'SUPERVISOR'
               and child.id.roleType = 'AGENT'
               and agentSeat.id.ccgid = agent.id.ccgid
               and agentSeat.id.positionId = child.id.positionId

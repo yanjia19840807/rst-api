@@ -65,8 +65,6 @@ public interface TimesheetPositionRepository
             value = """
                     select p.id.positionId as positionId,
                            p.id.roleType as roleType,
-                           p.parentPositionId as parentPositionId,
-                           p.parentRoleType as parentRoleType,
                            r.center as center
                     from TimesheetPosition p, TimesheetSyncRun r
                     where p.id.syncRunId = r.id
@@ -75,8 +73,14 @@ public interface TimesheetPositionRepository
                       and (:center = '' or r.center = :center)
                       and (:q = ''
                            or lower(p.id.positionId) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(p.parentPositionId, '')) like lower(concat('%', :q, '%'))
                            or lower(p.id.roleType) like lower(concat('%', :q, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetPositionParent edge
+                                where edge.id.syncRunId = r.id
+                                  and edge.id.positionId = p.id.positionId
+                                  and edge.id.roleType = p.id.roleType
+                                  and lower(edge.id.parentPositionId) like lower(concat('%', :q, '%')))
                            or exists (
                                 select 1
                                 from TimesheetPerson occupant, TimesheetPersonPositionRole seat
@@ -90,7 +94,8 @@ public interface TimesheetPositionRepository
                              case p.id.roleType
                                  when 'AGENT' then 0
                                  when 'SUPERVISOR' then 1
-                                 else 2
+                                 when 'SR_MANAGER' then 2
+                                 else 3
                              end
                     """,
             countQuery = """
@@ -102,8 +107,14 @@ public interface TimesheetPositionRepository
                       and (:center = '' or r.center = :center)
                       and (:q = ''
                            or lower(p.id.positionId) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(p.parentPositionId, '')) like lower(concat('%', :q, '%'))
                            or lower(p.id.roleType) like lower(concat('%', :q, '%'))
+                           or exists (
+                                select 1
+                                from TimesheetPositionParent edge
+                                where edge.id.syncRunId = r.id
+                                  and edge.id.positionId = p.id.positionId
+                                  and edge.id.roleType = p.id.roleType
+                                  and lower(edge.id.parentPositionId) like lower(concat('%', :q, '%')))
                            or exists (
                                 select 1
                                 from TimesheetPerson occupant, TimesheetPersonPositionRole seat
@@ -128,23 +139,27 @@ public interface TimesheetPositionRepository
     @Query(
             value = """
                     select agent.id.positionId as agentPositionId,
-                           agent.parentPositionId as supervisorPositionId,
-                           supervisor.parentPositionId as srManagerPositionId,
+                           supervisorEdge.id.parentPositionId as supervisorPositionId,
+                           managerEdge.id.parentPositionId as srManagerPositionId,
                            r.center as center
                     from TimesheetPosition agent
                     join TimesheetSyncRun r on agent.id.syncRunId = r.id
-                    left join TimesheetPosition supervisor
-                      on supervisor.id.syncRunId = agent.id.syncRunId
-                     and supervisor.id.positionId = agent.parentPositionId
-                     and supervisor.id.roleType = coalesce(agent.parentRoleType, 'SUPERVISOR')
+                    left join TimesheetPositionParent supervisorEdge
+                      on supervisorEdge.id.syncRunId = agent.id.syncRunId
+                     and supervisorEdge.id.positionId = agent.id.positionId
+                     and supervisorEdge.id.roleType = agent.id.roleType
+                    left join TimesheetPositionParent managerEdge
+                      on managerEdge.id.syncRunId = agent.id.syncRunId
+                     and managerEdge.id.positionId = supervisorEdge.id.parentPositionId
+                     and managerEdge.id.roleType = supervisorEdge.id.parentRoleType
                     where r.kind = 'DAILY'
                       and r.status = 'ACTIVE'
                       and agent.id.roleType = 'AGENT'
                       and (:center = '' or r.center = :center)
                       and (:q = ''
                            or lower(agent.id.positionId) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(agent.parentPositionId, '')) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(supervisor.parentPositionId, '')) like lower(concat('%', :q, '%'))
+                           or lower(coalesce(supervisorEdge.id.parentPositionId, '')) like lower(concat('%', :q, '%'))
+                           or lower(coalesce(managerEdge.id.parentPositionId, '')) like lower(concat('%', :q, '%'))
                            or exists (
                                 select 1
                                 from TimesheetPerson occupant, TimesheetPersonPositionRole seat,
@@ -158,8 +173,8 @@ public interface TimesheetPositionRepository
                                   and occupant.center = r.center
                                   and seat.id.positionId in (
                                         agent.id.positionId,
-                                        agent.parentPositionId,
-                                        supervisor.parentPositionId)
+                                        supervisorEdge.id.parentPositionId,
+                                        managerEdge.id.parentPositionId)
                                   and lower(occupant.name) like lower(concat('%', :q, '%'))))
                     order by r.center, agent.id.positionId
                     """,
@@ -167,18 +182,22 @@ public interface TimesheetPositionRepository
                     select count(agent)
                     from TimesheetPosition agent
                     join TimesheetSyncRun r on agent.id.syncRunId = r.id
-                    left join TimesheetPosition supervisor
-                      on supervisor.id.syncRunId = agent.id.syncRunId
-                     and supervisor.id.positionId = agent.parentPositionId
-                     and supervisor.id.roleType = coalesce(agent.parentRoleType, 'SUPERVISOR')
+                    left join TimesheetPositionParent supervisorEdge
+                      on supervisorEdge.id.syncRunId = agent.id.syncRunId
+                     and supervisorEdge.id.positionId = agent.id.positionId
+                     and supervisorEdge.id.roleType = agent.id.roleType
+                    left join TimesheetPositionParent managerEdge
+                      on managerEdge.id.syncRunId = agent.id.syncRunId
+                     and managerEdge.id.positionId = supervisorEdge.id.parentPositionId
+                     and managerEdge.id.roleType = supervisorEdge.id.parentRoleType
                     where r.kind = 'DAILY'
                       and r.status = 'ACTIVE'
                       and agent.id.roleType = 'AGENT'
                       and (:center = '' or r.center = :center)
                       and (:q = ''
                            or lower(agent.id.positionId) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(agent.parentPositionId, '')) like lower(concat('%', :q, '%'))
-                           or lower(coalesce(supervisor.parentPositionId, '')) like lower(concat('%', :q, '%'))
+                           or lower(coalesce(supervisorEdge.id.parentPositionId, '')) like lower(concat('%', :q, '%'))
+                           or lower(coalesce(managerEdge.id.parentPositionId, '')) like lower(concat('%', :q, '%'))
                            or exists (
                                 select 1
                                 from TimesheetPerson occupant, TimesheetPersonPositionRole seat,
@@ -192,8 +211,8 @@ public interface TimesheetPositionRepository
                                   and occupant.center = r.center
                                   and seat.id.positionId in (
                                         agent.id.positionId,
-                                        agent.parentPositionId,
-                                        supervisor.parentPositionId)
+                                        supervisorEdge.id.parentPositionId,
+                                        managerEdge.id.parentPositionId)
                                   and lower(occupant.name) like lower(concat('%', :q, '%'))))
                     """)
     Page<PositionChain> searchActiveChains(
@@ -213,13 +232,16 @@ public interface TimesheetPositionRepository
     @Query(
             value = """
                     select agent.id.positionId as agentPositionId,
-                           agent.parentPositionId as supervisorPositionId,
+                           edge.id.parentPositionId as supervisorPositionId,
                            scope.id.pl3Code as pl3Code,
                            scope.pl3Name as pl3Name,
                            scope.id.center as center
-                    from TimesheetPosition agent, TimesheetScope scope,
+                    from TimesheetPosition agent, TimesheetPositionParent edge, TimesheetScope scope,
                          TimesheetSyncRun daily, TimesheetSyncRun monthly
                     where agent.id.syncRunId = daily.id
+                      and edge.id.syncRunId = daily.id
+                      and edge.id.positionId = agent.id.positionId
+                      and edge.id.roleType = agent.id.roleType
                       and daily.kind = 'DAILY'
                       and daily.status = 'ACTIVE'
                       and scope.id.syncRunId = monthly.id
@@ -229,7 +251,7 @@ public interface TimesheetPositionRepository
                       and daily.center = monthly.center
                       and daily.center = scope.id.center
                       and agent.id.roleType = 'AGENT'
-                      and agent.parentPositionId = scope.id.supervisorPositionId
+                      and edge.id.parentPositionId = scope.id.supervisorPositionId
                       and (:center = '' or scope.id.center = :center)
                       and (:agent = ''
                            or lower(agent.id.positionId) like lower(concat('%', :agent, '%'))
@@ -247,7 +269,7 @@ public interface TimesheetPositionRepository
                                   and seat.id.positionId = agent.id.positionId
                                   and lower(occupant.name) like lower(concat('%', :agent, '%'))))
                       and (:supervisor = ''
-                           or lower(agent.parentPositionId) like lower(concat('%', :supervisor, '%'))
+                           or lower(edge.id.parentPositionId) like lower(concat('%', :supervisor, '%'))
                            or exists (
                                 select 1
                                 from TimesheetPerson occupant, TimesheetPersonPositionRole seat,
@@ -259,18 +281,21 @@ public interface TimesheetPositionRepository
                                   and occupantRun.status = 'ACTIVE'
                                   and occupantRun.center = daily.center
                                   and occupant.center = daily.center
-                                  and seat.id.positionId = agent.parentPositionId
+                                  and seat.id.positionId = edge.id.parentPositionId
                                   and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
                       and (:pl3Code = ''
                            or lower(scope.id.pl3Code) like lower(concat('%', :pl3Code, '%'))
                            or lower(coalesce(scope.pl3Name, '')) like lower(concat('%', :pl3Code, '%')))
-                    order by agent.id.positionId, agent.parentPositionId, scope.id.pl3Code, scope.id.center
+                    order by agent.id.positionId, edge.id.parentPositionId, scope.id.pl3Code, scope.id.center
                     """,
             countQuery = """
                     select count(scope)
-                    from TimesheetPosition agent, TimesheetScope scope,
+                    from TimesheetPosition agent, TimesheetPositionParent edge, TimesheetScope scope,
                          TimesheetSyncRun daily, TimesheetSyncRun monthly
                     where agent.id.syncRunId = daily.id
+                      and edge.id.syncRunId = daily.id
+                      and edge.id.positionId = agent.id.positionId
+                      and edge.id.roleType = agent.id.roleType
                       and daily.kind = 'DAILY'
                       and daily.status = 'ACTIVE'
                       and scope.id.syncRunId = monthly.id
@@ -280,7 +305,7 @@ public interface TimesheetPositionRepository
                       and daily.center = monthly.center
                       and daily.center = scope.id.center
                       and agent.id.roleType = 'AGENT'
-                      and agent.parentPositionId = scope.id.supervisorPositionId
+                      and edge.id.parentPositionId = scope.id.supervisorPositionId
                       and (:center = '' or scope.id.center = :center)
                       and (:agent = ''
                            or lower(agent.id.positionId) like lower(concat('%', :agent, '%'))
@@ -298,7 +323,7 @@ public interface TimesheetPositionRepository
                                   and seat.id.positionId = agent.id.positionId
                                   and lower(occupant.name) like lower(concat('%', :agent, '%'))))
                       and (:supervisor = ''
-                           or lower(agent.parentPositionId) like lower(concat('%', :supervisor, '%'))
+                           or lower(edge.id.parentPositionId) like lower(concat('%', :supervisor, '%'))
                            or exists (
                                 select 1
                                 from TimesheetPerson occupant, TimesheetPersonPositionRole seat,
@@ -310,7 +335,7 @@ public interface TimesheetPositionRepository
                                   and occupantRun.status = 'ACTIVE'
                                   and occupantRun.center = daily.center
                                   and occupant.center = daily.center
-                                  and seat.id.positionId = agent.parentPositionId
+                                  and seat.id.positionId = edge.id.parentPositionId
                                   and lower(occupant.name) like lower(concat('%', :supervisor, '%'))))
                       and (:pl3Code = ''
                            or lower(scope.id.pl3Code) like lower(concat('%', :pl3Code, '%'))
@@ -345,10 +370,6 @@ public interface TimesheetPositionRepository
         String getPositionId();
 
         String getRoleType();
-
-        String getParentPositionId();
-
-        String getParentRoleType();
 
         String getCenter();
     }

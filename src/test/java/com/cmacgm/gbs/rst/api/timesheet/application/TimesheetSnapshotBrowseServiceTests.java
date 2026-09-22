@@ -13,10 +13,12 @@ import java.util.UUID;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPersonPositionRole;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPositionParent;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonPositionRoleRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionParentRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,6 +31,7 @@ class TimesheetSnapshotBrowseServiceTests {
     private TimesheetPersonRepository people;
     private TimesheetPersonPositionRoleRepository seats;
     private TimesheetPositionRepository positions;
+    private TimesheetPositionParentRepository parents;
     private TimesheetScopeRepository scopes;
     private TimesheetKpiRepository kpis;
     private TimesheetSnapshotBrowseService service;
@@ -38,9 +41,10 @@ class TimesheetSnapshotBrowseServiceTests {
         people = mock(TimesheetPersonRepository.class);
         seats = mock(TimesheetPersonPositionRoleRepository.class);
         positions = mock(TimesheetPositionRepository.class);
+        parents = mock(TimesheetPositionParentRepository.class);
         scopes = mock(TimesheetScopeRepository.class);
         kpis = mock(TimesheetKpiRepository.class);
-        service = new TimesheetSnapshotBrowseService(people, seats, positions, scopes, kpis);
+        service = new TimesheetSnapshotBrowseService(people, seats, positions, parents, scopes, kpis);
     }
 
     @Test
@@ -76,12 +80,15 @@ class TimesheetSnapshotBrowseServiceTests {
         when(positions.searchActiveNodes(eq("GBS INDIA"), eq("174"), any()))
                 .thenReturn(new PageImpl<>(
                         List.of(
-                                node("174050", "SUPERVISOR", "173171", "SR_MANAGER", "GBS INDIA"),
-                                node("174050", "SR_MANAGER", null, null, "GBS INDIA")),
+                                node("174050", "SUPERVISOR", "GBS INDIA"),
+                                node("174050", "SR_MANAGER", "GBS INDIA")),
                         PageRequest.of(0, 10),
                         2));
 
         UUID runId = UUID.randomUUID();
+        when(parents.findActiveByPositionIdIn(eq("GBS INDIA"), any()))
+                .thenReturn(List.of(TimesheetPositionParent.create(
+                        runId, "174050", "SUPERVISOR", "173171", "SR_MANAGER")));
         stubOccupants(
                 runId,
                 TimesheetPersonPositionRole.create(runId, "S00000002", "174050", "SUPERVISOR"),
@@ -182,11 +189,7 @@ class TimesheetSnapshotBrowseServiceTests {
     }
 
     private static TimesheetPositionRepository.PositionNode node(
-            String positionId,
-            String roleType,
-            String parentPositionId,
-            String parentRoleType,
-            String center) {
+            String positionId, String roleType, String center) {
         return new TimesheetPositionRepository.PositionNode() {
             @Override
             public String getPositionId() {
@@ -196,16 +199,6 @@ class TimesheetSnapshotBrowseServiceTests {
             @Override
             public String getRoleType() {
                 return roleType;
-            }
-
-            @Override
-            public String getParentPositionId() {
-                return parentPositionId;
-            }
-
-            @Override
-            public String getParentRoleType() {
-                return parentRoleType;
             }
 
             @Override

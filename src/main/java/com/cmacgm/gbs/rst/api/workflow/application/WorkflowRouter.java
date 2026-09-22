@@ -48,7 +48,8 @@ public class WorkflowRouter {
     }
 
     /**
-     * Lists Timesheet position ids the principal currently occupies for their roles.
+     * Lists position ids the principal may act on. Each role contributes only its own seats:
+     * Sr Manager seats, Domain Head seats, and the LTH sentinel. Other seats stay out of the queue.
      *
      * @param principal current user
      * @return position ids used to filter the queue and authorize decisions
@@ -63,7 +64,7 @@ public class WorkflowRouter {
             positions.addAll(timesheet.positionsForRole(principal.ccgid(), "SR_MANAGER"));
         }
         if (roles.contains("DOMAIN_HEAD")) {
-            positions.addAll(timesheet.heldPositionIds(principal.ccgid()));
+            positions.addAll(timesheet.positionsForRole(principal.ccgid(), "DOMAIN_HEAD"));
         }
         if (roles.contains(RstRoles.LOCAL_TRANSFORMATION_HEAD)) {
             positions.add(RstRoles.LOCAL_TRANSFORMATION_HEAD);

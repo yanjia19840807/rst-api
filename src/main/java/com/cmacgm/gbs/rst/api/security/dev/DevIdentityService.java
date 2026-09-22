@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.security.dev;
 
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,6 +41,31 @@ public class DevIdentityService {
      * @param center GBS Center from config or {@code X-Dev-Center}; blank falls back to Timesheet
      * @return resolved principal
      */
+    /**
+     * ACTIVE Daily seat roles for a person. Used when a dev login names a CCGID and no role.
+     *
+     * @param ccgid identity
+     * @return AGENT / SUPERVISOR / SR_MANAGER / DOMAIN_HEAD held by the person
+     */
+    public Set<String> timesheetRoles(String ccgid) {
+        Set<String> roles = timesheet.findActiveProductSeat(ccgid)
+                .map(TimesheetReadService.ProductSeat::roleTypes)
+                .orElse(Set.of());
+        Set<String> allowed = new LinkedHashSet<>();
+        for (String role : roles) {
+            if (role != null && DevRoles.ALL.contains(role)) {
+                allowed.add(role);
+            }
+        }
+        if (allowed.isEmpty()) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "dev-identity-roles-missing",
+                    "CCGID has no ACTIVE Daily role.");
+        }
+        return Set.copyOf(allowed);
+    }
+
     public RstPrincipal resolve(String ccgid, Set<String> roles, String center) {
         if (ccgid == null || ccgid.isBlank()) {
             throw new ApiException(

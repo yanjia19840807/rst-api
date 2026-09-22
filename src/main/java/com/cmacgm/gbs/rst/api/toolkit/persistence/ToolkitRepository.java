@@ -16,7 +16,7 @@ public interface ToolkitRepository extends JpaRepository<Toolkit, UUID> {
     @Query("""
             select distinct toolkit
             from Toolkit toolkit, TimesheetPerson person, TimesheetPersonPositionRole occupancy,
-                 TimesheetPosition seat, TimesheetScope scope,
+                 TimesheetPosition seat, TimesheetPositionParent edge, TimesheetScope scope,
                  TimesheetSyncRun daily, TimesheetSyncRun monthly
             where person.id.syncRunId = daily.id
               and occupancy.id.syncRunId = daily.id
@@ -24,6 +24,9 @@ public interface ToolkitRepository extends JpaRepository<Toolkit, UUID> {
               and seat.id.syncRunId = daily.id
               and seat.id.positionId = occupancy.id.positionId
               and seat.id.roleType = occupancy.id.roleType
+              and edge.id.syncRunId = daily.id
+              and edge.id.positionId = seat.id.positionId
+              and edge.id.roleType = seat.id.roleType
               and scope.id.syncRunId = monthly.id
               and daily.kind = 'DAILY'
               and daily.status = 'ACTIVE'
@@ -31,8 +34,8 @@ public interface ToolkitRepository extends JpaRepository<Toolkit, UUID> {
               and monthly.status = 'ACTIVE'
               and upper(person.id.ccgid) = upper(:ccgid)
               and occupancy.id.roleType = 'AGENT'
-              and seat.parentPositionId = toolkit.supervisorPositionId
-              and scope.id.supervisorPositionId = seat.parentPositionId
+              and edge.id.parentPositionId = toolkit.supervisorPositionId
+              and scope.id.supervisorPositionId = edge.id.parentPositionId
               and scope.id.pl3Code = toolkit.primaryPl3Code
               and toolkit.deletedAt is null
             order by toolkit.name

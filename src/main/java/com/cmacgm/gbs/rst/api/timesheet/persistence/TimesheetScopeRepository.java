@@ -118,13 +118,17 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
     @Query("""
             select count(s) > 0
             from TimesheetPerson p, TimesheetPersonPositionRole o, TimesheetPosition pos,
-                 TimesheetScope s, TimesheetSyncRun daily, TimesheetSyncRun monthly
+                 TimesheetPositionParent edge, TimesheetScope s,
+                 TimesheetSyncRun daily, TimesheetSyncRun monthly
             where p.id.syncRunId = daily.id
               and o.id.syncRunId = daily.id
               and o.id.ccgid = p.id.ccgid
               and pos.id.syncRunId = daily.id
               and pos.id.positionId = o.id.positionId
               and pos.id.roleType = o.id.roleType
+              and edge.id.syncRunId = daily.id
+              and edge.id.positionId = pos.id.positionId
+              and edge.id.roleType = pos.id.roleType
               and daily.kind = 'DAILY'
               and daily.status = 'ACTIVE'
               and s.id.syncRunId = monthly.id
@@ -132,8 +136,8 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
               and monthly.status = 'ACTIVE'
               and upper(p.id.ccgid) = upper(:ccgid)
               and pos.id.roleType = 'AGENT'
-              and pos.parentPositionId = :positionId
-              and s.id.supervisorPositionId = pos.parentPositionId
+              and edge.id.parentPositionId = :positionId
+              and s.id.supervisorPositionId = edge.id.parentPositionId
               and s.id.pl3Code = :pl3Code
               and daily.center = monthly.center
               and daily.center = :center

@@ -4,10 +4,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Component;
@@ -16,15 +14,17 @@ import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.Report
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPersonPositionRole;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPosition;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPositionParent;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 
 /**
- * Daily people come from every complete identity on the file. Positions and
- * occupancies are built from RST-applicable Production + Productive rows
- * through Sr Manager. Domain Head is not synced. Date and Center come from
- * the file name. One person may hold more than one role on the same
- * position. {@code hc} is ignored.
+ * Daily people come from every complete identity on the file, including
+ * Domain Head. Positions, parent edges and occupancies are built from
+ * RST-applicable Production + Productive rows through Domain Head. A node
+ * may have more than one parent; every distinct edge is kept. Date and
+ * Center come from the file name. One person may hold more than one role
+ * on the same position. {@code hc} is ignored.
  */
 @Component
 public class TimesheetDailyCalculator {
@@ -36,6 +36,7 @@ public class TimesheetDailyCalculator {
             LocalDate syncDate,
             List<TimesheetPerson> people,
             List<TimesheetPosition> positions,
+            List<TimesheetPositionParent> parents,
             List<TimesheetPersonPositionRole> seats,
             List<TimesheetSyncIssue> issues) {
     }
@@ -105,7 +106,7 @@ public class TimesheetDailyCalculator {
         List<TimesheetSyncIssue> issues = new ArrayList<>(TimesheetRowValidator.validateDailyPeople(runId, rows, now));
         if (hasBlocking(issues)) {
             addFileDateIfMissing(issues, runId, now, syncDate);
-            return new Result(syncDate, List.of(), List.of(), List.of(), issues);
+            return new Result(syncDate, List.of(), List.of(), List.of(), List.of(), issues);
         }
 
         Map<String, PersonDraft> people = new LinkedHashMap<>();
@@ -114,43 +115,34 @@ public class TimesheetDailyCalculator {
         }
 
         issues.addAll(TimesheetRowValidator.validateDailyPositions(runId, rows, now, processes));
-        Map<String, Set<String>> childToParent = new LinkedHashMap<>();
-        collectParents(rows, processes, childToParent);
-        Set<String> dualParentNodes = addHierarchyConflicts(issues, runId, now, childToParent);
         if (hasBlocking(issues)) {
             addEmptyFileIfNeeded(issues, runId, now, people, List.of());
-            return toResult(runId, syncDate, people, List.of(), List.of(), issues);
+            return toResult(runId, syncDate, people, List.of(), List.of(), List.of(), issues);
         }
 
         Map<String, PositionDraft> positions = new LinkedHashMap<>();
+        Map<String, ParentEdge> parents = new LinkedHashMap<>();
         Map<String, SeatDraft> seats = new LinkedHashMap<>();
         for (ReportRow row : rows) {
             if (!processes.applies(row.pl3Code()) || !TimesheetRowValidator.isProductionLine(row)) {
                 continue;
             }
-            addPosition(
-                    positions,
-                    row.empPositionId(),
-                    "AGENT",
-                    row.supervisorPositionId(),
-                    "SUPERVISOR",
-                    dualParentNodes);
-            addPosition(
-                    positions,
-                    row.supervisorPositionId(),
-                    "SUPERVISOR",
-                    row.srManagerPositionId(),
-                    "SR_MANAGER",
-                    dualParentNodes);
-            addPosition(positions, row.srManagerPositionId(), "SR_MANAGER", null, null, dualParentNodes);
+            addPosition(positions, row.empPositionId(), "AGENT");
+            addPosition(positions, row.supervisorPositionId(), "SUPERVISOR");
+            addPosition(positions, row.srManagerPositionId(), "SR_MANAGER");
+            addPosition(positions, row.domainHeadPositionId(), "DOMAIN_HEAD");
+            addEdge(parents, row.empPositionId(), "AGENT", row.supervisorPositionId(), "SUPERVISOR");
+            addEdge(parents, row.supervisorPositionId(), "SUPERVISOR", row.srManagerPositionId(), "SR_MANAGER");
+            addEdge(parents, row.srManagerPositionId(), "SR_MANAGER", row.domainHeadPositionId(), "DOMAIN_HEAD");
             addSeat(seats, row.empCcgid(), row.empName(), row.empPositionId(), "AGENT");
             addSeat(seats, row.supervisorCcgid(), row.supervisorName(), row.supervisorPositionId(), "SUPERVISOR");
             addSeat(seats, row.srManagerCcgid(), row.srManagerName(), row.srManagerPositionId(), "SR_MANAGER");
+            addSeat(seats, row.domainHeadCcgid(), row.domainHeadName(), row.domainHeadPositionId(), "DOMAIN_HEAD");
         }
 
         addFileDateIfMissing(issues, runId, now, syncDate);
         addEmptyFileIfNeeded(issues, runId, now, people, positions.values());
-        return toResult(runId, syncDate, people, positions.values(), seats.values(), issues);
+        return toResult(runId, syncDate, people, positions.values(), parents.values(), seats.values(), issues);
     }
 
     private static Result toResult(
@@ -158,6 +150,7 @@ public class TimesheetDailyCalculator {
             LocalDate syncDate,
             Map<String, PersonDraft> people,
             java.util.Collection<PositionDraft> positions,
+            java.util.Collection<ParentEdge> parents,
             java.util.Collection<SeatDraft> seats,
             List<TimesheetSyncIssue> issues) {
         return new Result(
@@ -173,22 +166,31 @@ public class TimesheetDailyCalculator {
                                 draft.jobRole))
                         .toList(),
                 positions.stream()
-                        .map(draft -> TimesheetPosition.create(
+                        .map(draft -> TimesheetPosition.create(runId, draft.positionId, draft.roleType))
+                        .toList(),
+                parents.stream()
+                        .filter(edge -> hasNode(positions, edge.positionId, edge.roleType))
+                        .filter(edge -> hasNode(positions, edge.parentPositionId, edge.parentRoleType))
+                        .map(edge -> TimesheetPositionParent.create(
                                 runId,
-                                draft.positionId,
-                                draft.roleType,
-                                draft.parentPositionId,
-                                draft.parentRoleType))
+                                edge.positionId,
+                                edge.roleType,
+                                edge.parentPositionId,
+                                edge.parentRoleType))
                         .toList(),
                 seats.stream()
                         .filter(seat -> people.containsKey(seat.ccgid))
-                        .filter(seat -> positions.stream().anyMatch(position ->
-                                position.positionId.equals(seat.positionId)
-                                        && position.roleType.equals(seat.roleType)))
+                        .filter(seat -> hasNode(positions, seat.positionId, seat.roleType))
                         .map(seat -> TimesheetPersonPositionRole.create(
                                 runId, seat.ccgid, seat.positionId, seat.roleType))
                         .toList(),
                 issues);
+    }
+
+    private static boolean hasNode(
+            java.util.Collection<PositionDraft> positions, String positionId, String roleType) {
+        return positions.stream().anyMatch(position ->
+                position.positionId.equals(positionId) && position.roleType.equals(roleType));
     }
 
     private static LocalDate firstRowDate(List<ReportRow> rows) {
@@ -237,53 +239,6 @@ public class TimesheetDailyCalculator {
                 now));
     }
 
-    private static void collectParents(
-            List<ReportRow> rows, GbsProcessCatalog processes, Map<String, Set<String>> childToParent) {
-        for (ReportRow row : rows) {
-            if (!processes.applies(row.pl3Code()) || !TimesheetRowValidator.isProductionLine(row)) {
-                continue;
-            }
-            trackParent(childToParent, row.empPositionId(), "AGENT", row.supervisorPositionId());
-            trackParent(childToParent, row.supervisorPositionId(), "SUPERVISOR", row.srManagerPositionId());
-        }
-    }
-
-    private static void trackParent(
-            Map<String, Set<String>> childToParent, String positionId, String roleType, String parent) {
-        if (!hasText(positionId)) {
-            return;
-        }
-        childToParent
-                .computeIfAbsent(nodeKey(positionId, roleType), ignored -> new LinkedHashSet<>())
-                .add(hasText(parent) ? parent : "");
-    }
-
-    private static Set<String> addHierarchyConflicts(
-            List<TimesheetSyncIssue> issues, UUID runId, Instant now, Map<String, Set<String>> childToParent) {
-        Set<String> dualParentNodes = new LinkedHashSet<>();
-        for (Map.Entry<String, Set<String>> entry : childToParent.entrySet()) {
-            Set<String> parents = new LinkedHashSet<>(entry.getValue());
-            parents.remove("");
-            if (parents.size() <= 1) {
-                continue;
-            }
-            dualParentNodes.add(entry.getKey());
-            String[] node = entry.getKey().split("\\|", 2);
-            issues.add(TimesheetSyncIssue.error(
-                    runId,
-                    TimesheetSyncErrorCode.HIERARCHY_CONFLICT,
-                    "position_id " + node[0] + " role " + node[1] + " maps to multiple parent_position_id: "
-                            + String.join(", ", parents),
-                    null,
-                    null,
-                    node[0],
-                    null,
-                    null,
-                    now));
-        }
-        return dualParentNodes;
-    }
-
     private static void rememberPeopleFromRow(
             Map<String, PersonDraft> people, ReportRow row, String snapshotCenter) {
         rememberPerson(
@@ -313,6 +268,15 @@ public class TimesheetDailyCalculator {
                 null,
                 null,
                 row.srManagerPositionId());
+        rememberPerson(
+                people,
+                row.domainHeadCcgid(),
+                row.domainHeadId(),
+                row.domainHeadName(),
+                null,
+                null,
+                null,
+                row.domainHeadPositionId());
     }
 
     private static void rememberPerson(
@@ -356,33 +320,24 @@ public class TimesheetDailyCalculator {
         seats.putIfAbsent(key, new SeatDraft(ccgid.trim().toUpperCase(), positionId, roleType));
     }
 
-    private static void addPosition(
-            Map<String, PositionDraft> positions,
-            String positionId,
-            String roleType,
-            String parent,
-            String parentRoleType,
-            Set<String> dualParentNodes) {
+    private static void addPosition(Map<String, PositionDraft> positions, String positionId, String roleType) {
         if (!hasText(positionId)) {
             return;
         }
-        String key = nodeKey(positionId, roleType);
-        boolean conflicted = dualParentNodes.contains(key);
-        String resolvedParent = conflicted || !hasText(parent) ? null : parent;
-        String resolvedParentRole = resolvedParent == null ? null : parentRoleType;
-        PositionDraft incoming = new PositionDraft(positionId, roleType, resolvedParent, resolvedParentRole);
-        PositionDraft existing = positions.get(key);
-        if (existing == null) {
-            positions.put(key, incoming);
+        positions.putIfAbsent(nodeKey(positionId, roleType), new PositionDraft(positionId, roleType));
+    }
+
+    private static void addEdge(
+            Map<String, ParentEdge> parents,
+            String positionId,
+            String roleType,
+            String parentPositionId,
+            String parentRoleType) {
+        if (!hasText(positionId) || !hasText(parentPositionId)) {
             return;
         }
-        positions.put(
-                key,
-                new PositionDraft(
-                        existing.positionId,
-                        existing.roleType,
-                        existing.parentPositionId,
-                        existing.parentRoleType));
+        String key = nodeKey(positionId, roleType) + "|" + nodeKey(parentPositionId, parentRoleType);
+        parents.putIfAbsent(key, new ParentEdge(positionId, roleType, parentPositionId, parentRoleType));
     }
 
     private static String nodeKey(String positionId, String roleType) {
@@ -401,7 +356,10 @@ public class TimesheetDailyCalculator {
             String ccgid, String empId, String name, String email, String center, String jobRole) {
     }
 
-    private record PositionDraft(
+    private record PositionDraft(String positionId, String roleType) {
+    }
+
+    private record ParentEdge(
             String positionId, String roleType, String parentPositionId, String parentRoleType) {
     }
 

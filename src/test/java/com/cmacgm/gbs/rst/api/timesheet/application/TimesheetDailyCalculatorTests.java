@@ -13,6 +13,7 @@ import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.Report
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPersonPositionRole;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPosition;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPositionParent;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 import org.junit.jupiter.api.Test;
 
@@ -38,15 +39,14 @@ class TimesheetDailyCalculatorTests {
                 .contains(org.assertj.core.groups.Tuple.tuple("S00000001", "GBS INDIA", "s00000001@dev.local"));
         assertThat(result.people())
                 .extracting(TimesheetPerson::getCcgid)
-                .contains("S00000002", "S00000003")
-                .doesNotContain("S00000004");
+                .contains("S00000002", "S00000003", "S00000004");
         assertThat(result.positions())
                 .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
                 .contains(
                         org.assertj.core.groups.Tuple.tuple("EMP-POS-1", "AGENT"),
                         org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "SUPERVISOR"),
-                        org.assertj.core.groups.Tuple.tuple("POS-SRM-1", "SR_MANAGER"))
-                .doesNotContain(org.assertj.core.groups.Tuple.tuple("POS-DH-1", "DOMAIN_HEAD"));
+                        org.assertj.core.groups.Tuple.tuple("POS-SRM-1", "SR_MANAGER"),
+                        org.assertj.core.groups.Tuple.tuple("POS-DH-1", "DOMAIN_HEAD"));
         assertThat(result.seats())
                 .extracting(
                         TimesheetPersonPositionRole::getCcgid,
@@ -55,7 +55,9 @@ class TimesheetDailyCalculatorTests {
                 .contains(
                         org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-1", "AGENT"),
                         org.assertj.core.groups.Tuple.tuple("S00000002", "POS-SUP-1", "SUPERVISOR"),
-                        org.assertj.core.groups.Tuple.tuple("S00000003", "POS-SRM-1", "SR_MANAGER"));
+                        org.assertj.core.groups.Tuple.tuple("S00000003", "POS-SRM-1", "SR_MANAGER"),
+                        org.assertj.core.groups.Tuple.tuple("S00000004", "POS-DH-1", "DOMAIN_HEAD"));
+        assertThat(parentIds(result, "POS-SRM-1", "SR_MANAGER")).containsExactly("POS-DH-1");
     }
 
     @Test
@@ -101,8 +103,7 @@ class TimesheetDailyCalculatorTests {
 
         assertThat(result.people())
                 .extracting(TimesheetPerson::getCcgid)
-                .contains("S00000002", "S00000003")
-                .doesNotContain("S00000004");
+                .contains("S00000002", "S00000003", "S00000004");
         assertThat(result.positions()).isEmpty();
         assertThat(result.seats()).isEmpty();
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("EMPTY_FILE");
@@ -120,8 +121,7 @@ class TimesheetDailyCalculatorTests {
 
         assertThat(result.people())
                 .extracting(TimesheetPerson::getCcgid)
-                .contains("S00000001", "S00000002", "S00000003")
-                .doesNotContain("S00000004");
+                .contains("S00000001", "S00000002", "S00000003", "S00000004");
         assertThat(result.positions()).isEmpty();
         assertThat(result.seats()).isEmpty();
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("MISSING_FIELD");
@@ -216,10 +216,7 @@ class TimesheetDailyCalculatorTests {
                         org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "SUPERVISOR"),
                         org.assertj.core.groups.Tuple.tuple("POS-SRM-1", "SR_MANAGER"))
                 .doesNotContain(org.assertj.core.groups.Tuple.tuple("POS-DH-1", "DOMAIN_HEAD"));
-        assertThat(result.positions())
-                .filteredOn(position -> "POS-SRM-1".equals(position.getPositionId()))
-                .extracting(TimesheetPosition::getParentPositionId)
-                .containsExactly((String) null);
+        assertThat(parentIds(result, "POS-SRM-1", "SR_MANAGER")).isEmpty();
     }
 
     @Test
@@ -346,10 +343,7 @@ class TimesheetDailyCalculatorTests {
         assertThat(result.positions())
                 .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
                 .contains(org.assertj.core.groups.Tuple.tuple("181664", "SUPERVISOR"));
-        assertThat(result.positions())
-                .filteredOn(position -> "EMP-POS-1".equals(position.getPositionId()))
-                .extracting(TimesheetPosition::getParentPositionId)
-                .containsExactly("181664");
+        assertThat(parentIds(result, "EMP-POS-1", "AGENT")).containsExactly("181664");
     }
 
     @Test
@@ -579,7 +573,7 @@ class TimesheetDailyCalculatorTests {
     }
 
     @Test
-    void flagsHierarchyConflictOnProductionRowsOnly() {
+    void keepsEveryParentEdgeWhenANodeHasTwoParents() {
         UUID runId = UUID.randomUUID();
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId,
@@ -590,19 +584,11 @@ class TimesheetDailyCalculatorTests {
                 null,
                 RST_YES);
 
-        assertThat(result.issues())
-                .extracting(TimesheetSyncIssue::getCode, TimesheetSyncIssue::getMessage)
-                .contains(org.assertj.core.groups.Tuple.tuple(
-                        "HIERARCHY_CONFLICT",
-                        "position_id EMP-POS-1 role AGENT maps to multiple parent_position_id: POS-SUP-1, POS-SUP-2"));
-        assertThat(result.issues()).allMatch(issue -> TimesheetRowValidator.isAdvisory(issue, "DAILY"));
+        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("HIERARCHY_CONFLICT");
         assertThat(result.positions())
                 .extracting(TimesheetPosition::getPositionId)
                 .contains("EMP-POS-1", "POS-SUP-1", "POS-SUP-2");
-        assertThat(result.positions())
-                .filteredOn(position -> "EMP-POS-1".equals(position.getPositionId()))
-                .extracting(TimesheetPosition::getParentPositionId)
-                .containsExactly((String) null);
+        assertThat(parentIds(result, "EMP-POS-1", "AGENT")).containsExactlyInAnyOrder("POS-SUP-1", "POS-SUP-2");
     }
 
     @Test
@@ -618,10 +604,7 @@ class TimesheetDailyCalculatorTests {
                 RST_YES);
 
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("HIERARCHY_CONFLICT");
-        assertThat(result.positions())
-                .filteredOn(position -> "EMP-POS-1".equals(position.getPositionId()))
-                .extracting(TimesheetPosition::getParentPositionId)
-                .containsExactly("POS-SUP-1");
+        assertThat(parentIds(result, "EMP-POS-1", "AGENT")).containsExactly("POS-SUP-1");
     }
 
     @Test
@@ -668,8 +651,7 @@ class TimesheetDailyCalculatorTests {
 
         assertThat(result.people())
                 .extracting(TimesheetPerson::getCcgid)
-                .contains("S00000001", "S00000002", "S00000003")
-                .doesNotContain("S00000004");
+                .contains("S00000001", "S00000002", "S00000003", "S00000004");
         assertThat(result.positions()).isEmpty();
         assertThat(result.seats()).isEmpty();
         assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("MISSING_FIELD");
@@ -776,6 +758,14 @@ class TimesheetDailyCalculatorTests {
         assertThat(result.positions())
                 .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
                 .contains(org.assertj.core.groups.Tuple.tuple("273656", "SUPERVISOR"));
+    }
+
+    private static List<String> parentIds(
+            TimesheetDailyCalculator.Result result, String positionId, String roleType) {
+        return result.parents().stream()
+                .filter(edge -> positionId.equals(edge.getPositionId()) && roleType.equals(edge.getRoleType()))
+                .map(TimesheetPositionParent::getParentPositionId)
+                .toList();
     }
 
     private static ReportRow productionRow(

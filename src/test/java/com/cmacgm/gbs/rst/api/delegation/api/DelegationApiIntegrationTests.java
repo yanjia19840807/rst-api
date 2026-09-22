@@ -276,8 +276,8 @@ class DelegationApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into timesheet_position
-                    (sync_run_id, position_id, role_type, parent_position_id, parent_role_type)
-                values (?, ?, ?, null, null)
+                    (sync_run_id, position_id, role_type)
+                values (?, ?, ?)
                 """,
                 DAILY_RUN_ID,
                 positionId,

@@ -26,8 +26,9 @@ import com.cmacgm.gbs.rst.api.common.error.ApiException;
  * Injects a configurable demo principal in {@code dev}/{@code test}.
  *
  * <p>When {@code override-enabled} is {@code true}, identity comes from the SPA via
- * {@code X-Dev-Ccgid}, {@code X-Dev-Role}, and {@code X-Dev-Center}. Requests
- * without those headers default to {@code ADMIN001} / {@code ADMIN}.
+ * {@code X-Dev-Ccgid}, {@code X-Dev-Role}, and {@code X-Dev-Center}. A CCGID without
+ * a role uses every ACTIVE Daily seat. Requests without those headers default to
+ * {@code ADMIN001} / {@code ADMIN}.
  */
 @Component
 @Profile({"dev", "test"})
@@ -60,21 +61,22 @@ public class DevAuthenticationFilter extends OncePerRequestFilter {
             FilterChain filterChain) throws ServletException, IOException {
         if (SecurityContextHolder.getContext().getAuthentication() == null) {
             boolean override = properties.isOverrideEnabled();
-            String ccgid = firstNonBlank(
-                    override ? request.getHeader("X-Dev-Ccgid") : null,
-                    properties.getCcgid(),
-                    "ADMIN001");
-            String role;
+            String headerCcgid = override ? request.getHeader("X-Dev-Ccgid") : null;
+            String headerRole = override ? request.getHeader("X-Dev-Role") : null;
+            String ccgid = firstNonBlank(headerCcgid, properties.getCcgid(), "ADMIN001");
+            Set<String> roles;
             try {
-                role = DevRoles.requireValid(firstNonBlank(
-                        override ? request.getHeader("X-Dev-Role") : null,
-                        properties.getRole(),
-                        "ADMIN"));
+                if (headerRole != null && !headerRole.isBlank()) {
+                    roles = Set.of(DevRoles.requireValid(headerRole));
+                } else if (headerCcgid != null && !headerCcgid.isBlank()) {
+                    roles = identities.timesheetRoles(ccgid);
+                } else {
+                    roles = Set.of(DevRoles.requireValid(firstNonBlank(properties.getRole(), null, "ADMIN")));
+                }
             } catch (IllegalArgumentException ex) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "dev-identity-role", ex.getMessage());
             }
 
-            Set<String> roles = Set.of(role);
             String center = firstNonBlankPreserveCase(
                     override ? request.getHeader("X-Dev-Center") : null,
                     properties.getCenter());
@@ -82,7 +84,7 @@ public class DevAuthenticationFilter extends OncePerRequestFilter {
             var authentication = new RstAuthenticationToken(
                     principal,
                     "dev-profile",
-                    List.of(new SimpleGrantedAuthority("ROLE_" + role)));
+                    roles.stream().map(role -> new SimpleGrantedAuthority("ROLE_" + role)).toList());
             SecurityContextHolder.getContext().setAuthentication(authentication);
         }
         filterChain.doFilter(request, response);

@@ -1361,15 +1361,38 @@ class SupervisorApiIntegrationTests {
     private void insertPosition(UUID runId, String positionId, String roleType, String parentPositionId) {
         jdbcTemplate.update(
                 """
-                insert into timesheet_position
+                insert into timesheet_position (sync_run_id, position_id, role_type)
+                values (?, ?, ?)
+                on conflict (sync_run_id, position_id, role_type) do nothing
+                """,
+                runId,
+                positionId,
+                roleType);
+        if (parentPositionId == null || parentPositionId.isBlank()) {
+            return;
+        }
+        String parentRole = parentRoleOf(roleType, parentPositionId);
+        jdbcTemplate.update(
+                """
+                insert into timesheet_position (sync_run_id, position_id, role_type)
+                values (?, ?, ?)
+                on conflict (sync_run_id, position_id, role_type) do nothing
+                """,
+                runId,
+                parentPositionId,
+                parentRole);
+        jdbcTemplate.update(
+                """
+                insert into timesheet_position_parent
                     (sync_run_id, position_id, role_type, parent_position_id, parent_role_type)
                 values (?, ?, ?, ?, ?)
+                on conflict do nothing
                 """,
                 runId,
                 positionId,
                 roleType,
                 parentPositionId,
-                parentRoleOf(roleType, parentPositionId));
+                parentRole);
     }
 
     private void insertSeat(UUID runId, String ccgid, String positionId, String roleType) {
