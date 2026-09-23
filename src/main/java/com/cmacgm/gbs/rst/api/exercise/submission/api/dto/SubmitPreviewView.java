@@ -3,6 +3,7 @@ package com.cmacgm.gbs.rst.api.exercise.submission.api.dto;
 import java.util.List;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
 import com.cmacgm.gbs.rst.api.timesheet.api.dto.TimesheetAlignmentView;
 
 /**
@@ -18,5 +19,6 @@ public record SubmitPreviewView(
         String nextStep,
         String nextPositionId,
         String nextHandlerName,
-        String nextHandlerCcgid) {
+        String nextHandlerCcgid,
+        AuditActorView nextHandler) {
 }

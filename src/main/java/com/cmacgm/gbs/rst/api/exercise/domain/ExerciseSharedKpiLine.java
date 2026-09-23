@@ -66,11 +66,7 @@ public class ExerciseSharedKpiLine {
     @Column(name = "delivery_hc", nullable = false, precision = 18, scale = 6)
     private BigDecimal deliveryHc;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
 
-    @Column(name = "created_by")
-    private String createdBy;
 
     protected ExerciseSharedKpiLine() {
     }
@@ -106,8 +102,6 @@ public class ExerciseSharedKpiLine {
         line.carrier = carrier;
         line.customerCountry = customerCountry;
         line.deliveryHc = deliveryHc;
-        line.createdAt = now;
-        line.createdBy = createdBy;
         return line;
     }
 

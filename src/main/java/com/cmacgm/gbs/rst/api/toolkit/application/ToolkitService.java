@@ -14,8 +14,13 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Function;
 
+import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
+import com.cmacgm.gbs.rst.api.audit.application.AuditRecorder;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditAction;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditEntityType;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
+import com.cmacgm.gbs.rst.api.delegation.application.PositionCoverage;
 import com.cmacgm.gbs.rst.api.governance.application.CommaTokens;
 import com.cmacgm.gbs.rst.api.timesheet.api.dto.TimesheetAlignmentView;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetAlignment;
@@ -44,22 +49,38 @@ public class ToolkitService {
     private final ToolkitRepository toolkits;
     private final TimesheetReadService timesheet;
     private final TmsSessionRepository tmsSessions;
+    private final PositionCoverage coverage;
+    private final AuditRecorder audits;
     private final Clock clock;
 
     public ToolkitService(
             ToolkitRepository toolkits,
             TimesheetReadService timesheet,
             TmsSessionRepository tmsSessions,
+            PositionCoverage coverage,
+            AuditRecorder audits,
             Clock clock) {
         this.toolkits = toolkits;
         this.timesheet = timesheet;
         this.tmsSessions = tmsSessions;
+        this.coverage = coverage;
+        this.audits = audits;
         this.clock = clock;
     }
 
     @Transactional(readOnly = true)
     public List<ToolkitResponse> listAvailable(String ccgid) {
-        return toolkits.findAvailableToAgent(ccgid).stream()
+        var rows = new LinkedHashMap<UUID, Toolkit>();
+        for (Toolkit toolkit : toolkits.findAvailableToAgent(ccgid)) {
+            rows.put(toolkit.getId(), toolkit);
+        }
+        String covered = coverage.positionId("AGENT");
+        if (covered != null) {
+            for (Toolkit toolkit : toolkits.findAvailableToAgentPosition(covered)) {
+                rows.putIfAbsent(toolkit.getId(), toolkit);
+            }
+        }
+        return rows.values().stream()
                 .map(toolkit -> toAlignedResponse(toolkit, 0, false))
                 .toList();
     }
@@ -171,7 +192,10 @@ public class ToolkitService {
                     toolkit.addSubtask(item.name(), item.description(), item.displayOrder(), now));
         }
         validateAndAddKpis(toolkit, request.sharedKpiSelections(), now);
-        return toAlignedResponse(toolkits.saveAndFlush(toolkit), 0, true);
+        Toolkit saved = toolkits.saveAndFlush(toolkit);
+        saved.setLatestAuditEventId(
+                audits.record(AuditEntityType.TOOLKIT, saved.getId(), AuditAction.CREATE, "SUPERVISOR").getId());
+        return toAlignedResponse(toolkits.saveAndFlush(saved), 0, true);
     }
 
     @Transactional
@@ -184,11 +208,11 @@ public class ToolkitService {
         String name = request.name().trim();
         ensureNameAvailable(toolkit.getSupervisorPositionId(), name, toolkitId);
         Instant now = clock.instant();
-        toolkit.update(
-                name, request.description(), request.combineSubtasksTime(),
-                ccgid, now);
+        toolkit.update(name, request.description(), request.combineSubtasksTime());
+        toolkit.setLatestAuditEventId(audits.record(
+                AuditEntityType.TOOLKIT, toolkit.getId(), AuditAction.UPDATE, "SUPERVISOR").getId());
         toolkit.getSharedKpiSelections().stream()
-                .filter(selection -> selection.getDeletedAt() == null)
+                .filter(selection -> !selection.isDeleted())
                 .forEach(selection -> selection.softDelete(now));
         // Flush old active KPI rows before inserting replacements due to partial uniqueness.
         toolkits.saveAndFlush(toolkit);
@@ -204,6 +228,8 @@ public class ToolkitService {
                 ? toolkit.getSubtasks().size() + 1
                 : request.displayOrder();
         toolkit.addSubtask(request.name(), request.description(), displayOrder, now);
+        toolkit.setLatestAuditEventId(audits.record(
+                AuditEntityType.TOOLKIT, toolkit.getId(), AuditAction.UPDATE, "SUPERVISOR").getId());
         return toAlignedResponse(toolkits.saveAndFlush(toolkit), 0, true);
     }
 
@@ -215,7 +241,9 @@ public class ToolkitService {
         int displayOrder = request.displayOrder() == null
                 ? subtask.getDisplayOrder()
                 : request.displayOrder();
-        subtask.rename(request.name(), request.description(), displayOrder, clock.instant());
+        subtask.rename(request.name(), request.description(), displayOrder);
+        toolkit.setLatestAuditEventId(audits.record(
+                AuditEntityType.TOOLKIT, toolkit.getId(), AuditAction.UPDATE, "SUPERVISOR").getId());
         return toAlignedResponse(toolkits.saveAndFlush(toolkit), 0, true);
     }
 
@@ -223,7 +251,12 @@ public class ToolkitService {
     public ToolkitResponse setEnabled(String ccgid, UUID toolkitId, boolean enabled) {
         Toolkit toolkit = ownedToolkit(ccgid, toolkitId);
         Instant now = clock.instant();
-        toolkit.setEnabled(enabled, now);
+        toolkit.setEnabled(enabled);
+        toolkit.setLatestAuditEventId(audits.record(
+                AuditEntityType.TOOLKIT,
+                toolkit.getId(),
+                enabled ? AuditAction.ENABLE : AuditAction.DISABLE,
+                "SUPERVISOR").getId());
         int synced = syncSessions(tmsSessions.findByToolkit_Id(toolkitId), enabled, now);
         return toAlignedResponse(toolkits.saveAndFlush(toolkit), synced, true);
     }
@@ -234,26 +267,46 @@ public class ToolkitService {
         Toolkit toolkit = ownedToolkit(ccgid, toolkitId);
         ToolkitSubtask subtask = requireSubtask(toolkit, subtaskId);
         Instant now = clock.instant();
-        subtask.setEnabled(enabled, now);
+        subtask.setEnabled(enabled);
+        toolkit.setLatestAuditEventId(audits.record(
+                AuditEntityType.TOOLKIT, toolkit.getId(), AuditAction.UPDATE, "SUPERVISOR").getId());
         int synced = syncSessions(tmsSessions.findByToolkitSubtask_Id(subtaskId), enabled, now);
         return toAlignedResponse(toolkits.saveAndFlush(toolkit), synced, true);
     }
 
     private List<Toolkit> scopedManagedToolkits(String ccgid) {
-        var positions = timesheet.supervisorHierarchy(ccgid).stream()
+        String covered = coveredSupervisorPosition();
+        var positions = new ArrayList<>(timesheet.supervisorHierarchy(ccgid).stream()
                 .map(candidate -> candidate.supervisorPositionId())
                 .distinct()
-                .toList();
+                .toList());
+        if (covered != null && !positions.contains(covered)) {
+            positions.add(covered);
+        }
         return positions.stream()
                 .flatMap(position -> toolkits
-                        .findBySupervisorPositionIdAndDeletedAtIsNullOrderByName(position)
+                        .findBySupervisorPositionIdAndDeletedFalseOrderByCreatedAtDesc(position)
                         .stream())
-                .filter(toolkit -> timesheet.supervisorOwnsScope(
-                        ccgid,
-                        toolkit.getSupervisorPositionId(),
-                        toolkit.getPrimaryPl3Code(),
-                        toolkit.getCenter()))
+                .filter(toolkit -> ownsToolkit(ccgid, covered, toolkit))
                 .toList();
+    }
+
+    private boolean ownsToolkit(String ccgid, String covered, Toolkit toolkit) {
+        if (timesheet.supervisorOwnsScope(
+                ccgid,
+                toolkit.getSupervisorPositionId(),
+                toolkit.getPrimaryPl3Code(),
+                toolkit.getCenter())) {
+            return true;
+        }
+        return covered != null
+                && covered.equals(toolkit.getSupervisorPositionId())
+                && timesheet.positionHasScope(
+                        covered, toolkit.getPrimaryPl3Code(), toolkit.getCenter());
+    }
+
+    private String coveredSupervisorPosition() {
+        return coverage.positionId("SUPERVISOR");
     }
 
     /**
@@ -267,8 +320,7 @@ public class ToolkitService {
     private Toolkit ownedToolkit(String ccgid, UUID toolkitId) {
         Toolkit toolkit = toolkits.findExistingById(toolkitId)
                 .orElseThrow(() -> notFound("toolkit-not-found", "The Toolkit was not found."));
-        if (!timesheet.supervisorOwnsScope(
-                ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), toolkit.getCenter())) {
+        if (!ownsToolkit(ccgid, coveredSupervisorPosition(), toolkit)) {
             throw forbidden("toolkit-out-of-scope",
                     "The current Supervisor no longer owns this Toolkit scope.");
         }
@@ -276,7 +328,12 @@ public class ToolkitService {
     }
 
     private void ensureScope(String ccgid, CreateToolkitRequest request) {
-        boolean exactPath = timesheet.supervisorHierarchy(ccgid).stream().anyMatch(candidate ->
+        var hierarchy = new ArrayList<>(timesheet.supervisorHierarchy(ccgid));
+        String covered = coveredSupervisorPosition();
+        if (covered != null) {
+            hierarchy.addAll(timesheet.hierarchyForPosition(covered));
+        }
+        boolean exactPath = hierarchy.stream().anyMatch(candidate ->
                 candidate.supervisorPositionId().equals(request.supervisorPositionId())
                         && candidate.center().equals(request.center())
                         && candidate.domain().equals(request.domain())
@@ -292,9 +349,9 @@ public class ToolkitService {
 
     private void ensureNameAvailable(String supervisorPositionId, String name, UUID toolkitId) {
         boolean taken = toolkitId == null
-                ? toolkits.existsBySupervisorPositionIdAndNameAndDeletedAtIsNull(
+                ? toolkits.existsBySupervisorPositionIdAndNameAndDeletedFalse(
                         supervisorPositionId, name)
-                : toolkits.existsBySupervisorPositionIdAndNameAndIdNotAndDeletedAtIsNull(
+                : toolkits.existsBySupervisorPositionIdAndNameAndIdNotAndDeletedFalse(
                         supervisorPositionId, name, toolkitId);
         if (taken) {
             throw conflict(
@@ -304,7 +361,7 @@ public class ToolkitService {
     }
 
     private void ensureHierarchyAvailable(CreateToolkitRequest request) {
-        if (toolkits.existsBySupervisorPositionIdAndCenterAndDomainAndPl1AndPl2AndPrimaryPl3CodeAndDeletedAtIsNull(
+        if (toolkits.existsBySupervisorPositionIdAndCenterAndDomainAndPl1AndPl2AndPrimaryPl3CodeAndDeletedFalse(
                 request.supervisorPositionId(),
                 request.center(),
                 request.domain(),
@@ -350,7 +407,7 @@ public class ToolkitService {
 
     private ToolkitResponse toAlignedResponse(Toolkit toolkit, int syncedSessionCount, boolean includeDisabled) {
         List<TimesheetAlignment.Key> keys = toolkit.getSharedKpiSelections().stream()
-                .filter(selection -> selection.getDeletedAt() == null)
+                .filter(selection -> !selection.isDeleted())
                 .map(selection -> new TimesheetAlignment.Key(
                         selection.getCarrier(), selection.getSite(), selection.getCustomerCountry()))
                 .toList();
@@ -371,8 +428,12 @@ public class ToolkitService {
                             (int) tmsSessions.countByToolkitSubtask_IdAndEnabled(
                                     subtask.getId(), false)));
         }
+        AuditActorView createdBy = toolkit.getId() == null
+                ? null
+                : audits.createdBy(AuditEntityType.TOOLKIT, toolkit.getId());
         return ToolkitResponse.from(
-                toolkit, alignment, toolkitImpact, subtaskImpacts, syncedSessionCount, includeDisabled);
+                toolkit, alignment, toolkitImpact, subtaskImpacts, syncedSessionCount, includeDisabled)
+                .withActors(createdBy, audits.actor(toolkit.getLatestAuditEventId()));
     }
 
     private ToolkitSubtask requireSubtask(Toolkit toolkit, UUID subtaskId) {
@@ -420,7 +481,7 @@ public class ToolkitService {
 
     private static List<ToolkitSharedKpiSelection> activeKpis(Toolkit toolkit) {
         return toolkit.getSharedKpiSelections().stream()
-                .filter(selection -> selection.getDeletedAt() == null)
+                .filter(selection -> !selection.isDeleted())
                 .toList();
     }
 

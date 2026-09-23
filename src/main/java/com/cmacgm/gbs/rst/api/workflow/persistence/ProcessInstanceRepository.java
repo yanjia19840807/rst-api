@@ -50,7 +50,7 @@ public interface ProcessInstanceRepository extends JpaRepository<ProcessInstance
             from ProcessInstance w, RstExercise e
             join w.tasks t
             where w.exerciseId = e.id
-              and e.deletedAt is null
+              and e.deleted = false
               and w.status = com.cmacgm.gbs.rst.api.workflow.domain.ProcessStatus.OPEN
               and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.PENDING
               and t.node = com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.DOMAIN_HEAD
@@ -71,7 +71,7 @@ public interface ProcessInstanceRepository extends JpaRepository<ProcessInstance
             from ProcessInstance w, RstExercise e
             join w.tasks t
             where w.exerciseId = e.id
-              and e.deletedAt is null
+              and e.deleted = false
               and w.status = com.cmacgm.gbs.rst.api.workflow.domain.ProcessStatus.OPEN
               and t.status = com.cmacgm.gbs.rst.api.workflow.domain.TaskStatus.PENDING
               and t.node = com.cmacgm.gbs.rst.api.workflow.domain.TaskNode.LOCAL_TRANSFORMATION_HEAD

@@ -17,7 +17,7 @@ public interface CenterDomainHeadRepository extends JpaRepository<CenterDomainHe
      * @param center GBS center
      * @return mappings
      */
-    List<CenterDomainHead> findByIdCenterOrderByIdDomainAsc(String center);
+    List<CenterDomainHead> findByKeyCenterOrderByKeyDomainAsc(String center);
 
     /**
      * Mapping for one Center × Domain.
@@ -26,5 +26,5 @@ public interface CenterDomainHeadRepository extends JpaRepository<CenterDomainHe
      * @param domain GBS domain
      * @return mapping
      */
-    Optional<CenterDomainHead> findByIdCenterAndIdDomain(String center, String domain);
+    Optional<CenterDomainHead> findByKeyCenterAndKeyDomain(String center, String domain);
 }

@@ -66,20 +66,11 @@ public class RstExercise {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    @Column(name = "created_by")
-    private String createdBy;
+    @Column(name = "latest_audit_event_id")
+    private UUID latestAuditEventId;
 
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
-
-    @Column(name = "updated_by")
-    private String updatedBy;
-
-    @Column(name = "deleted_at")
-    private Instant deletedAt;
-
-    @Column(name = "deleted_by")
-    private String deletedBy;
+    @Column(name = "is_deleted", nullable = false)
+    private boolean deleted;
 
     @Version
     private long version;
@@ -136,9 +127,6 @@ public class RstExercise {
         exercise.tmsFrom = tmsFrom;
         exercise.tmsTo = tmsTo;
         exercise.createdAt = now;
-        exercise.createdBy = ownerCcgid;
-        exercise.updatedAt = now;
-        exercise.updatedBy = ownerCcgid;
         return exercise;
     }
 
@@ -146,13 +134,9 @@ public class RstExercise {
      * Updates Sizing Month while the Exercise remains editable.
      *
      * @param sizingMonth first day of sizing month
-     * @param actorCcgid updating Supervisor
-     * @param now update timestamp
      */
-    public void updatePeriods(LocalDate sizingMonth, String actorCcgid, Instant now) {
+    public void updatePeriods(LocalDate sizingMonth) {
         this.sizingMonth = sizingMonth;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
     }
 
     /**
@@ -160,15 +144,10 @@ public class RstExercise {
      *
      * @param tmsFrom TMS history from date
      * @param tmsTo TMS history to date
-     * @param actorCcgid updating Supervisor
-     * @param now update timestamp
      */
-    public void updateTmsPeriod(
-            LocalDate tmsFrom, LocalDate tmsTo, String actorCcgid, Instant now) {
+    public void updateTmsPeriod(LocalDate tmsFrom, LocalDate tmsTo) {
         this.tmsFrom = tmsFrom;
         this.tmsTo = tmsTo;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
     }
 
     public boolean hasTmsPeriod() {
@@ -178,11 +157,9 @@ public class RstExercise {
     /**
      * Clears the TMS Period so SYSTEM median is no longer populated from sessions.
      */
-    public void clearTmsPeriod(String actorCcgid, Instant now) {
+    public void clearTmsPeriod() {
         this.tmsFrom = null;
         this.tmsTo = null;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
     }
 
     /**
@@ -190,31 +167,21 @@ public class RstExercise {
      *
      * @param slotStartDate slot window start
      * @param slotWeeks slot window length in weeks (1–12)
-     * @param actorCcgid updating Supervisor
-     * @param now update timestamp
      */
-    public void updateSlotPeriod(
-            LocalDate slotStartDate,
-            short slotWeeks,
-            String actorCcgid,
-            Instant now) {
+    public void updateSlotPeriod(LocalDate slotStartDate, short slotWeeks) {
         if (slotWeeks < 1 || slotWeeks > 12) {
             throw new IllegalArgumentException("Slot weeks must be between 1 and 12.");
         }
         this.slotStartDate = slotStartDate;
         this.slotWeeks = slotWeeks;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
     }
 
     /**
      * Clears the Slot Period so Per-slot Volume is no longer generated.
      */
-    public void clearSlotPeriod(String actorCcgid, Instant now) {
+    public void clearSlotPeriod() {
         this.slotStartDate = null;
         this.slotWeeks = null;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
     }
 
     public boolean hasSlotPeriod() {
@@ -222,81 +189,51 @@ public class RstExercise {
     }
 
     /**
-     * Soft-deletes an unsubmitted Exercise.
-     *
-     * @param actorCcgid deleting Supervisor
-     * @param now deletion timestamp
+     * Marks an unsubmitted Exercise deleted. Who and when are on the audit event.
      */
-    public void softDelete(String actorCcgid, Instant now) {
-        this.deletedAt = now;
-        this.deletedBy = actorCcgid;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
+    public void softDelete() {
+        this.deleted = true;
     }
 
     /**
      * Points the Exercise at its current Official Scenario.
      *
      * @param scenarioId official scenario belonging to this Exercise
-     * @param actorCcgid actor
-     * @param now update timestamp
      */
-    public void setOfficialScenario(UUID scenarioId, String actorCcgid, Instant now) {
+    public void setOfficialScenario(UUID scenarioId) {
         this.officialScenarioId = scenarioId;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
     }
 
     /**
      * Clears the current Official Scenario pointer (e.g. after deleting that scenario).
-     *
-     * @param actorCcgid actor
-     * @param now update timestamp
      */
-    public void clearOfficialScenario(String actorCcgid, Instant now) {
+    public void clearOfficialScenario() {
         this.officialScenarioId = null;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
     }
 
     /**
      * Records the submit timestamp. Document status comes from the process.
      *
-     * @param actorCcgid submitting Supervisor
      * @param now submit timestamp
      */
-    public void markSubmitted(String actorCcgid, Instant now) {
+    public void markSubmitted(Instant now) {
         this.submittedAt = now;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
     }
 
     /**
      * Clears validation after Return so Supervisor can edit again.
-     *
-     * @param actorCcgid actor
-     * @param now update timestamp
      */
-    public void markReturned(String actorCcgid, Instant now) {
-        reopenForEditing(actorCcgid, now);
-    }
-
-    private void reopenForEditing(String actorCcgid, Instant now) {
+    public void markReturned() {
         this.validatedAt = null;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
     }
 
     /**
      * Records LTH approval time. Document status comes from the process.
      *
-     * @param actorCcgid approving actor
      * @param now approval timestamp
      */
-    public void markApproved(String actorCcgid, Instant now) {
+    public void markApproved(Instant now) {
         this.validatedAt = now;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
     }
 
     public boolean hasOfficialScenario() {
@@ -383,6 +320,14 @@ public class RstExercise {
                 now));
     }
 
+    public void setLatestAuditEventId(UUID latestAuditEventId) {
+        this.latestAuditEventId = latestAuditEventId;
+    }
+
+    public UUID getLatestAuditEventId() {
+        return latestAuditEventId;
+    }
+
     public UUID getId() {
         return id;
     }
@@ -435,12 +380,8 @@ public class RstExercise {
         return createdAt;
     }
 
-    public Instant getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public Instant getDeletedAt() {
-        return deletedAt;
+    public boolean isDeleted() {
+        return deleted;
     }
 
     public long getVersion() {

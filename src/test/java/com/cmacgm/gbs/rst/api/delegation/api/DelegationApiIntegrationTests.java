@@ -1,6 +1,7 @@
 package com.cmacgm.gbs.rst.api.delegation.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -8,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -51,6 +53,7 @@ class DelegationApiIntegrationTests {
         jdbcTemplate.update("delete from timesheet_kpi");
         jdbcTemplate.update("delete from timesheet_scope");
         jdbcTemplate.update("delete from timesheet_person_position_role");
+        jdbcTemplate.update("delete from timesheet_position_parent");
         jdbcTemplate.update("delete from timesheet_position");
         jdbcTemplate.update("delete from timesheet_person");
         jdbcTemplate.update("delete from timesheet_sync_run");
@@ -90,16 +93,16 @@ class DelegationApiIntegrationTests {
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"delegateCcgid":"AGENT010","validFrom":"%s","validUntil":"%s"}
+                                {"positionId":"POS-SUP-001","delegateCcgids":["AGENT010"],"validFrom":"%s","validUntil":"%s"}
                                 """.formatted(from, until)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.delegatorCcgid").value("SUPERVISOR001"))
-                .andExpect(jsonPath("$.delegateCcgid").value("AGENT010"))
-                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$[0].delegatorCcgid").value("SUPERVISOR001"))
+                .andExpect(jsonPath("$[0].delegateCcgid").value("AGENT010"))
+                .andExpect(jsonPath("$[0].status").value("ACTIVE"))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
-        String id = JsonPath.read(created, "$.id");
+        String id = JsonPath.read(created, "$[0].id");
 
         mockMvc.perform(get("/api/v1/delegations/received")
                         .header("X-Dev-Ccgid", "AGENT010")
@@ -112,8 +115,10 @@ class DelegationApiIntegrationTests {
                         .header("X-Dev-Role", "AGENT")
                         .header("X-Rst-Delegation-Id", id))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.ccgid").value("SUPERVISOR001"))
+                .andExpect(jsonPath("$.ccgid").value("AGENT010"))
+                .andExpect(jsonPath("$.roles.length()").value(1))
                 .andExpect(jsonPath("$.roles[0]").value("SUPERVISOR"))
+                .andExpect(jsonPath("$.delegatedPositionId").value("POS-SUP-001"))
                 .andExpect(jsonPath("$.actor.ccgid").value("AGENT010"))
                 .andExpect(jsonPath("$.delegationId").value(id));
 
@@ -123,7 +128,7 @@ class DelegationApiIntegrationTests {
                         .header("X-Rst-Delegation-Id", id)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"delegateCcgid":"SUPERVISOR001","validFrom":"%s","validUntil":"%s"}
+                                {"positionId":"POS-SUP-001","delegateCcgids":["SUPERVISOR001"],"validFrom":"%s","validUntil":"%s"}
                                 """.formatted(from, until)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.type")
@@ -154,7 +159,7 @@ class DelegationApiIntegrationTests {
                         .header("X-Dev-Role", "GOVERNANCE")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"delegateCcgid":"AGENT010","validFrom":"%s","validUntil":"%s"}
+                                {"positionId":"POS-SUP-001","delegateCcgids":["AGENT010"],"validFrom":"%s","validUntil":"%s"}
                                 """.formatted(from, until)))
                 .andExpect(status().isForbidden());
 
@@ -163,7 +168,7 @@ class DelegationApiIntegrationTests {
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"delegateCcgid":"SUPERVISOR001","validFrom":"%s","validUntil":"%s"}
+                                {"positionId":"POS-SUP-001","delegateCcgids":["SUPERVISOR001"],"validFrom":"%s","validUntil":"%s"}
                                 """.formatted(from, until)))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.type")
@@ -175,10 +180,10 @@ class DelegationApiIntegrationTests {
         Instant from = Instant.now().minus(1, ChronoUnit.HOURS);
         Instant until = Instant.now().plus(7, ChronoUnit.DAYS);
         String bodyToAgent = """
-                {"delegateCcgid":"AGENT010","validFrom":"%s","validUntil":"%s"}
+                {"positionId":"POS-SUP-001","delegateCcgids":["AGENT010"],"validFrom":"%s","validUntil":"%s"}
                 """.formatted(from, until);
         String bodyToAgent11 = """
-                {"delegateCcgid":"AGENT011","validFrom":"%s","validUntil":"%s"}
+                {"positionId":"POS-AGT-010","delegateCcgids":["AGENT011"],"validFrom":"%s","validUntil":"%s"}
                 """.formatted(from, until);
 
         mockMvc.perform(post("/api/v1/delegations")
@@ -235,11 +240,22 @@ class DelegationApiIntegrationTests {
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"delegateCcgid":"AGENT099","validFrom":"%s","validUntil":"%s"}
+                                {"positionId":"POS-SUP-001","delegateCcgids":["AGENT099"],"validFrom":"%s","validUntil":"%s"}
                                 """.formatted(from, until)))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.type")
                         .value("https://rst.cmacgm.com/problems/delegate-center-mismatch"));
+    }
+
+    @Test
+    void candidatesIncludeTheCaller() throws Exception {
+        mockMvc.perform(get("/api/v1/delegations/candidates")
+                        .header("X-Dev-Ccgid", "SUPERVISOR001")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .param("q", "SUPERVISOR001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].ccgid").value("SUPERVISOR001"))
+                .andExpect(jsonPath("$.items[0].name").value("Test Supervisor"));
     }
 
     @Test
@@ -256,6 +272,75 @@ class DelegationApiIntegrationTests {
                 .extracting(DelegationCandidateView::ccgid)
                 .contains("AGENT010")
                 .doesNotContain("SUPERVISOR002", "AGENT099");
+    }
+
+    @Test
+    void grantCoversEveryOccupiedPositionAndEveryRoleOnEach() throws Exception {
+        insertPosition("POS-SUP-001", "AGENT");
+        insertPosition("POS-SUP-003", "SUPERVISOR");
+        insertSeat("SUPERVISOR001", "POS-SUP-003", "SUPERVISOR");
+
+        String created = mockMvc.perform(post("/api/v1/delegations")
+                        .header("X-Dev-Ccgid", "SUPERVISOR001")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"delegateCcgids":["AGENT010"]}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(JsonPath.<List<String>>read(created, "$[*].subjectPositionId"))
+                .containsExactlyInAnyOrder("POS-SUP-001", "POS-SUP-003");
+        assertThat(JsonPath.<List<String>>read(
+                        created, "$[?(@.subjectPositionId=='POS-SUP-001')].delegatorRoles[*]"))
+                .containsExactlyInAnyOrder("SUPERVISOR", "AGENT");
+        assertThat(JsonPath.<List<String>>read(
+                        created, "$[?(@.subjectPositionId=='POS-SUP-003')].delegatorRoles[*]"))
+                .containsExactly("SUPERVISOR");
+    }
+
+    @Test
+    void assignCoversEveryChildPositionHeldByTheSameOccupant() throws Exception {
+        insertPosition("POS-AGT-012", "AGENT");
+        insertSeat("AGENT010", "POS-AGT-012", "AGENT");
+        insertParent("POS-AGT-010", "AGENT", "POS-SUP-001", "SUPERVISOR");
+        insertParent("POS-AGT-012", "AGENT", "POS-SUP-001", "SUPERVISOR");
+        insertParent("POS-AGT-011", "AGENT", "POS-SUP-001", "SUPERVISOR");
+
+        String created = mockMvc.perform(post("/api/v1/delegations/assignments")
+                        .header("X-Dev-Ccgid", "SUPERVISOR001")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"positionId":"POS-AGT-010","delegateCcgids":["AGENT011"]}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(JsonPath.<List<String>>read(created, "$[*].subjectPositionId"))
+                .containsExactlyInAnyOrder("POS-AGT-010", "POS-AGT-012");
+    }
+
+    @Test
+    void blankDatesCreateOngoingAccess() throws Exception {
+        mockMvc.perform(post("/api/v1/delegations")
+                        .header("X-Dev-Ccgid", "SUPERVISOR001")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"positionId":"POS-SUP-001","delegateCcgids":["AGENT010"]}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$[0].status").value("ACTIVE"))
+                .andExpect(jsonPath("$[0].validFrom").value(nullValue()))
+                .andExpect(jsonPath("$[0].validUntil").value(nullValue()));
     }
 
     private void insertPerson(String ccgid, String name, String center) {
@@ -282,6 +367,21 @@ class DelegationApiIntegrationTests {
                 DAILY_RUN_ID,
                 positionId,
                 roleType);
+    }
+
+    private void insertParent(
+            String positionId, String roleType, String parentPositionId, String parentRoleType) {
+        jdbcTemplate.update(
+                """
+                insert into timesheet_position_parent
+                    (sync_run_id, position_id, role_type, parent_position_id, parent_role_type)
+                values (?, ?, ?, ?, ?)
+                """,
+                DAILY_RUN_ID,
+                positionId,
+                roleType,
+                parentPositionId,
+                parentRoleType);
     }
 
     private void insertSeat(String ccgid, String positionId, String roleType) {

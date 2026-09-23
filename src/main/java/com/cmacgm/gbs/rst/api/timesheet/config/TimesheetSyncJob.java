@@ -25,7 +25,7 @@ public class TimesheetSyncJob extends QuartzJobBean {
             ApplicationContext app = (ApplicationContext) context.getScheduler().getContext().get("applicationContext");
             TimesheetSyncService syncService = app.getBean(TimesheetSyncService.class);
             log.info("Timesheet Quartz sync starting: kind={}", kind);
-            syncService.syncFromSharePoint(kind, "SYSTEM");
+            syncService.syncFromSharePoint(kind);
         } catch (Exception ex) {
             log.error("Timesheet Quartz sync failed: kind={} {}", kind, ex.getMessage(), ex);
             throw new JobExecutionException(ex);

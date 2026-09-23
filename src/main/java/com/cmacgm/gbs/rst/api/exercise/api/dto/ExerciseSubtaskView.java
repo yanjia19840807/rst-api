@@ -8,5 +8,5 @@ import java.util.UUID;
  */
 public record ExerciseSubtaskView(
         UUID id, UUID sourceToolkitSubtaskId, String name, String description,
-        int displayOrder, Instant deletedAt) {
+        int displayOrder, boolean isDeleted) {
 }

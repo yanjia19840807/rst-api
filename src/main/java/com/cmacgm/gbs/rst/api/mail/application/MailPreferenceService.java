@@ -133,7 +133,7 @@ public class MailPreferenceService {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
                     "mail-preference-own-account",
-                    "Stop acting as someone else to change email preferences.");
+                    "Stop this delegation before changing email preferences.");
         }
     }
 

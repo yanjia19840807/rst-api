@@ -146,8 +146,7 @@ public class TimesheetSyncController {
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public RunHeader upload(
-            @AuthenticationPrincipal RstPrincipal principal, @RequestParam("file") MultipartFile file) {
-        return admin.upload(principal, file);
+    public RunHeader upload(@RequestParam("file") MultipartFile file) {
+        return admin.upload(file);
     }
 }

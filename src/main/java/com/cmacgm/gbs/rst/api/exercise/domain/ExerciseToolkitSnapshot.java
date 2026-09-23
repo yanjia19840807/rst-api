@@ -66,11 +66,7 @@ public class ExerciseToolkitSnapshot {
     @Column(name = "combine_subtasks_time", nullable = false)
     private boolean combineSubtasksTime;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
 
-    @Column(name = "created_by")
-    private String createdBy;
 
     protected ExerciseToolkitSnapshot() {
     }
@@ -105,8 +101,6 @@ public class ExerciseToolkitSnapshot {
         snapshot.pl3Code = pl3Code;
         snapshot.pl3Name = pl3Name;
         snapshot.combineSubtasksTime = combineSubtasksTime;
-        snapshot.createdAt = now;
-        snapshot.createdBy = createdBy;
         exercise.attachToolkitSnapshot(snapshot);
         return snapshot;
     }

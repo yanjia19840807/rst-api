@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
 import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.ApprovalWorkspaceView;
 import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.ApprovalWorkspaceView.ApprovalCurrentHop;
 import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.ApprovalWorkspaceView.ApprovalHistoryRow;
@@ -30,14 +31,17 @@ public class ApprovalWorkspaceAssembler {
     static final String MODE_COMPLETED = "COMPLETED";
 
     private final WorkflowRouter workflowRouter;
+    private final ApprovalActorResolver actors;
 
     /**
      * Creates the assembler.
      *
      * @param workflowRouter Timesheet position router
+     * @param actors occupant plus optional delegate
      */
-    public ApprovalWorkspaceAssembler(WorkflowRouter workflowRouter) {
+    public ApprovalWorkspaceAssembler(WorkflowRouter workflowRouter, ApprovalActorResolver actors) {
         this.workflowRouter = workflowRouter;
+        this.actors = actors;
     }
 
     /**
@@ -58,15 +62,22 @@ public class ApprovalWorkspaceAssembler {
                 supervisorPosition(exercise),
                 toolkitCenter(exercise),
                 toolkitDomain(exercise));
+        AuditActorView nextBy = actors.forPosition(next.positionId(), next.reviewerCcgid(), displayNames);
+        String nextReviewer = nextBy != null ? nextBy.displayName() : next.reviewerName();
         return new ApprovalWorkspaceView(
                 MODE_IN_PROGRESS,
                 new ApprovalStatusBar(
-                        "IN_PROGRESS", "In progress", waiting.step(), waiting.reviewer()),
-                new ApprovalCurrentHop(waiting.step(), waiting.reviewer()),
+                        "IN_PROGRESS",
+                        "In progress",
+                        waiting.step(),
+                        waiting.reviewer(),
+                        waiting.reviewerBy()),
+                new ApprovalCurrentHop(waiting.step(), waiting.reviewer(), waiting.reviewerBy()),
                 next.stepLabel(),
                 next.positionId(),
-                next.reviewerName(),
+                nextReviewer,
                 next.reviewerCcgid(),
+                nextBy,
                 history(workflow, displayNames, null));
     }
 
@@ -94,18 +105,24 @@ public class ApprovalWorkspaceAssembler {
                 null,
                 null,
                 null,
+                null,
                 history(workflow, displayNames, mineStep));
     }
 
     private ApprovalStatusBar completedStatusBar(ProcessInstance workflow, Waiting waiting) {
         if (workflow.isAwaitingReview()) {
-            return new ApprovalStatusBar("NOW", "Now", waiting.step(), waiting.reviewer());
+            return new ApprovalStatusBar(
+                    "NOW", "Now", waiting.step(), waiting.reviewer(), waiting.reviewerBy());
         }
         return switch (workflow.submissionStatus()) {
-            case "APPROVED" -> new ApprovalStatusBar("APPROVED", "Approved", null, null);
-            case "RETURNED" -> new ApprovalStatusBar("RETURNED", "Returned", null, null);
+            case "APPROVED" -> new ApprovalStatusBar("APPROVED", "Approved", null, null, null);
+            case "RETURNED" -> new ApprovalStatusBar("RETURNED", "Returned", null, null, null);
             default -> new ApprovalStatusBar(
-                    "NOW", workflow.submissionStatus(), waiting.step(), waiting.reviewer());
+                    "NOW",
+                    workflow.submissionStatus(),
+                    waiting.step(),
+                    waiting.reviewer(),
+                    waiting.reviewerBy());
         };
     }
 
@@ -119,15 +136,19 @@ public class ApprovalWorkspaceAssembler {
                 : roleForStep(workflow.getCurrentStep());
         String step = workflow.isAwaitingReview() ? reviewStageLabel(role) : null;
         String reviewer = null;
+        AuditActorView reviewerBy = null;
         if (ready != null) {
             TaskActor actor = ready.findAnyPendingActor().orElse(null);
             if (actor != null) {
-                reviewer = firstNonBlank(
-                        workflowRouter.occupantName(ready.getNode().roleCode(), actor.getPositionId()),
-                        actor.getCcgid() == null ? null : displayNames.get(actor.getCcgid()));
+                reviewerBy = actors.forPosition(actor.getPositionId(), actor.getCcgid(), displayNames);
+                reviewer = reviewerBy != null
+                        ? reviewerBy.displayName()
+                        : firstNonBlank(
+                                workflowRouter.occupantName(ready.getNode().roleCode(), actor.getPositionId()),
+                                actor.getCcgid() == null ? null : displayNames.get(actor.getCcgid()));
             }
         }
-        return new Waiting(role, step, reviewer);
+        return new Waiting(role, step, reviewer, reviewerBy);
     }
 
     private List<ApprovalHistoryRow> history(
@@ -157,16 +178,18 @@ public class ApprovalWorkspaceAssembler {
                 && (actor.getStatus() == ActorStatus.APPROVED
                         || actor.getStatus() == ActorStatus.RETURNED)
                 && actor.getActorType() != ActorType.INITIATOR;
+        AuditActorView actedBy = actors.fromActor(actor, displayNames);
         return new ApprovalHistoryRow(
                 actor.getId(),
                 task.getNodeOrder(),
                 historyStep(task, actor),
                 roleLabel(task.getNode().roleCode()),
-                actor.handlerDisplayName(displayNames),
+                actedBy != null ? actedBy.displayName() : actor.handlerDisplayName(displayNames),
                 decision,
                 actor.getComments(),
                 actor.getActedAt(),
-                mine);
+                mine,
+                actedBy);
     }
 
     private Short actedStepNo(ProcessInstance workflow, RstPrincipal principal) {
@@ -269,6 +292,6 @@ public class ApprovalWorkspaceAssembler {
         return second;
     }
 
-    private record Waiting(String role, String step, String reviewer) {
+    private record Waiting(String role, String step, String reviewer, AuditActorView reviewerBy) {
     }
 }

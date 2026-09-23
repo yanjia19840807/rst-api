@@ -15,5 +15,5 @@ public interface ExerciseHolidayRepository extends JpaRepository<ExerciseHoliday
      * @param exerciseId Exercise id
      * @return active holidays
      */
-    List<ExerciseHoliday> findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(UUID exerciseId);
+    List<ExerciseHoliday> findByExerciseIdAndDeletedFalseOrderByHolidayDateAscHolidayNameAsc(UUID exerciseId);
 }

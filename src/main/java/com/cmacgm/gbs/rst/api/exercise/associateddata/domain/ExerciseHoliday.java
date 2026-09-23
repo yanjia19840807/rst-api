@@ -1,6 +1,5 @@
 package com.cmacgm.gbs.rst.api.exercise.associateddata.domain;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -34,23 +33,8 @@ public class ExerciseHoliday {
     @Column(name = "holiday_type", nullable = false, length = 20)
     private HolidayDayKind holidayType;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
-
-    @Column(name = "created_by")
-    private String createdBy;
-
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
-
-    @Column(name = "updated_by")
-    private String updatedBy;
-
-    @Column(name = "deleted_at")
-    private Instant deletedAt;
-
-    @Column(name = "deleted_by")
-    private String deletedBy;
+    @Column(name = "is_deleted", nullable = false)
+    private boolean deleted;
 
     @Version
     private long version;
@@ -65,17 +49,13 @@ public class ExerciseHoliday {
      * @param holidayDate calendar date
      * @param holidayName display name
      * @param holidayType Holiday, Weekend, or Normal
-     * @param actorCcgid creating Supervisor
-     * @param now creation timestamp
      * @return new holiday entity
      */
     public static ExerciseHoliday create(
             UUID exerciseId,
             LocalDate holidayDate,
             String holidayName,
-            HolidayDayKind holidayType,
-            String actorCcgid,
-            Instant now) {
+            HolidayDayKind holidayType) {
         if (holidayType == null) {
             throw new IllegalArgumentException("Holiday type is required.");
         }
@@ -85,24 +65,11 @@ public class ExerciseHoliday {
         holiday.holidayDate = holidayDate;
         holiday.holidayName = holidayName;
         holiday.holidayType = holidayType;
-        holiday.createdAt = now;
-        holiday.createdBy = actorCcgid;
-        holiday.updatedAt = now;
-        holiday.updatedBy = actorCcgid;
         return holiday;
     }
 
-    /**
-     * Soft-deletes this holiday.
-     *
-     * @param actorCcgid deleting Supervisor
-     * @param now deletion timestamp
-     */
-    public void softDelete(String actorCcgid, Instant now) {
-        this.deletedAt = now;
-        this.deletedBy = actorCcgid;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
+    public void softDelete() {
+        this.deleted = true;
     }
 
     public UUID getId() { return id; }
@@ -110,5 +77,5 @@ public class ExerciseHoliday {
     public LocalDate getHolidayDate() { return holidayDate; }
     public String getHolidayName() { return holidayName; }
     public HolidayDayKind getHolidayType() { return holidayType; }
-    public Instant getDeletedAt() { return deletedAt; }
+    public boolean isDeleted() { return deleted; }
 }

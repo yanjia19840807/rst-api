@@ -253,7 +253,7 @@ public class ExerciseInitializationService {
 
     private void copyHolidays(UUID toolkitId, UUID targetId, String actorCcgid, Instant now) {
         Set<LocalDate> existingDates = holidays
-                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(targetId)
+                .findByExerciseIdAndDeletedFalseOrderByHolidayDateAscHolidayNameAsc(targetId)
                 .stream()
                 .map(ExerciseHoliday::getHolidayDate)
                 .collect(Collectors.toSet());
@@ -267,9 +267,7 @@ public class ExerciseInitializationService {
                     targetId,
                     date,
                     holiday.getHolidayName(),
-                    holiday.getHolidayType(),
-                    actorCcgid,
-                    now));
+                    holiday.getHolidayType()));
         }
         holidays.saveAll(copies);
     }

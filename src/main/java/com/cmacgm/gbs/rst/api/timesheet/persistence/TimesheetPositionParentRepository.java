@@ -34,6 +34,27 @@ public interface TimesheetPositionParentRepository
     List<TimesheetPositionParent> findActiveByPositionId(@Param("positionId") String positionId);
 
     /**
+     * ACTIVE Daily children of one parent node.
+     *
+     * @param parentPositionId parent position
+     * @param parentRoleType parent role
+     * @return child edges
+     */
+    @Query("""
+            select e
+            from TimesheetPositionParent e, TimesheetSyncRun r
+            where e.id.syncRunId = r.id
+              and r.kind = 'DAILY'
+              and r.status = 'ACTIVE'
+              and e.id.parentPositionId = :parentPositionId
+              and e.id.parentRoleType = :parentRoleType
+            order by e.id.positionId, e.id.roleType
+            """)
+    List<TimesheetPositionParent> findActiveChildren(
+            @Param("parentPositionId") String parentPositionId,
+            @Param("parentRoleType") String parentRoleType);
+
+    /**
      * ACTIVE Daily parent edges for the given child positions.
      *
      * @param center exact run center; blank matches all

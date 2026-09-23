@@ -91,8 +91,8 @@ class TmsSessionApiIntegrationTests {
                 insert into toolkit
                     (id, name, supervisor_position_id, center, domain, pl1, pl2,
                      pl3_name, primary_pl3_code, combine_subtasks_time, enabled,
-                     owner_ccgid, created_at, updated_at, version)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, ?, ?, ?)
+                     is_deleted, owner_ccgid, created_at, version)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true, false, ?, ?, ?)
                 """,
                 TOOLKIT_ID,
                 "Bank Rec Manual Check",
@@ -106,48 +106,40 @@ class TmsSessionApiIntegrationTests {
                 false,
                 "SUPERVISOR001",
                 now,
-                now,
                 0);
         jdbcTemplate.update(
                 """
                 insert into toolkit_subtask
-                    (id, toolkit_id, name, display_order, enabled, created_at, updated_at, version)
-                values (?, ?, ?, ?, true, ?, ?, ?)
+                    (id, toolkit_id, name, display_order, enabled, is_deleted, version)
+                values (?, ?, ?, ?, true, false, ?)
                 """,
                 SUBTASK_ID,
                 TOOLKIT_ID,
                 "Manual match",
                 1,
-                now,
-                now,
                 0);
         jdbcTemplate.update(
                 """
                 insert into toolkit_subtask
-                    (id, toolkit_id, name, display_order, enabled, created_at, updated_at, version)
-                values (?, ?, ?, ?, true, ?, ?, ?)
+                    (id, toolkit_id, name, display_order, enabled, is_deleted, version)
+                values (?, ?, ?, ?, true, false, ?)
                 """,
                 SUBTASK_ID_2,
                 TOOLKIT_ID,
                 "Exception handling",
                 2,
-                now,
-                now,
                 0);
         jdbcTemplate.update(
                 """
                 insert into toolkit_shared_kpi_selection
-                    (id, toolkit_id, carrier, site, customer_country,
-                     created_at, updated_at, version)
-                values (?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, toolkit_id, carrier, site, customer_country, is_deleted, version)
+                values (?, ?, ?, ?, ?, false, ?)
                 """,
                 UUID.fromString("30000000-0000-0000-0000-000000000001"),
                 TOOLKIT_ID,
                 "Carrier A",
                 "KL",
                 "Australia",
-                now,
-                now,
                 0);
         UUID dailyRunId = UUID.fromString("40000000-0000-0000-0000-000000000001");
         UUID monthlyRunId = UUID.fromString("40000000-0000-0000-0000-000000000002");
@@ -332,25 +324,26 @@ class TmsSessionApiIntegrationTests {
         mockMvc.perform(post("/api/v1/tms/sessions/{id}/resume", sessionId)
                         .header("X-Dev-Ccgid", "AGENT001")
                         .header("X-Dev-Role", "AGENT"))
-                .andExpect(status().isConflict());
-
-        mockMvc.perform(post("/api/v1/tms/sessions/{id}/end", secondSessionId)
-                        .header("X-Dev-Ccgid", "AGENT001")
-                        .header("X-Dev-Role", "AGENT"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("completed"));
-
-        mockMvc.perform(post("/api/v1/tms/sessions/{id}/resume", sessionId)
-                        .header("X-Dev-Ccgid", "AGENT001")
-                        .header("X-Dev-Role", "AGENT"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("running"));
+
+        mockMvc.perform(get("/api/v1/tms/sessions/{id}", secondSessionId)
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("paused"));
 
         mockMvc.perform(post("/api/v1/tms/sessions/{id}/end", sessionId)
                         .header("X-Dev-Ccgid", "AGENT001")
                         .header("X-Dev-Role", "AGENT"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("completed"));
+
+        mockMvc.perform(post("/api/v1/tms/sessions/{id}/resume", secondSessionId)
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("running"));
 
         mockMvc.perform(get("/api/v1/tms/sessions")
                         .header("X-Dev-Ccgid", "AGENT001")
@@ -626,6 +619,46 @@ class TmsSessionApiIntegrationTests {
                 .andExpect(jsonPath("$.processedVolume").value(8))
                 .andExpect(jsonPath("$.reference").value("INV-200"))
                 .andExpect(jsonPath("$.remarks").value("filled before end"))
+                .andExpect(jsonPath("$.subtaskId").value(SUBTASK_ID.toString()));
+    }
+
+    @Test
+    void endsSessionAfterItsSubtaskIsDeleted() throws Exception {
+        String response = mockMvc.perform(post("/api/v1/tms/sessions")
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolkitId": "%s",
+                                  "subtaskId": "%s",
+                                  "processedVolume": 2,
+                                  "reference": "INV-DELETED-TASK"
+                                }
+                                """.formatted(TOOLKIT_ID, SUBTASK_ID)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String sessionId = JsonPath.read(response, "$.id");
+
+        jdbcTemplate.update(
+                "update toolkit_subtask set is_deleted = true where id = ?",
+                SUBTASK_ID);
+
+        mockMvc.perform(post("/api/v1/tms/sessions/{id}/end", sessionId)
+                        .header("X-Dev-Ccgid", "AGENT001")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "subtaskId": "%s",
+                                  "processedVolume": 2,
+                                  "reference": "INV-DELETED-TASK"
+                                }
+                                """.formatted(SUBTASK_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("completed"))
                 .andExpect(jsonPath("$.subtaskId").value(SUBTASK_ID.toString()));
     }
 

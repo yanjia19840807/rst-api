@@ -35,23 +35,14 @@ public class ToolkitSharedKpiSelection {
     @Column(name = "customer_country", nullable = false, length = 120)
     private String customerCountry;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
 
-    @Column(name = "created_by", length = 64)
-    private String createdBy;
 
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
 
-    @Column(name = "updated_by", length = 64)
-    private String updatedBy;
 
-    @Column(name = "deleted_at")
-    private Instant deletedAt;
 
-    @Column(name = "deleted_by", length = 64)
-    private String deletedBy;
+
+    @Column(name = "is_deleted", nullable = false)
+    private boolean deleted;
 
     @Version
     private long version;
@@ -60,29 +51,17 @@ public class ToolkitSharedKpiSelection {
     }
 
     static ToolkitSharedKpiSelection create(
-            Toolkit toolkit,
-            String carrier,
-            String site,
-            String customerCountry,
-            String actorCcgid,
-            Instant now) {
+            Toolkit toolkit, String carrier, String site, String customerCountry) {
         ToolkitSharedKpiSelection selection = new ToolkitSharedKpiSelection();
         selection.toolkit = toolkit;
         selection.carrier = carrier;
         selection.site = site;
         selection.customerCountry = customerCountry;
-        selection.createdAt = now;
-        selection.createdBy = actorCcgid;
-        selection.updatedAt = now;
-        selection.updatedBy = actorCcgid;
         return selection;
     }
 
     public void softDelete(Instant now) {
-        deletedAt = now;
-        deletedBy = toolkit.ownerForAudit();
-        updatedAt = now;
-        updatedBy = toolkit.ownerForAudit();
+        this.deleted = true;
     }
 
     public UUID getId() {
@@ -101,7 +80,7 @@ public class ToolkitSharedKpiSelection {
         return customerCountry;
     }
 
-    public Instant getDeletedAt() {
-        return deletedAt;
+    public boolean isDeleted() {
+        return deleted;
     }
 }

@@ -13,7 +13,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.domainhead.application.DomainHeadConfigService;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
+import com.cmacgm.gbs.rst.api.security.RstRoles;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 
 /**
@@ -27,10 +29,12 @@ public class DevIdentityService {
     private static final Logger log = LoggerFactory.getLogger(DevIdentityService.class);
 
     private final TimesheetReadService timesheet;
+    private final DomainHeadConfigService domainHeads;
     private final ConcurrentHashMap<String, RstPrincipal> cache = new ConcurrentHashMap<>();
 
-    public DevIdentityService(TimesheetReadService timesheet) {
+    public DevIdentityService(TimesheetReadService timesheet, DomainHeadConfigService domainHeads) {
         this.timesheet = timesheet;
+        this.domainHeads = domainHeads;
     }
 
     /**
@@ -56,6 +60,9 @@ public class DevIdentityService {
             if (role != null && DevRoles.ALL.contains(role)) {
                 allowed.add(role);
             }
+        }
+        if (domainHeads.isAssignedCdh(ccgid)) {
+            allowed.add(RstRoles.DOMAIN_HEAD);
         }
         if (allowed.isEmpty()) {
             throw new ApiException(

@@ -10,6 +10,9 @@ import java.util.UUID;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.workingdays.WeekendCode;
 import com.cmacgm.gbs.rst.api.exercise.cycletime.persistence.CycleTimeBaselineRepository;
+import com.cmacgm.gbs.rst.api.audit.application.AuditRecorder;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditAction;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditEntityType;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
@@ -36,6 +39,7 @@ public class ScenarioService {
     private final ScenarioRepository scenarios;
     private final CycleTimeBaselineRepository baselines;
     private final ScenarioOfficialReadiness officialReadiness;
+    private final AuditRecorder audits;
     private final Clock clock;
 
     /**
@@ -47,12 +51,14 @@ public class ScenarioService {
             ScenarioRepository scenarios,
             CycleTimeBaselineRepository baselines,
             ScenarioOfficialReadiness officialReadiness,
+            AuditRecorder audits,
             Clock clock) {
         this.exercises = exercises;
         this.exerciseRepository = exerciseRepository;
         this.scenarios = scenarios;
         this.baselines = baselines;
         this.officialReadiness = officialReadiness;
+        this.audits = audits;
         this.clock = clock;
     }
 
@@ -66,7 +72,7 @@ public class ScenarioService {
     @Transactional(readOnly = true)
     public List<ScenarioView> list(String ownerCcgid, UUID exerciseId) {
         exercises.requireReadable(ownerCcgid, exerciseId);
-        return scenarios.findByExerciseIdAndDeletedAtIsNullOrderByCreatedAtAsc(exerciseId).stream()
+        return scenarios.findByExerciseIdAndDeletedFalseOrderByCreatedAtAsc(exerciseId).stream()
                 .map(this::toView)
                 .toList();
     }
@@ -91,7 +97,8 @@ public class ScenarioService {
             name = name.replace(request.scenarioCode(), scenarioCode);
         }
         Scenario scenario = Scenario.createDraft(
-                exerciseId, scenarioCode, name, request.description(), request.rightSizingHc(), ownerCcgid, now);
+                exerciseId, scenarioCode, name, request.description(), request.rightSizingHc(), now);
+        touch(exercise);
         return toView(scenarios.save(scenario));
     }
 
@@ -99,10 +106,16 @@ public class ScenarioService {
      * Uses the requested code when free; otherwise allocates the next {@code S{n}} across all
      * historical codes for the exercise (including soft-deleted).
      */
+    private void touch(RstExercise exercise) {
+        exercise.setLatestAuditEventId(audits.record(
+                AuditEntityType.EXERCISE, exercise.getId(), AuditAction.UPDATE, "SUPERVISOR").getId());
+        exerciseRepository.save(exercise);
+    }
+
     private String resolveScenarioCode(UUID exerciseId, String requested) {
         String trimmed = requested == null ? "" : requested.trim();
         if (!trimmed.isBlank()
-                && !scenarios.existsByExerciseIdAndScenarioCodeAndDeletedAtIsNull(exerciseId, trimmed)) {
+                && !scenarios.existsByExerciseIdAndScenarioCodeAndDeletedFalse(exerciseId, trimmed)) {
             return trimmed;
         }
         int max = 0;
@@ -153,8 +166,8 @@ public class ScenarioService {
         exercises.requireEditable(exercise);
         Scenario scenario = requireScenario(exerciseId, scenarioId);
         requireWorking(scenario);
-        Instant now = clock.instant();
-        scenario.updateDraft(request.name(), request.description(), request.rightSizingHc(), ownerCcgid, now);
+        scenario.updateDraft(request.name(), request.description(), request.rightSizingHc());
+        touch(exercise);
         return toView(scenarios.save(scenario));
     }
 
@@ -178,7 +191,8 @@ public class ScenarioService {
                     "shift-limit-exceeded",
                     "A scenario can have at most " + Scenario.MAX_SHIFTS + " shifts.");
         }
-        scenario.replaceShifts(toShifts(requests, ownerCcgid, now), ownerCcgid, now);
+        scenario.replaceShifts(toShifts(requests, ownerCcgid, now));
+        touch(exercise);
         return toView(scenarios.save(scenario));
     }
 
@@ -197,11 +211,11 @@ public class ScenarioService {
         requireWorking(scenario);
         Instant now = clock.instant();
         if (scenario.getId().equals(exercise.getOfficialScenarioId())) {
-            exercise.clearOfficialScenario(ownerCcgid, now);
-            exerciseRepository.save(exercise);
+            exercise.clearOfficialScenario();
         }
-        scenario.softDelete(ownerCcgid, now);
+        scenario.softDelete();
         scenarios.save(scenario);
+        touch(exercise);
     }
 
     /**
@@ -228,7 +242,9 @@ public class ScenarioService {
                         "An active Cycle Time baseline is required before Official."));
         officialReadiness.requireReady(exercise, scenario, "Official");
 
-        exercise.setOfficialScenario(scenario.getId(), ownerCcgid, clock.instant());
+        exercise.setOfficialScenario(scenario.getId());
+        exercise.setLatestAuditEventId(audits.record(
+                AuditEntityType.EXERCISE, exercise.getId(), AuditAction.UPDATE, "SUPERVISOR").getId());
         exerciseRepository.save(exercise);
         return toView(scenario);
     }
@@ -251,7 +267,7 @@ public class ScenarioService {
     }
 
     private Scenario requireScenario(UUID exerciseId, UUID scenarioId) {
-        return scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
+        return scenarios.findByIdAndExerciseIdAndDeletedFalse(scenarioId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
     }

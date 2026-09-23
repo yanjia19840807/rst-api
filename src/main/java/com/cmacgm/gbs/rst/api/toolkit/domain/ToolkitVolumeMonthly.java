@@ -38,17 +38,9 @@ public class ToolkitVolumeMonthly implements Persistable<UUID> {
     @Column(name = "source_exercise_id", nullable = false)
     private UUID sourceExerciseId;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
 
-    @Column(name = "created_by")
-    private String createdBy;
 
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
 
-    @Column(name = "updated_by")
-    private String updatedBy;
 
     @Transient
     private boolean isNew = true;
@@ -74,10 +66,6 @@ public class ToolkitVolumeMonthly implements Persistable<UUID> {
         row.actualVolume = actualVolume;
         row.commercialRatio = commercialRatio;
         row.sourceExerciseId = sourceExerciseId;
-        row.createdAt = now;
-        row.createdBy = actorCcgid;
-        row.updatedAt = now;
-        row.updatedBy = actorCcgid;
         row.isNew = true;
         return row;
     }
@@ -94,8 +82,6 @@ public class ToolkitVolumeMonthly implements Persistable<UUID> {
         this.actualVolume = actualVolume;
         this.commercialRatio = commercialRatio;
         this.sourceExerciseId = sourceExerciseId;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
     }
 
     @Override

@@ -52,23 +52,14 @@ public class ExerciseProductionSupportItem {
 
     private String comments;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
 
-    @Column(name = "created_by")
-    private String createdBy;
 
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
 
-    @Column(name = "updated_by")
-    private String updatedBy;
 
-    @Column(name = "deleted_at")
-    private Instant deletedAt;
 
-    @Column(name = "deleted_by")
-    private String deletedBy;
+
+    @Column(name = "is_deleted", nullable = false)
+    private boolean deleted;
 
     @Version
     private long version;
@@ -103,10 +94,6 @@ public class ExerciseProductionSupportItem {
         item.unitOfMeasure = unitOfMeasure;
         item.workloadPerUnitMinutes = workloadPerUnitMinutes;
         item.comments = comments;
-        item.createdAt = now;
-        item.createdBy = actorCcgid;
-        item.updatedAt = now;
-        item.updatedBy = actorCcgid;
         return item;
     }
 
@@ -156,18 +143,13 @@ public class ExerciseProductionSupportItem {
         this.unitOfMeasure = unitOfMeasure;
         this.workloadPerUnitMinutes = workloadPerUnitMinutes;
         this.comments = comments;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
     }
 
     /**
      * Soft-deletes this support item.
      */
     public void softDelete(String actorCcgid, Instant now) {
-        this.deletedAt = now;
-        this.deletedBy = actorCcgid;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
+        this.deleted = true;
     }
 
     public UUID getId() { return id; }
@@ -181,5 +163,5 @@ public class ExerciseProductionSupportItem {
     public String getUnitOfMeasure() { return unitOfMeasure; }
     public BigDecimal getWorkloadPerUnitMinutes() { return workloadPerUnitMinutes; }
     public String getComments() { return comments; }
-    public Instant getDeletedAt() { return deletedAt; }
+    public boolean isDeleted() { return deleted; }
 }

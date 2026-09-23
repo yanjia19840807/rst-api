@@ -53,7 +53,7 @@ public record Handler(
     }
 
     /**
-     * Display: {@code Name} or {@code Actor (on behalf of Subject)}.
+     * Display: {@code Name} or {@code Subject via Actor}.
      *
      * @return formatted name
      */
@@ -73,7 +73,7 @@ public record Handler(
             return subject;
         }
         String actor = firstNonBlank(actorName, lookup(displayNames, actorCcgid), actorCcgid);
-        return actor + " (on behalf of " + subject + ")";
+        return subject + " via " + actor;
     }
 
     private static String lookup(Map<String, String> displayNames, String ccgid) {

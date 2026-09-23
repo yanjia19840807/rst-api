@@ -22,6 +22,10 @@ import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.SupportWorkloadMath;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseProductionSupportItemRepository;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseTeamSetupRepository;
+import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
+import com.cmacgm.gbs.rst.api.audit.application.AuditRecorder;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditAction;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditEntityType;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.common.time.CenterDates;
@@ -61,6 +65,7 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
 import com.cmacgm.gbs.rst.api.toolkit.persistence.ToolkitRepository;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
+import com.cmacgm.gbs.rst.api.workflow.approval.application.ApprovalActorResolver;
 import com.cmacgm.gbs.rst.api.workflow.domain.ExerciseLifecycle;
 import com.cmacgm.gbs.rst.api.workflow.domain.ProcessInstance;
 import com.cmacgm.gbs.rst.api.workflow.domain.ProcessTask;
@@ -92,6 +97,8 @@ public class ExerciseService {
     private final ExerciseProductionSupportItemRepository supportItems;
     private final ProcessInstanceRepository workflows;
     private final WorkflowRouter workflowRouter;
+    private final AuditRecorder audits;
+    private final ApprovalActorResolver actors;
     private final Clock clock;
 
     /**
@@ -111,6 +118,8 @@ public class ExerciseService {
             ExerciseProductionSupportItemRepository supportItems,
             ProcessInstanceRepository workflows,
             WorkflowRouter workflowRouter,
+            AuditRecorder audits,
+            ApprovalActorResolver actors,
             Clock clock) {
         this.exercises = exercises;
         this.access = access;
@@ -125,6 +134,8 @@ public class ExerciseService {
         this.supportItems = supportItems;
         this.workflows = workflows;
         this.workflowRouter = workflowRouter;
+        this.audits = audits;
+        this.actors = actors;
         this.clock = clock;
     }
 
@@ -161,6 +172,9 @@ public class ExerciseService {
                 now);
         freeze.applyTo(exercise, now);
         exercise = exercises.saveAndFlush(exercise);
+        exercise.setLatestAuditEventId(
+                audits.record(AuditEntityType.EXERCISE, exercise.getId(), AuditAction.CREATE, "SUPERVISOR").getId());
+        exercises.save(exercise);
         teamSetups.save(ExerciseTeamSetup.emptyShell(exerciseId, ownerCcgid, now));
         List<String> notices = new ArrayList<>(initialization.initialize(exercise, ownerCcgid));
         // initialize() may clear the persistence context via bulk @Modifying ops.
@@ -180,7 +194,7 @@ public class ExerciseService {
     @Transactional(readOnly = true)
     public ExerciseListView list(String ownerCcgid, ExerciseListQuery query, int page, int pageSize) {
         List<RstExercise> owned =
-                exercises.findByOwnerCcgidAndDeletedAtIsNullOrderByUpdatedAtDescIdAsc(ownerCcgid);
+                exercises.findByOwnerCcgidAndDeletedFalseOrderByCreatedAtDescIdAsc(ownerCcgid);
         Map<UUID, ProcessInstance> processes = processesOf(owned);
         Set<String> tabStatuses = tabStatuses(query.tab());
         List<RstExercise> inTab = owned.stream()
@@ -188,9 +202,19 @@ public class ExerciseService {
                         ExerciseLifecycle.workflowStatus(processes.get(item.getId()))))
                 .toList();
         Map<UUID, ReviewProgress> progress = reviewProgressFor(inTab, processes);
+        Map<UUID, AuditActorView> created = audits.createdBy(
+                AuditEntityType.EXERCISE, inTab.stream().map(RstExercise::getId).toList());
+        Map<UUID, AuditActorView> updated = audits.actors(
+                inTab.stream().map(RstExercise::getLatestAuditEventId).toList());
         List<ExerciseResponse> source = inTab.stream()
                 .map(item -> toResponse(
-                        item, progress.get(item.getId()), processes.get(item.getId())))
+                        item,
+                        progress.get(item.getId()),
+                        processes.get(item.getId()),
+                        created.get(item.getId()),
+                        item.getLatestAuditEventId() == null
+                                ? null
+                                : updated.get(item.getLatestAuditEventId())))
                 .toList();
         List<ExerciseResponse> items = source.stream()
                 .filter(item -> matches(item, query))
@@ -233,6 +257,11 @@ public class ExerciseService {
                 process);
     }
 
+    private void stamp(RstExercise exercise, AuditAction action) {
+        exercise.setLatestAuditEventId(
+                audits.record(AuditEntityType.EXERCISE, exercise.getId(), action, "SUPERVISOR").getId());
+    }
+
     /**
      * Soft-deletes an unsubmitted Exercise.
      *
@@ -249,7 +278,9 @@ public class ExerciseService {
                     "exercise-not-deletable",
                     "The Exercise can be deleted only while it is unsubmitted or returned.");
         }
-        exercise.softDelete(ownerCcgid, clock.instant());
+        exercise.softDelete();
+        exercise.setLatestAuditEventId(
+                audits.record(AuditEntityType.EXERCISE, exercise.getId(), AuditAction.DELETE, "SUPERVISOR").getId());
         exercises.save(exercise);
         if (process != null) {
             process.closeAfterExerciseDeleted();
@@ -278,10 +309,8 @@ public class ExerciseService {
         }
         boolean sizingChanged = !MonthKeys.parseMonthStart(request.sizingMonth())
                 .equals(exercise.getSizingMonth());
-        exercise.updatePeriods(
-                MonthKeys.parseMonthStart(request.sizingMonth()),
-                ownerCcgid,
-                clock.instant());
+        exercise.updatePeriods(MonthKeys.parseMonthStart(request.sizingMonth()));
+        stamp(exercise, AuditAction.UPDATE);
         exercises.saveAndFlush(exercise);
 
         List<String> notices = new ArrayList<>();
@@ -321,7 +350,8 @@ public class ExerciseService {
         }
         boolean tmsChanged = !request.tmsFrom().equals(exercise.getTmsFrom())
                 || !request.tmsTo().equals(exercise.getTmsTo());
-        exercise.updateTmsPeriod(request.tmsFrom(), request.tmsTo(), ownerCcgid, clock.instant());
+        exercise.updateTmsPeriod(request.tmsFrom(), request.tmsTo());
+        stamp(exercise, AuditAction.UPDATE);
         exercises.saveAndFlush(exercise);
 
         List<String> notices = new ArrayList<>();
@@ -353,7 +383,8 @@ public class ExerciseService {
                     "TMS period can only be changed during Supervisor Sizing.");
         }
         boolean hadPeriod = exercise.hasTmsPeriod();
-        exercise.clearTmsPeriod(ownerCcgid, clock.instant());
+        exercise.clearTmsPeriod();
+        stamp(exercise, AuditAction.UPDATE);
         exercises.saveAndFlush(exercise);
 
         List<String> notices = new ArrayList<>();
@@ -385,8 +416,8 @@ public class ExerciseService {
                     "exercise-not-editable",
                     "Slot Period can only be changed during Supervisor Sizing.");
         }
-        exercise.updateSlotPeriod(
-                request.slotStartDate(), request.slotWeeks(), ownerCcgid, clock.instant());
+        exercise.updateSlotPeriod(request.slotStartDate(), request.slotWeeks());
+        stamp(exercise, AuditAction.UPDATE);
         exercises.saveAndFlush(exercise);
         List<ExerciseVolumeSlotInput> rows = initialization.replaceEmptySlotGrid(exercise, ownerCcgid);
         int cleared = scenarioCommits.clearSlotResultsForExercise(exerciseId);
@@ -424,7 +455,8 @@ public class ExerciseService {
                     "exercise-not-editable",
                     "Slot Period can only be changed during Supervisor Sizing.");
         }
-        exercise.clearSlotPeriod(ownerCcgid, clock.instant());
+        exercise.clearSlotPeriod();
+        stamp(exercise, AuditAction.UPDATE);
         exercises.saveAndFlush(exercise);
         initialization.clearSlotGrid(exerciseId);
         int cleared = scenarioCommits.clearSlotResultsForExercise(exerciseId);
@@ -622,6 +654,20 @@ public class ExerciseService {
 
     private ExerciseResponse toResponse(
             RstExercise exercise, ReviewProgress progress, ProcessInstance process) {
+        return toResponse(
+                exercise,
+                progress,
+                process,
+                audits.createdBy(AuditEntityType.EXERCISE, exercise.getId()),
+                audits.actor(exercise.getLatestAuditEventId()));
+    }
+
+    private ExerciseResponse toResponse(
+            RstExercise exercise,
+            ReviewProgress progress,
+            ProcessInstance process,
+            AuditActorView createdBy,
+            AuditActorView updatedBy) {
         ExerciseToolkitSnapshot snapshot = exercise.getToolkitSnapshot();
         if (snapshot == null) {
             throw notFound("exercise-not-found", "The Exercise was not found.");
@@ -650,7 +696,7 @@ public class ExerciseService {
                         item.getName(),
                         item.getDescription(),
                         item.getDisplayOrder(),
-                        null))
+                        false))
                 .toList();
         var kpis = exercise.getSharedKpiLines().stream()
                 .map(item -> new ExerciseKpiView(
@@ -710,7 +756,10 @@ public class ExerciseService {
                 agingDays,
                 archivedAt,
                 new ExerciseSnapshot(toolkitView, subtasks, kpis, syncDate),
-                alignment);
+                alignment,
+                createdBy,
+                updatedBy,
+                progress == null ? null : progress.currentReviewerBy());
     }
 
     private TimesheetAlignmentView align(RstExercise exercise, ExerciseToolkitSnapshot snapshot) {
@@ -784,6 +833,7 @@ public class ExerciseService {
                         returned.getComments(),
                         null,
                         null,
+                        null,
                         null));
                 continue;
             }
@@ -798,7 +848,15 @@ public class ExerciseService {
             String positionId = pending == null ? null : pending.getPositionId();
             String reviewerCcgid = pending == null ? null : pending.getCcgid();
             TimesheetPerson person = personOf(people, reviewerCcgid);
-            String reviewer = ready == null || pending == null
+            AuditActorView reviewerBy = ready == null || pending == null
+                    ? null
+                    : actors.forPosition(positionId, reviewerCcgid, Map.of());
+            String reviewer = reviewerBy != null
+                    ? firstNonBlank(
+                            reviewerBy.subjectName(),
+                            workflowRouter.occupantName(ready.getNode().roleCode(), positionId),
+                            personName(person, reviewerCcgid))
+                    : ready == null || pending == null
                     ? null
                     : firstNonBlank(
                             workflowRouter.occupantName(ready.getNode().roleCode(), positionId),
@@ -811,7 +869,8 @@ public class ExerciseService {
                     null,
                     agingFrom,
                     reviewerCcgid,
-                    emailOf(person)));
+                    emailOf(person),
+                    reviewerBy));
         }
         return result;
     }
@@ -860,6 +919,10 @@ public class ExerciseService {
         return second;
     }
 
+    private static String firstNonBlank(String first, String second, String third) {
+        return firstNonBlank(firstNonBlank(first, second), third);
+    }
+
     private static String roleForStep(Short step) {
         TaskNode node = TaskNode.reviewOf(step);
         return node == null ? null : node.roleCode();
@@ -872,7 +935,8 @@ public class ExerciseService {
             String lastDecisionComment,
             Instant agingFrom,
             String currentReviewerCcgid,
-            String currentReviewerEmail) {
+            String currentReviewerEmail,
+            AuditActorView currentReviewerBy) {
     }
 
     private BigDecimal deliveryHc(RstExercise exercise) {
@@ -903,7 +967,7 @@ public class ExerciseService {
 
     private BigDecimal productionSupport(UUID exerciseId) {
         return SupportWorkloadMath.totalSupportFte(
-                supportItems.findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(exerciseId),
+                supportItems.findByExerciseIdAndDeletedFalseOrderByCategoryAscActivityAsc(exerciseId),
                 teamSetups.findById(exerciseId).orElse(null),
                 workingDaysService.workingDaysPerYear(exerciseId));
     }

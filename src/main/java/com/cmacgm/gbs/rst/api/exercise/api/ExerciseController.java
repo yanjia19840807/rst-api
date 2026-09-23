@@ -17,6 +17,7 @@ import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateSlotPeriodRequest;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateSlotPeriodResult;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateTmsPeriodRequest;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
+import com.cmacgm.gbs.rst.api.delegation.application.PositionCoverage;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.exercise.submission.application.SubmissionService;
 import com.cmacgm.gbs.rst.api.exercise.submission.api.dto.SubmitPreviewView;
@@ -46,16 +47,24 @@ public class ExerciseController {
 
     private final ExerciseService service;
     private final SubmissionService submissions;
+    private final PositionCoverage coverage;
 
     /**
      * Creates the Exercise controller.
      *
      * @param service Exercise service
      * @param submissions Submission service
+     * @param coverage covered-position subject
      */
-    public ExerciseController(ExerciseService service, SubmissionService submissions) {
+    public ExerciseController(
+            ExerciseService service, SubmissionService submissions, PositionCoverage coverage) {
         this.service = service;
         this.submissions = submissions;
+        this.coverage = coverage;
+    }
+
+    private String supervisor(RstPrincipal principal) {
+        return coverage.subjectCcgid(principal.ccgid(), "SUPERVISOR");
     }
 
     /**
@@ -124,7 +133,7 @@ public class ExerciseController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize,
             @AuthenticationPrincipal RstPrincipal principal) {
-        return service.list(principal.ccgid(), new ExerciseListQuery(
+        return service.list(supervisor(principal), new ExerciseListQuery(
                 tab,
                 exerciseCode,
                 toolkitName,
@@ -160,7 +169,7 @@ public class ExerciseController {
     public CreateExerciseResult create(
             @AuthenticationPrincipal RstPrincipal principal,
             @Valid @RequestBody CreateExerciseRequest request) {
-        return service.create(principal.ccgid(), request);
+        return service.create(supervisor(principal), request);
     }
 
     /**
@@ -175,7 +184,7 @@ public class ExerciseController {
     public ExerciseResponse detail(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
-        return service.detail(principal.ccgid(), id);
+        return service.detail(supervisor(principal), id);
     }
 
     /**
@@ -190,7 +199,7 @@ public class ExerciseController {
     public void delete(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
-        service.softDelete(principal.ccgid(), id);
+        service.softDelete(supervisor(principal), id);
     }
 
     /**
@@ -207,7 +216,7 @@ public class ExerciseController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id,
             @Valid @RequestBody UpdateExercisePeriodsRequest request) {
-        return service.updatePeriods(principal.ccgid(), id, request);
+        return service.updatePeriods(supervisor(principal), id, request);
     }
 
     /**
@@ -219,7 +228,7 @@ public class ExerciseController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id,
             @Valid @RequestBody UpdateTmsPeriodRequest request) {
-        return service.updateTmsPeriod(principal.ccgid(), id, request);
+        return service.updateTmsPeriod(supervisor(principal), id, request);
     }
 
     /**
@@ -229,7 +238,7 @@ public class ExerciseController {
     @PreAuthorize("hasRole('SUPERVISOR')")
     public UpdateExercisePeriodsResult clearTmsPeriod(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID id) {
-        return service.clearTmsPeriod(principal.ccgid(), id);
+        return service.clearTmsPeriod(supervisor(principal), id);
     }
 
     /**
@@ -241,7 +250,7 @@ public class ExerciseController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id,
             @Valid @RequestBody UpdateSlotPeriodRequest request) {
-        return service.updateSlotPeriod(principal.ccgid(), id, request);
+        return service.updateSlotPeriod(supervisor(principal), id, request);
     }
 
     /**
@@ -251,7 +260,7 @@ public class ExerciseController {
     @PreAuthorize("hasRole('SUPERVISOR')")
     public UpdateSlotPeriodResult clearSlotPeriod(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID id) {
-        return service.clearSlotPeriod(principal.ccgid(), id);
+        return service.clearSlotPeriod(supervisor(principal), id);
     }
 
     /**
@@ -262,7 +271,7 @@ public class ExerciseController {
     public CommittedResultsStatus committedResults(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
-        return service.committedResults(principal.ccgid(), id);
+        return service.committedResults(supervisor(principal), id);
     }
 
     /**
@@ -273,7 +282,7 @@ public class ExerciseController {
     public CommittedResultsStatus clearCommittedResults(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
-        return service.clearCommittedResults(principal.ccgid(), id);
+        return service.clearCommittedResults(supervisor(principal), id);
     }
 
     /**
@@ -288,7 +297,7 @@ public class ExerciseController {
     public SubmitPreviewView submitPreview(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
-        return submissions.submitPreview(principal.ccgid(), id);
+        return submissions.submitPreview(supervisor(principal), id);
     }
 
     /**
@@ -322,6 +331,6 @@ public class ExerciseController {
     public SubmittedDetailsView submittedDetails(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
-        return submissions.submittedDetails(principal.ccgid(), id);
+        return submissions.submittedDetails(supervisor(principal), id);
     }
 }

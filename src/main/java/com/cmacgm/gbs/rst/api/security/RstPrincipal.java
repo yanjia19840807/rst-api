@@ -19,7 +19,8 @@ public record RstPrincipal(
         String center,
         String actorCcgid,
         String actorDisplayName,
-        UUID delegationId) implements Principal, Serializable {
+        UUID delegationId,
+        String delegatedPositionId) implements Principal, Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -44,7 +45,23 @@ public record RstPrincipal(
             Set<String> roles,
             Set<String> scopes,
             String center) {
-        this(ccgid, displayName, email, roles, scopes, center, ccgid, displayName, null);
+        this(ccgid, displayName, email, roles, scopes, center, ccgid, displayName, null, null);
+    }
+
+    /**
+     * Person impersonation. Position coverage uses {@link #delegatedPositionId}.
+     */
+    public RstPrincipal(
+            String ccgid,
+            String displayName,
+            String email,
+            Set<String> roles,
+            Set<String> scopes,
+            String center,
+            String actorCcgid,
+            String actorDisplayName,
+            UUID delegationId) {
+        this(ccgid, displayName, email, roles, scopes, center, actorCcgid, actorDisplayName, delegationId, null);
     }
 
     /**

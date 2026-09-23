@@ -37,17 +37,9 @@ public class ToolkitHoliday {
     @Column(name = "holiday_type", nullable = false, length = 20)
     private HolidayDayKind holidayType;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
 
-    @Column(name = "created_by")
-    private String createdBy;
 
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
 
-    @Column(name = "updated_by")
-    private String updatedBy;
 
     protected ToolkitHoliday() {
     }
@@ -68,10 +60,6 @@ public class ToolkitHoliday {
         holiday.holidayDate = source.getHolidayDate();
         holiday.holidayName = source.getHolidayName();
         holiday.holidayType = source.getHolidayType();
-        holiday.createdAt = now;
-        holiday.createdBy = actorCcgid;
-        holiday.updatedAt = now;
-        holiday.updatedBy = actorCcgid;
         return holiday;
     }
 

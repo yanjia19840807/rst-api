@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
 import com.cmacgm.gbs.rst.api.timesheet.api.dto.TimesheetAlignmentView;
 
 /**
@@ -20,5 +21,8 @@ public record ExerciseResponse(
         BigDecimal deliveryHc, BigDecimal rightSizingHc, BigDecimal productionSupport,
         BigDecimal capacityCreation, Integer agingDays, Instant archivedAt,
         ExerciseSnapshot snapshot,
-        TimesheetAlignmentView timesheetAlignment) {
+        TimesheetAlignmentView timesheetAlignment,
+        AuditActorView createdBy,
+        AuditActorView updatedBy,
+        AuditActorView currentReviewerBy) {
 }

@@ -1,8 +1,8 @@
 package com.cmacgm.gbs.rst.api.domainhead.domain;
 
 import java.io.Serializable;
-import java.time.Instant;
 import java.util.Objects;
+import java.util.UUID;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
@@ -18,37 +18,33 @@ import jakarta.persistence.Table;
 public class CenterDomainHead {
 
     @EmbeddedId
-    private Id id;
+    private Id key;
 
-    @Column(name = "position_id", nullable = false, length = 80)
+    @Column(nullable = false, unique = true)
+    private UUID id;
+
+    @Column(name = "position_id", length = 80)
     private String positionId;
 
-    @Column(name = "updated_by", length = 32)
-    private String updatedBy;
-
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
+    @Column(name = "latest_audit_event_id")
+    private UUID latestAuditEventId;
 
     protected CenterDomainHead() {
     }
 
     /**
-     * Creates or replaces a mapping.
+     * Creates a mapping. The id is stable for audit even after the position is cleared.
      *
      * @param center GBS center
      * @param domain GBS domain
      * @param positionId bindable Timesheet position
-     * @param updatedBy actor ccgid
-     * @param now timestamp
      * @return row
      */
-    public static CenterDomainHead create(
-            String center, String domain, String positionId, String updatedBy, Instant now) {
+    public static CenterDomainHead create(String center, String domain, String positionId) {
         CenterDomainHead row = new CenterDomainHead();
-        row.id = new Id(center, domain);
+        row.key = new Id(center, domain);
+        row.id = UUID.randomUUID();
         row.positionId = positionId;
-        row.updatedBy = updatedBy;
-        row.updatedAt = now;
         return row;
     }
 
@@ -56,33 +52,40 @@ public class CenterDomainHead {
      * Updates the configured position.
      *
      * @param positionId bindable Timesheet position
-     * @param updatedBy actor ccgid
-     * @param now timestamp
      */
-    public void replace(String positionId, String updatedBy, Instant now) {
+    public void replace(String positionId) {
         this.positionId = positionId;
-        this.updatedBy = updatedBy;
-        this.updatedAt = now;
+    }
+
+    /**
+     * Clears the configured position. The row and its id stay so the audit remains attached to this Center and Domain.
+     */
+    public void clear() {
+        this.positionId = null;
+    }
+
+    public UUID getId() {
+        return id;
     }
 
     public String getCenter() {
-        return id.center;
+        return key.center;
     }
 
     public String getDomain() {
-        return id.domain;
+        return key.domain;
     }
 
     public String getPositionId() {
         return positionId;
     }
 
-    public String getUpdatedBy() {
-        return updatedBy;
+    public void setLatestAuditEventId(UUID latestAuditEventId) {
+        this.latestAuditEventId = latestAuditEventId;
     }
 
-    public Instant getUpdatedAt() {
-        return updatedAt;
+    public UUID getLatestAuditEventId() {
+        return latestAuditEventId;
     }
 
     /**

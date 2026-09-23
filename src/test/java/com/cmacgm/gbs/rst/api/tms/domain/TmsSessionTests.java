@@ -41,6 +41,7 @@ class TmsSessionTests {
         assertThatThrownBy(() -> TmsSession.start(
                 "TMS-AGENT001-20260805-0002",
                 "AGENT001",
+                null,
                 toolkit,
                 null,
                 null,
@@ -53,6 +54,7 @@ class TmsSessionTests {
         TmsSession session = TmsSession.start(
                 "TMS-AGENT001-20260805-0002",
                 "AGENT001",
+                null,
                 toolkit,
                 null,
                 BigDecimal.ONE,
@@ -81,6 +83,7 @@ class TmsSessionTests {
         assertThatThrownBy(() -> TmsSession.start(
                 "TMS-AGENT001-20260805-0003",
                 "AGENT001",
+                null,
                 toolkit,
                 subtask,
                 new BigDecimal("1.5"),
@@ -160,6 +163,7 @@ class TmsSessionTests {
         return TmsSession.start(
                 "TMS-AGENT001-20260805-0001",
                 "AGENT001",
+                null,
                 toolkit,
                 subtask,
                 BigDecimal.valueOf(25),

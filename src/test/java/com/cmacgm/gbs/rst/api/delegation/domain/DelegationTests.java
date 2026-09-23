@@ -44,6 +44,36 @@ class DelegationTests {
     }
 
     @Test
+    void blankDatesStayActiveWithNoEnd() {
+        Delegation row = Delegation.create(
+                "A1", "A", "B1", "B", Set.of("SUPERVISOR"), "KL", null, null, T0);
+
+        assertThat(row.getStatus()).isEqualTo(DelegationStatus.ACTIVE);
+        assertThat(row.isUsable(T2)).isTrue();
+        assertThat(row.refresh(T2)).isFalse();
+    }
+
+    @Test
+    void blankEndNeverExpires() {
+        Delegation row = Delegation.create(
+                "A1", "A", "B1", "B", Set.of("SUPERVISOR"), "KL", T0, null, T0);
+
+        assertThat(row.refresh(T2)).isFalse();
+        assertThat(row.isUsable(T2)).isTrue();
+    }
+
+    @Test
+    void blankStartIsActiveUntilTheEnd() {
+        Delegation row = Delegation.create(
+                "A1", "A", "B1", "B", Set.of("SUPERVISOR"), "KL", null, T1, T0);
+
+        assertThat(row.getStatus()).isEqualTo(DelegationStatus.ACTIVE);
+        assertThat(row.isUsable(T0)).isTrue();
+        assertThat(row.refresh(T1)).isTrue();
+        assertThat(row.getStatus()).isEqualTo(DelegationStatus.EXPIRED);
+    }
+
+    @Test
     void revokeStopsUseImmediately() {
         Delegation row = Delegation.create(
                 "A1", "A", "B1", "B", Set.of("SUPERVISOR"), "KL", T0, T2, T0);

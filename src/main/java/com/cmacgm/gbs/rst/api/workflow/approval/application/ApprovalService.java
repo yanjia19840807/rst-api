@@ -16,6 +16,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 
+import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
+import com.cmacgm.gbs.rst.api.audit.application.AuditRecorder;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditAction;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditEntityType;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.ExerciseVolumeTrainingService;
 import com.cmacgm.gbs.rst.api.toolkit.application.ToolkitAssociatedDataService;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup;
@@ -41,7 +45,6 @@ import com.cmacgm.gbs.rst.api.exercise.submission.domain.ValidationRule;
 import com.cmacgm.gbs.rst.api.exercise.submission.persistence.ValidationResultRepository;
 import com.cmacgm.gbs.rst.api.mail.application.MailNotificationService;
 import com.cmacgm.gbs.rst.api.mail.application.MailNotificationService.OwnerOutcome;
-import com.cmacgm.gbs.rst.api.security.Handler;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetAlignment;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
@@ -96,6 +99,8 @@ public class ApprovalService {
     private final ToolkitAssociatedDataService toolkitAssociatedData;
     private final MailNotificationService mail;
     private final ValidationResultRepository validations;
+    private final AuditRecorder audits;
+    private final ApprovalActorResolver actors;
     private final Clock clock;
 
     /**
@@ -116,6 +121,8 @@ public class ApprovalService {
             ToolkitAssociatedDataService toolkitAssociatedData,
             MailNotificationService mail,
             ValidationResultRepository validations,
+            AuditRecorder audits,
+            ApprovalActorResolver actors,
             Clock clock) {
         this.workflows = workflows;
         this.exercises = exercises;
@@ -131,6 +138,8 @@ public class ApprovalService {
         this.toolkitAssociatedData = toolkitAssociatedData;
         this.mail = mail;
         this.validations = validations;
+        this.audits = audits;
+        this.actors = actors;
         this.clock = clock;
     }
 
@@ -193,7 +202,7 @@ public class ApprovalService {
         List<ApprovalQueueItem> items = new ArrayList<>();
         for (ProcessInstance workflow : workflows.findByStatusInOrderBySubmittedAtDesc(statuses)) {
             RstExercise exercise = exercises.findById(workflow.getExerciseId()).orElse(null);
-            if (exercise == null || exercise.getDeletedAt() != null) {
+            if (exercise == null || exercise.isDeleted()) {
                 continue;
             }
             if (awaitingOnly) {
@@ -366,8 +375,7 @@ public class ApprovalService {
                         "workflow-step-not-ready",
                         "Current workflow step is not READY."));
         TaskActor actor = requirePendingActor(principal, current);
-        forbidSelfApproval(principal, loaded.exercise());
-        actor.applyHandler(Handler.from(principal));
+        actor.applyHandler(actors.handlerFor(principal));
         Instant now = clock.instant();
         loaded.workflow().approve(actor, request.comments(), requestId, now);
 
@@ -400,7 +408,10 @@ public class ApprovalService {
                         loaded.exercise(), principal.ccgid(), now);
                 toolkitAssociatedData.replaceSnapshots(
                         loaded.exercise(), principal.ccgid(), now);
-                loaded.exercise().markApproved(principal.ccgid(), now);
+                RstExercise exercise = loaded.exercise();
+                exercise.markApproved(now);
+                exercise.setLatestAuditEventId(audits.recordCurrent(
+                        AuditEntityType.EXERCISE, exercise.getId(), AuditAction.UPDATE).getId());
                 notifyOwnerApproved = true;
             }
         }
@@ -455,8 +466,7 @@ public class ApprovalService {
                         "workflow-step-not-ready",
                         "Current workflow step is not READY."));
         TaskActor actor = requirePendingActor(principal, current);
-        forbidSelfApproval(principal, loaded.exercise());
-        actor.applyHandler(Handler.from(principal));
+        actor.applyHandler(actors.handlerFor(principal));
         Instant now = clock.instant();
         loaded.workflow().returnToSupervisor(actor, request.comments(), requestId, now);
         reopenExercise(loaded, principal.ccgid(), now);
@@ -487,7 +497,10 @@ public class ApprovalService {
      * Associated Data and scenario content are not rewritten.
      */
     private void reopenExercise(Loaded loaded, String actorCcgid, Instant now) {
-        loaded.exercise().markReturned(actorCcgid, now);
+        RstExercise exercise = loaded.exercise();
+        exercise.markReturned();
+        exercise.setLatestAuditEventId(audits.recordCurrent(
+                AuditEntityType.EXERCISE, exercise.getId(), AuditAction.UPDATE).getId());
     }
 
     private Loaded load(UUID submissionId) {
@@ -607,8 +620,11 @@ public class ApprovalService {
         String previousStep = previous == null || previous.getTask() == null
                 ? null
                 : reviewStageLabel(previous.getTask().getNode().roleCode());
-        String previousActor = last != null
-                ? displayName(last.getCcgid(), names)
+        AuditActorView previousActorBy = last != null
+                ? actors.fromActor(last, names)
+                : null;
+        String previousActor = previousActorBy != null
+                ? previousActorBy.displayName()
                 : supervisor;
         Instant previousStepAt = last != null ? last.getActedAt() : workflow.getSubmittedAt();
         Instant agingFrom = WorkflowAging.currentStepStartedAt(workflow, workflow.getSubmittedAt());
@@ -625,6 +641,9 @@ public class ApprovalService {
         String completedStep = mine == null || mine.getTask() == null
                 ? null
                 : reviewStageLabel(mine.getTask().getNode().roleCode());
+        AuditActorView actedBy = mine == null || mine.getActedAt() == null
+                ? null
+                : actors.fromActor(mine, names);
 
         return new ApprovalQueueItem(
                 workflow.getId(),
@@ -659,7 +678,9 @@ public class ApprovalService {
                 myDecision,
                 myCompletedAt,
                 completedStep,
-                workflow.isAwaitingReview() && structuralDrift(exercise, snapshot));
+                workflow.isAwaitingReview() && structuralDrift(exercise, snapshot),
+                previousActorBy,
+                actedBy);
     }
 
     private boolean structuralDrift(RstExercise exercise, ExerciseToolkitSnapshot snapshot) {
@@ -711,7 +732,7 @@ public class ApprovalService {
 
     private BigDecimal productionSupport(UUID exerciseId) {
         return SupportWorkloadMath.totalSupportFte(
-                supportItems.findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(exerciseId),
+                supportItems.findByExerciseIdAndDeletedFalseOrderByCategoryAscActivityAsc(exerciseId),
                 teamSetups.findById(exerciseId).orElse(null),
                 workingDaysService.workingDaysPerYear(exerciseId));
     }
@@ -727,7 +748,7 @@ public class ApprovalService {
                 .orElse(null);
     }
 
-    private static Instant archivedAt(RstExercise exercise, ProcessInstance workflow) {
+    private Instant archivedAt(RstExercise exercise, ProcessInstance workflow) {
         if (exercise.getValidatedAt() != null) {
             return exercise.getValidatedAt();
         }
@@ -737,10 +758,15 @@ public class ApprovalService {
                     .filter(actor -> actor.getStatus() == ActorStatus.RETURNED)
                     .map(TaskActor::getActedAt)
                     .max(Instant::compareTo)
-                    .orElse(exercise.getUpdatedAt());
+                    .orElse(lastTouched(exercise));
             return fromAction != null ? fromAction : workflow.getSubmittedAt();
         }
-        return exercise.getUpdatedAt();
+        return lastTouched(exercise);
+    }
+
+    private Instant lastTouched(RstExercise exercise) {
+        Instant audited = audits.occurredAt(exercise.getLatestAuditEventId());
+        return audited != null ? audited : exercise.getCreatedAt();
     }
 
     private static String finalStatus(String submissionStatus) {
@@ -793,19 +819,6 @@ public class ApprovalService {
                 HttpStatus.BAD_REQUEST,
                 "invalid-status-filter",
                 "status must be AWAITING, OPEN, or omitted.");
-    }
-
-    private static void forbidSelfApproval(RstPrincipal principal, RstExercise exercise) {
-        if (principal == null || exercise == null || !principal.isDelegated()) {
-            return;
-        }
-        if (principal.realCcgid() != null
-                && principal.realCcgid().equalsIgnoreCase(exercise.getOwnerCcgid())) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    "self-approval-forbidden",
-                    "You cannot review a submission you own while acting as another user.");
-        }
     }
 
     private TaskActor requirePendingActor(RstPrincipal principal, ProcessTask current) {

@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import jakarta.validation.Valid;
 
+import com.cmacgm.gbs.rst.api.delegation.application.PositionCoverage;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.CreateToolkitRequest;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.ToolkitListView;
@@ -36,16 +37,27 @@ public class ToolkitController {
 
     private final ToolkitService toolkits;
     private final ToolkitExportService exports;
+    private final PositionCoverage coverage;
 
-    public ToolkitController(ToolkitService toolkits, ToolkitExportService exports) {
+    public ToolkitController(
+            ToolkitService toolkits, ToolkitExportService exports, PositionCoverage coverage) {
         this.toolkits = toolkits;
         this.exports = exports;
+        this.coverage = coverage;
+    }
+
+    private String agent(RstPrincipal principal) {
+        return coverage.subjectCcgid(principal.ccgid(), "AGENT");
+    }
+
+    private String supervisor(RstPrincipal principal) {
+        return coverage.subjectCcgid(principal.ccgid(), "SUPERVISOR");
     }
 
     @GetMapping
     @PreAuthorize("hasRole('AGENT')")
     public List<ToolkitResponse> available(@AuthenticationPrincipal RstPrincipal principal) {
-        return toolkits.listAvailable(principal.ccgid());
+        return toolkits.listAvailable(agent(principal));
     }
 
     /**
@@ -75,7 +87,7 @@ public class ToolkitController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         return toolkits.listManaged(
-                principal.ccgid(),
+                supervisor(principal),
                 name,
                 pl3Name,
                 pl3Code,
@@ -94,7 +106,7 @@ public class ToolkitController {
     public ResponseEntity<byte[]> export(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
-        ExportFile file = exports.export(principal.ccgid(), id);
+        ExportFile file = exports.export(supervisor(principal), id);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + file.filename() + "\"")
                 .contentType(MediaType.parseMediaType(
@@ -107,7 +119,7 @@ public class ToolkitController {
     public ToolkitResponse detail(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
-        return toolkits.detail(principal.ccgid(), id);
+        return toolkits.detail(supervisor(principal), id);
     }
 
     @PostMapping
@@ -116,7 +128,7 @@ public class ToolkitController {
     public ToolkitResponse create(
             @AuthenticationPrincipal RstPrincipal principal,
             @Valid @RequestBody CreateToolkitRequest request) {
-        return toolkits.create(principal.ccgid(), request);
+        return toolkits.create(supervisor(principal), request);
     }
 
     @PutMapping("/{id}")
@@ -125,7 +137,7 @@ public class ToolkitController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id,
             @Valid @RequestBody UpdateToolkitRequest request) {
-        return toolkits.update(principal.ccgid(), id, request);
+        return toolkits.update(supervisor(principal), id, request);
     }
 
     @PostMapping("/{id}/enable")
@@ -133,7 +145,7 @@ public class ToolkitController {
     public ToolkitResponse enable(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
-        return toolkits.setEnabled(principal.ccgid(), id, true);
+        return toolkits.setEnabled(supervisor(principal), id, true);
     }
 
     @PostMapping("/{id}/disable")
@@ -141,7 +153,7 @@ public class ToolkitController {
     public ToolkitResponse disable(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
-        return toolkits.setEnabled(principal.ccgid(), id, false);
+        return toolkits.setEnabled(supervisor(principal), id, false);
     }
 
     @PostMapping("/{id}/subtasks")
@@ -151,7 +163,7 @@ public class ToolkitController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id,
             @Valid @RequestBody WriteSubtaskRequest request) {
-        return toolkits.addSubtask(principal.ccgid(), id, request);
+        return toolkits.addSubtask(supervisor(principal), id, request);
     }
 
     @PutMapping("/{id}/subtasks/{subtaskId}")
@@ -161,7 +173,7 @@ public class ToolkitController {
             @PathVariable UUID id,
             @PathVariable UUID subtaskId,
             @Valid @RequestBody WriteSubtaskRequest request) {
-        return toolkits.renameSubtask(principal.ccgid(), id, subtaskId, request);
+        return toolkits.renameSubtask(supervisor(principal), id, subtaskId, request);
     }
 
     @PostMapping("/{id}/subtasks/{subtaskId}/enable")
@@ -170,7 +182,7 @@ public class ToolkitController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id,
             @PathVariable UUID subtaskId) {
-        return toolkits.setSubtaskEnabled(principal.ccgid(), id, subtaskId, true);
+        return toolkits.setSubtaskEnabled(supervisor(principal), id, subtaskId, true);
     }
 
     @PostMapping("/{id}/subtasks/{subtaskId}/disable")
@@ -179,6 +191,6 @@ public class ToolkitController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id,
             @PathVariable UUID subtaskId) {
-        return toolkits.setSubtaskEnabled(principal.ccgid(), id, subtaskId, false);
+        return toolkits.setSubtaskEnabled(supervisor(principal), id, subtaskId, false);
     }
 }

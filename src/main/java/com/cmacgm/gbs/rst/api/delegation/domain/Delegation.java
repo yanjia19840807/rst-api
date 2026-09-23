@@ -43,15 +43,24 @@ public class Delegation {
     @Column(name = "delegator_center", length = 120)
     private String delegatorCenter;
 
-    @Column(name = "valid_from", nullable = false)
+    @Column(name = "valid_from")
     private Instant validFrom;
 
-    @Column(name = "valid_until", nullable = false)
+    @Column(name = "valid_until")
     private Instant validUntil;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private DelegationStatus status;
+
+    @Column(name = "subject_position_id", length = 80)
+    private String subjectPositionId;
+
+    @Column(name = "assigned_by_ccgid", length = 64)
+    private String assignedByCcgid;
+
+    @Column(name = "assigned_by_name", length = 200)
+    private String assignedByName;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -71,8 +80,8 @@ public class Delegation {
      * @param delegateName B's name
      * @param delegatorRoles snapshot of A's roles
      * @param delegatorCenter snapshot of A's center
-     * @param validFrom start
-     * @param validUntil end
+     * @param validFrom start, or null to begin immediately
+     * @param validUntil end, or null when the grant does not expire
      * @param now create time
      * @return row
      */
@@ -97,7 +106,55 @@ public class Delegation {
         row.validFrom = validFrom;
         row.validUntil = validUntil;
         row.createdAt = now;
-        row.status = !now.isBefore(validFrom) ? DelegationStatus.ACTIVE : DelegationStatus.PENDING;
+        row.assignedByCcgid = row.delegatorCcgid;
+        row.assignedByName = delegatorName;
+        row.status = row.hasStarted(now) ? DelegationStatus.ACTIVE : DelegationStatus.PENDING;
+        return row;
+    }
+
+    /**
+     * Covers every current role of one position. The delegate stays themselves.
+     *
+     * @param positionId covered position
+     * @param positionRoles every role on that position
+     * @param occupantCcgid current occupant, or the position id when vacant
+     * @param occupantName current occupant names
+     * @param delegateCcgid person who will cover the position
+     * @param delegateName delegate name
+     * @param center GBS center
+     * @param assignedByCcgid parent occupant who made the assignment
+     * @param assignedByName operator name
+     * @param validFrom start, or null to begin immediately
+     * @param validUntil end, or null when coverage does not expire
+     * @param now create time
+     * @return row
+     */
+    public static Delegation assignPosition(
+            String positionId,
+            Set<String> positionRoles,
+            String occupantCcgid,
+            String occupantName,
+            String delegateCcgid,
+            String delegateName,
+            String center,
+            String assignedByCcgid,
+            String assignedByName,
+            Instant validFrom,
+            Instant validUntil,
+            Instant now) {
+        Delegation row = create(
+                occupantCcgid,
+                occupantName,
+                delegateCcgid,
+                delegateName,
+                positionRoles,
+                center,
+                validFrom,
+                validUntil,
+                now);
+        row.subjectPositionId = positionId;
+        row.assignedByCcgid = assignedByCcgid;
+        row.assignedByName = assignedByName;
         return row;
     }
 
@@ -111,11 +168,11 @@ public class Delegation {
         if (status == DelegationStatus.REVOKED) {
             return false;
         }
-        if (!now.isBefore(validUntil) && status != DelegationStatus.EXPIRED) {
+        if (hasEnded(now) && status != DelegationStatus.EXPIRED) {
             status = DelegationStatus.EXPIRED;
             return true;
         }
-        if (status == DelegationStatus.PENDING && !now.isBefore(validFrom) && now.isBefore(validUntil)) {
+        if (status == DelegationStatus.PENDING && hasStarted(now) && !hasEnded(now)) {
             status = DelegationStatus.ACTIVE;
             return true;
         }
@@ -137,9 +194,15 @@ public class Delegation {
      * @return true when B may use this row right now
      */
     public boolean isUsable(Instant now) {
-        return status == DelegationStatus.ACTIVE
-                && !now.isBefore(validFrom)
-                && now.isBefore(validUntil);
+        return status == DelegationStatus.ACTIVE && hasStarted(now) && !hasEnded(now);
+    }
+
+    private boolean hasStarted(Instant now) {
+        return validFrom == null || !now.isBefore(validFrom);
+    }
+
+    private boolean hasEnded(Instant now) {
+        return validUntil != null && !now.isBefore(validUntil);
     }
 
     /**
@@ -206,6 +269,18 @@ public class Delegation {
 
     public String getDelegatorCenter() {
         return delegatorCenter;
+    }
+
+    public String getSubjectPositionId() {
+        return subjectPositionId;
+    }
+
+    public String getAssignedByCcgid() {
+        return assignedByCcgid;
+    }
+
+    public String getAssignedByName() {
+        return assignedByName;
     }
 
     public Instant getValidFrom() {

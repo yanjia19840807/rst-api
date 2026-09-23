@@ -41,17 +41,9 @@ public class ScenarioShift {
     @Column(name = "weekend_code", nullable = false, length = 40)
     private String weekendCode;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
 
-    @Column(name = "created_by")
-    private String createdBy;
 
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
 
-    @Column(name = "updated_by")
-    private String updatedBy;
 
     @Version
     private long version;
@@ -77,10 +69,6 @@ public class ScenarioShift {
         shift.durationMinutes = durationMinutes;
         shift.headcount = headcount;
         shift.weekendCode = weekendCode;
-        shift.createdAt = now;
-        shift.createdBy = actorCcgid;
-        shift.updatedAt = now;
-        shift.updatedBy = actorCcgid;
         return shift;
     }
 
@@ -91,14 +79,12 @@ public class ScenarioShift {
     /**
      * Copies editable fields (keeps this row's id for unique-key upserts).
      */
-    void overwriteValues(ScenarioShift source, String actorCcgid, Instant now) {
+    void overwriteValues(ScenarioShift source) {
         this.shiftNo = source.shiftNo;
         this.startTime = source.startTime;
         this.durationMinutes = source.durationMinutes;
         this.headcount = source.headcount;
         this.weekendCode = source.weekendCode;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
     }
 
     public UUID getId() { return id; }

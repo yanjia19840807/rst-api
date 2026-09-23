@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
+
 /**
  * Approval tab workspace. {@code IN_PROGRESS} is the current reviewer's turn;
  * {@code COMPLETED} is a finished task (or a read-only Supervisor view).
@@ -15,6 +17,7 @@ import java.util.UUID;
  * @param nextPositionId Timesheet position of that hop, if known
  * @param nextReviewer occupant name of that hop, if known
  * @param nextHandlerCcgid occupant CCGID of that hop, if known
+ * @param nextReviewerBy occupant plus optional delegate of that hop
  * @param history already-occurred Submit / Approve / Return rows
  */
 public record ApprovalWorkspaceView(
@@ -25,6 +28,7 @@ public record ApprovalWorkspaceView(
         String nextPositionId,
         String nextReviewer,
         String nextHandlerCcgid,
+        AuditActorView nextReviewerBy,
         List<ApprovalHistoryRow> history) {
 
     /** Status strip: In progress / Now / Archived / Returned. */
@@ -32,11 +36,12 @@ public record ApprovalWorkspaceView(
             String state,
             String label,
             String step,
-            String reviewer) {
+            String reviewer,
+            AuditActorView reviewerBy) {
     }
 
     /** Current hop on the in-progress card (step + occupant). */
-    public record ApprovalCurrentHop(String step, String reviewer) {
+    public record ApprovalCurrentHop(String step, String reviewer, AuditActorView reviewerBy) {
     }
 
     /**
@@ -51,6 +56,7 @@ public record ApprovalWorkspaceView(
      * @param comments action comments
      * @param completedAt when the action happened
      * @param mine true when this is the viewer's acted hop (completed mode highlight)
+     * @param actedBy occupant plus optional delegate
      */
     public record ApprovalHistoryRow(
             UUID actionId,
@@ -61,6 +67,7 @@ public record ApprovalWorkspaceView(
             String decision,
             String comments,
             Instant completedAt,
-            boolean mine) {
+            boolean mine,
+            AuditActorView actedBy) {
     }
 }

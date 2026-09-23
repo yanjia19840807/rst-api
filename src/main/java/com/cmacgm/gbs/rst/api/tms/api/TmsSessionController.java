@@ -6,6 +6,7 @@ import java.util.UUID;
 import jakarta.validation.Valid;
 
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
+import com.cmacgm.gbs.rst.api.delegation.application.PositionCoverage;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 
 import com.cmacgm.gbs.rst.api.tms.api.dto.DiscardTmsSessionRequest;
@@ -39,22 +40,29 @@ public class TmsSessionController {
 
     private final TmsSessionCommandService commandService;
     private final TmsSessionQueryService queryService;
+    private final PositionCoverage coverage;
 
     public TmsSessionController(
             TmsSessionCommandService commandService,
-            TmsSessionQueryService queryService) {
+            TmsSessionQueryService queryService,
+            PositionCoverage coverage) {
         this.commandService = commandService;
         this.queryService = queryService;
+        this.coverage = coverage;
+    }
+
+    private String agentCcgid(RstPrincipal principal) {
+        return coverage.subjectCcgid(principal.ccgid(), "AGENT");
     }
 
     @GetMapping("/summary")
     public TmsSummaryResponse summary(@AuthenticationPrincipal RstPrincipal principal) {
-        return queryService.summary(principal.ccgid(), principal.center());
+        return queryService.summary(agentCcgid(principal), principal.center());
     }
 
     @GetMapping("/sessions/current")
     public TmsSessionResponse current(@AuthenticationPrincipal RstPrincipal principal) {
-        return queryService.current(principal.ccgid());
+        return queryService.current(agentCcgid(principal));
     }
 
     @GetMapping("/sessions/paused-match")
@@ -63,7 +71,7 @@ public class TmsSessionController {
             @RequestParam UUID toolkitId,
             @RequestParam(required = false) UUID subtaskId,
             @RequestParam(required = false) String reference) {
-        return queryService.pausedMatch(principal.ccgid(), toolkitId, subtaskId, reference);
+        return queryService.pausedMatch(agentCcgid(principal), toolkitId, subtaskId, reference);
     }
 
     @GetMapping("/sessions/export")
@@ -89,7 +97,7 @@ public class TmsSessionController {
             @RequestParam(required = false) String customerCountry) {
         return excelResponse(
                 queryService.exportSessions(
-                        principal.ccgid(),
+                        agentCcgid(principal),
                         status,
                         sessionNo,
                         reference,
@@ -111,7 +119,7 @@ public class TmsSessionController {
     @GetMapping("/sessions/{id}")
     public TmsSessionResponse get(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable String id) {
-        return queryService.get(principal.ccgid(), id);
+        return queryService.get(agentCcgid(principal), id);
     }
 
     @GetMapping("/sessions")
@@ -138,7 +146,7 @@ public class TmsSessionController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         return queryService.sessions(
-                principal.ccgid(),
+                agentCcgid(principal),
                 status,
                 sessionNo,
                 reference,
@@ -163,7 +171,7 @@ public class TmsSessionController {
     public TmsSessionResponse start(
             @AuthenticationPrincipal RstPrincipal principal,
             @Valid @RequestBody StartTmsSessionRequest request) {
-        return commandService.start(principal.ccgid(), request);
+        return commandService.start(agentCcgid(principal), request);
     }
 
     @PostMapping("/sessions/{id}/pause")
@@ -171,14 +179,14 @@ public class TmsSessionController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable String id,
             @Valid @RequestBody(required = false) UpdateTmsSessionRequest request) {
-        return commandService.pause(principal.ccgid(), id, request);
+        return commandService.pause(agentCcgid(principal), id, request);
     }
 
     @PostMapping("/sessions/{id}/resume")
     public TmsSessionResponse resume(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable String id) {
-        return commandService.resume(principal.ccgid(), id);
+        return commandService.resume(agentCcgid(principal), id);
     }
 
     @PostMapping("/sessions/{id}/end")
@@ -186,7 +194,7 @@ public class TmsSessionController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable String id,
             @Valid @RequestBody(required = false) UpdateTmsSessionRequest request) {
-        return commandService.end(principal.ccgid(), id, request);
+        return commandService.end(agentCcgid(principal), id, request);
     }
 
     @PostMapping("/sessions/{id}/discard")
@@ -195,7 +203,7 @@ public class TmsSessionController {
             @PathVariable String id,
             @RequestBody(required = false) DiscardTmsSessionRequest request) {
         String reason = request == null ? null : request.reason();
-        return commandService.discard(principal.ccgid(), id, reason);
+        return commandService.discard(agentCcgid(principal), id, reason);
     }
 
     private static ResponseEntity<byte[]> excelResponse(byte[] body, String filename) {

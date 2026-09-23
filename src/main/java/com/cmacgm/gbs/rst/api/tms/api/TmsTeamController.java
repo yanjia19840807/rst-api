@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
+import com.cmacgm.gbs.rst.api.delegation.application.PositionCoverage;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.TeamAgent;
 import com.cmacgm.gbs.rst.api.tms.api.dto.TmsSessionResponse;
@@ -33,17 +34,26 @@ public class TmsTeamController {
 
     private final TmsSessionQueryService queryService;
     private final TmsSessionCommandService commandService;
+    private final PositionCoverage coverage;
 
     /**
      * Creates the team TMS controller.
      *
      * @param queryService TMS query service
      * @param commandService TMS command service
+     * @param coverage covered-position subject
      */
     public TmsTeamController(
-            TmsSessionQueryService queryService, TmsSessionCommandService commandService) {
+            TmsSessionQueryService queryService,
+            TmsSessionCommandService commandService,
+            PositionCoverage coverage) {
         this.queryService = queryService;
         this.commandService = commandService;
+        this.coverage = coverage;
+    }
+
+    private String supervisor(RstPrincipal principal) {
+        return coverage.subjectCcgid(principal.ccgid(), "SUPERVISOR");
     }
 
     /**
@@ -54,7 +64,7 @@ public class TmsTeamController {
      */
     @GetMapping("/agents")
     public List<TeamAgent> teamAgents(@AuthenticationPrincipal RstPrincipal principal) {
-        return queryService.teamAgents(principal.ccgid());
+        return queryService.teamAgents(supervisor(principal));
     }
 
     /**
@@ -99,7 +109,7 @@ public class TmsTeamController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         return queryService.sessionsForTeam(
-                principal.ccgid(),
+                supervisor(principal),
                 agentCcgid,
                 toolkitId,
                 pl3Code,
@@ -150,7 +160,7 @@ public class TmsTeamController {
                 .contentType(MediaType.parseMediaType(
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .body(queryService.exportSessionsForTeam(
-                        principal.ccgid(),
+                        supervisor(principal),
                         agentCcgid,
                         toolkitId,
                         pl3Code,
@@ -179,18 +189,18 @@ public class TmsTeamController {
     @GetMapping("/sessions/{id}")
     public TmsSessionResponse get(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable String id) {
-        return queryService.getForTeam(principal.ccgid(), id);
+        return queryService.getForTeam(supervisor(principal), id);
     }
 
     @PostMapping("/sessions/{id}/enable")
     public TmsSessionResponse enable(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable String id) {
-        return commandService.setEnabled(principal.ccgid(), id, true);
+        return commandService.setEnabled(supervisor(principal), id, true);
     }
 
     @PostMapping("/sessions/{id}/disable")
     public TmsSessionResponse disable(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable String id) {
-        return commandService.setEnabled(principal.ccgid(), id, false);
+        return commandService.setEnabled(supervisor(principal), id, false);
     }
 }

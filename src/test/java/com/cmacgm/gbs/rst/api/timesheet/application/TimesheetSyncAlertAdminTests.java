@@ -44,6 +44,7 @@ class TimesheetSyncAlertAdminTests {
                 null,
                 alerts,
                 null,
+                null,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 

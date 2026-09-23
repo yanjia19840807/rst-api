@@ -37,8 +37,14 @@ public class TmsSession {
     @Column(name = "session_no", nullable = false, unique = true, length = 80)
     private String sessionNo;
 
-    @Column(name = "agent_ccgid", nullable = false, length = 64)
+    @Column(name = "agent_ccgid", length = 64)
     private String agentCcgid;
+
+    @Column(name = "position_id", length = 80)
+    private String positionId;
+
+    @Column(name = "latest_audit_event_id")
+    private UUID latestAuditEventId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "toolkit_id", nullable = false)
@@ -102,6 +108,7 @@ public class TmsSession {
     public static TmsSession start(
             String sessionNo,
             String agentCcgid,
+            String positionId,
             Toolkit toolkit,
             ToolkitSubtask subtask,
             BigDecimal processedVolume,
@@ -111,6 +118,7 @@ public class TmsSession {
         TmsSession session = new TmsSession();
         session.sessionNo = sessionNo;
         session.agentCcgid = agentCcgid;
+        session.positionId = positionId;
         session.toolkit = toolkit;
         session.toolkitSubtask = subtask;
         session.processedVolume = requireVolume(processedVolume);
@@ -252,6 +260,18 @@ public class TmsSession {
 
     public String getSessionNo() {
         return sessionNo;
+    }
+
+    public void setLatestAuditEventId(UUID latestAuditEventId) {
+        this.latestAuditEventId = latestAuditEventId;
+    }
+
+    public String getPositionId() {
+        return positionId;
+    }
+
+    public UUID getLatestAuditEventId() {
+        return latestAuditEventId;
     }
 
     public String getAgentCcgid() {

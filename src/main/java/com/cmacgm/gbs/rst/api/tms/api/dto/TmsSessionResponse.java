@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
 import com.cmacgm.gbs.rst.api.governance.application.CommaTokens;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSession;
 import com.cmacgm.gbs.rst.api.toolkit.domain.Toolkit;
@@ -41,9 +42,20 @@ public record TmsSessionResponse(
         Instant endedAt,
         long netDurationSeconds,
         String discardReason,
-        long version) {
+        long version,
+        AuditActorView createdBy,
+        AuditActorView updatedBy) {
 
     public static TmsSessionResponse from(TmsSession session, Instant now, String agentName) {
+        return from(session, now, agentName, null, null);
+    }
+
+    public static TmsSessionResponse from(
+            TmsSession session,
+            Instant now,
+            String agentName,
+            AuditActorView createdBy,
+            AuditActorView updatedBy) {
         Instant wireStartedAt = session.getRunningSince() == null
                 ? session.getStartedAt()
                 : session.getRunningSince();
@@ -56,7 +68,7 @@ public record TmsSessionResponse(
         List<ToolkitSharedKpiSelection> selections = toolkit.getSharedKpiSelections() == null
                 ? List.of()
                 : toolkit.getSharedKpiSelections().stream()
-                        .filter(selection -> selection.getDeletedAt() == null)
+                        .filter(selection -> !selection.isDeleted())
                         .toList();
         return new TmsSessionResponse(
                 session.getSessionNo(),
@@ -86,7 +98,9 @@ public record TmsSessionResponse(
                 session.getEndedAt(),
                 wireNetDuration,
                 session.getDiscardReason(),
-                session.getVersion());
+                session.getVersion(),
+                createdBy,
+                updatedBy);
     }
 
     private static List<String> distinctValues(List<String> values) {

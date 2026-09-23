@@ -1,10 +1,13 @@
 package com.cmacgm.gbs.rst.api.toolkit.api.dto;
 
 import java.time.Instant;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
 import com.cmacgm.gbs.rst.api.timesheet.api.dto.TimesheetAlignmentView;
 import com.cmacgm.gbs.rst.api.toolkit.domain.Toolkit;
 import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitSubtask;
@@ -25,12 +28,15 @@ public record ToolkitResponse(
         long version,
         List<SubtaskResponse> subtasks,
         List<SharedKpiResponse> sharedKpiSelections,
-        Instant deletedAt,
+        @JsonProperty("isDeleted") boolean isDeleted,
         int referencedEnabledSessionCount,
         int referencedDisabledSessionCount,
         int syncedSessionCount,
         boolean outOfSync,
-        TimesheetAlignmentView alignment) {
+        TimesheetAlignmentView alignment,
+        AuditActorView createdBy,
+        Instant createdAt,
+        AuditActorView updatedBy) {
 
     public record SessionImpact(int enabledCount, int disabledCount) {
         public static SessionImpact none() {
@@ -78,30 +84,66 @@ public record ToolkitResponse(
                                     subtask.getName(),
                                     subtask.getDescription(),
                                     subtask.getDisplayOrder(),
-                                    subtask.getDeletedAt(),
+                                    subtask.isDeleted(),
                                     subtask.isEnabled(),
                                     impact.enabledCount(),
                                     impact.disabledCount());
                         })
                         .toList(),
                 toolkit.getSharedKpiSelections().stream()
-                        .filter(selection -> selection.getDeletedAt() == null)
+                        .filter(selection -> !selection.isDeleted())
                         .map(selection -> new SharedKpiResponse(
                                 selection.getId(),
                                 selection.getCarrier(),
                                 selection.getSite(),
                                 selection.getCustomerCountry()))
                         .toList(),
-                toolkit.getDeletedAt(),
+                toolkit.isDeleted(),
                 safeToolkit.enabledCount(),
                 safeToolkit.disabledCount(),
                 syncedSessionCount,
                 alignment != null && alignment.structuralDrift(),
-                alignment);
+                alignment,
+                null,
+                toolkit.getCreatedAt(),
+                null);
+    }
+
+    /**
+     * @param createdBy first CREATE actor
+     * @param updatedBy latest actor
+     * @return copy with audit actors
+     */
+    public ToolkitResponse withActors(AuditActorView createdBy, AuditActorView updatedBy) {
+        return new ToolkitResponse(
+                id,
+                name,
+                description,
+                supervisorPositionId,
+                center,
+                domain,
+                pl1,
+                pl2,
+                pl3Code,
+                pl3Name,
+                combineSubtasksTime,
+                enabled,
+                version,
+                subtasks,
+                sharedKpiSelections,
+                isDeleted,
+                referencedEnabledSessionCount,
+                referencedDisabledSessionCount,
+                syncedSessionCount,
+                outOfSync,
+                alignment,
+                createdBy,
+                createdAt,
+                updatedBy);
     }
 
     private static boolean includeSubtask(ToolkitSubtask subtask, boolean includeDisabledSubtasks) {
-        if (subtask.getDeletedAt() != null) {
+        if (subtask.isDeleted()) {
             return includeDisabledSubtasks;
         }
         return includeDisabledSubtasks || subtask.isEnabled();
@@ -112,7 +154,7 @@ public record ToolkitResponse(
             String name,
             String description,
             int displayOrder,
-            Instant deletedAt,
+            @JsonProperty("isDeleted") boolean isDeleted,
             boolean enabled,
             int referencedEnabledSessionCount,
             int referencedDisabledSessionCount) {

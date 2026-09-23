@@ -22,6 +22,10 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.cmacgm.gbs.rst.api.audit.application.AuditRecorder;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditAction;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditEntityType;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditEvent;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.timesheet.config.TimesheetSharePointProperties;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSourceResolver.Source;
@@ -38,6 +42,7 @@ import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncIssueRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
 import org.junit.jupiter.api.BeforeEach;
+import org.mockito.Mockito;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.SimpleTransactionStatus;
@@ -90,7 +95,8 @@ class TimesheetSyncServiceTests {
                 issues,
                 noOpTransactions(),
                 Clock.fixed(NOW, ZoneOffset.UTC),
-                null);
+                null,
+                stubAudits());
     }
 
     @Test
@@ -166,7 +172,8 @@ class TimesheetSyncServiceTests {
                 }),
                 noOpTransactions(),
                 Clock.fixed(NOW, ZoneOffset.UTC),
-                null);
+                null,
+                stubAudits());
 
         TimesheetSyncService.SyncResult chinaResult = service.sync("MONTHLY").getFirst();
 
@@ -238,7 +245,8 @@ class TimesheetSyncServiceTests {
                 }),
                 noOpTransactions(),
                 Clock.fixed(NOW, ZoneOffset.UTC),
-                null);
+                null,
+                stubAudits());
 
         TimesheetSyncService.SyncResult second = service.sync("MONTHLY").getFirst();
 
@@ -310,10 +318,11 @@ class TimesheetSyncServiceTests {
                 }),
                 noOpTransactions(),
                 Clock.fixed(NOW, ZoneOffset.UTC),
-                null);
+                null,
+                stubAudits());
 
         TimesheetSyncService.SyncResult uploaded =
-                service.syncUploaded(fileName, csv.getBytes(StandardCharsets.UTF_8), "LTH001");
+                service.syncUploaded(fileName, csv.getBytes(StandardCharsets.UTF_8));
 
         assertThat(uploaded.id()).isNotEqualTo(firstId);
         assertThat(uploaded.status()).isEqualTo("ACTIVE");
@@ -398,7 +407,8 @@ class TimesheetSyncServiceTests {
                 issues,
                 noOpTransactions(),
                 Clock.fixed(NOW, ZoneOffset.UTC),
-                notifier);
+                notifier,
+                stubAudits());
 
         assertThatThrownBy(() -> failing.sync("MONTHLY")).isInstanceOf(ApiException.class);
         assertThat(mails.get()).isEqualTo(1);
@@ -479,7 +489,8 @@ class TimesheetSyncServiceTests {
                         }),
                 noOpTransactions(),
                 Clock.fixed(NOW, ZoneOffset.UTC),
-                notifier);
+                notifier,
+                stubAudits());
 
         assertThatThrownBy(() -> tolerant.sync("MONTHLY")).isInstanceOf(ApiException.class);
         assertThat(mails.get()).isEqualTo(1);
@@ -487,6 +498,21 @@ class TimesheetSyncServiceTests {
         assertThat(savedIssues).extracting(TimesheetSyncIssue::getCode).containsExactly("MISSING_FIELD");
         assertThat(savedScopes).isEmpty();
         assertThat(savedKpis).isEmpty();
+    }
+
+    private static AuditRecorder stubAudits() {
+        AuditRecorder audits = Mockito.mock(AuditRecorder.class);
+        Mockito.when(audits.recordSync(Mockito.any())).thenAnswer(invocation -> AuditEvent.record(
+                AuditEntityType.TIMESHEET_SYNC,
+                invocation.getArgument(0),
+                AuditAction.CREATE,
+                "SYSTEM",
+                "SYSTEM",
+                "SYSTEM",
+                "SYSTEM",
+                null,
+                NOW));
+        return audits;
     }
 
     private TimesheetSyncRun store(TimesheetSyncRun run) {

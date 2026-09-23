@@ -217,7 +217,7 @@ public class SlotSimulationService {
     @Transactional(readOnly = true)
     public SlotSimulationView getLatest(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
         exercises.requireReadable(ownerCcgid, exerciseId);
-        Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
+        Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedFalse(scenarioId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
         SimulationRun run = simulationRuns
@@ -405,7 +405,7 @@ public class SlotSimulationService {
             String ownerCcgid, UUID exerciseId, UUID scenarioId, List<SlotShift> overrideShifts) {
         RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
-        Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
+        Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedFalse(scenarioId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
         if (!scenario.isWorking()) {

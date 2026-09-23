@@ -152,6 +152,45 @@ public interface TimesheetScopeRepository extends JpaRepository<TimesheetScope, 
             @Param("center") String center);
 
     /**
+     * Whether an AGENT position reports to this Supervisor and Monthly scope owns the PL3.
+     * Used when someone covers the position without occupying it.
+     *
+     * @param agentPositionId covered AGENT position
+     * @param positionId supervisor position
+     * @param pl3Code PL3
+     * @param center GBS center
+     * @return true when the position can use the Toolkit
+     */
+    @Query("""
+            select count(s) > 0
+            from TimesheetPosition pos, TimesheetPositionParent edge, TimesheetScope s,
+                 TimesheetSyncRun daily, TimesheetSyncRun monthly
+            where pos.id.syncRunId = daily.id
+              and edge.id.syncRunId = daily.id
+              and edge.id.positionId = pos.id.positionId
+              and edge.id.roleType = pos.id.roleType
+              and daily.kind = 'DAILY'
+              and daily.status = 'ACTIVE'
+              and s.id.syncRunId = monthly.id
+              and monthly.kind = 'MONTHLY'
+              and monthly.status = 'ACTIVE'
+              and pos.id.positionId = :agentPositionId
+              and pos.id.roleType = 'AGENT'
+              and edge.id.parentPositionId = :positionId
+              and s.id.supervisorPositionId = edge.id.parentPositionId
+              and s.id.pl3Code = :pl3Code
+              and daily.center = monthly.center
+              and daily.center = :center
+              and monthly.center = :center
+              and s.id.center = :center
+            """)
+    boolean existsActiveForAgentPosition(
+            @Param("agentPositionId") String agentPositionId,
+            @Param("positionId") String positionId,
+            @Param("pl3Code") String pl3Code,
+            @Param("center") String center);
+
+    /**
      * Dashboard obligations: Center × Supervisor position × PL3.
      *
      * @return scope rows

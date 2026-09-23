@@ -68,7 +68,7 @@ public class ToolkitAssociatedDataService {
         supportItems.deleteByToolkitId(toolkitId);
         supportItems.flush();
         List<ExerciseProductionSupportItem> sourceSupport =
-                exerciseSupport.findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(sourceId);
+                exerciseSupport.findByExerciseIdAndDeletedFalseOrderByCategoryAscActivityAsc(sourceId);
         supportItems.saveAll(sourceSupport.stream()
                 .map(item -> ToolkitProductionSupportItem.fromExercise(
                         toolkitId, sourceId, item, actorCcgid, now))
@@ -77,7 +77,7 @@ public class ToolkitAssociatedDataService {
         holidays.deleteByToolkitId(toolkitId);
         holidays.flush();
         List<ExerciseHoliday> sourceHolidays =
-                exerciseHolidays.findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(sourceId);
+                exerciseHolidays.findByExerciseIdAndDeletedFalseOrderByHolidayDateAscHolidayNameAsc(sourceId);
         holidays.saveAll(sourceHolidays.stream()
                 .map(item -> ToolkitHoliday.fromExercise(toolkitId, sourceId, item, actorCcgid, now))
                 .toList());

@@ -22,7 +22,7 @@ class HandlerTests {
         Handler handler = new Handler("SUP1", "Yang Brenda", "AGT1", "Li Wei");
 
         assertThat(handler.hasActor()).isTrue();
-        assertThat(handler.displayName()).isEqualTo("Li Wei (on behalf of Yang Brenda)");
+        assertThat(handler.displayName()).isEqualTo("Yang Brenda via Li Wei");
     }
 
     @Test
@@ -43,6 +43,6 @@ class HandlerTests {
         assertThat(handler.hasActor()).isTrue();
         assertThat(handler.subjectCcgid()).isEqualTo("SUP1");
         assertThat(handler.actorCcgid()).isEqualTo("AGT1");
-        assertThat(handler.displayName()).isEqualTo("Li Wei (on behalf of Yang Brenda)");
+        assertThat(handler.displayName()).isEqualTo("Yang Brenda via Li Wei");
     }
 }

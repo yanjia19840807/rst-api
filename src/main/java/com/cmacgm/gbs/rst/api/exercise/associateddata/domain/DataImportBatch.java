@@ -46,9 +46,6 @@ public class DataImportBatch {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    @Column(name = "created_by")
-    private String createdBy;
-
     protected DataImportBatch() {
     }
 
@@ -63,7 +60,6 @@ public class DataImportBatch {
      * @param acceptedCount accepted rows
      * @param rejectedCount rejected rows
      * @param validationSummary optional JSON summary
-     * @param actorCcgid importer
      * @param now creation time
      * @return new batch
      */
@@ -76,7 +72,6 @@ public class DataImportBatch {
             int acceptedCount,
             int rejectedCount,
             String validationSummary,
-            String actorCcgid,
             Instant now) {
         DataImportBatch batch = new DataImportBatch();
         batch.id = UUID.randomUUID();
@@ -89,7 +84,6 @@ public class DataImportBatch {
         batch.rejectedCount = rejectedCount;
         batch.validationSummary = validationSummary;
         batch.createdAt = now;
-        batch.createdBy = actorCcgid;
         return batch;
     }
 

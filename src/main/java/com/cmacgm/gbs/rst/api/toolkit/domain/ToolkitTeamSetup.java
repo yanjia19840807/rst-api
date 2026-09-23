@@ -80,17 +80,9 @@ public class ToolkitTeamSetup {
     @Column(name = "weekend_code", length = 40)
     private String weekendCode;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
 
-    @Column(name = "created_by")
-    private String createdBy;
 
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
 
-    @Column(name = "updated_by")
-    private String updatedBy;
 
     @Version
     private long version;
@@ -106,8 +98,6 @@ public class ToolkitTeamSetup {
         ToolkitTeamSetup setup = new ToolkitTeamSetup();
         setup.toolkitId = toolkitId;
         setup.sourceExerciseId = sourceExerciseId;
-        setup.createdAt = now;
-        setup.createdBy = actorCcgid;
         setup.replaceFrom(source, sourceExerciseId, actorCcgid, now);
         return setup;
     }
@@ -138,8 +128,6 @@ public class ToolkitTeamSetup {
         this.weekendCode = source.getWeekendCode() == null || source.getWeekendCode().isBlank()
                 ? WeekendCode.DEFAULT_STORED
                 : WeekendCode.storedValue(source.getWeekendCode());
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
     }
 
     /**

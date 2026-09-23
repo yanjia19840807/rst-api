@@ -24,7 +24,7 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
      * @return optional Exercise
      */
     @EntityGraph(attributePaths = {"toolkitSnapshot"})
-    Optional<RstExercise> findByIdAndOwnerCcgidAndDeletedAtIsNull(UUID id, String ownerCcgid);
+    Optional<RstExercise> findByIdAndOwnerCcgidAndDeletedFalse(UUID id, String ownerCcgid);
 
     /**
      * Finds a non-deleted Exercise by id (owner or approver read path).
@@ -33,16 +33,16 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
      * @return optional Exercise
      */
     @EntityGraph(attributePaths = {"toolkitSnapshot"})
-    Optional<RstExercise> findByIdAndDeletedAtIsNull(UUID id);
+    Optional<RstExercise> findByIdAndDeletedFalse(UUID id);
 
     /**
-     * Lists non-deleted Exercises for a Supervisor ordered by recent update.
+     * Lists non-deleted Exercises for a Supervisor, newest created first.
      *
      * @param ownerCcgid owner Supervisor ccgid
      * @return exercises
      */
     @EntityGraph(attributePaths = {"toolkitSnapshot"})
-    List<RstExercise> findByOwnerCcgidAndDeletedAtIsNullOrderByUpdatedAtDescIdAsc(String ownerCcgid);
+    List<RstExercise> findByOwnerCcgidAndDeletedFalseOrderByCreatedAtDescIdAsc(String ownerCcgid);
 
     /**
      * Returns whether any Exercise references the Toolkit.
@@ -60,7 +60,7 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
     @EntityGraph(attributePaths = {"toolkitSnapshot", "sharedKpiLines"})
     @Query("""
             select e from RstExercise e
-            where e.deletedAt is null
+            where e.deleted = false
               and exists (
                   select 1 from ProcessInstance w
                   join w.tasks t
@@ -84,7 +84,7 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
     @Query("""
             select e from RstExercise e
             where e.id = :id
-              and e.deletedAt is null
+              and e.deleted = false
               and exists (
                   select 1 from ProcessInstance w
                   join w.tasks t
@@ -104,7 +104,7 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
     @EntityGraph(attributePaths = {"toolkitSnapshot", "sharedKpiLines"})
     @Query("""
             select e from RstExercise e
-            where e.deletedAt is null
+            where e.deleted = false
               and exists (
                   select 1 from ProcessInstance w
                   join w.tasks t
@@ -125,7 +125,7 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
     @EntityGraph(attributePaths = {"toolkitSnapshot", "sharedKpiLines"})
     @Query("""
             select e from RstExercise e
-            where e.deletedAt is null
+            where e.deleted = false
               and exists (
                   select 1 from ProcessInstance w
                   join w.tasks t
@@ -152,7 +152,7 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
     @Query("""
             select e from RstExercise e
             where e.id = :id
-              and e.deletedAt is null
+              and e.deleted = false
               and exists (
                   select 1 from ProcessInstance w
                   join w.tasks t
@@ -174,7 +174,7 @@ public interface RstExerciseRepository extends JpaRepository<RstExercise, UUID> 
      */
     @Query("""
             select count(e) from RstExercise e
-            where e.deletedAt is null
+            where e.deleted = false
               and exists (
                   select 1 from ProcessInstance w
                   join w.tasks t

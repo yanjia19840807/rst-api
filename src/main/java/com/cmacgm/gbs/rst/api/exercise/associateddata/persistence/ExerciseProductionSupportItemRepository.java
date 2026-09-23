@@ -17,7 +17,7 @@ public interface ExerciseProductionSupportItemRepository extends JpaRepository<E
      * @param exerciseId Exercise id
      * @return active items
      */
-    List<ExerciseProductionSupportItem> findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(UUID exerciseId);
+    List<ExerciseProductionSupportItem> findByExerciseIdAndDeletedFalseOrderByCategoryAscActivityAsc(UUID exerciseId);
 
     /**
      * Lists active support items for many Exercises.
@@ -25,7 +25,7 @@ public interface ExerciseProductionSupportItemRepository extends JpaRepository<E
      * @param exerciseIds Exercise ids
      * @return active items
      */
-    List<ExerciseProductionSupportItem> findByExerciseIdInAndDeletedAtIsNull(Collection<UUID> exerciseIds);
+    List<ExerciseProductionSupportItem> findByExerciseIdInAndDeletedFalse(Collection<UUID> exerciseIds);
 
     /**
      * Finds an active support item owned by an Exercise.
@@ -34,5 +34,5 @@ public interface ExerciseProductionSupportItemRepository extends JpaRepository<E
      * @param exerciseId Exercise id
      * @return optional item
      */
-    Optional<ExerciseProductionSupportItem> findByIdAndExerciseIdAndDeletedAtIsNull(UUID id, UUID exerciseId);
+    Optional<ExerciseProductionSupportItem> findByIdAndExerciseIdAndDeletedFalse(UUID id, UUID exerciseId);
 }

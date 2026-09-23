@@ -279,7 +279,7 @@ class BenchmarkingFiltersTests {
                 "SUP1",
                 now);
         if (validatedAt != null) {
-            exercise.markApproved("LTH1", validatedAt);
+            exercise.markApproved(validatedAt);
         }
         return exercise;
     }

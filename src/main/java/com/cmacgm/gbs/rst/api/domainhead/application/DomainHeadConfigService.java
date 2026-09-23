@@ -4,10 +4,15 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
+import com.cmacgm.gbs.rst.api.audit.application.AuditRecorder;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditAction;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditEntityType;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.domainhead.api.dto.CenterRoleAssigneeView;
 import com.cmacgm.gbs.rst.api.domainhead.api.dto.DomainHeadPageView;
@@ -46,6 +51,7 @@ public class DomainHeadConfigService {
     private final CenterLthRepository lthMappings;
     private final TimesheetReadService timesheet;
     private final ProcessInstanceRepository workflows;
+    private final AuditRecorder audits;
     private final Clock clock;
 
     /**
@@ -55,6 +61,7 @@ public class DomainHeadConfigService {
      * @param lthMappings Center LTH rows
      * @param timesheet ACTIVE Daily / Monthly org
      * @param workflows in-flight remount
+     * @param audits who changed each mapping
      * @param clock timestamps
      */
     public DomainHeadConfigService(
@@ -62,11 +69,13 @@ public class DomainHeadConfigService {
             CenterLthRepository lthMappings,
             TimesheetReadService timesheet,
             ProcessInstanceRepository workflows,
+            AuditRecorder audits,
             Clock clock) {
         this.mappings = mappings;
         this.lthMappings = lthMappings;
         this.timesheet = timesheet;
         this.workflows = workflows;
+        this.audits = audits;
         this.clock = clock;
     }
 
@@ -108,7 +117,7 @@ public class DomainHeadConfigService {
         Instant now = clock.instant();
         int remounted = 0;
         if (request != null && request.lthPositionId() != null) {
-            remounted += saveLth(center, request.lthPositionId(), principal.ccgid(), now);
+            remounted += saveLth(center, request.lthPositionId());
         }
         List<SaveDomainHeadsRequest.Mapping> mappingsToSave =
                 request == null || request.mappings() == null
@@ -117,20 +126,24 @@ public class DomainHeadConfigService {
         for (SaveDomainHeadsRequest.Mapping mapping : mappingsToSave) {
             String domain = requireText(mapping.domain(), "domain");
             String positionId = blankToNull(mapping.positionId());
-            CenterDomainHead existing = mappings.findByIdCenterAndIdDomain(center, domain).orElse(null);
+            CenterDomainHead existing = mappings.findByKeyCenterAndKeyDomain(center, domain).orElse(null);
             String previousPosition = existing == null ? null : existing.getPositionId();
             if (positionId == null) {
-                if (existing != null) {
-                    mappings.delete(existing);
+                if (existing != null && hasText(previousPosition)) {
+                    existing.clear();
+                    audit(existing, AuditAction.DELETE);
                     remounted += remountReady(center, domain, null, now);
                 }
                 continue;
             }
             requireCandidate(center, positionId);
             if (existing == null) {
-                mappings.save(CenterDomainHead.create(center, domain, positionId, principal.ccgid(), now));
-            } else if (!positionId.equals(existing.getPositionId())) {
-                existing.replace(positionId, principal.ccgid(), now);
+                CenterDomainHead created = CenterDomainHead.create(center, domain, positionId);
+                audit(created, AuditAction.CREATE);
+                mappings.save(created);
+            } else if (!positionId.equals(previousPosition)) {
+                existing.replace(positionId);
+                audit(existing, hasText(previousPosition) ? AuditAction.UPDATE : AuditAction.CREATE);
             }
             if (!Objects.equals(previousPosition, positionId)) {
                 remounted += remountReady(center, domain, positionId, now);
@@ -172,6 +185,49 @@ public class DomainHeadConfigService {
     }
 
     /**
+     * Mapping keys (Timesheet position or CCGID) this person currently owns as CDH.
+     * Center Roles may bind either a seat or a person who is in the Center but not
+     * on an RST Production line; both forms are stored on the pending actor.
+     *
+     * @param ccgid occupant
+     * @return assignment keys, possibly empty
+     */
+    @Transactional(readOnly = true)
+    public Set<String> assignedKeysFor(String ccgid) {
+        if (!hasText(ccgid)) {
+            return Set.of();
+        }
+        String id = ccgid.trim();
+        Set<String> keys = new LinkedHashSet<>();
+        for (CenterDomainHead row : mappings.findAll()) {
+            if (!hasText(row.getPositionId())) {
+                continue;
+            }
+            String key = row.getPositionId().trim();
+            if (id.equalsIgnoreCase(key)) {
+                keys.add(key);
+                continue;
+            }
+            Occupant occupant = timesheet.occupant(key);
+            if (occupant != null && hasText(occupant.ccgid()) && id.equalsIgnoreCase(occupant.ccgid())) {
+                keys.add(key);
+            }
+        }
+        return Set.copyOf(keys);
+    }
+
+    /**
+     * Whether this person is the configured CDH for any Center × Domain.
+     *
+     * @param ccgid occupant
+     * @return true when at least one live mapping points at them
+     */
+    @Transactional(readOnly = true)
+    public boolean isAssignedCdh(String ccgid) {
+        return !assignedKeysFor(ccgid).isEmpty();
+    }
+
+    /**
      * Whether Center × Domain has a valid live mapping.
      *
      * @param center GBS center
@@ -209,7 +265,7 @@ public class DomainHeadConfigService {
                     nullToBlank(center), dailyAvailable, monthlyAvailable, remountedCount, lth, List.of());
         }
         Map<String, CenterDomainHead> byDomain = new LinkedHashMap<>();
-        for (CenterDomainHead row : mappings.findByIdCenterOrderByIdDomainAsc(center)) {
+        for (CenterDomainHead row : mappings.findByKeyCenterOrderByKeyDomainAsc(center)) {
             byDomain.put(row.getDomain(), row);
         }
         List<DomainHeadRowView> domains = new ArrayList<>();
@@ -247,7 +303,7 @@ public class DomainHeadConfigService {
         if (!hasText(center) || !hasText(domain)) {
             return null;
         }
-        return resolveRow(center, domain, mappings.findByIdCenterAndIdDomain(center, domain).orElse(null));
+        return resolveRow(center, domain, mappings.findByKeyCenterAndKeyDomain(center, domain).orElse(null));
     }
 
     private Resolved resolveRow(String center, String domain, CenterDomainHead row) {
@@ -262,22 +318,26 @@ public class DomainHeadConfigService {
         return new Resolved(domain, row.getPositionId(), occupant.ccgid(), occupant.name(), STATUS_CONFIGURED);
     }
 
-    private int saveLth(String center, String rawPositionId, String updatedBy, Instant now) {
+    private int saveLth(String center, String rawPositionId) {
         String positionId = blankToNull(rawPositionId);
         CenterLth existing = lthMappings.findById(center).orElse(null);
         String previousPosition = existing == null ? null : existing.getPositionId();
         if (positionId == null) {
-            if (existing != null) {
-                lthMappings.delete(existing);
+            if (existing != null && hasText(previousPosition)) {
+                existing.clear();
+                audit(existing, AuditAction.DELETE);
                 return remountReadyLth(center, null);
             }
             return 0;
         }
         requireCandidate(center, positionId);
         if (existing == null) {
-            lthMappings.save(CenterLth.create(center, positionId, updatedBy, now));
-        } else if (!positionId.equals(existing.getPositionId())) {
-            existing.replace(positionId, updatedBy, now);
+            CenterLth created = CenterLth.create(center, positionId);
+            audit(created, AuditAction.CREATE);
+            lthMappings.save(created);
+        } else if (!positionId.equals(previousPosition)) {
+            existing.replace(positionId);
+            audit(existing, hasText(previousPosition) ? AuditAction.UPDATE : AuditAction.CREATE);
         }
         if (!Objects.equals(previousPosition, positionId)) {
             return remountReadyLth(center, positionId);
@@ -308,6 +368,15 @@ public class DomainHeadConfigService {
                     STATUS_STALE);
         }
         return new Resolved("", row.getPositionId(), occupant.ccgid(), occupant.name(), STATUS_CONFIGURED);
+    }
+
+    private void audit(CenterLth row, AuditAction action) {
+        row.setLatestAuditEventId(audits.recordCurrent(AuditEntityType.CENTER_LTH, row.getId(), action).getId());
+    }
+
+    private void audit(CenterDomainHead row, AuditAction action) {
+        row.setLatestAuditEventId(
+                audits.recordCurrent(AuditEntityType.CENTER_DOMAIN_HEAD, row.getId(), action).getId());
     }
 
     private int remountReadyLth(String center, String positionId) {

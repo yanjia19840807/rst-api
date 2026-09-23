@@ -41,17 +41,9 @@ public class ExerciseVolumeSlotInput implements Persistable<UUID> {
     @Column(name = "import_batch_id")
     private UUID importBatchId;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
 
-    @Column(name = "created_by")
-    private String createdBy;
 
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
 
-    @Column(name = "updated_by")
-    private String updatedBy;
 
     @Transient
     private boolean isNew = true;
@@ -89,10 +81,6 @@ public class ExerciseVolumeSlotInput implements Persistable<UUID> {
         row.actualVolume = actualVolume;
         row.sourceType = sourceType == null || sourceType.isBlank() ? "MANUAL" : sourceType;
         row.importBatchId = importBatchId;
-        row.createdAt = now;
-        row.createdBy = actorCcgid;
-        row.updatedAt = now;
-        row.updatedBy = actorCcgid;
         row.isNew = true;
         return row;
     }

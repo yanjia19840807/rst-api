@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.mail.application.SsoProfileService;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
@@ -50,5 +52,39 @@ class MeControllerTests {
                 "ADMIN001", "Admin", "admin@dev.local", Set.of("ADMIN"), Set.of(), null);
 
         assertThat(controller.me(principal).jobRole()).isNull();
+    }
+
+    @Test
+    void positionCoverageKeepsTheCallerAndReportsTheCoveredPosition() {
+        SsoProfileService profiles = mock(SsoProfileService.class);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<DevIdentityProperties> devIdentity = mock(ObjectProvider.class);
+        TimesheetReadService timesheet = mock(TimesheetReadService.class);
+        when(devIdentity.getIfAvailable()).thenReturn(null);
+        when(timesheet.findActiveJobRole("S00813982")).thenReturn("Supervisor");
+        when(timesheet.roleTypesOfPosition("174327")).thenReturn(List.of("AGENT"));
+        when(timesheet.occupant("174327"))
+                .thenReturn(new TimesheetReadService.Occupant("174327", "S00580242", "WU Rongchan"));
+        UUID delegationId = UUID.randomUUID();
+
+        MeController controller = new MeController(profiles, devIdentity, timesheet);
+        RstPrincipal principal = new RstPrincipal(
+                "S00813982",
+                "CHEN Cindy",
+                "s00813982@dev.local",
+                Set.of("SUPERVISOR", "AGENT"),
+                Set.of("SELF"),
+                "GBS CHINA",
+                "S00813982",
+                "CHEN Cindy",
+                delegationId,
+                "174327");
+
+        var me = controller.me(principal);
+        assertThat(me.ccgid()).isEqualTo("S00813982");
+        assertThat(me.displayName()).isEqualTo("CHEN Cindy");
+        assertThat(me.delegatedPositionId()).isEqualTo("174327");
+        assertThat(me.delegatedPositionRoles()).containsExactly("AGENT");
+        assertThat(me.delegatedOccupantName()).isEqualTo("WU Rongchan");
     }
 }

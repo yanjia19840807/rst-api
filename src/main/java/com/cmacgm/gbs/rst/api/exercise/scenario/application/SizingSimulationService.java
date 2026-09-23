@@ -522,7 +522,7 @@ public class SizingSimulationService {
                     HttpStatus.UNPROCESSABLE_ENTITY, "invalid-weekend-code", ex.getMessage());
         }
         Map<LocalDate, HolidayDayKind> kinds = HolidayDays.kinds(holidays
-                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId));
+                .findByExerciseIdAndDeletedFalseOrderByHolidayDateAscHolidayNameAsc(exerciseId));
         List<LocalDate> restDates = HolidayDays.restDates(kinds);
         int year = YearMonth.from(exercise.getSizingMonth()).getYear();
         BigDecimal workingDaysYear = BigDecimal.valueOf(
@@ -552,7 +552,7 @@ public class SizingSimulationService {
                 ? team.getMaxOvertimeMinutes() : BigDecimal.ZERO;
 
         BigDecimal supportFte = SupportWorkloadMath.totalSupportFte(
-                supportItems.findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(exerciseId),
+                supportItems.findByExerciseIdAndDeletedFalseOrderByCategoryAscActivityAsc(exerciseId),
                 team,
                 workingDaysYear);
         if (supportFte == null) {
@@ -608,7 +608,7 @@ public class SizingSimulationService {
     }
 
     private Scenario requireScenario(UUID exerciseId, UUID scenarioId) {
-        return scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
+        return scenarios.findByIdAndExerciseIdAndDeletedFalse(scenarioId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
     }

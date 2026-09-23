@@ -13,6 +13,7 @@ import com.cmacgm.gbs.rst.api.exercise.cycletime.api.dto.CycleTimeChartView;
 import com.cmacgm.gbs.rst.api.exercise.cycletime.api.dto.ManualBaselineRequest;
 import com.cmacgm.gbs.rst.api.exercise.cycletime.api.dto.PatchTmsSessionRequest;
 import com.cmacgm.gbs.rst.api.exercise.cycletime.api.dto.PatchTmsSessionResult;
+import com.cmacgm.gbs.rst.api.delegation.application.PositionCoverage;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -38,14 +39,21 @@ import org.springframework.web.multipart.MultipartFile;
 public class CycleTimeController {
 
     private final CycleTimeService service;
+    private final PositionCoverage coverage;
 
     /**
      * Creates the Cycle Time controller.
      *
      * @param service Cycle Time service
+     * @param coverage covered-position subject
      */
-    public CycleTimeController(CycleTimeService service) {
+    public CycleTimeController(CycleTimeService service, PositionCoverage coverage) {
         this.service = service;
+        this.coverage = coverage;
+    }
+
+    private String supervisor(RstPrincipal principal) {
+        return coverage.subjectCcgid(principal.ccgid(), "SUPERVISOR");
     }
 
     /**
@@ -62,7 +70,7 @@ public class CycleTimeController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @Valid @RequestBody ManualBaselineRequest request) {
-        return service.createManual(principal.ccgid(), exerciseId, request);
+        return service.createManual(supervisor(principal), exerciseId, request);
     }
 
     /**
@@ -79,7 +87,7 @@ public class CycleTimeController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID exerciseId,
             @RequestParam("file") MultipartFile file) {
-        return service.uploadSupportFile(principal.ccgid(), exerciseId, file);
+        return service.uploadSupportFile(supervisor(principal), exerciseId, file);
     }
 
     /**
@@ -92,7 +100,7 @@ public class CycleTimeController {
     @GetMapping("/active")
     public BaselineView getActive(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
-        return service.getActive(principal.ccgid(), exerciseId);
+        return service.getActive(supervisor(principal), exerciseId);
     }
 
     /**
@@ -105,7 +113,7 @@ public class CycleTimeController {
     @GetMapping("/chart")
     public CycleTimeChartView chart(
             @AuthenticationPrincipal RstPrincipal principal, @PathVariable UUID exerciseId) {
-        return service.controlChart(principal.ccgid(), exerciseId);
+        return service.controlChart(supervisor(principal), exerciseId);
     }
 
     /**
@@ -123,7 +131,7 @@ public class CycleTimeController {
             @PathVariable UUID exerciseId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        return service.listTmsSessions(principal.ccgid(), exerciseId, page, pageSize);
+        return service.listTmsSessions(supervisor(principal), exerciseId, page, pageSize);
     }
 
     /**
@@ -142,6 +150,6 @@ public class CycleTimeController {
             @PathVariable String sessionNo,
             @Valid @RequestBody PatchTmsSessionRequest request) {
         return service.patchTmsSessionIncluded(
-                principal.ccgid(), exerciseId, sessionNo, request);
+                supervisor(principal), exerciseId, sessionNo, request);
     }
 }

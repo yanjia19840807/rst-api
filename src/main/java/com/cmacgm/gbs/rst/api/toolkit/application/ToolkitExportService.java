@@ -111,7 +111,7 @@ public class ToolkitExportService {
                 "name", "description", "display_order", "deleted"));
         int rowIdx = 1;
         for (ToolkitSubtask item : toolkit.getAllSubtasks()) {
-            if (item.getDeletedAt() != null) {
+            if (item.isDeleted()) {
                 continue;
             }
             Row row = sheet.createRow(rowIdx++);
@@ -127,7 +127,7 @@ public class ToolkitExportService {
         Sheet sheet = sheet(workbook, "Shared KPI", List.of("carrier", "site", "customer_country"));
         int rowIdx = 1;
         for (ToolkitSharedKpiSelection item : toolkit.getSharedKpiSelections()) {
-            if (item.getDeletedAt() != null) {
+            if (item.isDeleted()) {
                 continue;
             }
             Row row = sheet.createRow(rowIdx++);

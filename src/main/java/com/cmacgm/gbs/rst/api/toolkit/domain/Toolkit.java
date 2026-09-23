@@ -70,20 +70,11 @@ public class Toolkit {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    @Column(name = "created_by", length = 64)
-    private String createdBy;
+    @Column(name = "latest_audit_event_id")
+    private UUID latestAuditEventId;
 
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
-
-    @Column(name = "updated_by", length = 64)
-    private String updatedBy;
-
-    @Column(name = "deleted_at")
-    private Instant deletedAt;
-
-    @Column(name = "deleted_by", length = 64)
-    private String deletedBy;
+    @Column(name = "is_deleted", nullable = false)
+    private boolean deleted;
 
     @Version
     @Column(nullable = false)
@@ -127,29 +118,18 @@ public class Toolkit {
         toolkit.enabled = true;
         toolkit.ownerCcgid = ownerCcgid;
         toolkit.createdAt = now;
-        toolkit.createdBy = ownerCcgid;
-        toolkit.updatedAt = now;
-        toolkit.updatedBy = ownerCcgid;
         return toolkit;
     }
 
-    public void update(
-            String name,
-            String description,
-            boolean combineSubtasksTime,
-            String ownerCcgid,
-            Instant now) {
+    public void update(String name, String description, boolean combineSubtasksTime) {
         this.name = name.trim();
         this.description = normalize(description);
         this.combineSubtasksTime = combineSubtasksTime;
-        this.ownerCcgid = ownerCcgid;
-        this.updatedAt = now;
-        this.updatedBy = ownerCcgid;
     }
 
     public ToolkitSubtask addSubtask(String name, String description, int displayOrder, Instant now) {
         ToolkitSubtask subtask =
-                ToolkitSubtask.create(this, name, description, displayOrder, ownerCcgid, now);
+                ToolkitSubtask.create(this, name, description, displayOrder);
         subtasks.add(subtask);
         return subtask;
     }
@@ -157,22 +137,17 @@ public class Toolkit {
     public ToolkitSharedKpiSelection selectKpi(
             String carrier, String site, String country, Instant now) {
         ToolkitSharedKpiSelection selection =
-                ToolkitSharedKpiSelection.create(this, carrier, site, country, ownerCcgid, now);
+                ToolkitSharedKpiSelection.create(this, carrier, site, country);
         sharedKpiSelections.add(selection);
         return selection;
     }
 
-    public void setEnabled(boolean enabled, Instant now) {
+    public void setEnabled(boolean enabled) {
         this.enabled = enabled;
-        this.updatedAt = now;
-        this.updatedBy = ownerCcgid;
     }
 
-    public void softDelete(Instant now) {
-        deletedAt = now;
-        deletedBy = ownerCcgid;
-        updatedAt = now;
-        updatedBy = ownerCcgid;
+    public void softDelete() {
+        this.deleted = true;
     }
 
     public UUID getId() {
@@ -223,24 +198,32 @@ public class Toolkit {
         return enabled;
     }
 
-    public long getVersion() {
-        return version;
+    public void setLatestAuditEventId(UUID latestAuditEventId) {
+        this.latestAuditEventId = latestAuditEventId;
     }
 
-    public Instant getDeletedAt() {
-        return deletedAt;
+    public UUID getLatestAuditEventId() {
+        return latestAuditEventId;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public boolean isDeleted() {
+        return deleted;
+    }
+
+    public long getVersion() {
+        return version;
     }
 
     public String getOwnerCcgid() {
         return ownerCcgid;
     }
 
-    String ownerForAudit() {
-        return ownerCcgid;
-    }
-
     public List<ToolkitSubtask> getSubtasks() {
-        return subtasks.stream().filter(item -> item.getDeletedAt() == null).toList();
+        return subtasks.stream().filter(item -> !item.isDeleted()).toList();
     }
 
     public List<ToolkitSubtask> getAllSubtasks() {

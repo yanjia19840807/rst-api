@@ -71,11 +71,7 @@ public class ForecastRun {
     @Column(name = "error_detail")
     private String errorDetail;
 
-    @Column(name = "created_by")
-    private String createdBy;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
 
     @OneToMany(mappedBy = "forecastRun", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ForecastPoint> points = new ArrayList<>();
@@ -155,8 +151,6 @@ public class ForecastRun {
         run.status = "ACCEPTED";
         run.startedAt = now;
         run.completedAt = now;
-        run.createdBy = actorCcgid;
-        run.createdAt = now;
         return run;
     }
 

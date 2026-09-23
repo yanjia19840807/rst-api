@@ -5,9 +5,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
+
 /**
  * Approver queue row. {@code completedTaskId} is the finished review visit
- * on Completed Task; Awaiting Review leaves it null.
+ * on Completed Task; Awaiting Review leaves it null. {@code actedBy} is that
+ * visit's handler (occupant, via delegate when one acted).
  */
 public record ApprovalQueueItem(
         UUID submissionId,
@@ -42,5 +45,7 @@ public record ApprovalQueueItem(
         String myDecision,
         Instant myCompletedAt,
         String completedStep,
-        boolean scopeChanged) {
+        boolean scopeChanged,
+        AuditActorView previousActorBy,
+        AuditActorView actedBy) {
 }

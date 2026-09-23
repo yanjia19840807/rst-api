@@ -18,7 +18,7 @@ public interface ScenarioRepository extends JpaRepository<Scenario, UUID> {
      * @param exerciseId Exercise id
      * @return scenarios
      */
-    List<Scenario> findByExerciseIdAndDeletedAtIsNullOrderByCreatedAtAsc(UUID exerciseId);
+    List<Scenario> findByExerciseIdAndDeletedFalseOrderByCreatedAtAsc(UUID exerciseId);
 
     /**
      * Finds a non-deleted scenario owned by an Exercise.
@@ -27,12 +27,12 @@ public interface ScenarioRepository extends JpaRepository<Scenario, UUID> {
      * @param exerciseId Exercise id
      * @return optional scenario
      */
-    Optional<Scenario> findByIdAndExerciseIdAndDeletedAtIsNull(UUID id, UUID exerciseId);
+    Optional<Scenario> findByIdAndExerciseIdAndDeletedFalse(UUID id, UUID exerciseId);
 
     /**
      * Returns whether an active (non-deleted) scenario code already exists for an Exercise.
      */
-    boolean existsByExerciseIdAndScenarioCodeAndDeletedAtIsNull(UUID exerciseId, String scenarioCode);
+    boolean existsByExerciseIdAndScenarioCodeAndDeletedFalse(UUID exerciseId, String scenarioCode);
 
     /**
      * Lists all scenario codes for an Exercise (including soft-deleted) for next-code allocation.

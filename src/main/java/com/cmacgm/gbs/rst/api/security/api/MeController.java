@@ -1,5 +1,7 @@
 package com.cmacgm.gbs.rst.api.security.api;
 
+import java.util.List;
+
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.mail.application.SsoProfileService;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
@@ -54,6 +56,14 @@ public class MeController {
         DevIdentityProperties properties = devIdentity.getIfAvailable();
         Boolean overrideEnabled = properties == null ? null : properties.isOverrideEnabled();
         String jobRole = timesheet.findActiveJobRole(principal.ccgid());
-        return CurrentUserResponse.from(principal, overrideEnabled, jobRole);
+        List<String> coveredRoles = principal.delegatedPositionId() == null
+                ? List.of()
+                : timesheet.roleTypesOfPosition(principal.delegatedPositionId());
+        String occupantName = null;
+        if (principal.delegatedPositionId() != null) {
+            TimesheetReadService.Occupant occupant = timesheet.occupant(principal.delegatedPositionId());
+            occupantName = occupant == null ? null : occupant.name();
+        }
+        return CurrentUserResponse.from(principal, overrideEnabled, jobRole, coveredRoles, occupantName);
     }
 }

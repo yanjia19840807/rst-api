@@ -55,11 +55,7 @@ public class SimulationRun {
     @Column(name = "error_detail")
     private String errorDetail;
 
-    @Column(name = "created_by")
-    private String createdBy;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
 
     protected SimulationRun() {
     }
@@ -89,8 +85,6 @@ public class SimulationRun {
         run.summaryJson = summaryJson;
         run.startedAt = now;
         run.completedAt = now;
-        run.createdBy = actorCcgid;
-        run.createdAt = now;
         return run;
     }
 

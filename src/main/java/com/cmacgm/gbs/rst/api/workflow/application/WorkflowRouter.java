@@ -4,6 +4,8 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.delegation.domain.Delegation;
+import com.cmacgm.gbs.rst.api.delegation.persistence.DelegationRepository;
 import com.cmacgm.gbs.rst.api.domainhead.application.DomainHeadConfigService;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.security.RstRoles;
@@ -23,6 +25,7 @@ public class WorkflowRouter {
 
     private final TimesheetReadService timesheet;
     private final DomainHeadConfigService domainHeads;
+    private final DelegationRepository delegations;
 
     /**
      * Creates the Timesheet workflow router.
@@ -32,9 +35,11 @@ public class WorkflowRouter {
      */
     public WorkflowRouter(
             TimesheetReadService timesheet,
-            DomainHeadConfigService domainHeads) {
+            DomainHeadConfigService domainHeads,
+            DelegationRepository delegations) {
         this.timesheet = timesheet;
         this.domainHeads = domainHeads;
+        this.delegations = delegations;
     }
 
     /**
@@ -49,7 +54,8 @@ public class WorkflowRouter {
 
     /**
      * Lists position ids the principal may act on. Each role contributes only its own seats:
-     * Sr Manager seats, Domain Head seats, and the LTH sentinel. Other seats stay out of the queue.
+     * Sr Manager seats, Domain Head seats, Center Roles CDH keys (position or CCGID),
+     * and the LTH sentinel. Other seats stay out of the queue.
      *
      * @param principal current user
      * @return position ids used to filter the queue and authorize decisions
@@ -63,14 +69,31 @@ public class WorkflowRouter {
         if (roles.contains("SR_MANAGER")) {
             positions.addAll(timesheet.positionsForRole(principal.ccgid(), "SR_MANAGER"));
         }
-        if (roles.contains("DOMAIN_HEAD")) {
+        Set<String> cdhKeys = domainHeads.assignedKeysFor(principal.ccgid());
+        if (roles.contains("DOMAIN_HEAD") || !cdhKeys.isEmpty()) {
             positions.addAll(timesheet.positionsForRole(principal.ccgid(), "DOMAIN_HEAD"));
+            positions.addAll(cdhKeys);
+            positions.add(principal.ccgid().trim());
         }
         if (roles.contains(RstRoles.LOCAL_TRANSFORMATION_HEAD)) {
             positions.add(RstRoles.LOCAL_TRANSFORMATION_HEAD);
         }
+        addCoveredPosition(principal, positions);
         positions.removeIf(position -> position == null || position.isBlank());
         return Set.copyOf(positions);
+    }
+
+    private void addCoveredPosition(RstPrincipal principal, Set<String> positions) {
+        if (principal.delegationId() == null || principal.delegatedPositionId() == null) {
+            return;
+        }
+        Delegation coverage = delegations.findById(principal.delegationId()).orElse(null);
+        if (coverage == null || coverage.getSubjectPositionId() == null) {
+            return;
+        }
+        if (coverage.roleSet().contains("SR_MANAGER") || coverage.roleSet().contains("DOMAIN_HEAD")) {
+            positions.add(coverage.getSubjectPositionId());
+        }
     }
 
     /**

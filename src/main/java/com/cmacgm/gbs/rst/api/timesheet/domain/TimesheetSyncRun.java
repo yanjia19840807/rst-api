@@ -52,8 +52,8 @@ public class TimesheetSyncRun {
     @Column(name = "source_file_name", length = 260)
     private String sourceFileName;
 
-    @Column(name = "triggered_by_ccgid", length = 32)
-    private String triggeredByCcgid;
+    @Column(name = "latest_audit_event_id")
+    private UUID latestAuditEventId;
 
     @Column(name = "started_at", nullable = false)
     private Instant startedAt;
@@ -99,25 +99,22 @@ public class TimesheetSyncRun {
      * @param etag Graph etag
      */
     public void setSource(String driveItemId, String etag) {
-        setSource(driveItemId, etag, null, null, null);
+        setSource(driveItemId, etag, null, null);
     }
 
     /**
-     * Records source identity and who triggered the run.
+     * Records source identity.
      *
      * @param driveItemId Graph item id
      * @param etag Graph etag
      * @param sourceType SHAREPOINT or MANUAL
      * @param fileName original file name
-     * @param triggeredByCcgid actor, or SYSTEM
      */
-    public void setSource(
-            String driveItemId, String etag, String sourceType, String fileName, String triggeredByCcgid) {
+    public void setSource(String driveItemId, String etag, String sourceType, String fileName) {
         this.sourceDriveItemId = driveItemId;
         this.sourceEtag = etag;
         this.sourceType = sourceType;
         this.sourceFileName = fileName;
-        this.triggeredByCcgid = triggeredByCcgid;
     }
 
     /**
@@ -219,8 +216,12 @@ public class TimesheetSyncRun {
         return sourceFileName;
     }
 
-    public String getTriggeredByCcgid() {
-        return triggeredByCcgid;
+    public void setLatestAuditEventId(UUID latestAuditEventId) {
+        this.latestAuditEventId = latestAuditEventId;
+    }
+
+    public UUID getLatestAuditEventId() {
+        return latestAuditEventId;
     }
 
     public Instant getStartedAt() {

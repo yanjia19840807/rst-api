@@ -1,6 +1,5 @@
 package com.cmacgm.gbs.rst.api.toolkit.domain;
 
-import java.time.Instant;
 import java.util.UUID;
 
 import jakarta.persistence.Column;
@@ -37,23 +36,8 @@ public class ToolkitSubtask {
     @Column(nullable = false)
     private boolean enabled;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
-
-    @Column(name = "created_by", length = 64)
-    private String createdBy;
-
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
-
-    @Column(name = "updated_by", length = 64)
-    private String updatedBy;
-
-    @Column(name = "deleted_at")
-    private Instant deletedAt;
-
-    @Column(name = "deleted_by", length = 64)
-    private String deletedBy;
+    @Column(name = "is_deleted", nullable = false)
+    private boolean deleted;
 
     @Version
     @Column(nullable = false)
@@ -63,50 +47,33 @@ public class ToolkitSubtask {
     }
 
     static ToolkitSubtask create(
-            Toolkit toolkit,
-            String name,
-            String description,
-            int displayOrder,
-            String actorCcgid,
-            Instant now) {
+            Toolkit toolkit, String name, String description, int displayOrder) {
         ToolkitSubtask subtask = new ToolkitSubtask();
         subtask.toolkit = toolkit;
         subtask.name = name.trim();
         subtask.description = description == null || description.isBlank() ? null : description.trim();
         subtask.displayOrder = displayOrder;
         subtask.enabled = true;
-        subtask.createdAt = now;
-        subtask.createdBy = actorCcgid;
-        subtask.updatedAt = now;
-        subtask.updatedBy = actorCcgid;
         return subtask;
     }
 
-    public void softDelete(Instant now) {
-        deletedAt = now;
-        deletedBy = toolkit.ownerForAudit();
-        updatedAt = now;
-        updatedBy = toolkit.ownerForAudit();
+    public void softDelete() {
+        this.deleted = true;
     }
 
-    public void rename(String name, String description, int displayOrder, Instant now) {
+    public void rename(String name, String description, int displayOrder) {
         this.name = name.trim();
         this.description = description == null || description.isBlank() ? null : description.trim();
         this.displayOrder = displayOrder;
-        this.updatedAt = now;
-        this.updatedBy = toolkit.ownerForAudit();
     }
 
-    public void setEnabled(boolean enabled, Instant now) {
+    public void setEnabled(boolean enabled) {
         this.enabled = enabled;
-        this.updatedAt = now;
-        this.updatedBy = toolkit.ownerForAudit();
     }
 
-    public void update(String name, String description, int displayOrder, boolean deleted, Instant now) {
-        rename(name, description, displayOrder, now);
-        this.deletedAt = deleted ? (deletedAt == null ? now : deletedAt) : null;
-        this.deletedBy = deleted ? toolkit.ownerForAudit() : null;
+    public void update(String name, String description, int displayOrder, boolean deleted) {
+        rename(name, description, displayOrder);
+        this.deleted = deleted;
     }
 
     public UUID getId() {
@@ -125,8 +92,8 @@ public class ToolkitSubtask {
         return displayOrder;
     }
 
-    public Instant getDeletedAt() {
-        return deletedAt;
+    public boolean isDeleted() {
+        return deleted;
     }
 
     public boolean isEnabled() {

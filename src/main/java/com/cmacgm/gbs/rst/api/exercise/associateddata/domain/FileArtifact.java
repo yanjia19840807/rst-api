@@ -46,11 +46,7 @@ public class FileArtifact {
     @Column(nullable = false, length = 20)
     private String status;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
 
-    @Column(name = "created_by")
-    private String createdBy;
 
     protected FileArtifact() {
     }
@@ -119,8 +115,6 @@ public class FileArtifact {
         artifact.mimeType = mimeType;
         artifact.sizeBytes = sizeBytes;
         artifact.status = "AVAILABLE";
-        artifact.createdAt = now;
-        artifact.createdBy = actorCcgid;
         return artifact;
     }
 
@@ -161,8 +155,6 @@ public class FileArtifact {
         artifact.mimeType = mimeType;
         artifact.sizeBytes = sizeBytes;
         artifact.status = "AVAILABLE";
-        artifact.createdAt = now;
-        artifact.createdBy = actorCcgid;
         return artifact;
     }
 

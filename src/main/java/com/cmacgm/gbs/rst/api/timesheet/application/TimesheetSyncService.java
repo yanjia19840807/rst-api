@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.cmacgm.gbs.rst.api.audit.application.AuditRecorder;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSourceResolver.Source;
@@ -60,6 +61,7 @@ public class TimesheetSyncService {
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
     private final TimesheetSyncAlertNotifier alertNotifier;
+    private final AuditRecorder audits;
 
     /**
      * @param parser report parser
@@ -78,6 +80,7 @@ public class TimesheetSyncService {
      * @param transactionManager cutover transactions
      * @param clock timestamps
      * @param alertNotifier failure email
+     * @param audits sync-run audit
      */
     public TimesheetSyncService(
             TimesheetReportParser parser,
@@ -95,7 +98,8 @@ public class TimesheetSyncService {
             TimesheetSyncIssueRepository issues,
             PlatformTransactionManager transactionManager,
             Clock clock,
-            TimesheetSyncAlertNotifier alertNotifier) {
+            TimesheetSyncAlertNotifier alertNotifier,
+            AuditRecorder audits) {
         this.parser = parser;
         this.dailyCalculator = dailyCalculator;
         this.monthlyCalculator = monthlyCalculator;
@@ -112,6 +116,7 @@ public class TimesheetSyncService {
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.clock = clock;
         this.alertNotifier = alertNotifier;
+        this.audits = audits;
     }
 
     /**
@@ -133,35 +138,34 @@ public class TimesheetSyncService {
      * @return one result per Center
      */
     public List<SyncResult> sync(String kind) {
-        return syncFromSharePoint(kind, "SYSTEM");
+        return syncFromSharePoint(kind);
     }
 
     /**
      * Uploads to Manual/Timesheet then parses. The file is stored even when parse fails.
+     * Who clicked is recorded on the sync audit event.
      *
      * @param fileName original name
      * @param content file bytes
-     * @param actorCcgid LTH
      * @return result
      */
-    public SyncResult syncUploaded(String fileName, byte[] content, String actorCcgid) {
+    public SyncResult syncUploaded(String fileName, byte[] content) {
         Source source = sources.storeManual(fileName, content == null ? new byte[0] : content);
         String kind = TimesheetReportName.parse(source.fileName())
                 .map(TimesheetReportName.Parsed::kind)
                 .orElseGet(() -> guessKind(source.fileName()));
-        return syncFromSource(kind, source, actorCcgid == null ? "SYSTEM" : actorCcgid);
+        return syncFromSource(kind, source);
     }
 
     /**
      * Syncs every Center file of one kind from SharePoint.
+     * A scheduled run has no login, so the audit actor is {@code SYSTEM}.
      *
      * @param kind DAILY or MONTHLY
-     * @param actorCcgid SYSTEM or a person
      * @return one result per Center
      */
-    public List<SyncResult> syncFromSharePoint(String kind, String actorCcgid) {
+    public List<SyncResult> syncFromSharePoint(String kind) {
         String normalized = normalizeKind(kind);
-        String actor = actorCcgid == null ? "SYSTEM" : actorCcgid;
         List<Source> files;
         try {
             files = sources.openAll(normalized);
@@ -169,19 +173,18 @@ public class TimesheetSyncService {
             failWithoutRows(
                     normalized,
                     new Source(null, InputStream.nullInputStream(), null, null, "SHAREPOINT", null),
-                    actor,
                     ex.code(),
                     ex.getMessage());
             throw ex;
         }
         List<SyncResult> results = new ArrayList<>();
         for (Source source : files) {
-            results.add(syncFromSource(normalized, source, actor));
+            results.add(syncFromSource(normalized, source));
         }
         return results;
     }
 
-    private SyncResult syncFromSource(String kind, Source source, String actorCcgid) {
+    private SyncResult syncFromSource(String kind, Source source) {
         String center = resolveCenter(source);
         if (syncRuns.findByKindAndStatusAndCenter(kind, "LOADING", center).isPresent()) {
             throw new ApiException(
@@ -214,20 +217,20 @@ public class TimesheetSyncService {
         try (InputStream in = source.content()) {
             rows = parser.parse(in, source.fileName());
         } catch (ApiException ex) {
-            failWithoutRows(kind, source, actorCcgid, ex.code(), ex.getMessage());
+            failWithoutRows(kind, source, ex.code(), ex.getMessage());
             throw ex;
         } catch (IOException ex) {
             ApiException wrapped = new ApiException(
                     HttpStatus.BAD_REQUEST,
                     TimesheetSyncErrorCode.SOURCE_UNAVAILABLE.code(),
                     "Unable to read Timesheet file: " + ex.getMessage());
-            failWithoutRows(kind, source, actorCcgid, wrapped.code(), wrapped.getMessage());
+            failWithoutRows(kind, source, wrapped.code(), wrapped.getMessage());
             throw wrapped;
         }
-        return persist(kind, source, rows, actorCcgid);
+        return persist(kind, source, rows);
     }
 
-    private SyncResult persist(String kind, Source source, List<ReportRow> rows, String actorCcgid) {
+    private SyncResult persist(String kind, Source source, List<ReportRow> rows) {
         Instant now = clock.instant();
         String hash = hashRows(rows);
         String center = resolveCenter(source);
@@ -240,14 +243,10 @@ public class TimesheetSyncService {
         LocalDate previewDate = source.filenameDate() != null ? source.filenameDate() : previewDate(kind, rows);
         TimesheetSyncRun run = TimesheetSyncRun.startLoading(
                 kind, previewDate, nextAttemptNo(kind, center, previewDate), now);
-        run.setSource(
-                source.driveItemId(),
-                source.etag(),
-                source.sourceType(),
-                source.fileName(),
-                actorCcgid);
+        run.setSource(source.driveItemId(), source.etag(), source.sourceType(), source.fileName());
         run.setCenter(resolveCenter(source));
         syncRuns.saveAndFlush(run);
+        attachAudit(run);
         try {
             GbsProcessCatalog catalog = processCatalogs.load();
             if ("DAILY".equals(kind)) {
@@ -380,18 +379,23 @@ public class TimesheetSyncService {
                 kpisDropped);
     }
 
-    private void failWithoutRows(String kind, Source source, String actorCcgid, String code, String message) {
+    private void failWithoutRows(String kind, Source source, String code, String message) {
         Instant now = clock.instant();
         LocalDate date = source.filenameDate() != null ? source.filenameDate() : LocalDate.now(clock);
         TimesheetSyncRun run = TimesheetSyncRun.startLoading(
                 kind, date, nextAttemptNo(kind, resolveCenter(source), date), now);
-        run.setSource(
-                source.driveItemId(), source.etag(), source.sourceType(), source.fileName(), actorCcgid);
+        run.setSource(source.driveItemId(), source.etag(), source.sourceType(), source.fileName());
         run.setCenter(resolveCenter(source));
         run.markFailed(code, sanitize(message), now);
         syncRuns.save(run);
+        attachAudit(run);
         persistRunIssueIfMissing(run.getId(), code, sanitize(message), now);
         notifyFailed(run.getId());
+    }
+
+    private void attachAudit(TimesheetSyncRun run) {
+        run.setLatestAuditEventId(audits.recordSync(run.getId()).getId());
+        syncRuns.save(run);
     }
 
     private void persistRunIssueIfMissing(UUID runId, String code, String message, Instant now) {

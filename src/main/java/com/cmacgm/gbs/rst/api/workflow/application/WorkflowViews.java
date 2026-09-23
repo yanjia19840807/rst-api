@@ -4,9 +4,10 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
+import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.ActionView;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.StepView;
-import com.cmacgm.gbs.rst.api.workflow.domain.ActorStatus;
+import com.cmacgm.gbs.rst.api.workflow.approval.application.ApprovalActorResolver;
 import com.cmacgm.gbs.rst.api.workflow.domain.ProcessInstance;
 import com.cmacgm.gbs.rst.api.workflow.domain.ProcessTask;
 import com.cmacgm.gbs.rst.api.workflow.domain.TaskActor;
@@ -17,6 +18,17 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class WorkflowViews {
+
+    private final ApprovalActorResolver actors;
+
+    /**
+     * Creates the mapper.
+     *
+     * @param actors occupant plus optional delegate
+     */
+    public WorkflowViews(ApprovalActorResolver actors) {
+        this.actors = actors;
+    }
 
     /**
      * One row per review task. Assignee is the pending actor, else the first actor.
@@ -62,19 +74,21 @@ public class WorkflowViews {
                 task.getStatus().name());
     }
 
-    private static ActionView toAction(
+    private ActionView toAction(
             ProcessTask task, TaskActor actor, Map<String, String> displayNames) {
         if (!actor.getStatus().isHistory()) {
             return null;
         }
+        AuditActorView actedBy = actors.fromActor(actor, displayNames);
         return new ActionView(
                 task.getNodeOrder(),
                 actor.getStatus().name(),
                 actor.getCcgid(),
                 task.getNode().roleCode(),
-                actor.handlerDisplayName(displayNames),
+                actedBy != null ? actedBy.displayName() : actor.handlerDisplayName(displayNames),
                 actor.getComments(),
                 actor.getActedAt(),
-                actor.getRequestId());
+                actor.getRequestId(),
+                actedBy);
     }
 }

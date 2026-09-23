@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.cmacgm.gbs.rst.api.audit.application.AuditRecorder;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
@@ -45,6 +46,7 @@ public class TimesheetSyncAdminService {
     private final TimesheetSyncIssueRepository issues;
     private final TimesheetSyncAlertRepository alerts;
     private final TimesheetSyncService syncService;
+    private final AuditRecorder audits;
     private final Clock clock;
 
     /**
@@ -52,6 +54,7 @@ public class TimesheetSyncAdminService {
      * @param issues issue rows
      * @param alerts alert config
      * @param syncService pipeline
+     * @param audits who triggered each run
      * @param clock timestamps
      */
     public TimesheetSyncAdminService(
@@ -59,11 +62,13 @@ public class TimesheetSyncAdminService {
             TimesheetSyncIssueRepository issues,
             TimesheetSyncAlertRepository alerts,
             TimesheetSyncService syncService,
+            AuditRecorder audits,
             Clock clock) {
         this.syncRuns = syncRuns;
         this.issues = issues;
         this.alerts = alerts;
         this.syncService = syncService;
+        this.audits = audits;
         this.clock = clock;
     }
 
@@ -167,20 +172,19 @@ public class TimesheetSyncAdminService {
 
     /**
      * Stores the file on SharePoint Manual/Timesheet and syncs immediately.
+     * The signed-in user is recorded on the sync audit event.
      *
-     * @param principal LTH
      * @param file upload
      * @return result header
      */
-    public RunHeader upload(RstPrincipal principal, MultipartFile file) {
+    public RunHeader upload(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new ApiException(
                     HttpStatus.BAD_REQUEST, TimesheetSyncErrorCode.INVALID_HEADER.code(), "Timesheet file is required.");
         }
         String name = file.getOriginalFilename() == null ? "upload.xlsx" : file.getOriginalFilename();
         try {
-            TimesheetSyncService.SyncResult result =
-                    syncService.syncUploaded(name, file.getBytes(), principal == null ? "SYSTEM" : principal.ccgid());
+            TimesheetSyncService.SyncResult result = syncService.syncUploaded(name, file.getBytes());
             return toHeader(syncRuns.findById(result.id()).orElseThrow());
         } catch (ApiException ex) {
             throw ex;
@@ -210,7 +214,7 @@ public class TimesheetSyncAdminService {
                 run.getSourceType(),
                 run.getSourceFileName(),
                 run.getSourceEtag(),
-                run.getTriggeredByCcgid(),
+                audits.label(run.getLatestAuditEventId()),
                 run.getErrorCode(),
                 run.getErrorMessage(),
                 run.getStartedAt(),
@@ -401,7 +405,7 @@ public class TimesheetSyncAdminService {
             String sourceType,
             String sourceFileName,
             String sourceEtag,
-            String triggeredByCcgid,
+            String triggeredBy,
             String errorCode,
             String errorMessage,
             Instant startedAt,

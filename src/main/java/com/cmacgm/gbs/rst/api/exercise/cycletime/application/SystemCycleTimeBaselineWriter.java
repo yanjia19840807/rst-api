@@ -92,7 +92,7 @@ public final class SystemCycleTimeBaselineWriter {
     }
 
     boolean combineSubtasksTime(UUID exerciseId) {
-        return exercises.findByIdAndDeletedAtIsNull(exerciseId)
+        return exercises.findByIdAndDeletedFalse(exerciseId)
                 .map(RstExercise::getToolkitSnapshot)
                 .map(ExerciseToolkitSnapshot::isCombineSubtasksTime)
                 .orElse(false);

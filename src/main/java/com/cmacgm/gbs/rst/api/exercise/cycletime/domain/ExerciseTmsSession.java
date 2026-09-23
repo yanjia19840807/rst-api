@@ -36,11 +36,7 @@ public class ExerciseTmsSession implements Persistable<ExerciseTmsSession.Pk> {
     @Column(name = "exclusion_reason")
     private String exclusionReason;
 
-    @Column(name = "selected_by")
-    private String selectedBy;
 
-    @Column(name = "selected_at", nullable = false)
-    private Instant selectedAt;
 
     /** Assigned-id rows: true until first persist/load so saveAll does not merge+select. */
     @Transient
@@ -72,8 +68,6 @@ public class ExerciseTmsSession implements Persistable<ExerciseTmsSession.Pk> {
         row.tmsSessionId = tmsSessionId;
         row.included = included;
         row.exclusionReason = exclusionReason;
-        row.selectedBy = actorCcgid;
-        row.selectedAt = now;
         row.isNew = true;
         return row;
     }

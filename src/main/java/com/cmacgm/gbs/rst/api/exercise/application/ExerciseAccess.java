@@ -40,7 +40,7 @@ public class ExerciseAccess {
      */
     @Transactional(readOnly = true)
     public RstExercise requireOwned(String ownerCcgid, UUID exerciseId) {
-        return exercises.findByIdAndOwnerCcgidAndDeletedAtIsNull(exerciseId, ownerCcgid)
+        return exercises.findByIdAndOwnerCcgidAndDeletedFalse(exerciseId, ownerCcgid)
                 .orElseThrow(() -> notFound("exercise-not-found", "The Exercise was not found."));
     }
 
@@ -54,7 +54,7 @@ public class ExerciseAccess {
      */
     @Transactional(readOnly = true)
     public RstExercise requireReadable(String actorCcgid, UUID exerciseId) {
-        RstExercise exercise = exercises.findByIdAndDeletedAtIsNull(exerciseId)
+        RstExercise exercise = exercises.findByIdAndDeletedFalse(exerciseId)
                 .orElseThrow(() -> notFound("exercise-not-found", "The Exercise was not found."));
         if (actorCcgid.equals(exercise.getOwnerCcgid())) {
             return exercise;

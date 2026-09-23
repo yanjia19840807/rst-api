@@ -9,10 +9,16 @@ import java.time.ZoneId;
 import com.cmacgm.gbs.rst.api.common.time.CenterZones;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
+import com.cmacgm.gbs.rst.api.audit.application.AuditRecorder;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditAction;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditEntityType;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.delegation.application.PositionCoverage;
 import com.cmacgm.gbs.rst.api.tms.api.dto.StartTmsSessionRequest;
 import com.cmacgm.gbs.rst.api.tms.api.dto.TmsSessionResponse;
 import com.cmacgm.gbs.rst.api.tms.api.dto.UpdateTmsSessionRequest;
@@ -35,16 +41,22 @@ public class TmsSessionCommandService {
     private final TmsSessionRepository sessionRepository;
     private final ToolkitRepository toolkitRepository;
     private final TimesheetReadService timesheet;
+    private final PositionCoverage coverage;
+    private final AuditRecorder audits;
     private final Clock clock;
 
     public TmsSessionCommandService(
             TmsSessionRepository sessionRepository,
             ToolkitRepository toolkitRepository,
             TimesheetReadService timesheet,
+            PositionCoverage coverage,
+            AuditRecorder audits,
             Clock clock) {
         this.sessionRepository = sessionRepository;
         this.toolkitRepository = toolkitRepository;
         this.timesheet = timesheet;
+        this.coverage = coverage;
+        this.audits = audits;
         this.clock = clock;
     }
 
@@ -56,8 +68,7 @@ public class TmsSessionCommandService {
                         HttpStatus.NOT_FOUND,
                         "toolkit-not-found",
                         "The Toolkit was not found."));
-        if (!timesheet.agentCanUse(
-                agentCcgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), toolkit.getCenter())) {
+        if (!canUseToolkit(agentCcgid, toolkit)) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
                     "toolkit-out-of-scope",
@@ -73,16 +84,22 @@ public class TmsSessionCommandService {
                 null);
 
         var now = clock.instant();
+        String positionId = coverage.positionId("AGENT");
+        String storedAgent = storedAgentCcgid(agentCcgid, positionId);
         TmsSession session = TmsSession.start(
-                nextSessionNumber(agentCcgid, toolkit),
-                agentCcgid,
+                nextSessionNumber(storedAgent == null ? agentCcgid : storedAgent, toolkit),
+                storedAgent,
+                positionId,
                 toolkit,
                 subtask,
                 request.processedVolume(),
                 normalize(request.reference()),
                 normalize(request.remarks()),
                 now);
-        return toResponse(sessionRepository.saveAndFlush(session), now);
+        TmsSession saved = sessionRepository.saveAndFlush(session);
+        saved.setLatestAuditEventId(
+                audits.record(AuditEntityType.TMS_SESSION, saved.getId(), AuditAction.CREATE, "AGENT").getId());
+        return toResponse(sessionRepository.saveAndFlush(saved), now);
     }
 
     @Transactional
@@ -92,15 +109,22 @@ public class TmsSessionCommandService {
         var now = clock.instant();
         applyDetails(session, request, now);
         session.pause(now);
+        stamp(session, AuditAction.UPDATE);
         return toResponse(session, now);
     }
 
     @Transactional
     public TmsSessionResponse resume(String agentCcgid, String sessionNo) {
         TmsSession session = ownedSession(agentCcgid, sessionNo);
-        ensureNoOtherActiveSession(agentCcgid, sessionNo);
         var now = clock.instant();
+        runningSession(agentCcgid)
+                .filter(running -> !running.getSessionNo().equals(sessionNo))
+                .ifPresent(running -> {
+                    running.pause(now);
+                    stamp(running, AuditAction.UPDATE);
+                });
         session.resume(now);
+        stamp(session, AuditAction.UPDATE);
         sessionRepository.flush();
         return toResponse(session, now);
     }
@@ -112,6 +136,7 @@ public class TmsSessionCommandService {
         var now = clock.instant();
         applyDetails(session, request, now);
         session.end(now);
+        stamp(session, AuditAction.UPDATE);
         return toResponse(session, now);
     }
 
@@ -120,6 +145,7 @@ public class TmsSessionCommandService {
         TmsSession session = ownedSession(agentCcgid, sessionNo);
         var now = clock.instant();
         session.discard(reason == null ? "" : reason.trim(), now);
+        stamp(session, AuditAction.DELETE);
         return toResponse(session, now);
     }
 
@@ -140,6 +166,11 @@ public class TmsSessionCommandService {
         }
         var now = clock.instant();
         session.setEnabled(enabled, now);
+        session.setLatestAuditEventId(audits.record(
+                AuditEntityType.TMS_SESSION,
+                session.getId(),
+                enabled ? AuditAction.ENABLE : AuditAction.DISABLE,
+                "SUPERVISOR").getId());
         return toResponse(session, now);
     }
 
@@ -149,10 +180,15 @@ public class TmsSessionCommandService {
                         HttpStatus.NOT_FOUND,
                         "toolkit-not-found",
                         "The Toolkit was not found."));
+        ToolkitSubtask currentSubtask = session.getToolkitSubtask();
         UUID requestedSubtaskId = request == null
-                ? (session.getToolkitSubtask() == null ? null : session.getToolkitSubtask().getId())
+                ? (currentSubtask == null ? null : currentSubtask.getId())
                 : request.subtaskId();
-        ToolkitSubtask subtask = resolveSubtask(toolkit, requestedSubtaskId, false);
+        ToolkitSubtask subtask = currentSubtask != null
+                && requestedSubtaskId != null
+                && requestedSubtaskId.equals(currentSubtask.getId())
+                ? currentSubtask
+                : resolveSubtask(toolkit, requestedSubtaskId, false);
         String reference = request == null ? session.getReference() : normalize(request.reference());
         ensureDocumentKeyAvailable(
                 session.getAgentCcgid(),
@@ -233,34 +269,85 @@ public class TmsSessionCommandService {
                         "The selected active Subtask does not belong to the Toolkit."));
     }
 
+    private String storedAgentCcgid(String subjectCcgid, String positionId) {
+        if (positionId == null) {
+            return subjectCcgid;
+        }
+        var occupant = timesheet.occupant(positionId);
+        if (occupant == null || occupant.ccgid() == null || occupant.ccgid().isBlank()
+                || occupant.ccgid().equalsIgnoreCase(positionId)) {
+            return null;
+        }
+        return occupant.ccgid();
+    }
+
     private TmsSession ownedSession(String agentCcgid, String sessionNo) {
-        return sessionRepository.findBySessionNoAndAgentCcgid(sessionNo, agentCcgid)
+        Optional<TmsSession> byAgent = agentCcgid == null
+                ? Optional.empty()
+                : sessionRepository.findBySessionNoAndAgentCcgid(sessionNo, agentCcgid);
+        if (byAgent.isPresent()) {
+            return byAgent.get();
+        }
+        String positionId = coverage.positionId("AGENT");
+        TmsSession session = sessionRepository.findBySessionNo(sessionNo)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
                         "tms-session-not-found",
                         "The TMS session was not found."));
+        if (positionId != null && positionId.equals(session.getPositionId())) {
+            return session;
+        }
+        throw new ApiException(
+                HttpStatus.NOT_FOUND,
+                "tms-session-not-found",
+                "The TMS session was not found.");
+    }
+
+    private boolean canUseToolkit(String agentCcgid, Toolkit toolkit) {
+        if (timesheet.agentCanUse(
+                agentCcgid,
+                toolkit.getSupervisorPositionId(),
+                toolkit.getPrimaryPl3Code(),
+                toolkit.getCenter())) {
+            return true;
+        }
+        return timesheet.agentPositionCanUse(
+                coverage.positionId("AGENT"),
+                toolkit.getSupervisorPositionId(),
+                toolkit.getPrimaryPl3Code(),
+                toolkit.getCenter());
+    }
+
+    private void stamp(TmsSession session, AuditAction action) {
+        session.setLatestAuditEventId(
+                audits.record(AuditEntityType.TMS_SESSION, session.getId(), action, "AGENT").getId());
+        sessionRepository.save(session);
+    }
+
+    private Optional<TmsSession> runningSession(String agentCcgid) {
+        Optional<TmsSession> byAgent = agentCcgid == null
+                ? Optional.empty()
+                : sessionRepository.findFirstByAgentCcgidAndStatusIn(
+                        agentCcgid, Set.of(TmsSessionStatus.RUNNING));
+        if (byAgent.isPresent()) {
+            return byAgent;
+        }
+        String positionId = coverage.positionId("AGENT");
+        if (positionId == null) {
+            return Optional.empty();
+        }
+        return sessionRepository.findFirstByPositionIdAndStatusIn(
+                positionId, Set.of(TmsSessionStatus.RUNNING));
     }
 
     private void ensureNoActiveSession(String agentCcgid) {
-        if (sessionRepository.existsByAgentCcgidAndStatusIn(
-                agentCcgid, Set.of(TmsSessionStatus.RUNNING))) {
+        runningSession(agentCcgid).ifPresent(session -> {
             throw new ApiException(
                     HttpStatus.CONFLICT,
                     "active-session-exists",
-                    "Pause or end the running session before starting another.");
-        }
-    }
-
-    private void ensureNoOtherActiveSession(String agentCcgid, String currentSessionNo) {
-        sessionRepository.findFirstByAgentCcgidAndStatusIn(
-                        agentCcgid, Set.of(TmsSessionStatus.RUNNING))
-                .filter(session -> !session.getSessionNo().equals(currentSessionNo))
-                .ifPresent(session -> {
-                    throw new ApiException(
-                            HttpStatus.CONFLICT,
-                            "active-session-exists",
-                            "Pause or end the running session before resuming another.");
-                });
+                    "Session " + session.getSessionNo()
+                            + " is still running. Pause or end it before starting another.");
+        });
     }
 
     private String nextSessionNumber(String ccgid, Toolkit toolkit) {
@@ -285,7 +372,12 @@ public class TmsSessionCommandService {
     }
 
     private TmsSessionResponse toResponse(TmsSession session, Instant now) {
+        AuditActorView createdBy = audits.createdBy(AuditEntityType.TMS_SESSION, session.getId());
         return TmsSessionResponse.from(
-                session, now, timesheet.displayNameByCcgid(session.getAgentCcgid()));
+                session,
+                now,
+                timesheet.displayNameByCcgid(session.getAgentCcgid()),
+                createdBy,
+                audits.actor(session.getLatestAuditEventId()));
     }
 }

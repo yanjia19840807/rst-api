@@ -82,6 +82,28 @@ public class DelegationAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private RstPrincipal effectivePrincipal(RstPrincipal actor, Delegation delegation) {
+        if (delegation.getSubjectPositionId() != null && !delegation.getSubjectPositionId().isBlank()) {
+            java.util.List<String> liveRoles = timesheet.roleTypesOfPosition(delegation.getSubjectPositionId());
+            java.util.Set<String> roles = new java.util.LinkedHashSet<>();
+            if (liveRoles != null && !liveRoles.isEmpty()) {
+                roles.addAll(liveRoles);
+            } else {
+                roles.addAll(delegation.roleSet());
+            }
+            return new RstPrincipal(
+                    actor.ccgid(),
+                    actor.displayName(),
+                    actor.email(),
+                    java.util.Set.copyOf(roles),
+                    actor.scopes() == null ? Set.of() : actor.scopes(),
+                    actor.center() == null || actor.center().isBlank()
+                            ? delegation.getDelegatorCenter()
+                            : actor.center(),
+                    actor.ccgid(),
+                    actor.displayName(),
+                    delegation.getId(),
+                    delegation.getSubjectPositionId());
+        }
         String subjectName = timesheet.displayNameByCcgid(delegation.getDelegatorCcgid());
         if (subjectName == null || subjectName.isBlank()) {
             subjectName = delegation.getDelegatorName();

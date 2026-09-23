@@ -41,6 +41,38 @@ public interface DelegationRepository extends JpaRepository<Delegation, UUID> {
     List<Delegation> findReceivedBy(@Param("ccgid") String delegateCcgid);
 
     /**
+     * Open coverage of one position by one delegate.
+     *
+     * @param positionId covered position
+     * @param delegateCcgid delegate
+     * @param open PENDING and ACTIVE
+     * @return matching rows
+     */
+    @Query("""
+            select d from Delegation d
+            where d.subjectPositionId = :positionId
+              and upper(d.delegateCcgid) = upper(:delegate)
+              and d.status in :open
+            """)
+    List<Delegation> findOpenPositionDelegate(
+            @Param("positionId") String positionId,
+            @Param("delegate") String delegateCcgid,
+            @Param("open") List<DelegationStatus> open);
+
+    /**
+     * Open and historical coverage of these positions.
+     *
+     * @param positionIds child positions
+     * @return rows
+     */
+    @Query("""
+            select d from Delegation d
+            where d.subjectPositionId in :positionIds
+            order by d.createdAt desc
+            """)
+    List<Delegation> findBySubjectPositionIdIn(@Param("positionIds") List<String> positionIds);
+
+    /**
      * Open A → B row if one exists.
      *
      * @param delegatorCcgid A

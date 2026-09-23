@@ -88,11 +88,14 @@ class TmsToolkitScopeTests {
                         new SharedKpiResponse(UUID.randomUUID(), "CMA CGM", "CNCKG", "CHINA"),
                         new SharedKpiResponse(
                                 UUID.randomUUID(), "CMA CGM", "CNCKG", "HONG KONG SAR, CHINA")),
-                null,
+                false,
                 0,
                 0,
                 0,
                 false,
+                null,
+                null,
+                null,
                 null);
     }
 }

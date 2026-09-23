@@ -49,20 +49,8 @@ public class Scenario {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    @Column(name = "created_by")
-    private String createdBy;
-
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
-
-    @Column(name = "updated_by")
-    private String updatedBy;
-
-    @Column(name = "deleted_at")
-    private Instant deletedAt;
-
-    @Column(name = "deleted_by")
-    private String deletedBy;
+    @Column(name = "is_deleted", nullable = false)
+    private boolean deleted;
 
     @Version
     private long version;
@@ -82,8 +70,7 @@ public class Scenario {
      * @param name display name
      * @param description optional description
      * @param rightSizingHc Right Sizing HC; null or non-positive stores null (no sizing result)
-     * @param actorCcgid creating Supervisor
-     * @param now creation timestamp
+     * @param now creation time, used to order scenarios
      * @return draft scenario
      */
     public static Scenario createDraft(
@@ -92,7 +79,6 @@ public class Scenario {
             String name,
             String description,
             BigDecimal rightSizingHc,
-            String actorCcgid,
             Instant now) {
         Scenario scenario = new Scenario();
         scenario.id = UUID.randomUUID();
@@ -104,9 +90,6 @@ public class Scenario {
         scenario.rightSizingHc =
                 rightSizingHc != null && rightSizingHc.signum() > 0 ? rightSizingHc : null;
         scenario.createdAt = now;
-        scenario.createdBy = actorCcgid;
-        scenario.updatedAt = now;
-        scenario.updatedBy = actorCcgid;
         return scenario;
     }
 
@@ -124,22 +107,13 @@ public class Scenario {
      * @param name display name
      * @param description optional description
      * @param rightSizingHc Right Sizing HC; null keeps the stored value; non-positive clears it
-     * @param actorCcgid updating Supervisor
-     * @param now update timestamp
      */
-    public void updateDraft(
-            String name,
-            String description,
-            BigDecimal rightSizingHc,
-            String actorCcgid,
-            Instant now) {
+    public void updateDraft(String name, String description, BigDecimal rightSizingHc) {
         this.name = name;
         this.description = description;
         if (rightSizingHc != null) {
             this.rightSizingHc = rightSizingHc.signum() > 0 ? rightSizingHc : null;
         }
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
     }
 
     /**
@@ -148,7 +122,7 @@ public class Scenario {
      * <p>Upserts by {@code shift_no} so Hibernate does not INSERT a duplicate before
      * deleting the old row (which violates {@code uk_scenario_shift}).
      */
-    public void replaceShifts(List<ScenarioShift> replacements, String actorCcgid, Instant now) {
+    public void replaceShifts(List<ScenarioShift> replacements) {
         Map<Short, ScenarioShift> incoming = new LinkedHashMap<>();
         for (ScenarioShift shift : replacements) {
             incoming.put(shift.getShiftNo(), shift);
@@ -163,14 +137,12 @@ public class Scenario {
         for (ScenarioShift next : incoming.values()) {
             ScenarioShift current = existingByNo.get(next.getShiftNo());
             if (current != null) {
-                current.overwriteValues(next, actorCcgid, now);
+                current.overwriteValues(next);
             } else {
                 next.attach(this);
                 shifts.add(next);
             }
         }
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
     }
 
     /**
@@ -179,12 +151,9 @@ public class Scenario {
      * @param actorCcgid deleting Supervisor
      * @param now deletion timestamp
      */
-    public void softDelete(String actorCcgid, Instant now) {
+    public void softDelete() {
         this.status = "DELETED";
-        this.deletedAt = now;
-        this.deletedBy = actorCcgid;
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
+        this.deleted = true;
     }
 
     public UUID getId() { return id; }
@@ -194,7 +163,7 @@ public class Scenario {
     public String getDescription() { return description; }
     public String getStatus() { return status; }
     public BigDecimal getRightSizingHc() { return rightSizingHc; }
-    public Instant getDeletedAt() { return deletedAt; }
+    public boolean isDeleted() { return deleted; }
     public long getVersion() { return version; }
     public List<ScenarioShift> getShifts() { return Collections.unmodifiableList(shifts); }
 }

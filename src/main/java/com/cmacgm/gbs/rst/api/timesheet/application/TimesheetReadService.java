@@ -137,6 +137,45 @@ public class TimesheetReadService {
     }
 
     /**
+     * Monthly scopes owned by a Supervisor position, whether or not it has an occupant.
+     *
+     * @param supervisorPositionId position
+     * @return scopes
+     */
+    @Transactional(readOnly = true)
+    public List<HierarchyCandidate> hierarchyForPosition(String supervisorPositionId) {
+        if (supervisorPositionId == null || supervisorPositionId.isBlank()) {
+            return List.of();
+        }
+        return scopes.findActiveBySupervisorPositionIdIn(List.of(supervisorPositionId.trim())).stream()
+                .map(scope -> new HierarchyCandidate(
+                        scope.getSupervisorPositionId(),
+                        scope.getCenter(),
+                        scope.getDomain(),
+                        scope.getPl1(),
+                        scope.getPl2(),
+                        scope.getPl3Code(),
+                        scope.getPl3Name()))
+                .toList();
+    }
+
+    /**
+     * Whether this Supervisor position still owns the PL3.
+     *
+     * @param positionId supervisor position
+     * @param pl3Code PL3
+     * @param center GBS center
+     * @return true when the scope exists
+     */
+    @Transactional(readOnly = true)
+    public boolean positionHasScope(String positionId, String pl3Code, String center) {
+        if (positionId == null || pl3Code == null || center == null || center.isBlank()) {
+            return false;
+        }
+        return scopes.existsActiveScope(positionId.trim(), pl3Code, center.trim());
+    }
+
+    /**
      * Toolkit hierarchy for a Supervisor occupant.
      *
      * @param supervisorCcgid supervisor
@@ -256,6 +295,23 @@ public class TimesheetReadService {
     }
 
     /**
+     * @param agentPositionId covered AGENT position
+     * @param supervisorPositionId toolkit supervisor position
+     * @param pl3Code toolkit PL3
+     * @param center GBS center
+     * @return true when that position can use the Toolkit
+     */
+    @Transactional(readOnly = true)
+    public boolean agentPositionCanUse(
+            String agentPositionId, String supervisorPositionId, String pl3Code, String center) {
+        if (agentPositionId == null || agentPositionId.isBlank() || center == null || center.isBlank()) {
+            return false;
+        }
+        return scopes.existsActiveForAgentPosition(
+                agentPositionId.trim(), supervisorPositionId, pl3Code, center.trim());
+    }
+
+    /**
      * Distinct team agents under a Supervisor.
      *
      * @param supervisorCcgid supervisor
@@ -333,6 +389,68 @@ public class TimesheetReadService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /**
+     * Role types present on an ACTIVE Daily position.
+     *
+     * @param positionId position
+     * @return roles, stable order
+     */
+    @Transactional(readOnly = true)
+    public List<String> roleTypesOfPosition(String positionId) {
+        if (positionId == null || positionId.isBlank()) {
+            return List.of();
+        }
+        return positions.findActiveByPositionId(positionId.trim()).stream()
+                .map(TimesheetPosition::getRoleType)
+                .filter(role -> role != null && !role.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * Whether this person holds a seat that is a direct parent of the position.
+     *
+     * @param ccgid parent occupant
+     * @param childPositionId child position
+     * @return true when at least one of the caller's seats parents the position
+     */
+    @Transactional(readOnly = true)
+    public boolean isDirectParentOf(String ccgid, String childPositionId) {
+        if (ccgid == null || ccgid.isBlank() || childPositionId == null || childPositionId.isBlank()) {
+            return false;
+        }
+        for (TimesheetPersonPositionRole seat : seats.findActiveByCcgid(ccgid.trim())) {
+            boolean parent = parents.findActiveChildren(seat.getPositionId(), seat.getRoleType()).stream()
+                    .anyMatch(edge -> childPositionId.trim().equals(edge.getPositionId()));
+            if (parent) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Child positions of the seats this person holds, with every role on each child.
+     *
+     * @param ccgid parent occupant
+     * @return child position ids
+     */
+    @Transactional(readOnly = true)
+    public List<String> directChildPositionIds(String ccgid) {
+        if (ccgid == null || ccgid.isBlank()) {
+            return List.of();
+        }
+        java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>();
+        for (TimesheetPersonPositionRole seat : seats.findActiveByCcgid(ccgid.trim())) {
+            for (TimesheetPositionParent edge : parents.findActiveChildren(seat.getPositionId(), seat.getRoleType())) {
+                if (edge.getPositionId() != null && !edge.getPositionId().isBlank()) {
+                    ids.add(edge.getPositionId());
+                }
+            }
+        }
+        return List.copyOf(ids);
     }
 
     /**

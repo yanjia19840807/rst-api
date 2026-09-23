@@ -18,6 +18,9 @@ public record CurrentUserResponse(
         String jobRole,
         ActorView actor,
         UUID delegationId,
+        String delegatedPositionId,
+        List<String> delegatedPositionRoles,
+        String delegatedOccupantName,
         Boolean devOverrideEnabled) {
 
     /**
@@ -53,7 +56,23 @@ public record CurrentUserResponse(
      */
     public static CurrentUserResponse from(
             RstPrincipal principal, Boolean devOverrideEnabled, String jobRole) {
+        return from(principal, devOverrideEnabled, jobRole, List.of(), null);
+    }
+
+    /**
+     * @param delegatedPositionRoles roles covered by {@code delegatedPositionId}; empty otherwise
+     * @param delegatedOccupantName current occupant of {@code delegatedPositionId}, if any
+     */
+    public static CurrentUserResponse from(
+            RstPrincipal principal,
+            Boolean devOverrideEnabled,
+            String jobRole,
+            List<String> delegatedPositionRoles,
+            String delegatedOccupantName) {
         ActorView actor = new ActorView(principal.actorCcgid(), principal.actorDisplayName());
+        List<String> coveredRoles = principal.delegatedPositionId() == null
+                ? List.of()
+                : List.copyOf(delegatedPositionRoles);
         return new CurrentUserResponse(
                 principal.ccgid(),
                 principal.displayName(),
@@ -64,6 +83,9 @@ public record CurrentUserResponse(
                 jobRole,
                 actor,
                 principal.delegationId(),
+                principal.delegatedPositionId(),
+                coveredRoles,
+                principal.delegatedPositionId() == null ? null : delegatedOccupantName,
                 devOverrideEnabled);
     }
 

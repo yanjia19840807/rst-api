@@ -15,6 +15,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
+import com.cmacgm.gbs.rst.api.audit.application.AuditRecorder;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditAction;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditEntityType;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
@@ -48,6 +52,7 @@ import com.cmacgm.gbs.rst.api.workflow.api.dto.StepView;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowViews;
 import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.ApprovalWorkspaceView;
+import com.cmacgm.gbs.rst.api.workflow.approval.application.ApprovalActorResolver;
 import com.cmacgm.gbs.rst.api.workflow.approval.application.ApprovalWorkspaceAssembler;
 import com.cmacgm.gbs.rst.api.workflow.domain.ExerciseLifecycle;
 import com.cmacgm.gbs.rst.api.mail.application.MailNotificationService;
@@ -82,6 +87,8 @@ public class SubmissionService {
     private final ApprovalWorkspaceAssembler workspaceAssembler;
     private final TimesheetReadService timesheet;
     private final MailNotificationService mail;
+    private final AuditRecorder audits;
+    private final ApprovalActorResolver actors;
     private final Clock clock;
 
     /**
@@ -104,6 +111,8 @@ public class SubmissionService {
             ApprovalWorkspaceAssembler workspaceAssembler,
             TimesheetReadService timesheet,
             MailNotificationService mail,
+            AuditRecorder audits,
+            ApprovalActorResolver actors,
             Clock clock) {
         this.exercises = exercises;
         this.exerciseRepository = exerciseRepository;
@@ -121,6 +130,8 @@ public class SubmissionService {
         this.workspaceAssembler = workspaceAssembler;
         this.timesheet = timesheet;
         this.mail = mail;
+        this.audits = audits;
+        this.actors = actors;
         this.clock = clock;
     }
 
@@ -143,6 +154,9 @@ public class SubmissionService {
                 .toList();
         TimesheetAlignmentView alignment = align(exercise);
         WorkflowRouter.RoutedStep manager = managerHop(exercise);
+        AuditActorView nextHandler = manager == null
+                ? null
+                : actors.forPosition(manager.positionId(), manager.assigneeCcgid(), Map.of());
         return new SubmitPreviewView(
                 scenarioId,
                 findings,
@@ -152,8 +166,9 @@ public class SubmissionService {
                 false,
                 "Manager Review",
                 manager == null ? null : manager.positionId(),
-                manager == null ? null : manager.occupantName(),
-                manager == null ? null : manager.assigneeCcgid());
+                nextHandler != null ? nextHandler.displayName() : (manager == null ? null : manager.occupantName()),
+                manager == null ? null : manager.assigneeCcgid(),
+                nextHandler);
     }
 
     /**
@@ -166,7 +181,7 @@ public class SubmissionService {
      */
     @Transactional
     public SubmittedDetailsView submit(RstPrincipal principal, UUID exerciseId, SubmitRequest request) {
-        return submit(principal.ccgid(), exerciseId, request, Handler.from(principal));
+        return submit(principal.ccgid(), exerciseId, request, actors.handlerFor(principal));
     }
 
     /**
@@ -230,7 +245,9 @@ public class SubmissionService {
         String managerCcgid = openManager(workflow, exercise, now);
         workflows.save(workflow);
 
-        exercise.markSubmitted(ownerCcgid, now);
+        exercise.markSubmitted(now);
+        exercise.setLatestAuditEventId(
+                audits.record(AuditEntityType.EXERCISE, exercise.getId(), AuditAction.SUBMIT, "SUPERVISOR").getId());
         exerciseRepository.save(exercise);
         mail.notifyApprovalRequested(managerCcgid, exercise);
 
@@ -262,7 +279,9 @@ public class SubmissionService {
         String managerCcgid = openManager(workflow, exercise, now);
         workflows.save(workflow);
 
-        exercise.markSubmitted(ownerCcgid, now);
+        exercise.markSubmitted(now);
+        exercise.setLatestAuditEventId(
+                audits.record(AuditEntityType.EXERCISE, exercise.getId(), AuditAction.SUBMIT, "SUPERVISOR").getId());
         exerciseRepository.save(exercise);
         mail.notifyApprovalRequested(managerCcgid, exercise);
         return toDetails(exercise, workflow);
@@ -455,7 +474,7 @@ public class SubmissionService {
 
     private UUID requireOfficialPackage(RstExercise exercise) {
         UUID scenarioId = scenarioService.requireOfficialScenarioId(exercise);
-        Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exercise.getId())
+        Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedFalse(scenarioId, exercise.getId())
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "official-scenario-required",

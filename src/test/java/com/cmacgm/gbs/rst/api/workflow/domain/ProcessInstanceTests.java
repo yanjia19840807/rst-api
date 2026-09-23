@@ -23,9 +23,9 @@ class ProcessInstanceTests {
 
         assertThat(instance.getSubmittedBy().hasActor()).isTrue();
         assertThat(instance.getSubmittedBy().displayName())
-                .isEqualTo("Li Wei (on behalf of Yang Brenda)");
+                .isEqualTo("Yang Brenda via Li Wei");
         assertThat(instance.getTasks().get(0).getActors().get(0).handlerDisplayName(java.util.Map.of()))
-                .isEqualTo("Li Wei (on behalf of Yang Brenda)");
+                .isEqualTo("Yang Brenda via Li Wei");
     }
 
     @Test

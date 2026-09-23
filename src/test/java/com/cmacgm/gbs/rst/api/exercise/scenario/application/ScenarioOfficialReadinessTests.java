@@ -88,7 +88,7 @@ class ScenarioOfficialReadinessTests {
 
     private static Scenario draft(BigDecimal hc) {
         return Scenario.createDraft(
-                UUID.randomUUID(), "S1", "Draft", null, hc, "sup1", NOW);
+                UUID.randomUUID(), "S1", "Draft", null, hc, NOW);
     }
 
     private void stubSizing(UUID scenarioId, BigDecimal snapshotHc) {

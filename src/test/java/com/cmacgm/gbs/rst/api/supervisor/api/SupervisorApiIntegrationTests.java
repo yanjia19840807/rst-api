@@ -445,13 +445,13 @@ class SupervisorApiIntegrationTests {
                 .andExpect(jsonPath("$.sharedKpiSelections[0].customerCountry").value("Germany"));
 
         Integer activeSubtasks = jdbcTemplate.queryForObject(
-                "select count(*) from toolkit_subtask where toolkit_id = ? and deleted_at is null",
+                "select count(*) from toolkit_subtask where toolkit_id = ? and is_deleted = false",
                 Integer.class,
                 UUID.fromString(toolkitId));
         Integer activeKpis = jdbcTemplate.queryForObject(
                 """
                 select count(*) from toolkit_shared_kpi_selection
-                where toolkit_id = ? and deleted_at is null
+                where toolkit_id = ? and is_deleted = false
                   and carrier = 'Carrier B' and site = 'Singapore'
                   and customer_country = 'Germany'
                 """,
@@ -540,7 +540,7 @@ class SupervisorApiIntegrationTests {
                 "Live Toolkit Renamed",
                 UUID.fromString(toolkitId));
         jdbcTemplate.update(
-                "update toolkit_subtask set name = ? where toolkit_id = ? and deleted_at is null",
+                "update toolkit_subtask set name = ? where toolkit_id = ? and is_deleted = false",
                 "Live Subtask Renamed",
                 UUID.fromString(toolkitId));
         jdbcTemplate.update(
@@ -649,7 +649,7 @@ class SupervisorApiIntegrationTests {
                         """
                         select count(*)
                         from exercise_production_support_item
-                        where exercise_id = ? and deleted_at is null and activity = 'Archive reporting'
+                        where exercise_id = ? and is_deleted = false and activity = 'Archive reporting'
                         """,
                         Integer.class,
                         targetExerciseId));
@@ -668,7 +668,7 @@ class SupervisorApiIntegrationTests {
                         """
                         select count(*)
                         from exercise_holiday
-                        where exercise_id = ? and deleted_at is null and holiday_date = DATE '2024-12-25'
+                        where exercise_id = ? and is_deleted = false and holiday_date = DATE '2024-12-25'
                         """,
                         Integer.class,
                         targetExerciseId));
@@ -680,27 +680,18 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 update toolkit_shared_kpi_selection
-                   set deleted_at = ?, deleted_by = ?, updated_at = ?, updated_by = ?
-                 where toolkit_id = ? and deleted_at is null
+                   set is_deleted = true
+                 where toolkit_id = ? and is_deleted = false
                 """,
-                NOW,
-                SUPERVISOR_CCGID,
-                NOW,
-                SUPERVISOR_CCGID,
                 UUID.fromString(toolkitId));
         jdbcTemplate.update(
                 """
                 insert into toolkit_shared_kpi_selection
-                    (id, toolkit_id, carrier, site, customer_country,
-                     created_at, created_by, updated_at, updated_by, version)
-                values (?, ?, 'Carrier Z', 'Nowhere', 'Mars', ?, ?, ?, ?, 0)
+                    (id, toolkit_id, carrier, site, customer_country, version)
+                values (?, ?, 'Carrier Z', 'Nowhere', 'Mars', 0)
                 """,
                 UUID.randomUUID(),
-                UUID.fromString(toolkitId),
-                NOW,
-                SUPERVISOR_CCGID,
-                NOW,
-                SUPERVISOR_CCGID);
+                UUID.fromString(toolkitId));
 
         mockMvc.perform(post("/api/v1/exercises")
                         .header("X-Dev-Role", "SUPERVISOR")
@@ -811,19 +802,14 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into toolkit_volume_slot
-                    (id, toolkit_id, slot_start_at, slot_end_at, actual_volume, source_exercise_id,
-                     created_at, created_by, updated_at, updated_by)
-                values (?, ?, ?, ?, 12.5, ?, ?, ?, ?, ?)
+                    (id, toolkit_id, slot_start_at, slot_end_at, actual_volume, source_exercise_id)
+                values (?, ?, ?, ?, 12.5, ?)
                 """,
                 UUID.randomUUID(),
                 UUID.fromString(toolkitId),
                 slotStart,
                 slotEnd,
-                UUID.fromString(exerciseId),
-                NOW,
-                SUPERVISOR_CCGID,
-                NOW,
-                SUPERVISOR_CCGID);
+                UUID.fromString(exerciseId));
         mockMvc.perform(put("/api/v1/exercises/{id}/slot-period", exerciseId)
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -856,32 +842,22 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into exercise_holiday
-                    (id, exercise_id, holiday_date, holiday_name, holiday_type,
-                     created_at, created_by, updated_at, updated_by, version)
-                values (?, ?, DATE '2024-12-25', 'Christmas', 'HOLIDAY', ?, ?, ?, ?, 0)
+                    (id, exercise_id, holiday_date, holiday_name, holiday_type, version)
+                values (?, ?, DATE '2024-12-25', 'Christmas', 'HOLIDAY', 0)
                 """,
                 UUID.randomUUID(),
-                exerciseUuid,
-                NOW,
-                SUPERVISOR_CCGID,
-                NOW,
-                SUPERVISOR_CCGID);
+                exerciseUuid);
         jdbcTemplate.update(
                 """
                 insert into exercise_production_support_item
                     (id, exercise_id, lineage_id, category, activity, frequency_code,
-                     volume, unit_of_measure, workload_per_unit_minutes,
-                     created_at, created_by, updated_at, updated_by, version)
+                     volume, unit_of_measure, workload_per_unit_minutes, version)
                 values (?, ?, ?, 'Operations', 'Approve reporting', 'MONTHLY',
-                        10, 'case', 5, ?, ?, ?, ?, 0)
+                        10, 'case', 5, 0)
                 """,
                 UUID.randomUUID(),
                 exerciseUuid,
-                UUID.randomUUID(),
-                NOW,
-                SUPERVISOR_CCGID,
-                NOW,
-                SUPERVISOR_CCGID);
+                UUID.randomUUID());
         RstExercise exercise = exercises.findById(exerciseUuid).orElseThrow();
         toolkitAssociatedData.replaceSnapshots(exercise, SUPERVISOR_CCGID, NOW);
         toolkitVolumes.upsertMonthly(
@@ -983,31 +959,22 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into toolkit_volume_monthly
-                    (id, toolkit_id, month, actual_volume, commercial_ratio, source_exercise_id,
-                     created_at, created_by, updated_at, updated_by)
-                values (?, ?, DATE '2026-07-01', 100, 0.85, ?, ?, ?, ?, ?)
+                    (id, toolkit_id, month, actual_volume, commercial_ratio, source_exercise_id)
+                values (?, ?, DATE '2026-07-01', 100, 0.85, ?)
                 """,
                 UUID.randomUUID(),
                 UUID.fromString(toolkitId),
-                UUID.fromString(sourceId),
-                NOW,
-                SUPERVISOR_CCGID,
-                NOW,
-                SUPERVISOR_CCGID);
+                UUID.fromString(sourceId));
         jdbcTemplate.update(
                 """
                 insert into toolkit_volume_daily
                     (id, toolkit_id, volume_date, actual_volume, daily_adjustment_ratio,
-                     source_exercise_id, created_at, created_by, updated_at, updated_by)
-                values (?, ?, DATE '2026-07-15', 5, 1.10, ?, ?, ?, ?, ?)
+                     source_exercise_id)
+                values (?, ?, DATE '2026-07-15', 5, 1.10, ?)
                 """,
                 UUID.randomUUID(),
                 UUID.fromString(toolkitId),
-                UUID.fromString(sourceId),
-                NOW,
-                SUPERVISOR_CCGID,
-                NOW,
-                SUPERVISOR_CCGID);
+                UUID.fromString(sourceId));
         String targetId = JsonPath.read(createExercise(toolkitId), "$.exercise.id");
         org.junit.jupiter.api.Assertions.assertEquals(
                 0,
@@ -1076,8 +1043,8 @@ class SupervisorApiIntegrationTests {
                 insert into toolkit
                     (id, name, supervisor_position_id, center, domain, pl1, pl2,
                      pl3_name, primary_pl3_code, combine_subtasks_time, enabled,
-                     owner_ccgid, created_at, updated_at, version)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, ?, ?, ?)
+                     owner_ccgid, created_at, version)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, ?, ?)
                 """,
                 toolkitWithoutKpi,
                 "Legacy Toolkit Without KPI",
@@ -1091,20 +1058,17 @@ class SupervisorApiIntegrationTests {
                 false,
                 SUPERVISOR_CCGID,
                 NOW,
-                NOW,
                 0);
         jdbcTemplate.update(
                 """
                 insert into toolkit_subtask
-                    (id, toolkit_id, name, display_order, enabled, created_at, updated_at, version)
-                values (?, ?, ?, ?, true, ?, ?, ?)
+                    (id, toolkit_id, name, display_order, enabled, version)
+                values (?, ?, ?, ?, true, ?)
                 """,
                 subtaskId,
                 toolkitWithoutKpi,
                 "Legacy subtask",
                 1,
-                NOW,
-                NOW,
                 0);
 
         mockMvc.perform(post("/api/v1/exercises")
@@ -1170,11 +1134,9 @@ class SupervisorApiIntegrationTests {
                 """
                 insert into exercise_production_support_item
                     (id, exercise_id, lineage_id, category, activity, frequency_code,
-                     volume, unit_of_measure, workload_per_unit_minutes,
-                     created_at, created_by, updated_at, updated_by, version)
+                     volume, unit_of_measure, workload_per_unit_minutes, version)
                 values (?, ?, ?, 'Operations', 'Archive reporting', 'MONTHLY',
-                        10, 'case', 5,
-                        ?, ?, ?, ?, 0)
+                        10, 'case', 5, 0)
                 """,
                 supportItemId,
                 exerciseId,
@@ -1199,39 +1161,28 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into toolkit_team_setup
-                    (toolkit_id, source_exercise_id, weekend_code,
-                     created_at, created_by, updated_at, updated_by, version)
-                values (?, ?, '1', ?, ?, ?, ?, 0)
+                    (toolkit_id, source_exercise_id, weekend_code, version)
+                values (?, ?, '1', 0)
                 """,
                 toolkitId,
-                exerciseId,
-                NOW,
-                SUPERVISOR_CCGID,
-                NOW,
-                SUPERVISOR_CCGID);
+                exerciseId);
         jdbcTemplate.update(
                 """
                 insert into toolkit_production_support_item
                     (id, toolkit_id, source_exercise_id, lineage_id, category, activity,
-                     frequency_code, volume, unit_of_measure, workload_per_unit_minutes,
-                     created_at, created_by, updated_at, updated_by)
+                     frequency_code, volume, unit_of_measure, workload_per_unit_minutes)
                 values (?, ?, ?, ?, 'Operations', 'Archive reporting', 'MONTHLY',
-                        10, 'case', 5, ?, ?, ?, ?)
+                        10, 'case', 5)
                 """,
                 UUID.randomUUID(),
                 toolkitId,
                 exerciseId,
-                supportItemId,
-                NOW,
-                SUPERVISOR_CCGID,
-                NOW,
-                SUPERVISOR_CCGID);
+                supportItemId);
         jdbcTemplate.update(
                 """
                 insert into toolkit_holiday
-                    (id, toolkit_id, source_exercise_id, holiday_date, holiday_name, holiday_type,
-                     created_at, created_by, updated_at, updated_by)
-                values (?, ?, ?, DATE '2024-12-25', 'Christmas', 'HOLIDAY', ?, ?, ?, ?)
+                    (id, toolkit_id, source_exercise_id, holiday_date, holiday_name, holiday_type)
+                values (?, ?, ?, DATE '2024-12-25', 'Christmas', 'HOLIDAY')
                 """,
                 UUID.randomUUID(),
                 toolkitId,

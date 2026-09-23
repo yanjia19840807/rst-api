@@ -37,17 +37,48 @@ public interface ToolkitRepository extends JpaRepository<Toolkit, UUID> {
               and edge.id.parentPositionId = toolkit.supervisorPositionId
               and scope.id.supervisorPositionId = edge.id.parentPositionId
               and scope.id.pl3Code = toolkit.primaryPl3Code
-              and toolkit.deletedAt is null
-            order by toolkit.name
+              and toolkit.deleted = false
+            order by toolkit.createdAt desc, toolkit.id asc
             """)
     List<Toolkit> findAvailableToAgent(@Param("ccgid") String ccgid);
+
+    /**
+     * Active Toolkits whose Supervisor parent matches an AGENT position,
+     * whether or not that position currently has an occupant.
+     *
+     * @param positionId covered or occupied AGENT position
+     * @return toolkits
+     */
+    @EntityGraph(attributePaths = "subtasks")
+    @Query("""
+            select distinct toolkit
+            from Toolkit toolkit, TimesheetPosition seat, TimesheetPositionParent edge,
+                 TimesheetScope scope, TimesheetSyncRun daily, TimesheetSyncRun monthly
+            where seat.id.syncRunId = daily.id
+              and edge.id.syncRunId = daily.id
+              and edge.id.positionId = seat.id.positionId
+              and edge.id.roleType = seat.id.roleType
+              and scope.id.syncRunId = monthly.id
+              and daily.kind = 'DAILY'
+              and daily.status = 'ACTIVE'
+              and monthly.kind = 'MONTHLY'
+              and monthly.status = 'ACTIVE'
+              and seat.id.positionId = :positionId
+              and seat.id.roleType = 'AGENT'
+              and edge.id.parentPositionId = toolkit.supervisorPositionId
+              and scope.id.supervisorPositionId = edge.id.parentPositionId
+              and scope.id.pl3Code = toolkit.primaryPl3Code
+              and toolkit.deleted = false
+            order by toolkit.createdAt desc, toolkit.id asc
+            """)
+    List<Toolkit> findAvailableToAgentPosition(@Param("positionId") String positionId);
 
     @EntityGraph(attributePaths = "subtasks")
     @Query("""
             select toolkit
             from Toolkit toolkit
             where toolkit.id = :id
-              and toolkit.deletedAt is null
+              and toolkit.deleted = false
               and toolkit.enabled = true
             """)
     Optional<Toolkit> findActiveById(@Param("id") UUID id);
@@ -57,15 +88,15 @@ public interface ToolkitRepository extends JpaRepository<Toolkit, UUID> {
             select toolkit
             from Toolkit toolkit
             where toolkit.id = :id
-              and toolkit.deletedAt is null
+              and toolkit.deleted = false
             """)
     Optional<Toolkit> findExistingById(@Param("id") UUID id);
 
     @EntityGraph(attributePaths = "subtasks")
-    List<Toolkit> findBySupervisorPositionIdAndDeletedAtIsNullOrderByName(
+    List<Toolkit> findBySupervisorPositionIdAndDeletedFalseOrderByCreatedAtDesc(
             String supervisorPositionId);
 
-    boolean existsBySupervisorPositionIdAndCenterAndDomainAndPl1AndPl2AndPrimaryPl3CodeAndDeletedAtIsNull(
+    boolean existsBySupervisorPositionIdAndCenterAndDomainAndPl1AndPl2AndPrimaryPl3CodeAndDeletedFalse(
             String supervisorPositionId,
             String center,
             String domain,
@@ -73,9 +104,9 @@ public interface ToolkitRepository extends JpaRepository<Toolkit, UUID> {
             String pl2,
             String primaryPl3Code);
 
-    boolean existsBySupervisorPositionIdAndNameAndDeletedAtIsNull(
+    boolean existsBySupervisorPositionIdAndNameAndDeletedFalse(
             String supervisorPositionId, String name);
 
-    boolean existsBySupervisorPositionIdAndNameAndIdNotAndDeletedAtIsNull(
+    boolean existsBySupervisorPositionIdAndNameAndIdNotAndDeletedFalse(
             String supervisorPositionId, String name, UUID id);
 }

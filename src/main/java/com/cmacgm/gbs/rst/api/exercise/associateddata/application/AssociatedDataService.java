@@ -19,6 +19,9 @@ import java.util.UUID;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+import com.cmacgm.gbs.rst.api.audit.application.AuditRecorder;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditAction;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditEntityType;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.DataImportBatch;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseHoliday;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup;
@@ -100,6 +103,7 @@ public class AssociatedDataService {
     private final DataImportBatchRepository importBatches;
     private final RstExerciseRepository exerciseRepository;
     private final ScenarioCommitService scenarioCommits;
+    private final AuditRecorder audits;
     private final Clock clock;
 
     /**
@@ -127,6 +131,7 @@ public class AssociatedDataService {
             DataImportBatchRepository importBatches,
             RstExerciseRepository exerciseRepository,
             ScenarioCommitService scenarioCommits,
+            AuditRecorder audits,
             Clock clock) {
         this.exercises = exercises;
         this.teamSetups = teamSetups;
@@ -149,6 +154,7 @@ public class AssociatedDataService {
         this.importBatches = importBatches;
         this.exerciseRepository = exerciseRepository;
         this.scenarioCommits = scenarioCommits;
+        this.audits = audits;
         this.clock = clock;
     }
 
@@ -184,7 +190,9 @@ public class AssociatedDataService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY, "invalid-weekend-code", ex.getMessage());
         }
-        return toTeamSetup(exercise, teamSetups.save(setup));
+        teamSetups.save(setup);
+        touchExercise(exercise.getId());
+        return toTeamSetup(exercise, setup);
     }
 
     /**
@@ -197,7 +205,7 @@ public class AssociatedDataService {
     @Transactional(readOnly = true)
     public List<SupportItemView> listSupport(String ownerCcgid, UUID exerciseId) {
         RstExercise exercise = exercises.requireReadable(ownerCcgid, exerciseId);
-        return supportItems.findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(exercise.getId())
+        return supportItems.findByExerciseIdAndDeletedFalseOrderByCategoryAscActivityAsc(exercise.getId())
                 .stream()
                 .map(item -> toSupport(item, exerciseId))
                 .toList();
@@ -226,6 +234,7 @@ public class AssociatedDataService {
                 request.volume(), request.unitOfMeasure(), request.workloadPerUnitMinutes(),
                 request.comments(), ownerCcgid, now);
         supportItems.save(item);
+        touchExercise(exerciseId);
         return toSupport(item, exerciseId);
     }
 
@@ -242,7 +251,7 @@ public class AssociatedDataService {
     public SupportItemView updateSupport(
             String ownerCcgid, UUID exerciseId, UUID itemId, SupportItemRequest request) {
         editable(ownerCcgid, exerciseId);
-        ExerciseProductionSupportItem item = supportItems.findByIdAndExerciseIdAndDeletedAtIsNull(itemId, exerciseId)
+        ExerciseProductionSupportItem item = supportItems.findByIdAndExerciseIdAndDeletedFalse(itemId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "support-item-not-found", "The support item was not found."));
         Instant now = clock.instant();
@@ -257,6 +266,7 @@ public class AssociatedDataService {
                 request.unitOfMeasure(), request.workloadPerUnitMinutes(),
                 request.comments(), ownerCcgid, now);
         supportItems.save(item);
+        touchExercise(exerciseId);
         return toSupport(item, exerciseId);
     }
 
@@ -270,11 +280,12 @@ public class AssociatedDataService {
     @Transactional
     public void deleteSupport(String ownerCcgid, UUID exerciseId, UUID itemId) {
         editable(ownerCcgid, exerciseId);
-        ExerciseProductionSupportItem item = supportItems.findByIdAndExerciseIdAndDeletedAtIsNull(itemId, exerciseId)
+        ExerciseProductionSupportItem item = supportItems.findByIdAndExerciseIdAndDeletedFalse(itemId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "support-item-not-found", "The support item was not found."));
         item.softDelete(ownerCcgid, clock.instant());
         supportItems.save(item);
+        touchExercise(exerciseId);
     }
 
     /**
@@ -309,7 +320,7 @@ public class AssociatedDataService {
         Instant now = clock.instant();
         Map<String, ExerciseProductionSupportItem> existingByKey = new LinkedHashMap<>();
         for (ExerciseProductionSupportItem item :
-                supportItems.findByExerciseIdAndDeletedAtIsNullOrderByCategoryAscActivityAsc(exerciseId)) {
+                supportItems.findByExerciseIdAndDeletedFalseOrderByCategoryAscActivityAsc(exerciseId)) {
             existingByKey.putIfAbsent(
                     itemKey(item.getCategoryId(), item.getActivity(), item.getFrequencyCode()),
                     item);
@@ -391,7 +402,7 @@ public class AssociatedDataService {
     public CalendarView getCalendar(String ownerCcgid, UUID exerciseId) {
         exercises.requireReadable(ownerCcgid, exerciseId);
         List<HolidayView> holidayViews = holidays
-                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)
+                .findByExerciseIdAndDeletedFalseOrderByHolidayDateAscHolidayNameAsc(exerciseId)
                 .stream()
                 .map(this::toHoliday)
                 .toList();
@@ -411,8 +422,8 @@ public class AssociatedDataService {
         editable(ownerCcgid, exerciseId);
         Instant now = clock.instant();
         for (ExerciseHoliday existing : holidays
-                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)) {
-            existing.softDelete(ownerCcgid, now);
+                .findByExerciseIdAndDeletedFalseOrderByHolidayDateAscHolidayNameAsc(exerciseId)) {
+            existing.softDelete();
             holidays.save(existing);
         }
         holidays.flush();
@@ -433,10 +444,10 @@ public class AssociatedDataService {
                 }
                 String name = holiday.holidayName() == null ? "" : holiday.holidayName().trim();
                 holidays.save(ExerciseHoliday.create(
-                        exerciseId, holiday.holidayDate(), name,
-                        holiday.holidayType(), ownerCcgid, now));
+                        exerciseId, holiday.holidayDate(), name, holiday.holidayType()));
             }
         }
+        touchExercise(exerciseId);
         return getCalendar(ownerCcgid, exerciseId);
     }
 
@@ -456,7 +467,7 @@ public class AssociatedDataService {
     public byte[] exportCalendarExcel(String ownerCcgid, UUID exerciseId) {
         exercises.requireOwned(ownerCcgid, exerciseId);
         List<HolidayRequest> rows = holidays
-                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId)
+                .findByExerciseIdAndDeletedFalseOrderByHolidayDateAscHolidayNameAsc(exerciseId)
                 .stream()
                 .map(h -> new HolidayRequest(h.getHolidayDate(), h.getHolidayName(), h.getHolidayType()))
                 .toList();
@@ -758,8 +769,7 @@ public class AssociatedDataService {
             String ownerCcgid, UUID exerciseId, byte[] content, String fileName) {
         RstExercise exercise = editable(ownerCcgid, exerciseId);
         SlotImportPlan plan = volumeValidator.planSlotImport(volumeExcel.parseSlot(new ByteArrayInputStream(content)));
-        Instant now = clock.instant();
-        exercise.updateSlotPeriod(plan.startDate(), plan.weeks(), ownerCcgid, now);
+        exercise.updateSlotPeriod(plan.startDate(), plan.weeks());
         exerciseRepository.saveAndFlush(exercise);
         UUID batchId = recordImportBatch(ownerCcgid, exerciseId, "SLOT_VOLUME", fileName, content, plan.fileRowCount());
         List<SlotVolumeView> volumes = replaceSlotVolumes(
@@ -815,6 +825,7 @@ public class AssociatedDataService {
                     now));
         }
         monthlyVolumes.saveAll(rows);
+        touchExercise(exerciseId);
         return getMonthlyVolumes(ownerCcgid, exerciseId);
     }
 
@@ -842,6 +853,7 @@ public class AssociatedDataService {
                     now));
         }
         dailyVolumes.saveAll(rows);
+        touchExercise(exerciseId);
         return getDailyVolumes(ownerCcgid, exerciseId);
     }
 
@@ -872,6 +884,7 @@ public class AssociatedDataService {
                     now));
         }
         slotVolumes.saveAll(rows);
+        touchExercise(exerciseId);
         return getSlotVolumes(ownerCcgid, exerciseId);
     }
 
@@ -998,6 +1011,14 @@ public class AssociatedDataService {
         }
     }
 
+    private void touchExercise(UUID exerciseId) {
+        exerciseRepository.findById(exerciseId).ifPresent(exercise -> {
+            exercise.setLatestAuditEventId(audits.record(
+                    AuditEntityType.EXERCISE, exercise.getId(), AuditAction.UPDATE, "SUPERVISOR").getId());
+            exerciseRepository.save(exercise);
+        });
+    }
+
     private UUID recordImportBatch(
             String ownerCcgid, UUID exerciseId, String importType, String fileName, byte[] content, int rowCount) {
         return recordImportBatch(
@@ -1035,8 +1056,12 @@ public class AssociatedDataService {
                 rowCount,
                 0,
                 "{\"accepted\":" + rowCount + "}",
-                ownerCcgid,
                 now));
+        exerciseRepository.findById(exerciseId).ifPresent(exercise -> {
+            exercise.setLatestAuditEventId(audits.record(
+                    AuditEntityType.EXERCISE, exercise.getId(), AuditAction.UPDATE, "SUPERVISOR").getId());
+            exerciseRepository.save(exercise);
+        });
         return batch.getId();
     }
 

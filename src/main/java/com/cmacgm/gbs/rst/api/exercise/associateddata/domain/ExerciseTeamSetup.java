@@ -80,17 +80,9 @@ public class ExerciseTeamSetup {
     @Column(name = "weekend_code", length = 40)
     private String weekendCode;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
 
-    @Column(name = "created_by")
-    private String createdBy;
 
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
 
-    @Column(name = "updated_by")
-    private String updatedBy;
 
     @Version
     private long version;
@@ -105,10 +97,6 @@ public class ExerciseTeamSetup {
         ExerciseTeamSetup setup = new ExerciseTeamSetup();
         setup.exerciseId = exerciseId;
         setup.weekendCode = WeekendCode.DEFAULT_STORED;
-        setup.createdAt = now;
-        setup.createdBy = actorCcgid;
-        setup.updatedAt = now;
-        setup.updatedBy = actorCcgid;
         return setup;
     }
 
@@ -134,8 +122,6 @@ public class ExerciseTeamSetup {
         this.weekendShiftHc = input.weekendShiftHc();
         this.skeletonRatio = input.skeletonRatio();
         this.weekendCode = WeekendCode.storedValue(input.weekendCode());
-        this.updatedAt = now;
-        this.updatedBy = actorCcgid;
     }
 
     /** Sum of tenure buckets; null when all empty or zero. */

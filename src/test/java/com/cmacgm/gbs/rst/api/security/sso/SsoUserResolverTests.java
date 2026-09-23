@@ -8,9 +8,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.domainhead.application.DomainHeadConfigService;
 import com.cmacgm.gbs.rst.api.security.RstRoles;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -23,12 +26,15 @@ class SsoUserResolverTests {
     @Mock
     private TimesheetReadService timesheet;
 
+    @Mock
+    private DomainHeadConfigService domainHeads;
+
     @Test
     void userReadsTimesheetSeat() {
         when(timesheet.findActiveProductSeat("S00596242"))
                 .thenReturn(Optional.of(new TimesheetReadService.ProductSeat(
                         Set.of("SUPERVISOR"), "GBS INDIA", "WU Bertie", "GSC.BERWU@cma-cgm.com")));
-        SsoUserResolver resolver = new SsoUserResolver(timesheet, properties("UAT"));
+        SsoUserResolver resolver = resolver("UAT");
 
         var principal = resolver.resolve(token(
                 "S00596242",
@@ -48,7 +54,7 @@ class SsoUserResolverTests {
         when(timesheet.findActiveProductSeat("S00596242"))
                 .thenReturn(Optional.of(new TimesheetReadService.ProductSeat(
                         Set.of("SUPERVISOR", "SR_MANAGER"), "GBS INDIA", "WU Bertie", "GSC.BERWU@cma-cgm.com")));
-        SsoUserResolver resolver = new SsoUserResolver(timesheet, properties("UAT"));
+        SsoUserResolver resolver = resolver("UAT");
 
         var principal = resolver.resolve(token(
                 "S00596242",
@@ -57,12 +63,12 @@ class SsoUserResolverTests {
                 "GSC.BERWU@cma-cgm.com",
                 null));
 
-        assertThat(principal.roles()).containsExactly(RstRoles.SUPERVISOR, RstRoles.SR_MANAGER);
+        assertThat(principal.roles()).containsExactlyInAnyOrder(RstRoles.SUPERVISOR, RstRoles.SR_MANAGER);
     }
 
     @Test
     void localTransformationHeadUsesTokenCenter() {
-        SsoUserResolver resolver = new SsoUserResolver(timesheet, properties("UAT"));
+        SsoUserResolver resolver = resolver("UAT");
 
         var principal = resolver.resolve(token(
                 "S001",
@@ -77,7 +83,7 @@ class SsoUserResolverTests {
 
     @Test
     void governanceAndAdminHaveNoCenter() {
-        SsoUserResolver resolver = new SsoUserResolver(timesheet, properties("PROD"));
+        SsoUserResolver resolver = resolver("PROD");
 
         assertThat(resolver.resolve(token(
                         "S002",
@@ -98,9 +104,29 @@ class SsoUserResolverTests {
     }
 
     @Test
+    void userAssignedAsCdhWithoutTimesheetSeatGetsDomainHead() {
+        when(timesheet.findActiveProductSeat("S00683842")).thenReturn(Optional.empty());
+        when(domainHeads.isAssignedCdh("S00683842")).thenReturn(true);
+        when(timesheet.findActivePerson("S00683842")).thenReturn(Optional.of(person(
+                "S00683842", "GBS CHINA", "HE Allen", "allen@cma-cgm.com")));
+        SsoUserResolver resolver = resolver("UAT");
+
+        var principal = resolver.resolve(token(
+                "S00683842",
+                List.of("CMACGM_APP_RST_USER_UAT"),
+                "HE Allen",
+                "allen@cma-cgm.com",
+                null));
+
+        assertThat(principal.roles()).containsExactly(RstRoles.DOMAIN_HEAD);
+        assertThat(principal.center()).isEqualTo("GBS CHINA");
+        assertThat(principal.displayName()).isEqualTo("HE Allen");
+    }
+
+    @Test
     void userMissingFromTimesheetIsRejected() {
         when(timesheet.findActiveProductSeat("S009")).thenReturn(Optional.empty());
-        SsoUserResolver resolver = new SsoUserResolver(timesheet, properties("UAT"));
+        SsoUserResolver resolver = resolver("UAT");
 
         assertThatThrownBy(() -> resolver.resolve(token(
                         "S009",
@@ -118,7 +144,7 @@ class SsoUserResolverTests {
         when(timesheet.findActiveProductSeat("S010"))
                 .thenReturn(Optional.of(new TimesheetReadService.ProductSeat(
                         Set.of("ADMIN"), "GBS INDIA", "Wrong", "w@cma-cgm.com")));
-        SsoUserResolver resolver = new SsoUserResolver(timesheet, properties("UAT"));
+        SsoUserResolver resolver = resolver("UAT");
 
         assertThatThrownBy(() -> resolver.resolve(token(
                         "S010",
@@ -136,7 +162,7 @@ class SsoUserResolverTests {
         when(timesheet.findActiveProductSeat("S011"))
                 .thenReturn(Optional.of(new TimesheetReadService.ProductSeat(
                         Set.of("AGENT"), "Kuala Lumpur", "Agent", "a@cma-cgm.com")));
-        SsoUserResolver resolver = new SsoUserResolver(timesheet, properties("UAT"));
+        SsoUserResolver resolver = resolver("UAT");
 
         assertThatThrownBy(() -> resolver.resolve(token(
                         "S011",
@@ -151,7 +177,7 @@ class SsoUserResolverTests {
 
     @Test
     void missingCcgidIsRejected() {
-        SsoUserResolver resolver = new SsoUserResolver(timesheet, properties("UAT"));
+        SsoUserResolver resolver = resolver("UAT");
 
         assertThatThrownBy(() -> resolver.resolve(token(
                         null,
@@ -166,7 +192,7 @@ class SsoUserResolverTests {
 
     @Test
     void unknownLthCenterIsRejected() {
-        SsoUserResolver resolver = new SsoUserResolver(timesheet, properties("UAT"));
+        SsoUserResolver resolver = resolver("UAT");
 
         assertThatThrownBy(() -> resolver.resolve(token(
                         "S001",
@@ -177,6 +203,14 @@ class SsoUserResolverTests {
                 .isInstanceOf(SsoException.class)
                 .extracting(ex -> ((SsoException) ex).code())
                 .isEqualTo("sso-center-invalid");
+    }
+
+    private SsoUserResolver resolver(String env) {
+        return new SsoUserResolver(timesheet, properties(env), domainHeads);
+    }
+
+    private static TimesheetPerson person(String ccgid, String center, String name, String email) {
+        return TimesheetPerson.create(UUID.randomUUID(), ccgid, ccgid, center, name, email, null);
     }
 
     private static SsoProperties properties(String env) {

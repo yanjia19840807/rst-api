@@ -28,11 +28,7 @@ public class CycleTimeBaselineFile {
     @Column(name = "display_order", nullable = false)
     private int displayOrder;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
 
-    @Column(name = "created_by")
-    private String createdBy;
 
     protected CycleTimeBaselineFile() {
     }
@@ -57,15 +53,12 @@ public class CycleTimeBaselineFile {
         row.cycleTimeBaselineId = cycleTimeBaselineId;
         row.fileArtifactId = fileArtifactId;
         row.displayOrder = displayOrder;
-        row.createdAt = now;
-        row.createdBy = actorCcgid;
         return row;
     }
 
     public UUID getCycleTimeBaselineId() { return cycleTimeBaselineId; }
     public UUID getFileArtifactId() { return fileArtifactId; }
     public int getDisplayOrder() { return displayOrder; }
-    public Instant getCreatedAt() { return createdAt; }
 
     /** Composite PK. */
     public static class Pk implements Serializable {

@@ -5,10 +5,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import com.cmacgm.gbs.rst.api.domainhead.application.DomainHeadConfigService;
 import com.cmacgm.gbs.rst.api.security.RstCenters;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.security.RstRoles;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
@@ -22,14 +24,20 @@ public class SsoUserResolver {
 
     private final TimesheetReadService timesheet;
     private final SsoProperties properties;
+    private final DomainHeadConfigService domainHeads;
 
     /**
      * @param timesheet ACTIVE Daily seats for SSO USER
      * @param properties current SSO env
+     * @param domainHeads Center Roles CDH assignments
      */
-    public SsoUserResolver(TimesheetReadService timesheet, SsoProperties properties) {
+    public SsoUserResolver(
+            TimesheetReadService timesheet,
+            SsoProperties properties,
+            DomainHeadConfigService domainHeads) {
         this.timesheet = timesheet;
         this.properties = properties;
+        this.domainHeads = domainHeads;
     }
 
     /**
@@ -63,12 +71,9 @@ public class SsoUserResolver {
     }
 
     private RstPrincipal resolveUser(String ccgid, String displayName, String email) {
-        TimesheetReadService.ProductSeat seat = timesheet.findActiveProductSeat(ccgid)
-                .orElseThrow(() -> new SsoException(
-                        "sso-timesheet-missing",
-                        "CCGID is not in the ACTIVE Daily Timesheet."));
+        TimesheetReadService.ProductSeat seat = timesheet.findActiveProductSeat(ccgid).orElse(null);
         Set<String> roles = new LinkedHashSet<>();
-        if (seat.roleTypes() != null) {
+        if (seat != null && seat.roleTypes() != null) {
             for (String roleType : seat.roleTypes()) {
                 if (roleType == null || roleType.isBlank()) {
                     continue;
@@ -79,12 +84,22 @@ public class SsoUserResolver {
                 }
             }
         }
+        if (domainHeads.isAssignedCdh(ccgid)) {
+            roles.add(RstRoles.DOMAIN_HEAD);
+        }
         if (roles.isEmpty()) {
+            if (seat == null) {
+                throw new SsoException(
+                        "sso-timesheet-missing",
+                        "CCGID is not in the ACTIVE Daily Timesheet.");
+            }
             throw new SsoException(
                     "sso-timesheet-role",
                     "Timesheet role is not AGENT, SUPERVISOR, SR_MANAGER, or DOMAIN_HEAD.");
         }
-        String center = RstCenters.canonicalize(seat.center());
+        TimesheetPerson person = seat == null ? timesheet.findActivePerson(ccgid).orElse(null) : null;
+        String center = RstCenters.canonicalize(
+                seat != null ? seat.center() : person == null ? null : person.getCenter());
         if (center == null) {
             throw new SsoException(
                     "sso-center-invalid",
@@ -92,8 +107,8 @@ public class SsoUserResolver {
         }
         return new RstPrincipal(
                 ccgid,
-                firstNonBlank(seat.displayName(), displayName),
-                firstNonBlank(seat.email(), email),
+                firstNonBlank(seat != null ? seat.displayName() : person == null ? null : person.getName(), displayName),
+                firstNonBlank(seat != null ? seat.email() : person == null ? null : person.getEmail(), email),
                 Set.copyOf(roles),
                 Set.of(),
                 center);

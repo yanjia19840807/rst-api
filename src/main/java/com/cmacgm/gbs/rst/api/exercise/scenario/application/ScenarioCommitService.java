@@ -82,7 +82,7 @@ public class ScenarioCommitService {
             String ownerCcgid, UUID exerciseId, UUID scenarioId, CommitScenarioRequest request) {
         RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
-        Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
+        Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedFalse(scenarioId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
         if (!scenario.isWorking()) {
@@ -156,7 +156,7 @@ public class ScenarioCommitService {
     @Transactional(readOnly = true)
     public int countScenariosWithResults(UUID exerciseId) {
         int count = 0;
-        for (Scenario scenario : scenarios.findByExerciseIdAndDeletedAtIsNullOrderByCreatedAtAsc(exerciseId)) {
+        for (Scenario scenario : scenarios.findByExerciseIdAndDeletedFalseOrderByCreatedAtAsc(exerciseId)) {
             if (!simulationRuns.findByScenarioId(scenario.getId()).isEmpty()
                     || !forecastRuns.findByScenarioId(scenario.getId()).isEmpty()) {
                 count++;
@@ -181,7 +181,7 @@ public class ScenarioCommitService {
      */
     @Transactional
     public int clearSlotResultsForExercise(UUID exerciseId) {
-        List<Scenario> items = scenarios.findByExerciseIdAndDeletedAtIsNullOrderByCreatedAtAsc(exerciseId);
+        List<Scenario> items = scenarios.findByExerciseIdAndDeletedFalseOrderByCreatedAtAsc(exerciseId);
         int cleared = 0;
         for (Scenario scenario : items) {
             List<SimulationRun> slotRuns = simulationRuns.findByScenarioId(scenario.getId()).stream()
@@ -204,7 +204,7 @@ public class ScenarioCommitService {
 
     @Transactional
     public int clearResultsForExercise(UUID exerciseId) {
-        List<Scenario> items = scenarios.findByExerciseIdAndDeletedAtIsNullOrderByCreatedAtAsc(exerciseId);
+        List<Scenario> items = scenarios.findByExerciseIdAndDeletedFalseOrderByCreatedAtAsc(exerciseId);
         int cleared = 0;
         for (Scenario scenario : items) {
             boolean hadResults = !simulationRuns.findByScenarioId(scenario.getId()).isEmpty()

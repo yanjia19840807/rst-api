@@ -63,7 +63,7 @@ public final class ExerciseFreeze {
         timesheet.activeDaily(toolkit.getCenter());
         ActiveSnapshot kpi = timesheet.activeMonthly(toolkit.getCenter());
         List<ToolkitSharedKpiSelection> selections = toolkit.getSharedKpiSelections().stream()
-                .filter(selection -> selection.getDeletedAt() == null)
+                .filter(selection -> !selection.isDeleted())
                 .toList();
         if (selections.isEmpty()) {
             throw new ApiException(
@@ -171,7 +171,7 @@ public final class ExerciseFreeze {
                 .filter(ToolkitSubtask::isEnabled)
                 .map(item -> new ExerciseSubtaskView(
                         item.getId(), item.getId(), item.getName(), item.getDescription(),
-                        item.getDisplayOrder(), null))
+                        item.getDisplayOrder(), false))
                 .toList();
         return new ExerciseSnapshot(
                 new ExerciseToolkitView(

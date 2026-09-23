@@ -51,17 +51,9 @@ public class ToolkitProductionSupportItem {
 
     private String comments;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
 
-    @Column(name = "created_by")
-    private String createdBy;
 
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
 
-    @Column(name = "updated_by")
-    private String updatedBy;
 
     protected ToolkitProductionSupportItem() {
     }
@@ -88,10 +80,6 @@ public class ToolkitProductionSupportItem {
         item.unitOfMeasure = source.getUnitOfMeasure();
         item.workloadPerUnitMinutes = source.getWorkloadPerUnitMinutes();
         item.comments = source.getComments();
-        item.createdAt = now;
-        item.createdBy = actorCcgid;
-        item.updatedAt = now;
-        item.updatedBy = actorCcgid;
         return item;
     }
 

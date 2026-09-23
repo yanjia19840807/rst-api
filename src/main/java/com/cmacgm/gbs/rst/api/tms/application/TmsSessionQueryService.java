@@ -16,7 +16,11 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
+import com.cmacgm.gbs.rst.api.audit.application.AuditRecorder;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditEntityType;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.delegation.application.PositionCoverage;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.TeamAgent;
@@ -43,6 +47,8 @@ public class TmsSessionQueryService {
     private final ToolkitService toolkits;
     private final TimesheetReadService timesheet;
     private final TmsSessionExcelService excel;
+    private final PositionCoverage coverage;
+    private final AuditRecorder audits;
     private final Clock clock;
 
     public TmsSessionQueryService(
@@ -50,11 +56,15 @@ public class TmsSessionQueryService {
             ToolkitService toolkits,
             TimesheetReadService timesheet,
             TmsSessionExcelService excel,
+            PositionCoverage coverage,
+            AuditRecorder audits,
             Clock clock) {
         this.sessionRepository = sessionRepository;
         this.toolkits = toolkits;
         this.timesheet = timesheet;
         this.excel = excel;
+        this.coverage = coverage;
+        this.audits = audits;
         this.clock = clock;
     }
 
@@ -90,8 +100,17 @@ public class TmsSessionQueryService {
     @Transactional(readOnly = true)
     public TmsSessionResponse current(String agentCcgid) {
         var now = clock.instant();
-        return sessionRepository.findFirstByAgentCcgidAndStatusIn(
-                        agentCcgid, Set.of(TmsSessionStatus.RUNNING))
+        Optional<TmsSession> byAgent = sessionRepository.findFirstByAgentCcgidAndStatusIn(
+                agentCcgid, Set.of(TmsSessionStatus.RUNNING));
+        if (byAgent.isPresent()) {
+            return toResponse(byAgent.get(), now);
+        }
+        String positionId = coverage.positionId("AGENT");
+        if (positionId == null) {
+            return null;
+        }
+        return sessionRepository.findFirstByPositionIdAndStatusIn(
+                        positionId, Set.of(TmsSessionStatus.RUNNING))
                 .map(session -> toResponse(session, now))
                 .orElse(null);
     }
@@ -384,7 +403,8 @@ public class TmsSessionQueryService {
                 domain,
                 carrier,
                 site,
-                customerCountry);
+                customerCountry,
+                vacantPositionId());
     }
 
     private Filter teamFilter(
@@ -462,7 +482,21 @@ public class TmsSessionQueryService {
                 domain,
                 carrier,
                 site,
-                customerCountry);
+                customerCountry,
+                null);
+    }
+
+    private String vacantPositionId() {
+        String positionId = coverage.positionId("AGENT");
+        if (positionId == null) {
+            return null;
+        }
+        var occupant = timesheet.occupant(positionId);
+        if (occupant == null || occupant.ccgid() == null || occupant.ccgid().isBlank()
+                || occupant.ccgid().equalsIgnoreCase(positionId)) {
+            return positionId;
+        }
+        return null;
     }
 
     private PageResponse<TmsSessionResponse> pageSessions(Filter filter, int page, int pageSize) {
@@ -476,17 +510,27 @@ public class TmsSessionQueryService {
         var result = sessionRepository.findAll(TmsSessionSpecification.filtered(filter), pageable);
         var now = clock.instant();
         Map<String, String> names = new HashMap<>();
-        return PageResponse.from(result, session -> toResponse(session, now, names));
+        Map<UUID, AuditActorView> created = audits.createdBy(
+                AuditEntityType.TMS_SESSION,
+                result.getContent().stream().map(TmsSession::getId).toList());
+        Map<UUID, AuditActorView> updated = audits.actors(
+                result.getContent().stream().map(TmsSession::getLatestAuditEventId).toList());
+        return PageResponse.from(result, session -> toResponse(session, now, names, created, updated));
     }
 
     private List<TmsSessionResponse> listSessions(Filter filter) {
         validateDateRange(filter);
         var now = clock.instant();
         Map<String, String> names = new HashMap<>();
-        return sessionRepository
-                .findAll(TmsSessionSpecification.filtered(filter), Sort.by(Sort.Direction.DESC, "startedAt"))
-                .stream()
-                .map(session -> toResponse(session, now, names))
+        List<TmsSession> sessions = sessionRepository
+                .findAll(TmsSessionSpecification.filtered(filter), Sort.by(Sort.Direction.DESC, "startedAt"));
+        Map<UUID, AuditActorView> created = audits.createdBy(
+                AuditEntityType.TMS_SESSION,
+                sessions.stream().map(TmsSession::getId).toList());
+        Map<UUID, AuditActorView> updated = audits.actors(
+                sessions.stream().map(TmsSession::getLatestAuditEventId).toList());
+        return sessions.stream()
+                .map(session -> toResponse(session, now, names, created, updated))
                 .toList();
     }
 
@@ -502,13 +546,29 @@ public class TmsSessionQueryService {
     }
 
     private TmsSessionResponse toResponse(TmsSession session, Instant now) {
-        return toResponse(session, now, new HashMap<>());
+        return toResponse(session, now, new HashMap<>(), Map.of(), Map.of());
     }
 
-    private TmsSessionResponse toResponse(TmsSession session, Instant now, Map<String, String> names) {
+    private TmsSessionResponse toResponse(
+            TmsSession session,
+            Instant now,
+            Map<String, String> names,
+            Map<UUID, AuditActorView> created,
+            Map<UUID, AuditActorView> updated) {
         String agentName = names.computeIfAbsent(
                 session.getAgentCcgid(), timesheet::displayNameByCcgid);
-        return TmsSessionResponse.from(session, now, agentName);
+        AuditActorView createdBy = created.get(session.getId());
+        if (createdBy == null && created.isEmpty()) {
+            createdBy = audits.createdBy(AuditEntityType.TMS_SESSION, session.getId());
+        }
+        AuditActorView updatedBy = null;
+        if (session.getLatestAuditEventId() != null) {
+            updatedBy = updated.get(session.getLatestAuditEventId());
+            if (updatedBy == null && updated.isEmpty()) {
+                updatedBy = audits.actor(session.getLatestAuditEventId());
+            }
+        }
+        return TmsSessionResponse.from(session, now, agentName, createdBy, updatedBy);
     }
 
     private Set<UUID> scopedToolkitIds(String ccgid) {

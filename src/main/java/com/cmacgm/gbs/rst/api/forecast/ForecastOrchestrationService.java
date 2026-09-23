@@ -301,7 +301,7 @@ public class ForecastOrchestrationService {
     public ForecastView getLatestAccepted(
             String ownerCcgid, UUID exerciseId, UUID scenarioId, String level) {
         exercises.requireReadable(ownerCcgid, exerciseId);
-        scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
+        scenarios.findByIdAndExerciseIdAndDeletedFalse(scenarioId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
         String forecastLevel = normalizeLevel(level);
@@ -474,7 +474,7 @@ public class ForecastOrchestrationService {
                     HttpStatus.UNPROCESSABLE_ENTITY, "invalid-weekend-code", ex.getMessage());
         }
         Map<LocalDate, HolidayDayKind> kinds = HolidayDays.kinds(holidays
-                .findByExerciseIdAndDeletedAtIsNullOrderByHolidayDateAscHolidayNameAsc(exerciseId));
+                .findByExerciseIdAndDeletedFalseOrderByHolidayDateAscHolidayNameAsc(exerciseId));
         List<LocalDate> rest = HolidayDays.restDates(kinds);
         return new CalendarContext(weekendCode, rest, new HashSet<>(rest), kinds);
     }
@@ -491,7 +491,7 @@ public class ForecastOrchestrationService {
     private RstExercise requireEditableDraft(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
         RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
         exercises.requireEditable(exercise);
-        Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedAtIsNull(scenarioId, exerciseId)
+        Scenario scenario = scenarios.findByIdAndExerciseIdAndDeletedFalse(scenarioId, exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
         if (!scenario.isWorking()) {

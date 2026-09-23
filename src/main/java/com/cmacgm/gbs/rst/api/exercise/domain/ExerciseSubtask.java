@@ -33,8 +33,6 @@ public class ExerciseSubtask {
     @Column(name = "display_order", nullable = false)
     private int displayOrder;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
 
     protected ExerciseSubtask() {
     }
@@ -53,7 +51,6 @@ public class ExerciseSubtask {
         subtask.name = name;
         subtask.description = description;
         subtask.displayOrder = displayOrder;
-        subtask.createdAt = now;
         return subtask;
     }
 

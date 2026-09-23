@@ -86,7 +86,7 @@ public final class BenchmarkingFilters {
 
     /**
      * Returns whether an Exercise can enter the latest-per-scope pick for this query.
-     * Needs a matching Shared KPI line plus Exercise-level Sizing Month / Validated Date.
+     * Needs a matching Shared KPI line plus Exercise-level Sizing Month / Validated at.
      *
      * @param exercise APPROVED Exercise
      * @param query list filters; {@code pl3Code} is required

@@ -58,7 +58,9 @@ public final class TmsSessionSpecification {
         return (root, query, builder) -> {
             var predicates = new ArrayList<Predicate>();
             Join<TmsSession, Toolkit> toolkit = null;
-            if (filter.agentCcgid() != null) {
+            if (filter.positionId() != null && !filter.positionId().isBlank()) {
+                predicates.add(builder.equal(root.get("positionId"), filter.positionId()));
+            } else if (filter.agentCcgid() != null) {
                 predicates.add(builder.equal(root.get("agentCcgid"), filter.agentCcgid()));
             }
             if (filter.toolkitIds() != null) {
@@ -159,7 +161,8 @@ public final class TmsSessionSpecification {
             String domain,
             String carrier,
             String site,
-            String customerCountry) {
+            String customerCountry,
+            String positionId) {
         public Filter(
                 String agentCcgid,
                 Collection<UUID> toolkitIds,
@@ -182,6 +185,7 @@ public final class TmsSessionSpecification {
                     queryText,
                     dateFrom,
                     dateTo,
+                    null,
                     null,
                     null,
                     null,
@@ -220,6 +224,7 @@ public final class TmsSessionSpecification {
                     null,
                     null,
                     null,
+                    null,
                     null);
         }
 
@@ -249,6 +254,7 @@ public final class TmsSessionSpecification {
                     dateTo,
                     enabled,
                     dateCenter,
+                    null,
                     null,
                     null,
                     null,

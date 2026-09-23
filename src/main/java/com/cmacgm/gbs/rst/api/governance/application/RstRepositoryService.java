@@ -152,7 +152,7 @@ public class RstRepositoryService {
                                 item.getName(),
                                 item.getDescription(),
                                 item.getDisplayOrder(),
-                                null))
+                                false))
                         .toList(),
                 exercise.getSharedKpiLines().stream()
                         .map(item -> new ExerciseKpiView(
@@ -312,7 +312,7 @@ public class RstRepositoryService {
         List<UUID> exerciseIds = approved.stream().map(RstExercise::getId).toList();
         Map<UUID, List<ExerciseProductionSupportItem>> itemsByExercise = new HashMap<>();
         for (ExerciseProductionSupportItem item :
-                supportItems.findByExerciseIdInAndDeletedAtIsNull(exerciseIds)) {
+                supportItems.findByExerciseIdInAndDeletedFalse(exerciseIds)) {
             itemsByExercise.computeIfAbsent(item.getExerciseId(), ignored -> new ArrayList<>()).add(item);
         }
         Map<UUID, ExerciseTeamSetup> setups = new HashMap<>();
