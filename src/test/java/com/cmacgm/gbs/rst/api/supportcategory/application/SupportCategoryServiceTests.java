@@ -12,7 +12,12 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
+import com.cmacgm.gbs.rst.api.audit.application.AuditRecorder;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditAction;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditEntityType;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.supportcategory.api.dto.CreateSupportCategoryRequest;
@@ -23,6 +28,7 @@ import com.cmacgm.gbs.rst.api.supportcategory.api.dto.UpdateSupportCategoryReque
 import com.cmacgm.gbs.rst.api.supportcategory.domain.SupportCategory;
 import com.cmacgm.gbs.rst.api.supportcategory.persistence.SupportCategoryRepository;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 class SupportCategoryServiceTests {
 
@@ -144,7 +150,27 @@ class SupportCategoryServiceTests {
     }
 
     private static SupportCategoryService service(List<SupportCategory> store) {
-        return new SupportCategoryService(repo(store), Clock.fixed(NOW, ZoneOffset.UTC));
+        AuditRecorder audits = Mockito.mock(AuditRecorder.class);
+        Mockito.when(audits.recordCurrent(
+                        Mockito.eq(AuditEntityType.SUPPORT_CATEGORY),
+                        Mockito.any(UUID.class),
+                        Mockito.eq(AuditAction.CREATE)))
+                .thenReturn(null);
+        Mockito.when(audits.createdBy(Mockito.eq(AuditEntityType.SUPPORT_CATEGORY), Mockito.any(UUID.class)))
+                .thenReturn(AuditActorView.self("ADMIN001", "Admin"));
+        Mockito.when(audits.createdBy(Mockito.eq(AuditEntityType.SUPPORT_CATEGORY), Mockito.anyCollection()))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    List<UUID> ids = ((java.util.Collection<UUID>) invocation.getArgument(1))
+                            .stream()
+                            .toList();
+                    java.util.Map<UUID, AuditActorView> created = new java.util.HashMap<>();
+                    for (UUID id : ids) {
+                        created.put(id, AuditActorView.self("ADMIN001", "Admin"));
+                    }
+                    return created;
+                });
+        return new SupportCategoryService(repo(store), audits, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private static RstPrincipal admin() {

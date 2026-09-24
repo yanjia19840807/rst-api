@@ -7,11 +7,13 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -19,7 +21,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
 import com.cmacgm.gbs.rst.api.audit.application.AuditRecorder;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditEntityType;
+import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphService;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
@@ -47,6 +52,7 @@ public class TimesheetSyncAdminService {
     private final TimesheetSyncAlertRepository alerts;
     private final TimesheetSyncService syncService;
     private final AuditRecorder audits;
+    private final MicrosoftGraphService graph;
     private final Clock clock;
 
     /**
@@ -55,6 +61,7 @@ public class TimesheetSyncAdminService {
      * @param alerts alert config
      * @param syncService pipeline
      * @param audits who triggered each run
+     * @param graph source file download
      * @param clock timestamps
      */
     public TimesheetSyncAdminService(
@@ -63,18 +70,22 @@ public class TimesheetSyncAdminService {
             TimesheetSyncAlertRepository alerts,
             TimesheetSyncService syncService,
             AuditRecorder audits,
+            MicrosoftGraphService graph,
             Clock clock) {
         this.syncRuns = syncRuns;
         this.issues = issues;
         this.alerts = alerts;
         this.syncService = syncService;
         this.audits = audits;
+        this.graph = graph;
         this.clock = clock;
     }
 
     /**
      * @param kind optional DAILY or MONTHLY
      * @param status optional run status
+     * @param center optional GBS center
+     * @param sourceType optional SHAREPOINT or MANUAL
      * @param dateFrom inclusive sync date
      * @param dateTo inclusive sync date
      * @param page 1-based page
@@ -83,20 +94,44 @@ public class TimesheetSyncAdminService {
      */
     @Transactional(readOnly = true)
     public Overview overview(
-            String kind, String status, LocalDate dateFrom, LocalDate dateTo, int page, int pageSize) {
+            String kind,
+            String status,
+            String center,
+            String sourceType,
+            LocalDate dateFrom,
+            LocalDate dateTo,
+            int page,
+            int pageSize) {
         int safePageSize = Math.min(100, Math.max(1, pageSize));
         int safePage = Math.max(1, page);
-        return new Overview(
-                snapshots("DAILY"),
-                snapshots("MONTHLY"),
-                PageResponse.from(
-                        syncRuns.findAll(
-                                TimesheetSyncRunSpecification.filtered(kind, status, dateFrom, dateTo),
-                                PageRequest.of(
-                                        safePage - 1,
-                                        safePageSize,
-                                        Sort.by(Sort.Direction.DESC, "startedAt"))),
-                        this::toHeader));
+        Page<TimesheetSyncRun> runs = syncRuns.findAll(
+                TimesheetSyncRunSpecification.filtered(kind, status, center, sourceType, dateFrom, dateTo),
+                PageRequest.of(safePage - 1, safePageSize, Sort.by(Sort.Direction.DESC, "startedAt")));
+        return new Overview(snapshots("DAILY"), snapshots("MONTHLY"), headers(runs));
+    }
+
+    /**
+     * Streams the source file stored on SharePoint for this run.
+     *
+     * @param id run
+     * @return file name and bytes
+     */
+    @Transactional(readOnly = true)
+    public FileDownload downloadSource(UUID id) {
+        TimesheetSyncRun run = syncRuns.findById(id)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Timesheet sync run not found."));
+        String itemId = run.getSourceDriveItemId();
+        if (itemId == null || itemId.isBlank()) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "FILE_UNAVAILABLE", "File is no longer available.");
+        }
+        try {
+            String fileName = run.getSourceFileName() == null || run.getSourceFileName().isBlank()
+                    ? "timesheet.xlsx"
+                    : run.getSourceFileName();
+            return new FileDownload(fileName, graph.getDriveItemBytesById(itemId));
+        } catch (RuntimeException ex) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "FILE_UNAVAILABLE", "File is no longer available.");
+        }
     }
 
     /**
@@ -197,12 +232,28 @@ public class TimesheetSyncAdminService {
     }
 
     private List<RunHeader> snapshots(String kind) {
-        return syncRuns.findByKindAndStatus(kind, "ACTIVE").stream()
-                .map(this::toHeader)
-                .toList();
+        List<TimesheetSyncRun> rows = syncRuns.findByKindAndStatus(kind, "ACTIVE");
+        Map<UUID, AuditActorView> created = createdBy(rows);
+        return rows.stream().map(run -> toHeader(run, created.get(run.getId()))).toList();
+    }
+
+    private PageResponse<RunHeader> headers(Page<TimesheetSyncRun> page) {
+        Map<UUID, AuditActorView> created = createdBy(page.getContent());
+        return PageResponse.from(page, run -> toHeader(run, created.get(run.getId())));
+    }
+
+    private Map<UUID, AuditActorView> createdBy(List<TimesheetSyncRun> rows) {
+        return audits.createdBy(
+                AuditEntityType.TIMESHEET_SYNC,
+                rows.stream().map(TimesheetSyncRun::getId).toList());
     }
 
     private RunHeader toHeader(TimesheetSyncRun run) {
+        return toHeader(run, audits.createdBy(AuditEntityType.TIMESHEET_SYNC, run.getId()));
+    }
+
+    private RunHeader toHeader(TimesheetSyncRun run, AuditActorView createdBy) {
+        String itemId = run.getSourceDriveItemId();
         return new RunHeader(
                 run.getId(),
                 run.getKind(),
@@ -214,7 +265,8 @@ public class TimesheetSyncAdminService {
                 run.getSourceType(),
                 run.getSourceFileName(),
                 run.getSourceEtag(),
-                audits.label(run.getLatestAuditEventId()),
+                itemId != null && !itemId.isBlank(),
+                createdBy,
                 run.getErrorCode(),
                 run.getErrorMessage(),
                 run.getStartedAt(),
@@ -394,6 +446,9 @@ public class TimesheetSyncAdminService {
     public record RunDetail(RunHeader run, PageResponse<IssueView> issues) {
     }
 
+    public record FileDownload(String fileName, byte[] content) {
+    }
+
     public record RunHeader(
             UUID id,
             String kind,
@@ -405,7 +460,8 @@ public class TimesheetSyncAdminService {
             String sourceType,
             String sourceFileName,
             String sourceEtag,
-            String triggeredBy,
+            boolean hasSourceFile,
+            AuditActorView createdBy,
             String errorCode,
             String errorMessage,
             Instant startedAt,

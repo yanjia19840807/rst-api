@@ -9,6 +9,10 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
+import com.cmacgm.gbs.rst.api.audit.application.AuditRecorder;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditAction;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditEntityType;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.supportcategory.api.dto.CreateSupportCategoryRequest;
@@ -29,10 +33,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class SupportCategoryService {
 
     private final SupportCategoryRepository categories;
+    private final AuditRecorder audits;
     private final Clock clock;
 
-    public SupportCategoryService(SupportCategoryRepository categories, Clock clock) {
+    public SupportCategoryService(
+            SupportCategoryRepository categories, AuditRecorder audits, Clock clock) {
         this.categories = categories;
+        this.audits = audits;
         this.clock = clock;
     }
 
@@ -93,9 +100,11 @@ public class SupportCategoryService {
      */
     @Transactional(readOnly = true)
     public List<SupportCategoryAdminRow> listAdmin() {
-        return categories.findByDeletedAtIsNullOrderByDisplayOrderAscNameAsc().stream()
-                .map(SupportCategoryService::toAdminRow)
-                .toList();
+        List<SupportCategory> rows = categories.findByDeletedAtIsNullOrderByDisplayOrderAscNameAsc();
+        Map<UUID, AuditActorView> created = audits.createdBy(
+                AuditEntityType.SUPPORT_CATEGORY,
+                rows.stream().map(SupportCategory::getId).toList());
+        return rows.stream().map(row -> toAdminRow(row, created.get(row.getId()))).toList();
     }
 
     /**
@@ -112,7 +121,9 @@ public class SupportCategoryService {
         Instant now = clock.instant();
         String actor = actorCcgid(principal);
         SupportCategory category = SupportCategory.create(name, nextDisplayOrder(), actor, now);
-        return toAdminRow(categories.save(category));
+        SupportCategory saved = categories.save(category);
+        audits.recordCurrent(AuditEntityType.SUPPORT_CATEGORY, saved.getId(), AuditAction.CREATE);
+        return toAdminRow(saved, audits.createdBy(AuditEntityType.SUPPORT_CATEGORY, saved.getId()));
     }
 
     /**
@@ -150,7 +161,9 @@ public class SupportCategoryService {
             swapDisplayOrder(category, nextOrder, actor, now);
             category.reorder(nextOrder, actor, now);
         }
-        return toAdminRow(categories.save(category));
+        return toAdminRow(
+                categories.save(category),
+                audits.createdBy(AuditEntityType.SUPPORT_CATEGORY, category.getId()));
     }
 
     /**
@@ -251,12 +264,14 @@ public class SupportCategoryService {
         return principal.realCcgid();
     }
 
-    private static SupportCategoryAdminRow toAdminRow(SupportCategory category) {
+    private static SupportCategoryAdminRow toAdminRow(SupportCategory category, AuditActorView createdBy) {
         return new SupportCategoryAdminRow(
                 category.getId(),
                 category.getName(),
                 category.getStatus(),
                 category.getDisplayOrder(),
+                createdBy,
+                category.getCreatedAt(),
                 category.getUpdatedAt());
     }
 

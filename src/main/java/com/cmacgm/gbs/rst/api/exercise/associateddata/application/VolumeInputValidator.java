@@ -78,11 +78,12 @@ public class VolumeInputValidator {
         }
         requireActualVolumes(request);
         requireContinuousMonths(months);
-        rejectMonthsOutsideHistory(request, sizingMonth);
+        rejectMonthsAfterSizing(request, sizingMonth);
     }
 
     /**
-     * Monthly Excel: non-empty, every actual filled, months continuous, inside the 36-month window.
+     * Monthly Excel: non-empty, every actual filled, months continuous, on or before Sizing Month.
+     * Length is not capped at 36 months; forecast send trims the FastAPI payload separately.
      */
     public void validateMonthlyImportRows(List<MonthlyVolumeRequest> request, LocalDate sizingMonth) {
         if (request == null || request.isEmpty()) {
@@ -91,7 +92,7 @@ public class VolumeInputValidator {
         List<YearMonth> months = validateMonthlyShape(request);
         requireActualVolumes(request);
         requireContinuousMonths(months);
-        rejectMonthsOutsideHistory(request, sizingMonth);
+        rejectMonthsAfterSizing(request, sizingMonth);
     }
 
     /**
@@ -124,25 +125,13 @@ public class VolumeInputValidator {
         }
     }
 
-    private static void rejectMonthsOutsideHistory(
+    private static void rejectMonthsAfterSizing(
             List<MonthlyVolumeRequest> request, LocalDate sizingMonth) {
         YearMonth cutoff = YearMonth.from(sizingMonth);
-        YearMonth floor = VolumeTrainWindows.monthlyHistoryFloor(sizingMonth);
         for (MonthlyVolumeRequest row : request) {
             YearMonth ym = YearMonth.parse(row.month().trim());
             if (ym.isAfter(cutoff)) {
                 fail("volume-month-after-sizing", "Month " + ym + " is after the sizing month and cannot have Actual Volume.");
-            }
-            if (ym.isBefore(floor)) {
-                fail(
-                        "volume-month-before-history",
-                        "Month "
-                                + ym
-                                + " is more than "
-                                + VolumeTrainWindows.MAX_VOLUME_HISTORY_MONTHS
-                                + " months before the sizing month. Earliest allowed month is "
-                                + floor
-                                + ".");
             }
         }
     }
@@ -211,11 +200,12 @@ public class VolumeInputValidator {
         }
         requireDailyActualVolumes(request);
         requireContinuousDates(dates);
-        rejectDatesOutsideHistory(request, sizingMonth);
+        rejectDatesAfterSizing(request, sizingMonth);
     }
 
     /**
-     * Daily Excel: non-empty, every actual filled, dates continuous, inside the 36-month window.
+     * Daily Excel: non-empty, every actual filled, dates continuous, on or before Sizing Month.
+     * Length is not capped at 36 months; forecast send trims the FastAPI payload separately.
      */
     public void validateDailyImportRows(List<DailyVolumeRequest> request, LocalDate sizingMonth) {
         if (request == null || request.isEmpty()) {
@@ -224,7 +214,7 @@ public class VolumeInputValidator {
         List<LocalDate> dates = validateDailyShape(request);
         requireDailyActualVolumes(request);
         requireContinuousDates(dates);
-        rejectDatesOutsideHistory(request, sizingMonth);
+        rejectDatesAfterSizing(request, sizingMonth);
     }
 
     /**
@@ -257,25 +247,13 @@ public class VolumeInputValidator {
         }
     }
 
-    private static void rejectDatesOutsideHistory(
+    private static void rejectDatesAfterSizing(
             List<DailyVolumeRequest> request, LocalDate sizingMonth) {
         LocalDate cutoff = YearMonth.from(sizingMonth).atEndOfMonth();
-        LocalDate floor = VolumeTrainWindows.dailyHistoryFloor(sizingMonth);
         for (DailyVolumeRequest row : request) {
             LocalDate date = row.volumeDate();
             if (date.isAfter(cutoff)) {
                 fail("volume-date-after-sizing", "Date " + date + " is after the sizing month and cannot have Actual Volume.");
-            }
-            if (date.isBefore(floor)) {
-                fail(
-                        "volume-date-before-history",
-                        "Date "
-                                + date
-                                + " is more than "
-                                + VolumeTrainWindows.MAX_VOLUME_HISTORY_MONTHS
-                                + " months before the sizing month. Earliest allowed date is "
-                                + floor
-                                + ".");
             }
         }
     }

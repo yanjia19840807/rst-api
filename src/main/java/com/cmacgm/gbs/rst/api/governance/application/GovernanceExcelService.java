@@ -21,7 +21,6 @@ public class GovernanceExcelService {
             "Exercise No",
             "Toolkit",
             "Sizing Month",
-            "Validated at",
             "GBS Center",
             "Domain",
             "PL1",
@@ -35,13 +34,13 @@ public class GovernanceExcelService {
             "Production Support (FTE)",
             "Capacity Creation (HC)",
             "Capacity Creation (%)",
-            "Volume Increase YoY (%)");
+            "Volume Increase YoY (%)",
+            "Validated at");
 
     private static final List<String> SUPPORT_HEADERS = List.of(
             "Exercise No",
             "Toolkit",
             "Sizing Month",
-            "Validated at",
             "GBS Center",
             "Domain",
             "PL1",
@@ -56,12 +55,12 @@ public class GovernanceExcelService {
             "Volume (transactions)",
             "UOM",
             "Support (FTE)",
-            "Comments");
+            "Comments",
+            "Validated at");
 
     private static final List<String> BENCHMARK_HEADERS = List.of(
             "Exercise No",
             "Sizing Month",
-            "Validated at",
             "GBS Center",
             "Domain",
             "PL1",
@@ -73,7 +72,8 @@ public class GovernanceExcelService {
             "Cycle time (s)",
             "Daily Production Capacity / Agent (transactions)",
             "Production Support Ratio (%)",
-            "Capacity Creation (HC)");
+            "Capacity Creation (HC)",
+            "Validated at");
 
     /**
      * Writes filtered RST Repository rows.
@@ -88,7 +88,6 @@ public class GovernanceExcelService {
                     blank(row.exerciseId()),
                     blank(row.toolkit()),
                     blank(row.sizingMonth()),
-                    dateTime(row.validatedDate()),
                     blank(row.country()),
                     blank(row.domain()),
                     blank(row.pl1()),
@@ -102,7 +101,8 @@ public class GovernanceExcelService {
                     decimal(row.support()),
                     decimal(row.capacityCreation()),
                     decimal(row.capacityPct()),
-                    blank(row.volumeYoY())));
+                    blank(row.volumeYoY()),
+                    dateTime(row.validatedDate())));
         }
         return ExcelSheets.write("RST Repository", REPOSITORY_HEADERS, body);
     }
@@ -120,7 +120,6 @@ public class GovernanceExcelService {
                     blank(row.exerciseNo()),
                     blank(row.toolkit()),
                     blank(row.sizingMonth()),
-                    dateTime(row.validatedDate()),
                     blank(row.center()),
                     blank(row.domain()),
                     blank(row.pl1()),
@@ -135,7 +134,8 @@ public class GovernanceExcelService {
                     decimal(row.volume()),
                     blank(row.uom()),
                     decimal(row.fte()),
-                    blank(row.comments())));
+                    blank(row.comments()),
+                    dateTime(row.validatedDate())));
         }
         return ExcelSheets.write("Support Repository", SUPPORT_HEADERS, body);
     }
@@ -152,7 +152,6 @@ public class GovernanceExcelService {
             body.add(List.of(
                     blank(row.exerciseNo()),
                     blank(row.sizingMonth()),
-                    dateTime(row.validatedDate()),
                     blank(row.gbs()),
                     blank(row.domain()),
                     blank(row.pl1()),
@@ -164,7 +163,8 @@ public class GovernanceExcelService {
                     decimal(row.cycleTimeSeconds()),
                     decimal(row.dailyCapacityPerAgent()),
                     decimal(row.productionSupportRatioPct()),
-                    decimal(row.capacityCreation())));
+                    decimal(row.capacityCreation()),
+                    dateTime(row.validatedDate())));
         }
         return ExcelSheets.write("Benchmarking", BENCHMARK_HEADERS, body);
     }

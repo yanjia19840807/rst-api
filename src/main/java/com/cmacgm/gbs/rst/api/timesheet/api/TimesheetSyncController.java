@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSyncAdminService.FileDownload;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSnapshotBrowseService;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSnapshotBrowseService.AssignmentView;
@@ -18,7 +19,9 @@ import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSyncAdminService.Al
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSyncAdminService.Overview;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSyncAdminService.RunDetail;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSyncAdminService.RunHeader;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -56,11 +59,13 @@ public class TimesheetSyncController {
     public Overview overview(
             @RequestParam(required = false) String kind,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String center,
+            @RequestParam(required = false) String sourceType,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        return admin.overview(kind, status, dateFrom, dateTo, page, pageSize);
+        return admin.overview(kind, status, center, sourceType, dateFrom, dateTo, page, pageSize);
     }
 
     @GetMapping("/tables/filters")
@@ -135,6 +140,17 @@ public class TimesheetSyncController {
     public AlertConfig saveAlert(
             @AuthenticationPrincipal RstPrincipal principal, @RequestBody AlertConfig request) {
         return admin.saveAlert(principal, request);
+    }
+
+    @GetMapping("/{id}/file")
+    public ResponseEntity<byte[]> file(@PathVariable UUID id) {
+        FileDownload file = admin.downloadSource(id);
+        String fileName = file.fileName().replace("\"", "");
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(file.content());
     }
 
     @GetMapping("/{id}")

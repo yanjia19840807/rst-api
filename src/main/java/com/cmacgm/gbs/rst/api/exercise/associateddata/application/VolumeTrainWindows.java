@@ -27,8 +27,9 @@ public final class VolumeTrainWindows {
     /** Apply Period and import share this cap. */
     public static final int MAX_SLOT_WEEKS = 12;
     /**
-     * Inclusive months pulled from Toolkit into an Exercise, ending at Sizing Month.
-     * Example: sizing 2026-09 → 2023-10 … 2026-09.
+     * Max months sent to FastAPI forecast (and Toolkit seed overlay), ending at Sizing Month.
+     * Volume Input save/import is not capped at this length.
+     * Example: sizing 2026-09 → forecast payload 2023-10 … 2026-09.
      */
     public static final int MAX_VOLUME_HISTORY_MONTHS = 36;
 

@@ -9,5 +9,6 @@ public enum AuditEntityType {
     TOOLKIT,
     TIMESHEET_SYNC,
     CENTER_LTH,
-    CENTER_DOMAIN_HEAD
+    CENTER_DOMAIN_HEAD,
+    SUPPORT_CATEGORY
 }

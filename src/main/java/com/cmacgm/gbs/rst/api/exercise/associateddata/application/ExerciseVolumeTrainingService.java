@@ -56,7 +56,8 @@ public class ExerciseVolumeTrainingService {
     }
 
     /**
-     * Monthly actuals for forecast: Toolkit series overlaid by this Exercise, cutoff sizing month.
+     * Monthly actuals for FastAPI forecast: Toolkit overlaid by this Exercise, last 36 months
+     * through Sizing Month. Older Volume Input rows stay on the Exercise but are not sent.
      */
     @Transactional(readOnly = true)
     public List<TrainingPoint> assembleMonthly(RstExercise exercise) {
@@ -91,7 +92,8 @@ public class ExerciseVolumeTrainingService {
     }
 
     /**
-     * Daily actuals for forecast: Toolkit series overlaid by this Exercise, cutoff sizing month end.
+     * Daily actuals for FastAPI forecast: Toolkit overlaid by this Exercise, last 36 months
+     * through the end of Sizing Month. Older Volume Input rows stay on the Exercise but are not sent.
      */
     @Transactional(readOnly = true)
     public List<TrainingPoint> assembleDaily(RstExercise exercise) {

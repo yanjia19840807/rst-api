@@ -17,16 +17,23 @@ public final class TimesheetSyncRunSpecification {
     }
 
     /**
-     * Filters by kind, status and sync-date range. Blank values are ignored.
+     * Filters by kind, status, center, source and sync-date range. Blank values are ignored.
      *
      * @param kind DAILY or MONTHLY
      * @param status run status
+     * @param center GBS center
+     * @param sourceType SHAREPOINT or MANUAL
      * @param dateFrom inclusive sync date
      * @param dateTo inclusive sync date
      * @return specification
      */
     public static Specification<TimesheetSyncRun> filtered(
-            String kind, String status, LocalDate dateFrom, LocalDate dateTo) {
+            String kind,
+            String status,
+            String center,
+            String sourceType,
+            LocalDate dateFrom,
+            LocalDate dateTo) {
         return (root, query, builder) -> {
             var predicates = new ArrayList<Predicate>();
             String kindFilter = blankToNull(kind);
@@ -36,6 +43,14 @@ public final class TimesheetSyncRunSpecification {
             String statusFilter = blankToNull(status);
             if (statusFilter != null) {
                 predicates.add(builder.equal(root.get("status"), statusFilter.toUpperCase()));
+            }
+            String centerFilter = blankToNull(center);
+            if (centerFilter != null) {
+                predicates.add(builder.equal(root.get("center"), centerFilter));
+            }
+            String sourceFilter = blankToNull(sourceType);
+            if (sourceFilter != null) {
+                predicates.add(builder.equal(root.get("sourceType"), sourceFilter.toUpperCase()));
             }
             if (dateFrom != null) {
                 predicates.add(builder.greaterThanOrEqualTo(root.get("syncDate"), dateFrom));

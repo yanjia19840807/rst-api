@@ -140,6 +140,23 @@ public class MicrosoftGraphService {
     }
 
     /**
+     * Downloads file bytes by drive item id.
+     *
+     * @param driveItemId file item id
+     * @return content
+     */
+    public byte[] getDriveItemBytesById(String driveItemId) {
+        try (InputStream content = getDriveItemContentById(driveItemId)) {
+            return content.readAllBytes();
+        } catch (IOException ex) {
+            throw new ApiException(
+                    HttpStatus.BAD_GATEWAY,
+                    "graph-download-failed",
+                    "Unable to read SharePoint file: " + ex.getMessage());
+        }
+    }
+
+    /**
      * Creates or replaces a file under a folder path in the Timesheet library.
      *
      * @param folderPath folder relative to the library root, for example

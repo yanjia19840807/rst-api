@@ -73,19 +73,19 @@ class VolumeInputValidatorTests {
     }
 
     @Test
-    void monthlyImportRejectsMonthBefore36MonthWindow() {
-        assertThatThrownBy(() -> validator.validateMonthlyImportRows(
-                        List.of(new MonthlyVolumeRequest("2023-09", BigDecimal.ONE, null)),
-                        LocalDate.of(2026, 9, 1)))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("Earliest allowed month is 2023-10");
+    void monthlyImportAllowsMoreThan36MonthsBeforeSizing() {
+        validator.validateMonthlyImportRows(
+                months("2023-09", "2026-09"),
+                LocalDate.of(2026, 9, 1));
     }
 
     @Test
-    void monthlyImportAllowsEarliestMonthInWindow() {
-        validator.validateMonthlyImportRows(
-                List.of(new MonthlyVolumeRequest("2023-10", BigDecimal.ONE, null)),
-                LocalDate.of(2026, 9, 1));
+    void monthlyImportStillRejectsMonthAfterSizing() {
+        assertThatThrownBy(() -> validator.validateMonthlyImportRows(
+                        List.of(new MonthlyVolumeRequest("2026-10", BigDecimal.ONE, null)),
+                        LocalDate.of(2026, 9, 1)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("after the sizing month");
     }
 
     @Test
@@ -103,12 +103,10 @@ class VolumeInputValidatorTests {
     }
 
     @Test
-    void dailyImportRejectsDateBefore36MonthWindow() {
-        assertThatThrownBy(() -> validator.validateDailyImportRows(
-                        List.of(new DailyVolumeRequest(LocalDate.of(2023, 9, 30), BigDecimal.ONE, null)),
-                        LocalDate.of(2026, 9, 1)))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("Earliest allowed date is 2023-10-01");
+    void dailyImportAllowsDateBefore36MonthWindow() {
+        validator.validateDailyImportRows(
+                List.of(new DailyVolumeRequest(LocalDate.of(2023, 9, 30), BigDecimal.ONE, null)),
+                LocalDate.of(2026, 9, 1));
     }
 
     @Test
@@ -156,6 +154,16 @@ class VolumeInputValidatorTests {
         assertThatThrownBy(() -> validator.planSlotImport(rows))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("cannot exceed 12 weeks");
+    }
+
+    private static List<MonthlyVolumeRequest> months(String from, String to) {
+        YearMonth start = YearMonth.parse(from);
+        YearMonth end = YearMonth.parse(to);
+        List<MonthlyVolumeRequest> rows = new ArrayList<>();
+        for (YearMonth cursor = start; !cursor.isAfter(end); cursor = cursor.plusMonths(1)) {
+            rows.add(new MonthlyVolumeRequest(cursor.toString(), BigDecimal.ONE, null));
+        }
+        return rows;
     }
 
     private static List<SlotVolumeRequest> days(LocalDate start, int count) {

@@ -130,6 +130,8 @@ public class SupportCategory {
     public String getName() { return name; }
     public String getStatus() { return status; }
     public int getDisplayOrder() { return displayOrder; }
+    public Instant getCreatedAt() { return createdAt; }
+    public String getCreatedBy() { return createdBy; }
     public Instant getUpdatedAt() { return updatedAt; }
     public Instant getDeletedAt() { return deletedAt; }
 }

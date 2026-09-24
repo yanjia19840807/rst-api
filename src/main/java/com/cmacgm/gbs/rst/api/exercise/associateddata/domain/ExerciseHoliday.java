@@ -68,6 +68,20 @@ public class ExerciseHoliday {
         return holiday;
     }
 
+    /**
+     * Updates name and type. Date is the upsert key and stays unchanged.
+     *
+     * @param holidayName display name
+     * @param holidayType Holiday, Weekend, or Normal
+     */
+    public void update(String holidayName, HolidayDayKind holidayType) {
+        if (holidayType == null) {
+            throw new IllegalArgumentException("Holiday type is required.");
+        }
+        this.holidayName = holidayName;
+        this.holidayType = holidayType;
+    }
+
     public void softDelete() {
         this.deleted = true;
     }

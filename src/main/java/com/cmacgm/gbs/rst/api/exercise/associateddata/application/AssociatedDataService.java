@@ -475,7 +475,7 @@ public class AssociatedDataService {
     }
 
     /**
-     * Imports holidays from Excel and replaces the current list.
+     * Upserts holidays from Excel by date. Existing dates not in the file are kept.
      */
     @Transactional
     public CalendarView importCalendarExcel(
@@ -486,17 +486,49 @@ public class AssociatedDataService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY, "invalid-excel", "No holiday rows found.");
         }
+        Map<LocalDate, ExerciseHoliday> existingByDate = new LinkedHashMap<>();
+        for (ExerciseHoliday existing : holidays
+                .findByExerciseIdAndDeletedFalseOrderByHolidayDateAscHolidayNameAsc(exerciseId)) {
+            existingByDate.putIfAbsent(existing.getHolidayDate(), existing);
+        }
+        int accepted = 0;
+        for (HolidayRequest holiday : parsed) {
+            if (holiday.holidayType() == null) {
+                throw new ApiException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "invalid-holiday-type",
+                        "Holiday type is required.");
+            }
+            if (holiday.holidayDate() == null) {
+                throw new ApiException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "invalid-holiday-date",
+                        "Holiday date is required.");
+            }
+            String name = holiday.holidayName() == null ? "" : holiday.holidayName().trim();
+            ExerciseHoliday existing = existingByDate.get(holiday.holidayDate());
+            if (existing == null) {
+                ExerciseHoliday created = ExerciseHoliday.create(
+                        exerciseId, holiday.holidayDate(), name, holiday.holidayType());
+                holidays.save(created);
+                existingByDate.put(holiday.holidayDate(), created);
+            } else {
+                existing.update(name, holiday.holidayType());
+                holidays.save(existing);
+            }
+            accepted += 1;
+        }
         recordImportBatch(
                 ownerCcgid,
                 exerciseId,
                 "HOLIDAY",
                 fileName,
                 content,
-                parsed.size(),
+                accepted,
                 "HOLIDAY_IMPORT",
                 "holiday-import.xlsx",
                 ManualImportStore.Module.CALENDAR);
-        return putCalendar(ownerCcgid, exerciseId, new CalendarRequest(parsed));
+        return getCalendar(ownerCcgid, exerciseId);
     }
 
     /**
