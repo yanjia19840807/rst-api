@@ -15,7 +15,6 @@ public record SubmitPreviewView(
         boolean remarksRequired,
         boolean submitBlocked,
         TimesheetAlignmentView timesheetAlignment,
-        boolean scopeAcknowledgementRequired,
         String nextStep,
         String nextPositionId,
         String nextHandlerName,

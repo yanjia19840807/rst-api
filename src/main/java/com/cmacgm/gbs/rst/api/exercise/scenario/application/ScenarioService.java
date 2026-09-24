@@ -26,6 +26,7 @@ import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.ShiftRequest;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.CreateScenarioRequest;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ScenarioView;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ShiftView;
+import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.UpdateScenarioIdentityRequest;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.UpdateScenarioRequest;
 
 /**
@@ -91,13 +92,13 @@ public class ScenarioService {
         exercises.requireEditable(exercise);
         Instant now = clock.instant();
         String scenarioCode = resolveScenarioCode(exerciseId, request.scenarioCode());
-        String name = request.name();
-        if (name != null && request.scenarioCode() != null && name.contains(request.scenarioCode())) {
-            // Keep display name aligned when server allocates a different code.
-            name = name.replace(request.scenarioCode(), scenarioCode);
-        }
         Scenario scenario = Scenario.createDraft(
-                exerciseId, scenarioCode, name, request.description(), request.rightSizingHc(), now);
+                exerciseId,
+                scenarioCode,
+                request.name(),
+                request.description(),
+                request.rightSizingHc(),
+                now);
         touch(exercise);
         return toView(scenarios.save(scenario));
     }
@@ -169,6 +170,23 @@ public class ScenarioService {
         scenario.updateDraft(request.name(), request.description(), request.rightSizingHc());
         touch(exercise);
         return toView(scenarios.save(scenario));
+    }
+
+    /**
+     * Updates a live scenario name and description. Right Sizing HC, shifts and
+     * committed simulation snapshots stay unchanged.
+     */
+    @Transactional
+    public ScenarioView updateIdentity(
+            String ownerCcgid,
+            UUID exerciseId,
+            UUID scenarioId,
+            UpdateScenarioIdentityRequest request) {
+        return update(
+                ownerCcgid,
+                exerciseId,
+                scenarioId,
+                new UpdateScenarioRequest(request.name(), request.description(), null));
     }
 
     /**

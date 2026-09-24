@@ -20,7 +20,6 @@ class WorkingDaysCalculatorTest {
     @Test
     void networkDays_weekendOnly_satSun_2025() {
         assertEquals(261, calculator.networkDays(2025, "1", List.of()));
-        assertEquals(261, calculator.networkDays(2025, "SAT_SUN", List.of()));
     }
 
     @Test

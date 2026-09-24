@@ -35,7 +35,7 @@ public class Scenario {
     @Column(name = "scenario_code", nullable = false, length = 40)
     private String scenarioCode;
 
-    @Column(nullable = false, length = 200)
+    @Column(nullable = false, length = 30)
     private String name;
 
     private String description;

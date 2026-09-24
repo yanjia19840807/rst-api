@@ -12,6 +12,7 @@ import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.CommitScenarioRequest;
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.ScenarioService;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.CreateScenarioRequest;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.ScenarioView;
+import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.UpdateScenarioIdentityRequest;
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.SizingSimulationService;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.DailySizingView;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.MonthlySizingView;
@@ -117,6 +118,18 @@ public class ScenarioController {
             @PathVariable UUID exerciseId,
             @PathVariable UUID scenarioId) {
         return scenarios.detail(supervisor(principal), exerciseId, scenarioId);
+    }
+
+    /**
+     * Updates scenario name and description without changing simulation inputs or results.
+     */
+    @PutMapping("/{scenarioId}")
+    public ScenarioView updateIdentity(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID exerciseId,
+            @PathVariable UUID scenarioId,
+            @Valid @RequestBody UpdateScenarioIdentityRequest request) {
+        return scenarios.updateIdentity(supervisor(principal), exerciseId, scenarioId, request);
     }
 
     /**

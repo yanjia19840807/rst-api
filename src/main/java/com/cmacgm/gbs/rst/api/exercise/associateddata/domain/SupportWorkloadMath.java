@@ -20,7 +20,6 @@ public final class SupportWorkloadMath {
 
     /**
      * Stored frequency: DAILY / WEEKLY / MONTHLY.
-     * DAY / WEEK / MONTH are accepted on input and mapped to the stored values.
      *
      * @param frequencyCode input code
      * @return canonical stored code
@@ -28,9 +27,9 @@ public final class SupportWorkloadMath {
     public static String canonicalFrequency(String frequencyCode) {
         String code = frequencyCode == null ? "" : frequencyCode.trim().toUpperCase(Locale.ROOT);
         return switch (code) {
-            case "DAILY", "DAY" -> "DAILY";
-            case "WEEKLY", "WEEK" -> "WEEKLY";
-            case "MONTHLY", "MONTH" -> "MONTHLY";
+            case "DAILY" -> "DAILY";
+            case "WEEKLY" -> "WEEKLY";
+            case "MONTHLY" -> "MONTHLY";
             default -> throw new IllegalArgumentException(
                     "frequencyCode must be DAILY, WEEKLY, or MONTHLY.");
         };

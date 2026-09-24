@@ -324,7 +324,7 @@ public class ExerciseService {
                 notices.add(
                         "Cleared saved Forecast and Simulation results for "
                                 + cleared
-                                + " scenario(s). Re-run Preview / Save sizing on each scenario.");
+                                + " scenario(s). Run Sizing Simulation on each scenario.");
             }
         }
         // Volume sync may run bulk @Modifying deletes that clear the
@@ -362,7 +362,7 @@ public class ExerciseService {
                 notices.add(
                         "Cleared saved Forecast and Simulation results for "
                                 + cleared
-                                + " scenario(s). Re-run Preview / Save sizing on each scenario.");
+                                + " scenario(s). Run Sizing Simulation on each scenario.");
             }
         }
         RstExercise reloaded = access.requireOwned(ownerCcgid, exerciseId);
@@ -395,7 +395,7 @@ public class ExerciseService {
                 notices.add(
                         "Cleared saved Forecast and Simulation results for "
                                 + cleared
-                                + " scenario(s). Re-run Preview / Save sizing on each scenario.");
+                                + " scenario(s). Run Sizing Simulation on each scenario.");
             }
         }
         RstExercise reloaded = access.requireOwned(ownerCcgid, exerciseId);

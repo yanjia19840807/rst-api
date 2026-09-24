@@ -51,24 +51,17 @@ public class ScenarioOfficialReadiness {
 
     void requireReady(Scenario scenario, String gate) {
         BigDecimal hc = scenario.getRightSizingHc();
-        if (hc == null || hc.signum() <= 0) {
-            throw unprocessable(
-                    "right-sizing-hc-required",
-                    "Right Sizing HC must be a positive number before " + gate + ".");
-        }
         SimulationRun monthly = accepted(scenario.getId(), "MONTHLY_SIZING");
         SimulationRun daily = accepted(scenario.getId(), "DAILY");
-        if (monthly == null || daily == null) {
-            throw unprocessable(
-                    "sizing-results-required",
-                    "Save Forecast and Sizing (monthly and daily) before " + gate + ".");
-        }
-        List<MonthlySizingResult> rows = monthlyResults.findBySimulationRunId(monthly.getId());
-        if (rows.isEmpty()
-                || dailyResults.findBySimulationRunIdOrderByResultDateAsc(daily.getId()).isEmpty()) {
-            throw unprocessable(
-                    "sizing-results-required",
-                    "Save Forecast and Sizing (monthly and daily) before " + gate + ".");
+        List<MonthlySizingResult> rows =
+                monthly == null ? List.of() : monthlyResults.findBySimulationRunId(monthly.getId());
+        boolean hasSizing =
+                monthly != null
+                        && daily != null
+                        && !rows.isEmpty()
+                        && !dailyResults.findBySimulationRunIdOrderByResultDateAsc(daily.getId()).isEmpty();
+        if (hc == null || hc.signum() <= 0 || !hasSizing) {
+            throw unprocessable("sizing-results-required", missingSizingMessage(gate));
         }
         BigDecimal expected = hc.setScale(6, RoundingMode.HALF_UP);
         for (MonthlySizingResult row : rows) {
@@ -76,10 +69,18 @@ public class ScenarioOfficialReadiness {
                     || row.getRightSizingHc().setScale(6, RoundingMode.HALF_UP).compareTo(expected) != 0) {
                 throw unprocessable(
                         "sizing-hc-mismatch",
-                        "Saved sizing results do not match the current Right Sizing HC. "
-                                + "Re-run Preview / Save sizing before " + gate + ".");
+                        "Saved Sizing results do not match the current Right Sizing HC. "
+                                + "Run Sizing Simulation again before " + gate + ".");
             }
         }
+    }
+
+    private static String missingSizingMessage(String gate) {
+        if ("Submit".equals(gate)) {
+            return "The Official Scenario has no saved Sizing results. "
+                    + "Run Sizing Simulation first.";
+        }
+        return "This scenario has no saved Sizing results. Run Sizing Simulation first.";
     }
 
     private SimulationRun accepted(UUID scenarioId, String runType) {

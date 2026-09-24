@@ -31,20 +31,20 @@ class SupportWorkloadMathTests {
     void unknownFrequencyIsRejected() {
         assertThatThrownBy(() -> SupportWorkloadMath.requireFrequency("YEARLY"))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> SupportWorkloadMath.requireFrequency("DAY"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void aliasesNormalizeToStoredCodes() {
-        assertThat(SupportWorkloadMath.canonicalFrequency("day")).isEqualTo("DAILY");
-        assertThat(SupportWorkloadMath.canonicalFrequency("WEEK")).isEqualTo("WEEKLY");
-        assertThat(SupportWorkloadMath.canonicalFrequency("month")).isEqualTo("MONTHLY");
+    void storedCodesAreAcceptedAsIs() {
         assertThat(SupportWorkloadMath.canonicalFrequency("DAILY")).isEqualTo("DAILY");
+        assertThat(SupportWorkloadMath.canonicalFrequency("weekly")).isEqualTo("WEEKLY");
         ExerciseProductionSupportItem item = ExerciseProductionSupportItem.create(
                 UUID.randomUUID(),
                 null,
                 "Admin",
                 "Mail",
-                "week",
+                "WEEKLY",
                 BigDecimal.ONE,
                 "Cases",
                 new BigDecimal("30"),

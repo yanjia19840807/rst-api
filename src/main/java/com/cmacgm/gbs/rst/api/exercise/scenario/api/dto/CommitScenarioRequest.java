@@ -14,7 +14,7 @@ import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
  * Full scenario save payload.
  */
 public record CommitScenarioRequest(
-        @NotBlank String name,
+        @NotBlank @Size(max = 30) String name,
         String description,
         BigDecimal rightSizingHc,
         @Size(max = Scenario.MAX_SHIFTS) List<@Valid ShiftRequest> shifts,

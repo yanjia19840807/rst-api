@@ -3,7 +3,6 @@ package com.cmacgm.gbs.rst.api.mail.domain;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 
 /**
  * Mail types a signed-in Supervisor / Manager / CDH / LTH / ADMIN can opt into.
@@ -11,22 +10,6 @@ import java.util.Set;
 public enum MailType {
     WORKFLOW("workflow.notification", "Workflow notifications"),
     TIMESHEET_SYNC_FAILED("timesheet.sync.failed", "Timesheet sync failed");
-
-    private static final Set<String> WORKFLOW_ALIASES = Set.of(
-            "workflow.notification",
-            "WORKFLOW",
-            "approval.requested",
-            "APPROVAL_REQUESTED",
-            "submission.outcome",
-            "SUBMISSION_OUTCOME",
-            "submission.returned",
-            "submission.approved",
-            "SUBMISSION_RETURNED",
-            "SUBMISSION_APPROVED");
-
-    private static final List<String> LEGACY_WORKFLOW_IDS = List.of(
-            "approval.requested",
-            "submission.outcome");
 
     private final String id;
     private final String label;
@@ -45,15 +28,6 @@ public enum MailType {
     }
 
     /**
-     * Stored preference ids that used to be separate workflow switches.
-     *
-     * @return legacy ids
-     */
-    public static List<String> legacyWorkflowIds() {
-        return LEGACY_WORKFLOW_IDS;
-    }
-
-    /**
      * @param raw slug or enum name
      * @return type, or null
      */
@@ -62,9 +36,6 @@ public enum MailType {
             return null;
         }
         String trimmed = raw.trim();
-        if (WORKFLOW_ALIASES.contains(trimmed) || WORKFLOW_ALIASES.contains(trimmed.toUpperCase(Locale.ROOT))) {
-            return WORKFLOW;
-        }
         for (MailType type : values()) {
             if (type.id.equals(trimmed) || type.name().equalsIgnoreCase(trimmed)) {
                 return type;

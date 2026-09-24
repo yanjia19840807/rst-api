@@ -45,7 +45,7 @@ class ScenarioOfficialReadinessTests {
 
         assertThatThrownBy(() -> readiness.requireReady(scenario, "Official"))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("Right Sizing HC");
+                .hasMessageContaining("no saved Sizing results");
     }
 
     @Test
@@ -54,7 +54,7 @@ class ScenarioOfficialReadinessTests {
 
         assertThatThrownBy(() -> readiness.requireReady(scenario, "Official"))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("Forecast and Sizing");
+                .hasMessageContaining("no saved Sizing results");
     }
 
     @Test

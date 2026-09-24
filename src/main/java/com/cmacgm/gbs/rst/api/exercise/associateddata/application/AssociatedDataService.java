@@ -49,7 +49,6 @@ import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.ScenarioCommitService;
-import com.cmacgm.gbs.rst.api.common.workingdays.WeekendCode;
 import com.cmacgm.gbs.rst.api.supportcategory.application.SupportCategoryService;
 import com.cmacgm.gbs.rst.api.supportcategory.application.SupportCategoryService.ResolvedCategory;
 import org.springframework.http.HttpStatus;
@@ -1127,16 +1126,10 @@ public class AssociatedDataService {
     private TeamSetupView toTeamSetup(RstExercise exercise, ExerciseTeamSetup setup) {
         BigDecimal workingDays = workingDaysService.workingDaysPerYear(exercise);
         BigDecimal cycleTime = activeCycleTimeSeconds(exercise.getId());
-        String weekend;
-        try {
-            weekend = WeekendCode.storedValue(setup.getWeekendCode());
-        } catch (IllegalArgumentException ex) {
-            weekend = setup.getWeekendCode();
-        }
         return new TeamSetupView(
                 setup.getAgentsLt6m(), setup.getAgents6To24m(), setup.getAgents24To48m(),
                 setup.getAgentsGt48m(), deliveryHc(exercise), setup.workingHoursPerDay(),
-                setup.getPaidLeaveDays(), setup.getOtherLeaveDays(), weekend,
+                setup.getPaidLeaveDays(), setup.getOtherLeaveDays(), setup.getWeekendCode(),
                 setup.getAvailabilityRatio(), setup.getAutomationRatio(), setup.capacityRatio(workingDays),
                 setup.getMaxOvertimeMinutes(), setup.getSlaType(), setup.getSlaTargetRatio(),
                 setup.getSlaTurnaroundMinutes(), setup.getSlaStartTime(), setup.getSlaEndTime(),

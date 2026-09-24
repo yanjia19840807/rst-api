@@ -201,32 +201,6 @@ public class WorkflowRouter {
     }
 
     /**
-     * Looks up the position id for a role without throwing (legacy steps with a null
-     * {@code assignee_position_id}).
-     *
-     * @param supervisorPositionId toolkit supervisor position
-     * @param center toolkit center
-     * @param domain toolkit domain
-     * @param roleCode MANAGER, CDH, or LTH
-     * @return position id, or null when it cannot be resolved
-     */
-    public String positionIdOrNull(String supervisorPositionId, String center, String domain, String roleCode) {
-        if (!hasText(roleCode)) {
-            return null;
-        }
-        if (RstRoles.LOCAL_TRANSFORMATION_HEAD.equals(roleCode)) {
-            return RstRoles.LOCAL_TRANSFORMATION_HEAD;
-        }
-        if ("SR_MANAGER".equals(roleCode)) {
-            return parentOrNull(supervisorPositionId);
-        }
-        if ("DOMAIN_HEAD".equals(roleCode)) {
-            return domainHeads.configuredPositionId(center, domain);
-        }
-        return null;
-    }
-
-    /**
      * Resolves the current Timesheet occupant of a position for display.
      *
      * @param roleCode MANAGER, CDH, or LTH

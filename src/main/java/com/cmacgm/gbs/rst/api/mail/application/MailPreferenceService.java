@@ -102,18 +102,6 @@ public class MailPreferenceService {
     }
 
     private static boolean enabledIn(Map<String, Boolean> saved, MailType type) {
-        if (type == MailType.WORKFLOW) {
-            Boolean unified = saved.get(MailType.WORKFLOW.id());
-            if (unified != null) {
-                return unified;
-            }
-            for (String legacyId : MailType.legacyWorkflowIds()) {
-                if (Boolean.FALSE.equals(saved.get(legacyId))) {
-                    return false;
-                }
-            }
-            return true;
-        }
         return saved.getOrDefault(type.id(), true);
     }
 

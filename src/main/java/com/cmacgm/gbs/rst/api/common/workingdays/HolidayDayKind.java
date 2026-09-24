@@ -23,23 +23,6 @@ public enum HolidayDayKind {
         return this == HOLIDAY || this == WEEKEND;
     }
 
-    /**
-     * Parses a stored type. Legacy BASELINE/CUSTOM rows map to Holiday.
-     *
-     * @param raw stored type
-     * @return kind; unknown values default to Holiday
-     */
-    public static HolidayDayKind parse(String raw) {
-        if (raw == null || raw.isBlank()) {
-            return HOLIDAY;
-        }
-        return switch (raw.trim().toUpperCase(Locale.ROOT)) {
-            case "WEEKEND" -> WEEKEND;
-            case "NORMAL" -> NORMAL;
-            default -> HOLIDAY;
-        };
-    }
-
     @JsonValue
     public String toJson() {
         return name();

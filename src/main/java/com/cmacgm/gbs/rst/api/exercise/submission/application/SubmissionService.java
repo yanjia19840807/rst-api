@@ -163,7 +163,6 @@ public class SubmissionService {
                 remarksRequired(findings),
                 submitBlocked(findings),
                 alignment,
-                false,
                 "Manager Review",
                 manager == null ? null : manager.positionId(),
                 nextHandler != null ? nextHandler.displayName() : (manager == null ? null : manager.occupantName()),

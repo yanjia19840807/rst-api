@@ -34,14 +34,6 @@ class MailPreferenceServiceTests {
     }
 
     @Test
-    void legacyWorkflowOffMapsToUnifiedSwitch() {
-        MailPreference row = MailPreference.of("S1", "approval.requested", false);
-        MailPreferenceService service = new MailPreferenceService(repoWith(row), ccgid -> "s1@timesheet.local");
-
-        assertThat(service.isEnabled("S1", MailType.WORKFLOW)).isFalse();
-    }
-
-    @Test
     void supervisorDefaultsAllOutcomeTypesOn() {
         MailPreferenceService service = new MailPreferenceService(emptyRepo(), ccgid -> "s1@timesheet.local");
         RstPrincipal principal = new RstPrincipal(

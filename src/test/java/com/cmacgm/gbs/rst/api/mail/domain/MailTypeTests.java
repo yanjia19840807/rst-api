@@ -49,11 +49,10 @@ class MailTypeTests {
 
     @Test
     void fromIdAcceptsSlugOrEnumName() {
-        assertThat(MailType.fromId("approval.requested")).isEqualTo(MailType.WORKFLOW);
-        assertThat(MailType.fromId("submission.outcome")).isEqualTo(MailType.WORKFLOW);
         assertThat(MailType.fromId("workflow.notification")).isEqualTo(MailType.WORKFLOW);
+        assertThat(MailType.fromId("WORKFLOW")).isEqualTo(MailType.WORKFLOW);
         assertThat(MailType.fromId("TIMESHEET_SYNC_FAILED")).isEqualTo(MailType.TIMESHEET_SYNC_FAILED);
-        assertThat(MailType.fromId("submission.returned")).isEqualTo(MailType.WORKFLOW);
+        assertThat(MailType.fromId("approval.requested")).isNull();
         assertThat(MailType.fromId("unknown")).isNull();
     }
 }

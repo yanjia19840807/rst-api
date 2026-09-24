@@ -2,7 +2,6 @@ package com.cmacgm.gbs.rst.api.common.workingdays;
 
 import java.time.DayOfWeek;
 import java.util.EnumSet;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -62,7 +61,7 @@ public enum WeekendCode {
     }
 
     /**
-     * Parses a stored weekend code. Accepts Excel numbers and legacy RST names.
+     * Parses a stored weekend code. Only Excel NETWORKDAYS.INTL numbers are accepted.
      * Unknown or blank values are rejected — they must not become Saturday + Sunday.
      *
      * @param raw stored code
@@ -73,41 +72,22 @@ public enum WeekendCode {
         if (raw == null || raw.isBlank()) {
             throw new IllegalArgumentException("Weekend code is required.");
         }
-        String trimmed = raw.trim();
         try {
-            int number = Integer.parseInt(trimmed);
-            WeekendCode byNumber = BY_NUMBER.get(number);
+            WeekendCode byNumber = BY_NUMBER.get(Integer.parseInt(raw.trim()));
             if (byNumber != null) {
                 return byNumber;
             }
         } catch (NumberFormatException ignored) {
-            // Fall through to name aliases.
+            // Reject below.
         }
-        String token = trimmed.toUpperCase(Locale.ROOT).replace('-', '_');
-        return switch (token) {
-            case "SAT_SUN", "SATURDAY_SUNDAY" -> SATURDAY_SUNDAY;
-            case "SUN_ONLY", "SUNDAY_ONLY" -> SUNDAY_ONLY;
-            case "FRI_SAT", "FRIDAY_SATURDAY" -> FRIDAY_SATURDAY;
-            case "SUNDAY_MONDAY" -> SUNDAY_MONDAY;
-            case "MONDAY_TUESDAY" -> MONDAY_TUESDAY;
-            case "TUESDAY_WEDNESDAY" -> TUESDAY_WEDNESDAY;
-            case "WEDNESDAY_THURSDAY" -> WEDNESDAY_THURSDAY;
-            case "THURSDAY_FRIDAY" -> THURSDAY_FRIDAY;
-            case "MONDAY_ONLY" -> MONDAY_ONLY;
-            case "TUESDAY_ONLY" -> TUESDAY_ONLY;
-            case "WEDNESDAY_ONLY" -> WEDNESDAY_ONLY;
-            case "THURSDAY_ONLY" -> THURSDAY_ONLY;
-            case "FRIDAY_ONLY" -> FRIDAY_ONLY;
-            case "SATURDAY_ONLY" -> SATURDAY_ONLY;
-            default -> throw new IllegalArgumentException(
-                    "Weekend code must be an Excel NETWORKDAYS.INTL code (1–7 or 11–17).");
-        };
+        throw new IllegalArgumentException(
+                "Weekend code must be an Excel NETWORKDAYS.INTL code (1–7 or 11–17).");
     }
 
     /**
-     * Normalizes any accepted input to the stored Excel number string.
+     * Normalizes a valid Excel number to the stored string.
      *
-     * @param raw stored or legacy code
+     * @param raw stored code
      * @return Excel number as string
      */
     public static String storedValue(String raw) {

@@ -94,18 +94,11 @@ public class SupportExcelService {
                 String category = requireText(excelRow, headers.get("category"), displayRow, "Category");
                 String activity = requireText(excelRow, headers.get("activity"), displayRow, "Activity");
                 String frequency = requireText(excelRow, headers.get("frequency"), displayRow, "Frequency");
+                String frequencyCode;
                 try {
-                    SupportWorkloadMath.requireFrequency(frequency);
+                    frequencyCode = SupportWorkloadMath.canonicalFrequency(frequency);
                 } catch (IllegalArgumentException ex) {
                     throw conflict("invalid-excel", "Row " + displayRow + ": " + ex.getMessage());
-                }
-                String frequencyCode = frequency.trim().toUpperCase(Locale.ROOT);
-                if ("DAY".equals(frequencyCode)) {
-                    frequencyCode = "DAILY";
-                } else if ("WEEK".equals(frequencyCode)) {
-                    frequencyCode = "WEEKLY";
-                } else if ("MONTH".equals(frequencyCode)) {
-                    frequencyCode = "MONTHLY";
                 }
                 BigDecimal volume = requireDecimal(excelRow, headers.get("volume"), displayRow, "Volume");
                 String uom = canonicalizeUom(requireText(excelRow, headers.get("uom"), displayRow, "UOM"), displayRow);
