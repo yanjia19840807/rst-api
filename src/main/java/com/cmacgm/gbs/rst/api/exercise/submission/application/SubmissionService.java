@@ -336,6 +336,20 @@ public class SubmissionService {
     @Transactional(readOnly = true)
     public SubmittedDetailsView submittedDetails(String ownerCcgid, UUID exerciseId) {
         RstExercise exercise = exercises.requireOwned(ownerCcgid, exerciseId);
+        return toSubmittedDetails(exercise, exerciseId);
+    }
+
+    /**
+     * Returns Submitted Details when the caller may read the Exercise (owner or any
+     * user after Submit). Used by Download Summary.
+     */
+    @Transactional(readOnly = true)
+    public SubmittedDetailsView submittedDetailsReadable(String actorCcgid, UUID exerciseId) {
+        RstExercise exercise = exercises.requireReadable(actorCcgid, exerciseId);
+        return toSubmittedDetails(exercise, exerciseId);
+    }
+
+    private SubmittedDetailsView toSubmittedDetails(RstExercise exercise, UUID exerciseId) {
         ProcessInstance workflow = workflows.findByExerciseId(exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,

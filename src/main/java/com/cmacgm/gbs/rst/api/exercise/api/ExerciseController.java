@@ -20,11 +20,16 @@ import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
 import com.cmacgm.gbs.rst.api.delegation.application.PositionCoverage;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.exercise.submission.application.SubmissionService;
+import com.cmacgm.gbs.rst.api.exercise.submission.application.SubmissionSummaryExcelService;
+import com.cmacgm.gbs.rst.api.exercise.submission.application.SubmissionSummaryExcelService.ExportFile;
 import com.cmacgm.gbs.rst.api.exercise.submission.api.dto.SubmitPreviewView;
 import com.cmacgm.gbs.rst.api.exercise.submission.api.dto.SubmitRequest;
 import com.cmacgm.gbs.rst.api.exercise.submission.api.dto.SubmittedDetailsView;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -47,6 +52,7 @@ public class ExerciseController {
 
     private final ExerciseService service;
     private final SubmissionService submissions;
+    private final SubmissionSummaryExcelService summaries;
     private final PositionCoverage coverage;
 
     /**
@@ -54,12 +60,17 @@ public class ExerciseController {
      *
      * @param service Exercise service
      * @param submissions Submission service
+     * @param summaries Official Scenario Excel annex
      * @param coverage covered-position subject
      */
     public ExerciseController(
-            ExerciseService service, SubmissionService submissions, PositionCoverage coverage) {
+            ExerciseService service,
+            SubmissionService submissions,
+            SubmissionSummaryExcelService summaries,
+            PositionCoverage coverage) {
         this.service = service;
         this.submissions = submissions;
+        this.summaries = summaries;
         this.coverage = coverage;
     }
 
@@ -332,5 +343,21 @@ public class ExerciseController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
         return submissions.submittedDetails(supervisor(principal), id);
+    }
+
+    /**
+     * Downloads the Official Scenario package as an Excel annex.
+     */
+    @GetMapping("/{id}/summary.xlsx")
+    @PreAuthorize("hasAnyRole('SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
+    public ResponseEntity<byte[]> downloadSummary(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @PathVariable UUID id) {
+        ExportFile file = summaries.export(supervisor(principal), id);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + file.filename() + "\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(file.body());
     }
 }
