@@ -40,6 +40,7 @@ class WorkflowRouterTests {
     void domainHeadQueueIncludesCenterRolesCcgidAssignment() {
         when(timesheet.positionsForRole("S00683842", "DOMAIN_HEAD")).thenReturn(List.of());
         when(domainHeads.assignedKeysFor("S00683842")).thenReturn(Set.of("S00683842"));
+        when(domainHeads.assignedLthKeysFor("S00683842")).thenReturn(Set.of());
 
         Set<String> positions = router.positionsFor(principal("S00683842", Set.of(RstRoles.DOMAIN_HEAD)));
 
@@ -50,6 +51,7 @@ class WorkflowRouterTests {
     void domainHeadQueueIncludesCcgidWhenRoleIsForcedWithoutTimesheetSeat() {
         when(timesheet.positionsForRole("S00683842", "DOMAIN_HEAD")).thenReturn(List.of());
         when(domainHeads.assignedKeysFor("S00683842")).thenReturn(Set.of());
+        when(domainHeads.assignedLthKeysFor("S00683842")).thenReturn(Set.of());
 
         Set<String> positions = router.positionsFor(principal("S00683842", Set.of(RstRoles.DOMAIN_HEAD)));
 
@@ -60,10 +62,21 @@ class WorkflowRouterTests {
     void managerQueueDoesNotPickUpUnrelatedCdhKeys() {
         when(timesheet.positionsForRole("S00628202", "SR_MANAGER")).thenReturn(List.of("174210"));
         when(domainHeads.assignedKeysFor("S00628202")).thenReturn(Set.of());
+        when(domainHeads.assignedLthKeysFor("S00628202")).thenReturn(Set.of());
 
         Set<String> positions = router.positionsFor(principal("S00628202", Set.of(RstRoles.SR_MANAGER)));
 
         assertThat(positions).containsExactly("174210");
+    }
+
+    @Test
+    void lthQueueIncludesSentinelWhenCenterRolesAssignsLthWithoutRoleClaim() {
+        when(domainHeads.assignedKeysFor("S00690001")).thenReturn(Set.of());
+        when(domainHeads.assignedLthKeysFor("S00690001")).thenReturn(Set.of("POS-LTH-1"));
+
+        Set<String> positions = router.positionsFor(principal("S00690001", Set.of()));
+
+        assertThat(positions).containsExactly(RstRoles.LOCAL_TRANSFORMATION_HEAD);
     }
 
     private static RstPrincipal principal(String ccgid, Set<String> roles) {

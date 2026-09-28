@@ -41,12 +41,16 @@ public class ForecastClient {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(Duration.ofMillis(Math.max(1, properties.readTimeoutMs())));
 
-        this.restClient = RestClient.builder()
+        RestClient.Builder builder = RestClient.builder()
                 .baseUrl(trimTrailingSlash(properties.baseUrl()))
                 .requestFactory(requestFactory)
                 .configureMessageConverters(converters -> converters
-                        .withJsonConverter(new JacksonJsonHttpMessageConverter(jsonMapper)))
-                .build();
+                        .withJsonConverter(new JacksonJsonHttpMessageConverter(jsonMapper)));
+        String apiKey = properties.apiKey();
+        if (apiKey != null && !apiKey.isBlank()) {
+            builder.defaultHeader("X-API-Key", apiKey.trim());
+        }
+        this.restClient = builder.build();
     }
 
     /**

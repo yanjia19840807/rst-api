@@ -9,6 +9,9 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.audit.application.AuditRecorder;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditAction;
+import com.cmacgm.gbs.rst.api.audit.domain.AuditEntityType;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.delegation.api.dto.AssignDelegationRequest;
@@ -37,17 +40,23 @@ public class DelegationService {
 
     private final DelegationRepository delegations;
     private final TimesheetReadService timesheet;
+    private final AuditRecorder audits;
     private final Clock clock;
 
     /**
      * @param delegations store
      * @param timesheet person names
+     * @param audits create / revoke audit trail
      * @param clock time
      */
     public DelegationService(
-            DelegationRepository delegations, TimesheetReadService timesheet, Clock clock) {
+            DelegationRepository delegations,
+            TimesheetReadService timesheet,
+            AuditRecorder audits,
+            Clock clock) {
         this.delegations = delegations;
         this.timesheet = timesheet;
+        this.audits = audits;
         this.clock = clock;
     }
 
@@ -234,6 +243,7 @@ public class DelegationService {
                     validUntil,
                     now);
             row.refresh(now);
+            audit(row, AuditAction.CREATE);
             created.add(DelegationView.from(delegations.save(row)));
         }
         return created;
@@ -287,7 +297,17 @@ public class DelegationService {
         Instant now = clock.instant();
         Delegation row = requireOwnedOpen(principal.realCcgid(), id, now);
         row.revoke(now);
+        audit(row, AuditAction.DISABLE);
         return DelegationView.from(delegations.save(row));
+    }
+
+    private void audit(Delegation row, AuditAction action) {
+        row.setLatestAuditEventId(audits.recordCurrent(
+                        AuditEntityType.DELEGATION,
+                        row.getId(),
+                        action,
+                        row.getSubjectPositionId())
+                .getId());
     }
 
     /**

@@ -98,10 +98,29 @@ public class AuditRecorder {
      */
     @Transactional
     public AuditEvent recordCurrent(AuditEntityType entityType, UUID entityId, AuditAction action) {
+        return recordCurrent(entityType, entityId, action, null);
+    }
+
+    /**
+     * Like {@link #recordCurrent(AuditEntityType, UUID, AuditAction)} but allows the
+     * caller to pin a business position (for example a covered delegation seat).
+     *
+     * @param entityType aggregate
+     * @param entityId business id
+     * @param action what changed
+     * @param subjectPositionId optional business position; blank falls back to the
+     *        caller's delegated position when acting under coverage
+     * @return saved event
+     */
+    @Transactional
+    public AuditEvent recordCurrent(
+            AuditEntityType entityType, UUID entityId, AuditAction action, String subjectPositionId) {
         RstPrincipal principal = currentPrincipal();
         String actorCcgid = principal == null ? "SYSTEM" : principal.realCcgid();
         String actorName = principal == null ? "SYSTEM" : principal.actorDisplayName();
-        String positionId = principal == null ? null : principal.delegatedPositionId();
+        String positionId = hasText(subjectPositionId)
+                ? subjectPositionId.trim()
+                : principal == null ? null : principal.delegatedPositionId();
         String subjectCcgid = actorCcgid;
         if (principal != null && positionId != null) {
             var occupant = timesheet.occupant(positionId);
@@ -125,6 +144,10 @@ public class AuditRecorder {
                 positionId,
                 clock.instant());
         return events.save(event);
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     /**

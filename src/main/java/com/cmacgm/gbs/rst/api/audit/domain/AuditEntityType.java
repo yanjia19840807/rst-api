@@ -10,5 +10,6 @@ public enum AuditEntityType {
     TIMESHEET_SYNC,
     CENTER_LTH,
     CENTER_DOMAIN_HEAD,
-    SUPPORT_CATEGORY
+    SUPPORT_CATEGORY,
+    DELEGATION
 }

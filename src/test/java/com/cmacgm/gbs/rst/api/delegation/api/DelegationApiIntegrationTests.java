@@ -48,6 +48,7 @@ class DelegationApiIntegrationTests {
 
     @BeforeEach
     void seed() {
+        jdbcTemplate.update("delete from audit_event where entity_type = 'DELEGATION'");
         jdbcTemplate.update("delete from rst_delegation");
         jdbcTemplate.update("delete from timesheet_sync_issue");
         jdbcTemplate.update("delete from timesheet_kpi");
@@ -103,6 +104,22 @@ class DelegationApiIntegrationTests {
                 .getResponse()
                 .getContentAsString();
         String id = JsonPath.read(created, "$[0].id");
+        assertThat(jdbcTemplate.queryForObject(
+                        """
+                        select count(*) from audit_event
+                        where entity_type = 'DELEGATION' and entity_id = ?::uuid and action = 'CREATE'
+                        """,
+                        Integer.class,
+                        id))
+                .isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                        """
+                        select subject_position_id from audit_event
+                        where entity_type = 'DELEGATION' and entity_id = ?::uuid and action = 'CREATE'
+                        """,
+                        String.class,
+                        id))
+                .isEqualTo("POS-SUP-001");
 
         mockMvc.perform(get("/api/v1/delegations/received")
                         .header("X-Dev-Ccgid", "AGENT010")
@@ -139,6 +156,14 @@ class DelegationApiIntegrationTests {
                         .header("X-Dev-Role", "SUPERVISOR"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REVOKED"));
+        assertThat(jdbcTemplate.queryForObject(
+                        """
+                        select count(*) from audit_event
+                        where entity_type = 'DELEGATION' and entity_id = ?::uuid and action = 'DISABLE'
+                        """,
+                        Integer.class,
+                        id))
+                .isEqualTo(1);
 
         mockMvc.perform(get("/api/v1/me")
                         .header("X-Dev-Ccgid", "AGENT010")

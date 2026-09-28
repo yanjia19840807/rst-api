@@ -2,6 +2,8 @@ package com.cmacgm.gbs.rst.api.timesheet.application;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.DefaultResourceLoader;
@@ -11,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphService;
 import com.cmacgm.gbs.rst.api.process.ProcessProperties;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 
@@ -22,16 +25,22 @@ public class GbsProcessCatalogSource {
 
     private final ProcessProperties properties;
     private final ResourceLoader resources;
+    private final MicrosoftGraphService graph;
     private final GbsProcessCatalog fixed;
 
     /**
      * @param properties catalog location
      * @param resources Spring resources
+     * @param graph Microsoft Graph client used when {@code process.remote=true}
      */
     @Autowired
-    public GbsProcessCatalogSource(ProcessProperties properties, ResourceLoader resources) {
+    public GbsProcessCatalogSource(
+            ProcessProperties properties,
+            ResourceLoader resources,
+            MicrosoftGraphService graph) {
         this.properties = properties;
         this.resources = resources;
+        this.graph = graph;
         this.fixed = null;
     }
 
@@ -48,6 +57,7 @@ public class GbsProcessCatalogSource {
     private GbsProcessCatalogSource(GbsProcessCatalog catalog) {
         this.properties = new ProcessProperties();
         this.resources = new DefaultResourceLoader();
+        this.graph = null;
         this.fixed = catalog;
     }
 
@@ -89,12 +99,39 @@ public class GbsProcessCatalogSource {
     }
 
     private GbsProcessCatalog loadSharePoint() {
-        throw new ApiException(
-                HttpStatus.CONFLICT,
-                TimesheetSyncErrorCode.SOURCE_UNAVAILABLE.code(),
-                "GBS Process SharePoint list is not wired yet: "
-                        + properties.getSharepoint().getSite()
-                        + " / "
-                        + properties.getSharepoint().getList());
+        if (graph == null) {
+            throw new ApiException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    TimesheetSyncErrorCode.SOURCE_UNAVAILABLE.code(),
+                    "Microsoft Graph is not available for GBS Process.");
+        }
+        ProcessProperties.SharePoint sharePoint = properties.getSharepoint();
+        try {
+            List<Map<String, Object>> rows = graph.getListItemFields(
+                    sharePoint.getSite(), sharePoint.getList());
+            return GbsProcessCatalog.fromSharePointFields(rows);
+        } catch (ApiException ex) {
+            if (ex.getMessage() != null && ex.getMessage().contains("HTTP 403")) {
+                throw new ApiException(
+                        HttpStatus.CONFLICT,
+                        TimesheetSyncErrorCode.SOURCE_UNAVAILABLE.code(),
+                        "GBS Process SharePoint list access denied for "
+                                + sharePoint.getSite()
+                                + " / "
+                                + sharePoint.getList()
+                                + ". Grant the Graph app Sites.Selected (or Sites.Read.All) on that site.");
+            }
+            throw ex;
+        } catch (RuntimeException ex) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    TimesheetSyncErrorCode.SOURCE_UNAVAILABLE.code(),
+                    "Unable to read GBS Process SharePoint list "
+                            + sharePoint.getSite()
+                            + " / "
+                            + sharePoint.getList()
+                            + ": "
+                            + ex.getMessage());
+        }
     }
 }

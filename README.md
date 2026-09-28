@@ -80,6 +80,7 @@ JUnit uses `application-test.yml` only.
 | `TIMESHEET_SHAREPOINT_ROOT` | `4.RST/2.UAT` (`0.DEV` / `1.SIT` / `2.UAT` / `2.5.PRE` / `3.Production`) | Timesheet library RST folder |
 | `FORECAST_BASE_URL` | `http://localhost:8000` | Python forecast service |
 | `FORECAST_ENABLED` | `true` | Enable forecast HTTP calls |
+| `FORECAST_API_KEY` | empty | Shared secret for `X-API-Key` to rst-forecast; required in uat/pre/prod |
 | `MAIL_ENABLED` | `true` in runtime profiles | Send workflow / Timesheet-fail mail |
 | `MAIL_REDIRECT_TO` | empty | Redirect all outgoing mail to this inbox |
 | `MAIL_FROM` | `GBS.TIMESHEET@cma-cgm.com` | Graph send-as mailbox |
@@ -170,10 +171,16 @@ Recurring sync uses Quartz when `timesheet.sync.daily.enabled` or
 | `timesheet.sync.daily.cron` | `0 0 6 * * ?` | Daily Quartz cron |
 | `timesheet.sync.monthly.enabled` | `false` | Register Monthly Quartz job |
 | `timesheet.sync.monthly.cron` | `0 30 6 * * ?` | Monthly Quartz cron |
-| `process.remote` | `false` (`true` in pre / prod) | GBS Process from SharePoint list when true |
+| `process.remote` | `false` (`true` in pre / prod) | GBS Process from SharePoint list via Graph when true |
 | `process.classpath-location` | `timesheet/GBS Process.csv` | Local catalog; ignored when `remote=true` |
 | `process.sharepoint.site` | `…/sites/CMA-GlobalBusinessServices` | Site that hosts the GBS Process list |
 | `process.sharepoint.list` | `GBS Process` | SharePoint list display name |
+
+Remote Process catalog uses the same Graph app as Timesheet (`MS_GRAPH_*`).
+That app already reaches `CMA-SharedKPIAutomation`; for `process.remote=true` it
+also needs site access on `CMA-GlobalBusinessServices` (`Sites.Selected` grant
+or `Sites.Read.All`). Live check:
+`MicrosoftGraphProcessListIT`.
 
 Same `driveItemId` + `etag` on the same business date, or the same content
 hash, skips cutover. An older filename date than the ACTIVE snapshot is also

@@ -49,7 +49,8 @@ public class DevIdentityService {
      * ACTIVE Daily seat roles for a person. Used when a dev login names a CCGID and no role.
      *
      * @param ccgid identity
-     * @return AGENT / SUPERVISOR / SR_MANAGER / DOMAIN_HEAD held by the person
+     * @return AGENT / SUPERVISOR / SR_MANAGER / DOMAIN_HEAD / LOCAL_TRANSFORMATION_HEAD
+     *         held by the person (Timesheet seat and/or Center Roles)
      */
     public Set<String> timesheetRoles(String ccgid) {
         Set<String> roles = timesheet.findActiveProductSeat(ccgid)
@@ -64,11 +65,14 @@ public class DevIdentityService {
         if (domainHeads.isAssignedCdh(ccgid)) {
             allowed.add(RstRoles.DOMAIN_HEAD);
         }
+        if (domainHeads.isAssignedLth(ccgid)) {
+            allowed.add(RstRoles.LOCAL_TRANSFORMATION_HEAD);
+        }
         if (allowed.isEmpty()) {
             throw new ApiException(
                     HttpStatus.BAD_REQUEST,
                     "dev-identity-roles-missing",
-                    "CCGID has no ACTIVE Daily role.");
+                    "CCGID has no ACTIVE Daily role or Center Roles CDH/LTH assignment.");
         }
         return Set.copyOf(allowed);
     }

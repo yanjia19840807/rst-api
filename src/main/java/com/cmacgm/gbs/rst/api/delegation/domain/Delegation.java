@@ -68,6 +68,9 @@ public class Delegation {
     @Column(name = "revoked_at")
     private Instant revokedAt;
 
+    @Column(name = "latest_audit_event_id")
+    private UUID latestAuditEventId;
+
     protected Delegation() {
     }
 
@@ -301,5 +304,16 @@ public class Delegation {
 
     public Instant getRevokedAt() {
         return revokedAt;
+    }
+
+    public UUID getLatestAuditEventId() {
+        return latestAuditEventId;
+    }
+
+    /**
+     * @param latestAuditEventId most recent audit event for this row
+     */
+    public void setLatestAuditEventId(UUID latestAuditEventId) {
+        this.latestAuditEventId = latestAuditEventId;
     }
 }

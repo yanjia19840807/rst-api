@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.process.ProcessProperties;
@@ -46,22 +48,43 @@ class GbsProcessCatalogTests {
     }
 
     @Test
+    void fromSharePointFieldsAcceptsInternalNames() {
+        GbsProcessCatalog catalog = GbsProcessCatalog.fromSharePointFields(List.of(
+                Map.of("id", 313, "RST_x0020_Applicability", "Yes"),
+                Map.of("ID", "321", "RST Applicability", "No"),
+                Map.of("id", "497.0", "RST_x0020_Applicability", "YES")));
+
+        assertThat(catalog.rstYesPl3Codes()).containsExactlyInAnyOrder("313", "497");
+        assertThat(catalog.applies("313")).isTrue();
+        assertThat(catalog.applies("321")).isFalse();
+    }
+
+    @Test
+    void fromSharePointFieldsRejectsMissingApplicability() {
+        assertThatThrownBy(() -> GbsProcessCatalog.fromSharePointFields(List.of(Map.of("id", "313"))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("RST Applicability");
+    }
+
+    @Test
     void loadClasspathMockIncludesKnownRstProcess() {
         ProcessProperties properties = new ProcessProperties();
-        GbsProcessCatalog catalog = new GbsProcessCatalogSource(properties, new DefaultResourceLoader()).load();
+        GbsProcessCatalog catalog = new GbsProcessCatalogSource(
+                properties, new DefaultResourceLoader(), null).load();
 
         assertThat(catalog.applies("497")).isTrue();
         assertThat(catalog.rstYesPl3Codes()).isNotEmpty();
     }
 
     @Test
-    void remoteTrueReadsSharePointAndIsNotWiredYet() {
+    void remoteTrueWithoutGraphFailsClearly() {
         ProcessProperties properties = new ProcessProperties();
         properties.setRemote(true);
 
-        assertThatThrownBy(() -> new GbsProcessCatalogSource(properties, new DefaultResourceLoader()).load())
+        assertThatThrownBy(() -> new GbsProcessCatalogSource(
+                        properties, new DefaultResourceLoader(), null)
+                .load())
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("CMA-GlobalBusinessServices")
-                .hasMessageContaining("GBS Process");
+                .hasMessageContaining("Microsoft Graph");
     }
 }

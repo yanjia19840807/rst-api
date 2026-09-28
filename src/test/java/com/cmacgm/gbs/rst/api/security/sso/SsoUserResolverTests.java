@@ -124,6 +124,103 @@ class SsoUserResolverTests {
     }
 
     @Test
+    void userAssignedAsLthWithoutTimesheetSeatGetsLocalTransformationHead() {
+        when(timesheet.findActiveProductSeat("S00690001")).thenReturn(Optional.empty());
+        when(domainHeads.isAssignedLth("S00690001")).thenReturn(true);
+        when(timesheet.findActivePerson("S00690001")).thenReturn(Optional.of(person(
+                "S00690001", "GBS CHINA", "LTH Config", "lthcfg@cma-cgm.com")));
+        SsoUserResolver resolver = resolver("UAT");
+
+        var principal = resolver.resolve(token(
+                "S00690001",
+                List.of("CMACGM_APP_RST_USER_UAT"),
+                "LTH Config",
+                "lthcfg@cma-cgm.com",
+                null));
+
+        assertThat(principal.roles()).containsExactly(RstRoles.LOCAL_TRANSFORMATION_HEAD);
+        assertThat(principal.center()).isEqualTo("GBS CHINA");
+        assertThat(principal.displayName()).isEqualTo("LTH Config");
+    }
+
+    @Test
+    void userKeepsTimesheetRoleAndCenterRolesLthTogether() {
+        when(timesheet.findActiveProductSeat("S00596242"))
+                .thenReturn(Optional.of(new TimesheetReadService.ProductSeat(
+                        Set.of("SUPERVISOR"), "GBS INDIA", "WU Bertie", "GSC.BERWU@cma-cgm.com")));
+        when(domainHeads.isAssignedLth("S00596242")).thenReturn(true);
+        SsoUserResolver resolver = resolver("UAT");
+
+        var principal = resolver.resolve(token(
+                "S00596242",
+                List.of("CMACGM_APP_RST_USER_UAT"),
+                "WU Bertie",
+                "GSC.BERWU@cma-cgm.com",
+                null));
+
+        assertThat(principal.roles())
+                .containsExactlyInAnyOrder(RstRoles.SUPERVISOR, RstRoles.LOCAL_TRANSFORMATION_HEAD);
+    }
+
+    @Test
+    void multipleSsoRolesUnionTimesheetAndDirectRoles() {
+        when(timesheet.findActiveProductSeat("S00596242"))
+                .thenReturn(Optional.of(new TimesheetReadService.ProductSeat(
+                        Set.of("SUPERVISOR"), "GBS INDIA", "WU Bertie", "GSC.BERWU@cma-cgm.com")));
+        SsoUserResolver resolver = resolver("UAT");
+
+        var principal = resolver.resolve(token(
+                "S00596242",
+                List.of(
+                        "CMACGM_APP_RST_USER_UAT",
+                        "CMACGM_APP_RST_GOVERNANCE_UAT",
+                        "CMACGM_APP_RST_ADMIN_UAT"),
+                "WU Bertie",
+                "GSC.BERWU@cma-cgm.com",
+                null));
+
+        assertThat(principal.roles()).containsExactlyInAnyOrder(
+                RstRoles.SUPERVISOR, RstRoles.GOVERNANCE, RstRoles.ADMIN);
+        assertThat(principal.center()).isEqualTo("GBS INDIA");
+    }
+
+    @Test
+    void userPlusAdminSurvivesMissingTimesheetSeat() {
+        when(timesheet.findActiveProductSeat("S009")).thenReturn(Optional.empty());
+        when(timesheet.findActivePerson("S009")).thenReturn(Optional.empty());
+        SsoUserResolver resolver = resolver("UAT");
+
+        var principal = resolver.resolve(token(
+                "S009",
+                List.of("CMACGM_APP_RST_USER_UAT", "CMACGM_APP_RST_ADMIN_UAT"),
+                "Admin Dual",
+                "admin@cma-cgm.com",
+                null));
+
+        assertThat(principal.roles()).containsExactly(RstRoles.ADMIN);
+        assertThat(principal.center()).isNull();
+        assertThat(principal.displayName()).isEqualTo("Admin Dual");
+    }
+
+    @Test
+    void directLthAndGovernanceWithoutUserUsesTokenCenter() {
+        SsoUserResolver resolver = resolver("UAT");
+
+        var principal = resolver.resolve(token(
+                "S001",
+                List.of(
+                        "CMACGM_APP_RST_LOCAL_TRANSFORMATION_HEAD_UAT",
+                        "CMACGM_APP_RST_GOVERNANCE_UAT"),
+                "LTH Gov",
+                "lthgov@cma-cgm.com",
+                "GBS PHILIPPINES"));
+
+        assertThat(principal.roles())
+                .containsExactlyInAnyOrder(RstRoles.LOCAL_TRANSFORMATION_HEAD, RstRoles.GOVERNANCE);
+        assertThat(principal.center()).isEqualTo("GBS PHILIPPINES");
+    }
+
+    @Test
     void userMissingFromTimesheetIsRejected() {
         when(timesheet.findActiveProductSeat("S009")).thenReturn(Optional.empty());
         SsoUserResolver resolver = resolver("UAT");

@@ -10,6 +10,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param readTimeoutMs read timeout
  * @param enabled when false, forecast endpoints return forecast-disabled
  * @param confidenceLevel prediction interval level
+ * @param apiKey shared secret sent as {@code X-API-Key}; blank disables the header
  */
 @ConfigurationProperties(prefix = "forecast")
 public record ForecastProperties(
@@ -17,7 +18,8 @@ public record ForecastProperties(
         int connectTimeoutMs,
         int readTimeoutMs,
         boolean enabled,
-        double confidenceLevel) {
+        double confidenceLevel,
+        String apiKey) {
 
     /**
      * Defaults for local development.
@@ -30,6 +32,7 @@ public record ForecastProperties(
                 3_000,
                 60_000,
                 true,
-                0.95);
+                0.95,
+                "");
     }
 }

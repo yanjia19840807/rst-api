@@ -228,6 +228,49 @@ public class DomainHeadConfigService {
     }
 
     /**
+     * Center Roles LTH assignment keys for this person. Same matching rules as
+     * {@link #assignedKeysFor(String)}: the configured position id may be a
+     * Timesheet position or a CCGID written on the LTH row.
+     *
+     * @param ccgid occupant
+     * @return assignment keys, possibly empty
+     */
+    @Transactional(readOnly = true)
+    public Set<String> assignedLthKeysFor(String ccgid) {
+        if (!hasText(ccgid)) {
+            return Set.of();
+        }
+        String id = ccgid.trim();
+        Set<String> keys = new LinkedHashSet<>();
+        for (CenterLth row : lthMappings.findAll()) {
+            if (!hasText(row.getPositionId())) {
+                continue;
+            }
+            String key = row.getPositionId().trim();
+            if (id.equalsIgnoreCase(key)) {
+                keys.add(key);
+                continue;
+            }
+            Occupant occupant = timesheet.occupant(key);
+            if (occupant != null && hasText(occupant.ccgid()) && id.equalsIgnoreCase(occupant.ccgid())) {
+                keys.add(key);
+            }
+        }
+        return Set.copyOf(keys);
+    }
+
+    /**
+     * Whether this person is the configured LTH for any Center.
+     *
+     * @param ccgid occupant
+     * @return true when at least one live mapping points at them
+     */
+    @Transactional(readOnly = true)
+    public boolean isAssignedLth(String ccgid) {
+        return !assignedLthKeysFor(ccgid).isEmpty();
+    }
+
+    /**
      * Whether Center × Domain has a valid live mapping.
      *
      * @param center GBS center

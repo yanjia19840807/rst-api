@@ -1,5 +1,6 @@
 package com.cmacgm.gbs.rst.api.security.sso;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Builds an {@link RstPrincipal} from a validated Azure ID token.
+ * All matching App Roles are unioned; {@code USER} expands Timesheet / Center Roles.
  */
 @Component
 @Profile({"uat", "pre", "prod"})
@@ -29,7 +31,7 @@ public class SsoUserResolver {
     /**
      * @param timesheet ACTIVE Daily seats for SSO USER
      * @param properties current SSO env
-     * @param domainHeads Center Roles CDH assignments
+     * @param domainHeads Center Roles CDH / LTH assignments
      */
     public SsoUserResolver(
             TimesheetReadService timesheet,
@@ -50,27 +52,45 @@ public class SsoUserResolver {
             throw new SsoException("sso-ccgid-missing", "CCGID is missing from the sign-in token.");
         }
         ccgid = ccgid.trim().toUpperCase(Locale.ROOT);
-        SsoRoleParser.Parsed parsed = SsoRoleParser.parse(firstRole(jwt), properties.env());
-        String displayName = firstClaim(jwt, "name", "preferred_username");
-        String email = firstClaim(jwt, "email", "preferred_username");
-        return switch (parsed.name()) {
-            case "USER" -> resolveUser(ccgid, displayName, email);
-            case "LOCAL_TRANSFORMATION_HEAD" -> new RstPrincipal(
-                    ccgid,
-                    displayName,
-                    email,
-                    Set.of(RstRoles.LOCAL_TRANSFORMATION_HEAD),
-                    Set.of(),
-                    requireCenter(jwt));
-            case "GOVERNANCE" -> new RstPrincipal(
-                    ccgid, displayName, email, Set.of(RstRoles.GOVERNANCE), Set.of(), null);
-            case "ADMIN" -> new RstPrincipal(
-                    ccgid, displayName, email, Set.of(RstRoles.ADMIN), Set.of(), null);
-            default -> throw new SsoException("sso-role-invalid", "SSO role is not a RST application role.");
-        };
+        Set<String> ssoNames = SsoRoleParser.parseNames(roleClaims(jwt), properties.env());
+        String tokenName = firstClaim(jwt, "name", "preferred_username");
+        String tokenEmail = firstClaim(jwt, "email", "preferred_username");
+
+        Set<String> productRoles = new LinkedHashSet<>();
+        if (ssoNames.contains("LOCAL_TRANSFORMATION_HEAD")) {
+            productRoles.add(RstRoles.LOCAL_TRANSFORMATION_HEAD);
+        }
+        if (ssoNames.contains("GOVERNANCE")) {
+            productRoles.add(RstRoles.GOVERNANCE);
+        }
+        if (ssoNames.contains("ADMIN")) {
+            productRoles.add(RstRoles.ADMIN);
+        }
+
+        UserExpansion user = null;
+        if (ssoNames.contains("USER")) {
+            user = expandUser(ccgid);
+            productRoles.addAll(user.roles());
+        }
+
+        if (productRoles.isEmpty()) {
+            if (user != null && user.failureCode() != null) {
+                throw new SsoException(user.failureCode(), user.failureMessage());
+            }
+            throw new SsoException("sso-role-missing", "SSO role is missing.");
+        }
+
+        String center = resolveCenter(jwt, productRoles, user);
+        return new RstPrincipal(
+                ccgid,
+                firstNonBlank(user == null ? null : user.displayName(), tokenName),
+                firstNonBlank(user == null ? null : user.email(), tokenEmail),
+                Set.copyOf(productRoles),
+                Set.of(),
+                center);
     }
 
-    private RstPrincipal resolveUser(String ccgid, String displayName, String email) {
+    private UserExpansion expandUser(String ccgid) {
         TimesheetReadService.ProductSeat seat = timesheet.findActiveProductSeat(ccgid).orElse(null);
         Set<String> roles = new LinkedHashSet<>();
         if (seat != null && seat.roleTypes() != null) {
@@ -87,31 +107,53 @@ public class SsoUserResolver {
         if (domainHeads.isAssignedCdh(ccgid)) {
             roles.add(RstRoles.DOMAIN_HEAD);
         }
-        if (roles.isEmpty()) {
-            if (seat == null) {
-                throw new SsoException(
-                        "sso-timesheet-missing",
-                        "CCGID is not in the ACTIVE Daily Timesheet.");
-            }
-            throw new SsoException(
-                    "sso-timesheet-role",
-                    "Timesheet role is not AGENT, SUPERVISOR, SR_MANAGER, or DOMAIN_HEAD.");
+        if (domainHeads.isAssignedLth(ccgid)) {
+            roles.add(RstRoles.LOCAL_TRANSFORMATION_HEAD);
         }
+
         TimesheetPerson person = seat == null ? timesheet.findActivePerson(ccgid).orElse(null) : null;
         String center = RstCenters.canonicalize(
                 seat != null ? seat.center() : person == null ? null : person.getCenter());
-        if (center == null) {
-            throw new SsoException(
-                    "sso-center-invalid",
-                    "Timesheet center is missing or is not a known GBS Center.");
+        String displayName = seat != null
+                ? seat.displayName()
+                : person == null ? null : person.getName();
+        String email = seat != null ? seat.email() : person == null ? null : person.getEmail();
+
+        if (!roles.isEmpty()) {
+            if (center == null) {
+                throw new SsoException(
+                        "sso-center-invalid",
+                        "Timesheet center is missing or is not a known GBS Center.");
+            }
+            return new UserExpansion(Set.copyOf(roles), center, displayName, email, null, null);
         }
-        return new RstPrincipal(
-                ccgid,
-                firstNonBlank(seat != null ? seat.displayName() : person == null ? null : person.getName(), displayName),
-                firstNonBlank(seat != null ? seat.email() : person == null ? null : person.getEmail(), email),
-                Set.copyOf(roles),
+        if (seat == null) {
+            return new UserExpansion(
+                    Set.of(),
+                    center,
+                    displayName,
+                    email,
+                    "sso-timesheet-missing",
+                    "CCGID is not in the ACTIVE Daily Timesheet.");
+        }
+        return new UserExpansion(
                 Set.of(),
-                center);
+                center,
+                displayName,
+                email,
+                "sso-timesheet-role",
+                "Timesheet role is not AGENT, SUPERVISOR, SR_MANAGER, or DOMAIN_HEAD,"
+                        + " and Center Roles has no CDH/LTH assignment.");
+    }
+
+    private static String resolveCenter(Jwt jwt, Set<String> productRoles, UserExpansion user) {
+        if (user != null && user.center() != null) {
+            return user.center();
+        }
+        if (productRoles.contains(RstRoles.LOCAL_TRANSFORMATION_HEAD)) {
+            return requireCenter(jwt);
+        }
+        return null;
     }
 
     private static String requireCenter(Jwt jwt) {
@@ -122,12 +164,18 @@ public class SsoUserResolver {
         return center;
     }
 
-    private static String firstRole(Jwt jwt) {
+    private static List<String> roleClaims(Jwt jwt) {
         List<String> roles = jwt.getClaimAsStringList("roles");
-        if (roles == null || roles.isEmpty()) {
-            return jwt.getClaimAsString("roles");
+        if (roles != null && !roles.isEmpty()) {
+            return roles;
         }
-        return roles.getFirst();
+        String single = jwt.getClaimAsString("roles");
+        if (single == null || single.isBlank()) {
+            return List.of();
+        }
+        List<String> one = new ArrayList<>(1);
+        one.add(single);
+        return one;
     }
 
     private static String firstClaim(Jwt jwt, String first, String second) {
@@ -139,5 +187,14 @@ public class SsoUserResolver {
             return first.trim();
         }
         return second == null || second.isBlank() ? null : second.trim();
+    }
+
+    private record UserExpansion(
+            Set<String> roles,
+            String center,
+            String displayName,
+            String email,
+            String failureCode,
+            String failureMessage) {
     }
 }

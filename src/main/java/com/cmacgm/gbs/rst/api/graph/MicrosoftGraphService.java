@@ -5,7 +5,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.slf4j.Logger;
@@ -27,23 +29,28 @@ import com.microsoft.graph.models.DriveCollectionResponse;
 import com.microsoft.graph.models.DriveItem;
 import com.microsoft.graph.models.DriveItemCollectionResponse;
 import com.microsoft.graph.models.EmailAddress;
+import com.microsoft.graph.models.FieldValueSet;
 import com.microsoft.graph.models.Folder;
 import com.microsoft.graph.models.ItemBody;
+import com.microsoft.graph.models.ListItem;
+import com.microsoft.graph.models.ListItemCollectionResponse;
 import com.microsoft.graph.models.Message;
 import com.microsoft.graph.models.Recipient;
 import com.microsoft.graph.models.Site;
 import com.microsoft.graph.models.odataerrors.ODataError;
 import com.microsoft.graph.serviceclient.GraphServiceClient;
+import com.microsoft.graph.sites.item.lists.item.items.ItemsRequestBuilder;
 import com.microsoft.graph.users.item.sendmail.SendMailPostRequestBody;
 
 /**
- * Microsoft Graph access to the Timesheet SharePoint library via the official SDK.
+ * Microsoft Graph access to SharePoint drives and lists via the official SDK.
  */
 @Service
 public class MicrosoftGraphService {
 
     private static final Logger log = LoggerFactory.getLogger(MicrosoftGraphService.class);
     private static final String[] SCOPES = {"https://graph.microsoft.com/.default"};
+    private static final int LIST_PAGE_SIZE = 200;
 
     private final MicrosoftGraphProperties properties;
     private final TimesheetSharePointProperties sharePoint;
@@ -307,6 +314,87 @@ public class MicrosoftGraphService {
         requireItemId(driveItemId);
         return toView(invoke("get drive item by id", () ->
                 graph().drives().byDriveId(driveId()).items().byDriveItemId(driveItemId).get()));
+    }
+
+    /**
+     * Reads every list item's field bag from a SharePoint list (paginated).
+     * The list id argument may be the list display name or GUID.
+     *
+     * @param siteWebUrl site web URL, for example
+     *        {@code https://cmacgmgroup.sharepoint.com/sites/CMA-GlobalBusinessServices}
+     * @param listNameOrId list display name or id, for example {@code GBS Process}
+     * @return field maps in list order; never null
+     */
+    public List<Map<String, Object>> getListItemFields(String siteWebUrl, String listNameOrId) {
+        if (siteWebUrl == null || siteWebUrl.isBlank()) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST, "graph-site-required", "SharePoint site URL is required.");
+        }
+        if (listNameOrId == null || listNameOrId.isBlank()) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST, "graph-list-required", "SharePoint list name is required.");
+        }
+        String resolvedSiteId = resolveSiteId(siteWebUrl.trim());
+        String listId = listNameOrId.trim();
+        log.info("Microsoft Graph getListItemFields site={} list={}", siteWebUrl, listId);
+
+        ItemsRequestBuilder items = graph().sites()
+                .bySiteId(resolvedSiteId)
+                .lists()
+                .byListId(listId)
+                .items();
+        ListItemCollectionResponse page = invoke("list items " + listId, () -> items.get(request -> {
+            request.queryParameters.expand = new String[]{"fields"};
+            request.queryParameters.top = LIST_PAGE_SIZE;
+        }));
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        while (true) {
+            List<ListItem> value = page.getValue();
+            if (value != null) {
+                for (ListItem item : value) {
+                    rows.add(fieldsOf(item));
+                }
+            }
+            String next = page.getOdataNextLink();
+            if (next == null || next.isBlank()) {
+                break;
+            }
+            String nextLink = next;
+            page = invoke("list items page " + listId, () -> items.withUrl(nextLink).get());
+        }
+        log.info("Microsoft Graph getListItemFields returned {} rows for {}", rows.size(), listId);
+        return rows;
+    }
+
+    private String resolveSiteId(String siteWebUrl) {
+        String graphSiteId = MicrosoftGraphPaths.siteIdFromWebUrl(siteWebUrl);
+        Site site = invoke("resolve site " + siteWebUrl, () -> graph().sites().bySiteId(graphSiteId).get());
+        if (site.getId() == null || site.getId().isBlank()) {
+            throw new ApiException(
+                    HttpStatus.BAD_GATEWAY,
+                    "graph-site-missing",
+                    "SharePoint site was not found: " + siteWebUrl);
+        }
+        return site.getId();
+    }
+
+    private static Map<String, Object> fieldsOf(ListItem item) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        FieldValueSet fieldSet = item == null ? null : item.getFields();
+        if (fieldSet != null && fieldSet.getAdditionalData() != null) {
+            for (Map.Entry<String, Object> entry : fieldSet.getAdditionalData().entrySet()) {
+                String key = entry.getKey();
+                if (key == null || key.startsWith("@")) {
+                    continue;
+                }
+                fields.put(key, entry.getValue());
+            }
+        }
+        if (!fields.containsKey("id") && !fields.containsKey("ID") && item != null && item.getId() != null) {
+            fields.put("id", item.getId());
+        }
+        return fields;
     }
 
     private GraphServiceClient graph() {

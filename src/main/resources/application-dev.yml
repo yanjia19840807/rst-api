@@ -14,7 +14,7 @@ mail:
 
 microsoft:
   graph:
-    client-id: ${MS_GRAPH_CLIENT_ID:2b5ec0be-1344-4161-80f5-b7674d74f019}
+    client-id: ${MS_GRAPH_CLIENT_ID:}
 
 decorator:
   datasource:

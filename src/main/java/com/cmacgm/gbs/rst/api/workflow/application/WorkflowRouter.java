@@ -55,7 +55,7 @@ public class WorkflowRouter {
     /**
      * Lists position ids the principal may act on. Each role contributes only its own seats:
      * Sr Manager seats, Domain Head seats, Center Roles CDH keys (position or CCGID),
-     * and the LTH sentinel. Other seats stay out of the queue.
+     * Center Roles LTH assignment, and the LTH sentinel. Other seats stay out of the queue.
      *
      * @param principal current user
      * @return position ids used to filter the queue and authorize decisions
@@ -75,7 +75,8 @@ public class WorkflowRouter {
             positions.addAll(cdhKeys);
             positions.add(principal.ccgid().trim());
         }
-        if (roles.contains(RstRoles.LOCAL_TRANSFORMATION_HEAD)) {
+        Set<String> lthKeys = domainHeads.assignedLthKeysFor(principal.ccgid());
+        if (roles.contains(RstRoles.LOCAL_TRANSFORMATION_HEAD) || !lthKeys.isEmpty()) {
             positions.add(RstRoles.LOCAL_TRANSFORMATION_HEAD);
         }
         addCoveredPosition(principal, positions);
