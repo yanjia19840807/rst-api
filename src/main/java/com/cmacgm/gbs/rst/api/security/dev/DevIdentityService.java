@@ -38,14 +38,6 @@ public class DevIdentityService {
     }
 
     /**
-     * Returns a principal for the given CCGID.
-     *
-     * @param ccgid corporate identity from config or header
-     * @param roles role codes attached to the principal
-     * @param center GBS Center from config or {@code X-Dev-Center}; blank falls back to Timesheet
-     * @return resolved principal
-     */
-    /**
      * ACTIVE Daily seat roles for a person. Used when a dev login names a CCGID and no role.
      *
      * @param ccgid identity

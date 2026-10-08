@@ -72,14 +72,14 @@ public final class GbsProcessCatalog {
                 .setIgnoreSurroundingSpaces(true)
                 .build();
         try (CSVParser parser = format.parse(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
-            requireHeader(parser, HEADER_ID);
-            requireHeader(parser, HEADER_APPLICABILITY);
+            String idHeader = requireHeader(parser, HEADER_ID);
+            String applicabilityHeader = requireHeader(parser, HEADER_APPLICABILITY);
             Set<String> codes = new LinkedHashSet<>();
             for (CSVRecord record : parser) {
-                if (!isYes(record.get(HEADER_APPLICABILITY))) {
+                if (!isYes(record.get(applicabilityHeader))) {
                     continue;
                 }
-                String id = normalize(record.get(HEADER_ID));
+                String id = normalize(record.get(idHeader));
                 if (id != null) {
                     codes.add(id);
                 }
@@ -95,7 +95,8 @@ public final class GbsProcessCatalog {
     /**
      * Builds a catalog from SharePoint list item field bags. Looks up
      * {@code ID} / {@code id} and {@code RST Applicability}
-     * (including the SharePoint internal name {@code RST_x0020_Applicability}).
+     * (SharePoint internal name {@code RSTApplicability}, also accepting
+     * {@code RST_x0020_Applicability}).
      *
      * @param rows field maps from Graph list items
      * @return catalog
@@ -152,10 +153,18 @@ public final class GbsProcessCatalog {
         return rstYesPl3Codes;
     }
 
-    private static void requireHeader(CSVParser parser, String name) {
-        if (!parser.getHeaderNames().contains(name)) {
-            throw conflict("Missing GBS Process header: " + name);
+    /** @return actual header name in the file (may include a UTF-8 BOM prefix) */
+    private static String requireHeader(CSVParser parser, String name) {
+        for (String header : parser.getHeaderNames()) {
+            if (header == null) {
+                continue;
+            }
+            String normalized = header.charAt(0) == '\uFEFF' ? header.substring(1) : header;
+            if (name.equals(normalized) || name.equals(header)) {
+                return header;
+            }
         }
+        throw conflict("Missing GBS Process header: " + name);
     }
 
     private static boolean isYes(String value) {
@@ -178,6 +187,12 @@ public final class GbsProcessCatalog {
         if (direct != null) {
             return direct;
         }
+        // SharePoint often drops spaces: "RST Applicability" → RSTApplicability
+        String stripped = displayName.replace(" ", "");
+        Object strippedValue = row.get(stripped);
+        if (strippedValue != null) {
+            return strippedValue;
+        }
         String encoded = displayName.replace(" ", "_x0020_");
         Object sharePoint = row.get(encoded);
         if (sharePoint != null) {
@@ -190,13 +205,14 @@ public final class GbsProcessCatalog {
             }
         }
         String needle = displayName.toLowerCase(Locale.ROOT);
+        String strippedNeedle = stripped.toLowerCase(Locale.ROOT);
         String encodedNeedle = encoded.toLowerCase(Locale.ROOT);
         for (Map.Entry<String, Object> entry : row.entrySet()) {
             if (entry.getKey() == null || entry.getValue() == null) {
                 continue;
             }
             String key = entry.getKey().toLowerCase(Locale.ROOT);
-            if (key.equals(needle) || key.equals(encodedNeedle)) {
+            if (key.equals(needle) || key.equals(strippedNeedle) || key.equals(encodedNeedle)) {
                 return entry.getValue();
             }
         }

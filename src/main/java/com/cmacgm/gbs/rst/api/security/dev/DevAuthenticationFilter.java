@@ -1,7 +1,8 @@
 package com.cmacgm.gbs.rst.api.security.dev;
 
 import java.io.IOException;
-import java.util.List;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Set;
 
@@ -12,9 +13,12 @@ import jakarta.servlet.http.HttpServletResponse;
 
 import com.cmacgm.gbs.rst.api.security.RstAuthenticationToken;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -37,6 +41,7 @@ public class DevAuthenticationFilter extends OncePerRequestFilter {
 
     private final DevIdentityProperties properties;
     private final DevIdentityService identities;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * @param properties identity selection from configuration
@@ -74,7 +79,12 @@ public class DevAuthenticationFilter extends OncePerRequestFilter {
                     roles = Set.of(DevRoles.requireValid(firstNonBlank(properties.getRole(), null, "ADMIN")));
                 }
             } catch (IllegalArgumentException ex) {
-                throw new ApiException(HttpStatus.BAD_REQUEST, "dev-identity-role", ex.getMessage());
+                writeProblem(response, request, new ApiException(
+                        HttpStatus.BAD_REQUEST, "dev-identity-role", ex.getMessage()));
+                return;
+            } catch (ApiException ex) {
+                writeProblem(response, request, ex);
+                return;
             }
 
             String center = firstNonBlankPreserveCase(
@@ -88,6 +98,20 @@ public class DevAuthenticationFilter extends OncePerRequestFilter {
             SecurityContextHolder.getContext().setAuthentication(authentication);
         }
         filterChain.doFilter(request, response);
+    }
+
+    private void writeProblem(
+            HttpServletResponse response, HttpServletRequest request, ApiException exception)
+            throws IOException {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                exception.status(), exception.getMessage());
+        problem.setTitle(exception.status().getReasonPhrase());
+        problem.setType(URI.create("https://rst.cmacgm.com/problems/" + exception.code()));
+        problem.setInstance(URI.create(request.getRequestURI()));
+        response.setStatus(exception.status().value());
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        objectMapper.writeValue(response.getOutputStream(), problem);
     }
 
     private static String firstNonBlank(String first, String second, String fallback) {

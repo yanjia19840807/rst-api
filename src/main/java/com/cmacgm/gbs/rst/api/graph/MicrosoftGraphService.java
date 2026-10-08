@@ -326,6 +326,21 @@ public class MicrosoftGraphService {
      * @return field maps in list order; never null
      */
     public List<Map<String, Object>> getListItemFields(String siteWebUrl, String listNameOrId) {
+        return getListItemFields(siteWebUrl, listNameOrId, null);
+    }
+
+    /**
+     * Reads list item fields, optionally restricting the expanded field set.
+     * Default {@code $expand=fields} omits many custom columns (for example
+     * {@code RSTApplicability}); pass internal names via {@code fieldSelect}.
+     *
+     * @param siteWebUrl site web URL
+     * @param listNameOrId list display name or id
+     * @param fieldSelect SharePoint internal field names for {@code fields($select=…)}; null = all default fields
+     * @return field maps in list order; never null
+     */
+    public List<Map<String, Object>> getListItemFields(
+            String siteWebUrl, String listNameOrId, String[] fieldSelect) {
         if (siteWebUrl == null || siteWebUrl.isBlank()) {
             throw new ApiException(
                     HttpStatus.BAD_REQUEST, "graph-site-required", "SharePoint site URL is required.");
@@ -336,7 +351,8 @@ public class MicrosoftGraphService {
         }
         String resolvedSiteId = resolveSiteId(siteWebUrl.trim());
         String listId = listNameOrId.trim();
-        log.info("Microsoft Graph getListItemFields site={} list={}", siteWebUrl, listId);
+        String expand = fieldsExpand(fieldSelect);
+        log.info("Microsoft Graph getListItemFields site={} list={} expand={}", siteWebUrl, listId, expand);
 
         ItemsRequestBuilder items = graph().sites()
                 .bySiteId(resolvedSiteId)
@@ -344,7 +360,7 @@ public class MicrosoftGraphService {
                 .byListId(listId)
                 .items();
         ListItemCollectionResponse page = invoke("list items " + listId, () -> items.get(request -> {
-            request.queryParameters.expand = new String[]{"fields"};
+            request.queryParameters.expand = new String[]{expand};
             request.queryParameters.top = LIST_PAGE_SIZE;
         }));
 
@@ -365,6 +381,26 @@ public class MicrosoftGraphService {
         }
         log.info("Microsoft Graph getListItemFields returned {} rows for {}", rows.size(), listId);
         return rows;
+    }
+
+    private static String fieldsExpand(String[] fieldSelect) {
+        if (fieldSelect == null || fieldSelect.length == 0) {
+            return "fields";
+        }
+        StringBuilder select = new StringBuilder();
+        for (String field : fieldSelect) {
+            if (field == null || field.isBlank()) {
+                continue;
+            }
+            if (select.length() > 0) {
+                select.append(',');
+            }
+            select.append(field.trim());
+        }
+        if (select.isEmpty()) {
+            return "fields";
+        }
+        return "fields($select=" + select + ")";
     }
 
     private String resolveSiteId(String siteWebUrl) {

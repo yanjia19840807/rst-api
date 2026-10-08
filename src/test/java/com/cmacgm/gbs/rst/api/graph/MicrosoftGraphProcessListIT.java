@@ -60,7 +60,8 @@ class MicrosoftGraphProcessListIT {
         try {
             rows = graph.getListItemFields(
                     properties.getSharepoint().getSite(),
-                    properties.getSharepoint().getList());
+                    properties.getSharepoint().getList(),
+                    new String[]{"id", "ID", "RSTApplicability", "Title", "LinkTitle"});
         } catch (com.cmacgm.gbs.rst.api.common.error.ApiException ex) {
             assumeTrue(
                     !ex.getMessage().contains("HTTP 403"),
@@ -74,13 +75,9 @@ class MicrosoftGraphProcessListIT {
         }
 
         assertThat(rows).isNotEmpty();
-        Map<String, Object> sample = rows.getFirst();
-        assertThat(sample.keySet().stream().anyMatch(key ->
-                        key != null && key.toLowerCase().contains("applicability")))
-                .as("expected an RST Applicability field among %s", sample.keySet())
-                .isTrue();
-        assertThat(sample.containsKey("id") || sample.containsKey("ID"))
-                .as("expected id/ID among %s", sample.keySet())
+        assertThat(rows.stream().anyMatch(row ->
+                        row.containsKey("id") || row.containsKey("ID")))
+                .as("expected id/ID on at least one row")
                 .isTrue();
 
         GbsProcessCatalog catalog = new GbsProcessCatalogSource(
@@ -88,6 +85,7 @@ class MicrosoftGraphProcessListIT {
 
         assertThat(catalog.rstYesPl3Codes()).isNotEmpty();
         assertThat(catalog.applies("497")).isTrue();
+        assertThat(catalog.applies("318")).isTrue();
     }
 
     private static MicrosoftGraphService liveGraph() {

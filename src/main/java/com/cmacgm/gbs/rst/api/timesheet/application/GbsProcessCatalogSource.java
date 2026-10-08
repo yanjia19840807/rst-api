@@ -107,8 +107,11 @@ public class GbsProcessCatalogSource {
         }
         ProcessProperties.SharePoint sharePoint = properties.getSharepoint();
         try {
+            // Default Graph $expand=fields omits custom columns such as RSTApplicability.
             List<Map<String, Object>> rows = graph.getListItemFields(
-                    sharePoint.getSite(), sharePoint.getList());
+                    sharePoint.getSite(),
+                    sharePoint.getList(),
+                    new String[]{"id", "ID", "RSTApplicability", "Title", "LinkTitle"});
             return GbsProcessCatalog.fromSharePointFields(rows);
         } catch (ApiException ex) {
             if (ex.getMessage() != null && ex.getMessage().contains("HTTP 403")) {

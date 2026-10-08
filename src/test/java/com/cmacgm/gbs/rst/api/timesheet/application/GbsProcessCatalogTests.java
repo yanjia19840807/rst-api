@@ -50,7 +50,7 @@ class GbsProcessCatalogTests {
     @Test
     void fromSharePointFieldsAcceptsInternalNames() {
         GbsProcessCatalog catalog = GbsProcessCatalog.fromSharePointFields(List.of(
-                Map.of("id", 313, "RST_x0020_Applicability", "Yes"),
+                Map.of("id", 313, "RSTApplicability", "Yes"),
                 Map.of("ID", "321", "RST Applicability", "No"),
                 Map.of("id", "497.0", "RST_x0020_Applicability", "YES")));
 

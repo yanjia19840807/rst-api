@@ -171,7 +171,7 @@ Recurring sync uses Quartz when `timesheet.sync.daily.enabled` or
 | `timesheet.sync.daily.cron` | `0 0 6 * * ?` | Daily Quartz cron |
 | `timesheet.sync.monthly.enabled` | `false` | Register Monthly Quartz job |
 | `timesheet.sync.monthly.cron` | `0 30 6 * * ?` | Monthly Quartz cron |
-| `process.remote` | `false` (`true` in pre / prod) | GBS Process from SharePoint list via Graph when true |
+| `process.remote` | `true` in dev / pre / prod (`PROCESS_REMOTE`) | GBS Process from SharePoint list via Graph when true |
 | `process.classpath-location` | `timesheet/GBS Process.csv` | Local catalog; ignored when `remote=true` |
 | `process.sharepoint.site` | `…/sites/CMA-GlobalBusinessServices` | Site that hosts the GBS Process list |
 | `process.sharepoint.list` | `GBS Process` | SharePoint list display name |
