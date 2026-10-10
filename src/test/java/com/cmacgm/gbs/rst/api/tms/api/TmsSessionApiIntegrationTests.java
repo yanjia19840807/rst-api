@@ -78,6 +78,7 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update("delete from timesheet_kpi");
         jdbcTemplate.update("delete from timesheet_scope");
         jdbcTemplate.update("delete from timesheet_person_position_role");
+        jdbcTemplate.update("delete from timesheet_position_parent");
         jdbcTemplate.update("delete from timesheet_position");
         jdbcTemplate.update("delete from timesheet_person");
         jdbcTemplate.update("delete from timesheet_sync_run");

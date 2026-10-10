@@ -70,7 +70,7 @@ JUnit uses `application-test.yml` only.
 | `DB_USERNAME` | `postgres` | Database user |
 | `DB_PASSWORD` | empty | Database password; local `.env`, never commit |
 | `CORS_ALLOWED_ORIGINS` | localhost / host per profile | Comma-separated SPA origins |
-| `AZURE_TENANT_ID` | CMA CGM tenant | Entra tenant; required for SSO (uat/pre/prod) and Graph |
+| Entra tenant | `9d314297-75dc-4329-8f94-a66489b4b9bb` in `application.yml` | SSO and Graph; not an environment variable |
 | `AZURE_CLIENT_ID` | profile default | RST Azure app; not used on local `dev` |
 | `AZURE_CLIENT_SECRET` | empty | RST Azure secret; env only, never commit |
 | `AZURE_REDIRECT_URI` | `{host}/api/sso/callback` | Registered confidential-client redirect |
@@ -80,7 +80,7 @@ JUnit uses `application-test.yml` only.
 | `TIMESHEET_SHAREPOINT_ROOT` | `4.RST/2.UAT` (`0.DEV` / `1.SIT` / `2.UAT` / `2.5.PRE` / `3.Production`) | Timesheet library RST folder |
 | `FORECAST_BASE_URL` | `http://localhost:8000` | Python forecast service |
 | `FORECAST_ENABLED` | `true` | Enable forecast HTTP calls |
-| `FORECAST_API_KEY` | empty | Shared secret for `X-API-Key` to rst-forecast; required in uat/pre/prod |
+| `FORECAST_API_KEY` | empty | Shared with rst-forecast under the same name; sent as `X-API-Key`. Required in uat/pre/prod |
 | `MAIL_ENABLED` | `true` in runtime profiles | Send workflow / Timesheet-fail mail |
 | `MAIL_REDIRECT_TO` | empty | Redirect all outgoing mail to this inbox |
 | `MAIL_FROM` | `GBS.TIMESHEET@cma-cgm.com` | Graph send-as mailbox |
