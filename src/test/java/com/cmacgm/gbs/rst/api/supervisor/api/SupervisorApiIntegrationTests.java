@@ -104,6 +104,7 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update("delete from timesheet_kpi");
         jdbcTemplate.update("delete from timesheet_scope");
         jdbcTemplate.update("delete from timesheet_person_position_role");
+        jdbcTemplate.update("delete from timesheet_position_parent");
         jdbcTemplate.update("delete from timesheet_position");
         jdbcTemplate.update("delete from timesheet_person");
         jdbcTemplate.update("delete from timesheet_sync_run");
@@ -162,7 +163,7 @@ class SupervisorApiIntegrationTests {
                         .header("X-Dev-Role", "SUPERVISOR"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Bank Reconciliation Toolkit"))
-                .andExpect(jsonPath("$.version").value(0))
+                .andExpect(jsonPath("$.version").value(1))
                 .andExpect(jsonPath("$.subtasks.length()").value(1))
                 .andExpect(jsonPath("$.subtasks[0].name").value("Manual match"))
                 .andExpect(jsonPath("$.sharedKpiSelections.length()").value(1))
@@ -687,8 +688,8 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into toolkit_shared_kpi_selection
-                    (id, toolkit_id, carrier, site, customer_country, version)
-                values (?, ?, 'Carrier Z', 'Nowhere', 'Mars', 0)
+                    (id, toolkit_id, carrier, site, customer_country, is_deleted, version)
+                values (?, ?, 'Carrier Z', 'Nowhere', 'Mars', false, 0)
                 """,
                 UUID.randomUUID(),
                 UUID.fromString(toolkitId));
@@ -842,8 +843,8 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into exercise_holiday
-                    (id, exercise_id, holiday_date, holiday_name, holiday_type, version)
-                values (?, ?, DATE '2024-12-25', 'Christmas', 'HOLIDAY', 0)
+                    (id, exercise_id, holiday_date, holiday_name, holiday_type, is_deleted, version)
+                values (?, ?, DATE '2024-12-25', 'Christmas', 'HOLIDAY', false, 0)
                 """,
                 UUID.randomUUID(),
                 exerciseUuid);
@@ -851,9 +852,9 @@ class SupervisorApiIntegrationTests {
                 """
                 insert into exercise_production_support_item
                     (id, exercise_id, lineage_id, category, activity, frequency_code,
-                     volume, unit_of_measure, workload_per_unit_minutes, version)
+                     volume, unit_of_measure, workload_per_unit_minutes, is_deleted, version)
                 values (?, ?, ?, 'Operations', 'Approve reporting', 'MONTHLY',
-                        10, 'case', 5, 0)
+                        10, 'case', 5, false, 0)
                 """,
                 UUID.randomUUID(),
                 exerciseUuid,
@@ -1043,8 +1044,8 @@ class SupervisorApiIntegrationTests {
                 insert into toolkit
                     (id, name, supervisor_position_id, center, domain, pl1, pl2,
                      pl3_name, primary_pl3_code, combine_subtasks_time, enabled,
-                     owner_ccgid, created_at, version)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, ?, ?)
+                     is_deleted, owner_ccgid, created_at, version)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true, false, ?, ?, ?)
                 """,
                 toolkitWithoutKpi,
                 "Legacy Toolkit Without KPI",
@@ -1062,8 +1063,8 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update(
                 """
                 insert into toolkit_subtask
-                    (id, toolkit_id, name, display_order, enabled, version)
-                values (?, ?, ?, ?, true, ?)
+                    (id, toolkit_id, name, display_order, enabled, is_deleted, version)
+                values (?, ?, ?, ?, true, false, ?)
                 """,
                 subtaskId,
                 toolkitWithoutKpi,
@@ -1134,17 +1135,13 @@ class SupervisorApiIntegrationTests {
                 """
                 insert into exercise_production_support_item
                     (id, exercise_id, lineage_id, category, activity, frequency_code,
-                     volume, unit_of_measure, workload_per_unit_minutes, version)
+                     volume, unit_of_measure, workload_per_unit_minutes, is_deleted, version)
                 values (?, ?, ?, 'Operations', 'Archive reporting', 'MONTHLY',
-                        10, 'case', 5, 0)
+                        10, 'case', 5, false, 0)
                 """,
                 supportItemId,
                 exerciseId,
-                supportItemId,
-                NOW,
-                SUPERVISOR_CCGID,
-                NOW,
-                SUPERVISOR_CCGID);
+                supportItemId);
         jdbcTemplate.update(
                 """
                 insert into cycle_time_baseline
@@ -1186,11 +1183,7 @@ class SupervisorApiIntegrationTests {
                 """,
                 UUID.randomUUID(),
                 toolkitId,
-                exerciseId,
-                NOW,
-                SUPERVISOR_CCGID,
-                NOW,
-                SUPERVISOR_CCGID);
+                exerciseId);
     }
 
     private String createToolkitRequest(String name, boolean withKpi) {
@@ -1310,40 +1303,61 @@ class SupervisorApiIntegrationTests {
     }
 
     private void insertPosition(UUID runId, String positionId, String roleType, String parentPositionId) {
-        jdbcTemplate.update(
-                """
-                insert into timesheet_position (sync_run_id, position_id, role_type)
-                values (?, ?, ?)
-                on conflict (sync_run_id, position_id, role_type) do nothing
-                """,
-                runId,
-                positionId,
-                roleType);
+        insertPositionNode(runId, positionId, roleType);
         if (parentPositionId == null || parentPositionId.isBlank()) {
             return;
         }
         String parentRole = parentRoleOf(roleType, parentPositionId);
-        jdbcTemplate.update(
+        insertPositionNode(runId, parentPositionId, parentRole);
+        Long edges = jdbcTemplate.queryForObject(
                 """
-                insert into timesheet_position (sync_run_id, position_id, role_type)
-                values (?, ?, ?)
-                on conflict (sync_run_id, position_id, role_type) do nothing
+                select count(*) from timesheet_position_parent
+                where sync_run_id = ? and position_id = ? and role_type = ?
+                  and parent_position_id = ? and parent_role_type = ?
                 """,
+                Long.class,
                 runId,
+                positionId,
+                roleType,
                 parentPositionId,
                 parentRole);
+        if (edges != null && edges > 0) {
+            return;
+        }
         jdbcTemplate.update(
                 """
                 insert into timesheet_position_parent
                     (sync_run_id, position_id, role_type, parent_position_id, parent_role_type)
                 values (?, ?, ?, ?, ?)
-                on conflict do nothing
                 """,
                 runId,
                 positionId,
                 roleType,
                 parentPositionId,
                 parentRole);
+    }
+
+    private void insertPositionNode(UUID runId, String positionId, String roleType) {
+        Long existing = jdbcTemplate.queryForObject(
+                """
+                select count(*) from timesheet_position
+                where sync_run_id = ? and position_id = ? and role_type = ?
+                """,
+                Long.class,
+                runId,
+                positionId,
+                roleType);
+        if (existing != null && existing > 0) {
+            return;
+        }
+        jdbcTemplate.update(
+                """
+                insert into timesheet_position (sync_run_id, position_id, role_type)
+                values (?, ?, ?)
+                """,
+                runId,
+                positionId,
+                roleType);
     }
 
     private void insertSeat(UUID runId, String ccgid, String positionId, String roleType) {

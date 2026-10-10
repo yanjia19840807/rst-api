@@ -1,14 +1,19 @@
-# SPRING_PROFILES_ACTIVE=uat  →  https://gbs-rst-uat.cma-cgm.com
+# SPRING_PROFILES_ACTIVE=uat  →  https://rightsizingtool-uat.cma-cgm.com
 # Secrets: AZURE_CLIENT_SECRET, DB_PASSWORD, MS_GRAPH_CLIENT_SECRET, FORECAST_API_KEY
+# SSO: https://login.microsoftonline.com/{tenant}/oauth2/v2.0
+# Timesheet sync: SharePoint library Timesheet / 4.RST/2.UAT via Microsoft Graph
 
 app:
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://gbs-rst-uat.cma-cgm.com}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://rightsizingtool-uat.cma-cgm.com}
   security:
     sso:
+      tenant-id: ${AZURE_TENANT_ID:9d314297-75dc-4329-8f94-a66489b4b9bb}
       env: ${SSO_ENV:UAT}
       client-id: ${AZURE_CLIENT_ID:}
-      redirect-uri: ${AZURE_REDIRECT_URI:https://gbs-rst-uat.cma-cgm.com/api/sso/callback}
+      redirect-uri: ${AZURE_REDIRECT_URI:https://rightsizingtool-uat.cma-cgm.com/api/sso/callback}
+    dev-identity:
+      override-enabled: false
 
 decorator:
   datasource:
@@ -28,7 +33,27 @@ server:
 
 timesheet:
   sharepoint:
+    site: ${TIMESHEET_SHAREPOINT_SITE:https://cmacgmgroup.sharepoint.com/sites/CMA-SharedKPIAutomation}
+    library: ${TIMESHEET_SHAREPOINT_LIBRARY:Timesheet}
     root: ${TIMESHEET_SHAREPOINT_ROOT:4.RST/2.UAT}
+  sync:
+    daily:
+      enabled: ${TIMESHEET_SYNC_DAILY_ENABLED:true}
+      cron: ${TIMESHEET_SYNC_DAILY_CRON:0 0 6 * * ?}
+    monthly:
+      enabled: ${TIMESHEET_SYNC_MONTHLY_ENABLED:true}
+      cron: ${TIMESHEET_SYNC_MONTHLY_CRON:0 30 6 * * ?}
+
+process:
+  remote: ${PROCESS_REMOTE:true}
+  sharepoint:
+    site: ${PROCESS_SHAREPOINT_SITE:https://cmacgmgroup.sharepoint.com/sites/CMA-GlobalBusinessServices}
+    list: ${PROCESS_SHAREPOINT_LIST:GBS Process}
+
+microsoft:
+  graph:
+    tenant-id: ${MS_GRAPH_TENANT_ID:${AZURE_TENANT_ID:9d314297-75dc-4329-8f94-a66489b4b9bb}}
+    client-id: ${MS_GRAPH_CLIENT_ID:2b5ec0be-1344-4161-80f5-b7674d74f019}
 
 mail:
   enabled: ${MAIL_ENABLED:true}
