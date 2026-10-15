@@ -60,12 +60,31 @@ class SizingMathTests {
     }
 
     @Test
+    void monthlyManualVolumeTreatsMissingCommercialAsZero() {
+        BigDecimal manual = SizingMath.monthlyManualVolume(
+                new BigDecimal("1000"),
+                BigDecimal.ZERO,
+                null);
+        assertThat(manual).isEqualByComparingTo("1000.000000");
+    }
+
+    @Test
     void monthlyManualVolumeAppliesCommercialRatio() {
         BigDecimal manual = SizingMath.monthlyManualVolume(
                 new BigDecimal("1000"),
                 new BigDecimal("0.10"),
                 new BigDecimal("0.05"));
         assertThat(manual).isEqualByComparingTo("945.000000");
+    }
+
+    @Test
+    void dailyManualVolumeTreatsMissingAdjustmentAsZero() {
+        BigDecimal manual = SizingMath.dailyManualVolume(
+                new BigDecimal("1000"),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                null);
+        assertThat(manual).isEqualByComparingTo("1000.000000");
     }
 
     @Test

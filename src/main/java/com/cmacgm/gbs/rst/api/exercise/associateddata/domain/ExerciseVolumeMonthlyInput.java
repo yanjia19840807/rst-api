@@ -58,7 +58,7 @@ public class ExerciseVolumeMonthlyInput implements Persistable<UUID> {
      * @param exerciseId owning Exercise
      * @param month first day of the month
      * @param actualVolume optional actual volume
-     * @param commercialRatio Excel Commercial Ratio; null treated as 0 in sizing
+     * @param commercialRatio Excel Commercial Ratio; null is stored as 0 so sizing does not add 100%
      * @param sourceType MANUAL / TOOLKIT / IMPORT
      * @param importBatchId optional import batch
      * @param actorCcgid creating Supervisor
@@ -79,7 +79,7 @@ public class ExerciseVolumeMonthlyInput implements Persistable<UUID> {
         row.exerciseId = exerciseId;
         row.month = month;
         row.actualVolume = actualVolume;
-        row.commercialRatio = commercialRatio;
+        row.commercialRatio = commercialRatio == null ? BigDecimal.ZERO : commercialRatio;
         row.sourceType = sourceType == null || sourceType.isBlank() ? "MANUAL" : sourceType;
         row.importBatchId = importBatchId;
         row.isNew = true;

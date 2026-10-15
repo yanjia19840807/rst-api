@@ -57,7 +57,7 @@ public class ExerciseVolumeDailyInput implements Persistable<UUID> {
      * @param exerciseId owning Exercise
      * @param volumeDate calendar date
      * @param actualVolume optional actual volume
-     * @param dailyAdjustmentRatio Excel Daily Volume Adjustment Ratio; null treated as 0 in sizing
+     * @param dailyAdjustmentRatio Excel Daily Volume Adjustment Ratio; null is stored as 0 so sizing does not add 100%
      * @param sourceType MANUAL / TOOLKIT / IMPORT
      * @param importBatchId optional import batch
      * @param actorCcgid creating Supervisor
@@ -78,7 +78,7 @@ public class ExerciseVolumeDailyInput implements Persistable<UUID> {
         row.exerciseId = exerciseId;
         row.volumeDate = volumeDate;
         row.actualVolume = actualVolume;
-        row.dailyAdjustmentRatio = dailyAdjustmentRatio;
+        row.dailyAdjustmentRatio = dailyAdjustmentRatio == null ? BigDecimal.ZERO : dailyAdjustmentRatio;
         row.sourceType = sourceType == null || sourceType.isBlank() ? "MANUAL" : sourceType;
         row.importBatchId = importBatchId;
         row.isNew = true;
