@@ -3,6 +3,7 @@ package com.cmacgm.gbs.rst.api.config;
 import com.cmacgm.gbs.rst.api.delegation.security.DelegationAuthenticationFilter;
 import com.cmacgm.gbs.rst.api.security.ProblemSecurityHandler;
 import com.cmacgm.gbs.rst.api.security.dev.DevAuthenticationFilter;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -12,14 +13,15 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 
 /**
- * Temporary open security for local {@code dev} walkthrough only.
+ * Open security when a local uat run enables Dev Identity.
  * {@code @PreAuthorize} is disabled; HTTP auth is {@code permitAll}.
  * {@link DevAuthenticationFilter} still injects a principal for {@code ccgid}.
  * Restore role checks after the Supervisor → Submit path is stable.
  */
 @Configuration
 @EnableMethodSecurity(prePostEnabled = false)
-@Profile("dev")
+@Profile("uat")
+@ConditionalOnProperty(name = "app.security.dev-identity.override-enabled", havingValue = "true")
 public class DevSecurityConfig {
 
     /**

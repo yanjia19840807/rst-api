@@ -4,10 +4,11 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -18,6 +19,7 @@ import org.springframework.web.client.RestClient;
  */
 @Component
 @Profile({"uat", "pre", "prod"})
+@ConditionalOnProperty(name = "app.security.dev-identity.override-enabled", havingValue = "false", matchIfMissing = true)
 public class AzureOidcClient {
 
     private final SsoProperties properties;

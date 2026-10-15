@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/sso")
 @Profile({"uat", "pre", "prod"})
+@ConditionalOnProperty(name = "app.security.dev-identity.override-enabled", havingValue = "false", matchIfMissing = true)
 public class SsoController {
 
     private final AzureOidcClient azure;

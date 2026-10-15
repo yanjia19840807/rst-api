@@ -28,20 +28,22 @@ import org.springframework.test.context.TestPropertySource;
  * Live SharePoint sync into local Postgres. Break on
  * {@link TimesheetSyncService#sync(String)}.
  *
- * <p>Uses the {@code dev} profile: {@code rst-api/.env} datasource and p6spy.
+ * <p>Uses the {@code uat} profile: {@code rst-api/.env} datasource and p6spy.
+ * Dev Identity stays on so this sync test does not start Azure SSO.
  * Full SQL is printed to stdout so it shows in Debug Console. This writes and
  * may archive the current ACTIVE Daily / Monthly snapshot.
  *
  * <p>Skipped when {@code MS_GRAPH_CLIENT_SECRET} is absent.
  */
 @SpringBootTest
-@ActiveProfiles("dev")
+@ActiveProfiles("uat")
 @EnabledIf("liveEnabled")
 @TestPropertySource(properties = {
         "mail.enabled=false",
         "forecast.enabled=false",
         "timesheet.sync.daily.enabled=false",
         "timesheet.sync.monthly.enabled=false",
+        "app.security.dev-identity.override-enabled=true",
         "decorator.datasource.enabled=true",
         "decorator.datasource.p6spy.enable-logging=true",
         "decorator.datasource.p6spy.logging=sysout",

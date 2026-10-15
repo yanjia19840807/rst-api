@@ -3,7 +3,7 @@ package com.cmacgm.gbs.rst.api.security.dev;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Dev identity ({@code application-dev.yml}).
+ * Dev identity for a simulated local run.
  *
  * <p>When {@code override-enabled} is {@code true}, the SPA supplies CCGID / role /
  * Center on each request. Headerless calls default to {@code ADMIN001} / {@code ADMIN}.

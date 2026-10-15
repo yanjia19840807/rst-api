@@ -12,11 +12,11 @@ spring:
   application:
     name: rst-api
   # Import .env first so SPRING_PROFILES_ACTIVE in that file can activate a profile.
-  # Official hosts also export it as a process env. Local default is still dev.
+  # Official hosts also export it as a process env. Local default is uat.
   config:
     import: optional:file:.env[.properties]
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:dev}
+    active: ${SPRING_PROFILES_ACTIVE:uat}
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/rst}
     username: ${DB_USERNAME:postgres}

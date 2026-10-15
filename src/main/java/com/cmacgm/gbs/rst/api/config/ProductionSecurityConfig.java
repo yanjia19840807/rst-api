@@ -3,6 +3,7 @@ package com.cmacgm.gbs.rst.api.config;
 import com.cmacgm.gbs.rst.api.delegation.security.DelegationAuthenticationFilter;
 import com.cmacgm.gbs.rst.api.security.ProblemSecurityHandler;
 import com.cmacgm.gbs.rst.api.security.sso.SsoSessionFilter;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -15,6 +16,7 @@ import org.springframework.security.web.authentication.AnonymousAuthenticationFi
 @Configuration
 @EnableMethodSecurity
 @Profile({"uat", "pre", "prod"})
+@ConditionalOnProperty(name = "app.security.dev-identity.override-enabled", havingValue = "false", matchIfMissing = true)
 public class ProductionSecurityConfig {
 
     @Bean

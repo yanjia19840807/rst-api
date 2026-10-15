@@ -16,4 +16,4 @@ For further reference, please consider the following sections:
 ### Local database
 
 RST API uses a machine-local PostgreSQL instance (not Docker). See [README.md](README.md)
-for JDBC settings and the default `dev` profile (`application-dev.yml`).
+for JDBC settings and the default `uat` profile (`application-uat.yml`).

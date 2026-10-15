@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -23,7 +24,8 @@ import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
  * Display names are taken from the ACTIVE Daily Timesheet snapshot when available.
  */
 @Service
-@Profile({"dev", "test"})
+@Profile({"uat", "test"})
+@ConditionalOnProperty(name = "app.security.dev-identity.override-enabled", havingValue = "true")
 public class DevIdentityService {
 
     private static final Logger log = LoggerFactory.getLogger(DevIdentityService.class);

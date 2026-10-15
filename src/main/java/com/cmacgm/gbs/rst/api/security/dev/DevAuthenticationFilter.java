@@ -14,6 +14,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import com.cmacgm.gbs.rst.api.security.RstAuthenticationToken;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
@@ -27,7 +28,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 
 /**
- * Injects a configurable demo principal in {@code dev}/{@code test}.
+ * Injects a configurable demo principal in simulated {@code uat} and {@code test}.
  *
  * <p>When {@code override-enabled} is {@code true}, identity comes from the SPA via
  * {@code X-Dev-Ccgid}, {@code X-Dev-Role}, and {@code X-Dev-Center}. A CCGID without
@@ -35,7 +36,8 @@ import com.cmacgm.gbs.rst.api.common.error.ApiException;
  * {@code ADMIN001} / {@code ADMIN}.
  */
 @Component
-@Profile({"dev", "test"})
+@Profile({"uat", "test"})
+@ConditionalOnProperty(name = "app.security.dev-identity.override-enabled", havingValue = "true")
 @EnableConfigurationProperties(DevIdentityProperties.class)
 public class DevAuthenticationFilter extends OncePerRequestFilter {
 

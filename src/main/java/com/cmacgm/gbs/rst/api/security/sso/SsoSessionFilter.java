@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -18,6 +19,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
  */
 @Component
 @Profile({"uat", "pre", "prod"})
+@ConditionalOnProperty(name = "app.security.dev-identity.override-enabled", havingValue = "false", matchIfMissing = true)
 public class SsoSessionFilter extends OncePerRequestFilter {
 
     @Override

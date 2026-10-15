@@ -1,4 +1,4 @@
-# JUnit only. Not a runtime environment (runtime is dev / uat / pre / prod).
+# JUnit only. Not a runtime environment (runtime is uat / pre / prod).
 
 spring:
   datasource:

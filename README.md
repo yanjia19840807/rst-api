@@ -20,22 +20,26 @@ to `.env` and fill `DB_PASSWORD`.
 | `DB_URL` | `jdbc:postgresql://localhost:5432/rst` |
 | `DB_USERNAME` | `postgres` |
 | `DB_PASSWORD` | local Postgres password |
-| Dev identity CCGID | `app.security.dev-identity.ccgid` in `application-dev.yml` |
+| Dev identity CCGID | `ADMIN001` unless the SPA sends `X-Dev-Ccgid` |
 
 Create database `rst` if needed. This project does **not** use Docker Compose / Testcontainers.
 
 ### Run API
 
 ```sh
-# defaults to profile dev → loads application-dev.yml
-./mvnw spring-boot:run
+# profile uat, registered UAT callback
+./scripts/run-local-sso.sh
+
+# profile uat, Dev Identity, Azure SSO off
+./scripts/run-local.sh
 ```
 
-IDE Run Configuration: leave Active profiles empty — `application.yml` already defaults to `dev`.
+IDE Run Configuration: leave Active profiles empty — `application.yml` already defaults to `uat`.
 
 ### Dev identity (simulate one user login)
 
-Turn on one switch. The person is chosen in the SPA, not in YAML.
+`./scripts/run-local.sh` sets `APP_SECURITY_DEV_IDENTITY_OVERRIDE_ENABLED=true` on profile `uat`.
+The person is chosen in the SPA, not in YAML.
 Requests without a person default to `ADMIN001` / `ADMIN`.
 
 ```yaml
@@ -61,7 +65,7 @@ To connect `rst-web`, set `VITE_API_BASE_URL=http://localhost:8080` (or leave it
 
 ## Configuration
 
-Runtime profiles are **dev** (default, local Dev Identity), **uat**, **pre**, and **prod**.
+Runtime profiles are **uat** (default, including this machine), **pre**, and **prod**.
 JUnit uses `application-test.yml` only.
 
 | Variable | Default | Purpose |
@@ -71,7 +75,7 @@ JUnit uses `application-test.yml` only.
 | `DB_PASSWORD` | empty | Database password; local `.env`, never commit |
 | `CORS_ALLOWED_ORIGINS` | localhost / host per profile | Comma-separated SPA origins |
 | Entra tenant | `9d314297-75dc-4329-8f94-a66489b4b9bb` in `application.yml` | SSO and Graph; not an environment variable |
-| `AZURE_CLIENT_ID` | profile default | RST Azure app; not used on local `dev` |
+| `AZURE_CLIENT_ID` | profile default | RST Azure app |
 | `AZURE_CLIENT_SECRET` | empty | RST Azure secret; env only, never commit |
 | `AZURE_REDIRECT_URI` | `{host}/api/sso/callback` | Registered confidential-client redirect |
 | `SSO_ENV` | UAT / PRE / PROD | Must match `CMACGM_APP_RST_{NAME}_{ENV}` |
@@ -86,7 +90,10 @@ JUnit uses `application-test.yml` only.
 | `MAIL_FROM` | `GBS.TIMESHEET@cma-cgm.com` | Graph send-as mailbox |
 
 uat / pre / prod authenticate with Azure authorization-code + HttpOnly session.
-Local `dev` uses Dev Identity (`X-Dev-Role` / query). Do not put secrets in YAML.
+This machine uses profile `uat` as well. `./scripts/run-local-sso.sh` keeps the
+registered callback `https://rightsizingtool-uat.cma-cgm.com/api/sso/callback`.
+`./scripts/run-local.sh` turns on Dev Identity and leaves Azure SSO unloaded.
+Do not put secrets in YAML.
 
 ## Architecture
 

@@ -2,6 +2,7 @@ package com.cmacgm.gbs.rst.api.security.sso;
 
 import java.util.Locale;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,6 +15,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoders;
  */
 @Configuration
 @Profile({"uat", "pre", "prod"})
+@ConditionalOnProperty(name = "app.security.dev-identity.override-enabled", havingValue = "false", matchIfMissing = true)
 @EnableConfigurationProperties(SsoProperties.class)
 public class SsoConfig {
 
