@@ -78,12 +78,12 @@ JUnit uses `application-test.yml` only.
 | `AZURE_CLIENT_SECRET` | empty | RST Azure secret; env only, never commit |
 | `MS_GRAPH_CLIENT_ID` | empty | Graph application (client) id; env only, never commit |
 | `MS_GRAPH_CLIENT_SECRET` | empty | Graph client secret; never commit |
-| `FORECAST_BASE_URL` | `http://localhost:8000` | Python forecast service |
 | `FORECAST_ENABLED` | `true` | Enable forecast HTTP calls |
 | `FORECAST_API_KEY` | empty | Shared with rst-forecast under the same name; sent as `X-API-Key`. Required in dev/uat/pre/prod |
 | `MAIL_ENABLED` | `true` in runtime profiles | Send workflow / Timesheet-fail mail |
 
-Host, SSO callback, `SSO_ENV`, cookie `secure`, and the Timesheet folder
+Host, SSO callback, `SSO_ENV`, cookie `secure`, forecast base URL
+(`https://<host>/forecast`), and the Timesheet folder
 (`4.RST/0.DEV` / `2.UAT` / `2.5.PRE` / `3.Production`) are written in the profile file.
 SharePoint site, library, GBS Process list, mail from-address, `mail.redirect-to`, and sync cron are fixed in `application.yml`.
 `mail.redirect-to` is empty, so mail goes to the real recipients.

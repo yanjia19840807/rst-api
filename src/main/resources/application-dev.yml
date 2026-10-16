@@ -61,3 +61,6 @@ microsoft:
 
 mail:
   enabled: ${MAIL_ENABLED:true}
+
+forecast:
+  base-url: https://rightsizingtool-dev.cma-cgm.com/forecast

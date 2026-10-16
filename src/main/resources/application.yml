@@ -5,7 +5,7 @@
 # TIMESHEET_SYNC_DAILY_ENABLED TIMESHEET_SYNC_MONTHLY_ENABLED
 # PROCESS_REMOTE
 # MAIL_ENABLED
-# FORECAST_BASE_URL FORECAST_ENABLED FORECAST_API_KEY
+# FORECAST_ENABLED FORECAST_API_KEY
 spring:
   application:
     name: rst-api
@@ -104,7 +104,7 @@ mail:
   from: GBS.TIMESHEET@cma-cgm.com
 
 forecast:
-  base-url: ${FORECAST_BASE_URL:http://localhost:8000}
+  base-url: http://localhost:8000
   connect-timeout-ms: 3000
   read-timeout-ms: 60000
   enabled: ${FORECAST_ENABLED:true}
