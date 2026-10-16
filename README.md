@@ -65,7 +65,7 @@ To connect `rst-web`, set `VITE_API_BASE_URL=http://localhost:8080` (or leave it
 
 ## Configuration
 
-Runtime profiles are **uat** (default, including this machine), **pre**, and **prod**.
+Runtime profiles are **dev**, **uat** (default, including this machine), **pre**, and **prod**.
 JUnit uses `application-test.yml` only.
 
 | Variable | Default | Purpose |
@@ -73,23 +73,22 @@ JUnit uses `application-test.yml` only.
 | `DB_URL` | `jdbc:postgresql://localhost:5432/rst` | PostgreSQL JDBC URL |
 | `DB_USERNAME` | `postgres` | Database user |
 | `DB_PASSWORD` | empty | Database password; local `.env`, never commit |
-| `CORS_ALLOWED_ORIGINS` | localhost / host per profile | Comma-separated SPA origins |
 | Entra tenant | `9d314297-75dc-4329-8f94-a66489b4b9bb` in `application.yml` | SSO and Graph; not an environment variable |
-| `AZURE_CLIENT_ID` | profile default | RST Azure app |
+| `AZURE_CLIENT_ID` | empty | RST Azure app |
 | `AZURE_CLIENT_SECRET` | empty | RST Azure secret; env only, never commit |
-| `AZURE_REDIRECT_URI` | `{host}/api/sso/callback` | Registered confidential-client redirect |
-| `SSO_ENV` | UAT / PRE / PROD | Must match `CMACGM_APP_RST_{NAME}_{ENV}` |
-| `MS_GRAPH_CLIENT_ID` | empty (dev default set) | Graph application (client) id |
+| `MS_GRAPH_CLIENT_ID` | empty | Graph application (client) id; env only, never commit |
 | `MS_GRAPH_CLIENT_SECRET` | empty | Graph client secret; never commit |
-| `TIMESHEET_SHAREPOINT_ROOT` | `4.RST/2.UAT` (`0.DEV` / `1.SIT` / `2.UAT` / `2.5.PRE` / `3.Production`) | Timesheet library RST folder |
 | `FORECAST_BASE_URL` | `http://localhost:8000` | Python forecast service |
 | `FORECAST_ENABLED` | `true` | Enable forecast HTTP calls |
-| `FORECAST_API_KEY` | empty | Shared with rst-forecast under the same name; sent as `X-API-Key`. Required in uat/pre/prod |
+| `FORECAST_API_KEY` | empty | Shared with rst-forecast under the same name; sent as `X-API-Key`. Required in dev/uat/pre/prod |
 | `MAIL_ENABLED` | `true` in runtime profiles | Send workflow / Timesheet-fail mail |
-| `MAIL_REDIRECT_TO` | empty | Redirect all outgoing mail to this inbox |
-| `MAIL_FROM` | `GBS.TIMESHEET@cma-cgm.com` | Graph send-as mailbox |
 
-uat / pre / prod authenticate with Azure authorization-code + HttpOnly session.
+Host, SSO callback, `SSO_ENV`, cookie `secure`, and the Timesheet folder
+(`4.RST/0.DEV` / `2.UAT` / `2.5.PRE` / `3.Production`) are written in the profile file.
+SharePoint site, library, GBS Process list, mail from-address, `mail.redirect-to`, and sync cron are fixed in `application.yml`.
+`mail.redirect-to` is empty, so mail goes to the real recipients.
+
+dev / uat / pre / prod authenticate with Azure authorization-code + HttpOnly session.
 This machine uses profile `uat` as well. `./scripts/run-local-sso.sh` keeps the
 registered callback `https://rightsizingtool-uat.cma-cgm.com/api/sso/callback`.
 `./scripts/run-local.sh` turns on Dev Identity and leaves Azure SSO unloaded.

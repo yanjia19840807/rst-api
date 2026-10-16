@@ -19,6 +19,8 @@ class SsoRoleParserTests {
                 .isEqualTo(new SsoRoleParser.Parsed("GOVERNANCE", "PROD"));
         assertThat(SsoRoleParser.parse("CMACGM_APP_RST_ADMIN_UAT", "UAT"))
                 .isEqualTo(new SsoRoleParser.Parsed("ADMIN", "UAT"));
+        assertThat(SsoRoleParser.parse("CMACGM_APP_RST_ADMIN_DEV", "DEV"))
+                .isEqualTo(new SsoRoleParser.Parsed("ADMIN", "DEV"));
     }
 
     @Test
@@ -31,7 +33,7 @@ class SsoRoleParserTests {
                 .isInstanceOf(SsoException.class)
                 .extracting(ex -> ((SsoException) ex).code())
                 .isEqualTo("sso-role-invalid");
-        assertThatThrownBy(() -> SsoRoleParser.parse("CMACGM_APP_RST_ADMIN_DEV", "DEV"))
+        assertThatThrownBy(() -> SsoRoleParser.parse("CMACGM_APP_RST_ADMIN_SIT", "SIT"))
                 .isInstanceOf(SsoException.class);
     }
 

@@ -1,13 +1,11 @@
 # Env keys consumed here (see .env.example). Unknown keys in .env are ignored.
 # DB_URL DB_USERNAME DB_PASSWORD
-# CORS_ALLOWED_ORIGINS SESSION_COOKIE_SECURE
-# AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_REDIRECT_URI SSO_ENV
-# MS_GRAPH_CLIENT_ID MS_GRAPH_CLIENT_SECRET MS_GRAPH_TENANT_ID MS_GRAPH_SECRET_NAME
-# TIMESHEET_SHAREPOINT_SITE TIMESHEET_SHAREPOINT_LIBRARY TIMESHEET_SHAREPOINT_ROOT
-# TIMESHEET_SYNC_DAILY_ENABLED TIMESHEET_SYNC_DAILY_CRON
-# TIMESHEET_SYNC_MONTHLY_ENABLED TIMESHEET_SYNC_MONTHLY_CRON
-# PROCESS_REMOTE PROCESS_CLASSPATH PROCESS_SHAREPOINT_SITE PROCESS_SHAREPOINT_LIST
-# MAIL_ENABLED MAIL_REDIRECT_TO MAIL_FROM FORECAST_*
+# AZURE_CLIENT_ID AZURE_CLIENT_SECRET
+# MS_GRAPH_CLIENT_ID MS_GRAPH_CLIENT_SECRET
+# TIMESHEET_SYNC_DAILY_ENABLED TIMESHEET_SYNC_MONTHLY_ENABLED
+# PROCESS_REMOTE
+# MAIL_ENABLED
+# FORECAST_BASE_URL FORECAST_ENABLED FORECAST_API_KEY
 spring:
   application:
     name: rst-api
@@ -51,7 +49,7 @@ server:
       cookie:
         http-only: true
         same-site: lax
-        secure: ${SESSION_COOKIE_SECURE:false}
+        secure: false
 
 decorator:
   datasource:
@@ -72,52 +70,50 @@ springdoc:
 
 app:
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+    allowed-origins: http://localhost:5173,http://127.0.0.1:5173
   security:
     sso:
       tenant-id: 9d314297-75dc-4329-8f94-a66489b4b9bb
       client-id: ${AZURE_CLIENT_ID:}
       client-secret: ${AZURE_CLIENT_SECRET:}
-      redirect-uri: ${AZURE_REDIRECT_URI:}
-      env: ${SSO_ENV:}
 
 timesheet:
   sharepoint:
-    site: ${TIMESHEET_SHAREPOINT_SITE:https://cmacgmgroup.sharepoint.com/sites/CMA-SharedKPIAutomation}
-    library: ${TIMESHEET_SHAREPOINT_LIBRARY:Timesheet}
+    site: https://cmacgmgroup.sharepoint.com/sites/CMA-SharedKPIAutomation
+    library: Timesheet
     # 4.RST/0.DEV · 1.SIT · 2.UAT · 2.5.PRE · 3.Production
-    root: ${TIMESHEET_SHAREPOINT_ROOT:4.RST/2.UAT}
+    root: 4.RST/2.UAT
   sync:
     daily:
       enabled: ${TIMESHEET_SYNC_DAILY_ENABLED:false}
-      cron: ${TIMESHEET_SYNC_DAILY_CRON:0 0 6 * * ?}
+      cron: "0 0 6 * * ?"
     monthly:
       enabled: ${TIMESHEET_SYNC_MONTHLY_ENABLED:false}
-      cron: ${TIMESHEET_SYNC_MONTHLY_CRON:0 30 6 * * ?}
+      cron: "0 30 6 * * ?"
 
 process:
   remote: ${PROCESS_REMOTE:false}
-  classpath-location: ${PROCESS_CLASSPATH:timesheet/GBS Process.csv}
+  classpath-location: timesheet/GBS Process.csv
   sharepoint:
-    site: ${PROCESS_SHAREPOINT_SITE:https://cmacgmgroup.sharepoint.com/sites/CMA-GlobalBusinessServices}
-    list: ${PROCESS_SHAREPOINT_LIST:GBS Process}
+    site: https://cmacgmgroup.sharepoint.com/sites/CMA-GlobalBusinessServices
+    list: GBS Process
 
 mail:
   enabled: ${MAIL_ENABLED:false}
-  redirect-to: ${MAIL_REDIRECT_TO:}
-  from: ${MAIL_FROM:GBS.TIMESHEET@cma-cgm.com}
+  redirect-to:
+  from: GBS.TIMESHEET@cma-cgm.com
 
 forecast:
   base-url: ${FORECAST_BASE_URL:http://localhost:8000}
-  connect-timeout-ms: ${FORECAST_CONNECT_TIMEOUT_MS:3000}
-  read-timeout-ms: ${FORECAST_READ_TIMEOUT_MS:60000}
+  connect-timeout-ms: 3000
+  read-timeout-ms: 60000
   enabled: ${FORECAST_ENABLED:true}
-  confidence-level: ${FORECAST_CONFIDENCE:0.95}
+  confidence-level: 0.95
   api-key: ${FORECAST_API_KEY:}
 
 microsoft:
   graph:
-    secret-name: ${MS_GRAPH_SECRET_NAME:timesheet-prd-microsoft-graph-credentials}
+    secret-name: timesheet-prd-microsoft-graph-credentials
     tenant-id: 9d314297-75dc-4329-8f94-a66489b4b9bb
     client-id: ${MS_GRAPH_CLIENT_ID:}
     client-secret: ${MS_GRAPH_CLIENT_SECRET:}

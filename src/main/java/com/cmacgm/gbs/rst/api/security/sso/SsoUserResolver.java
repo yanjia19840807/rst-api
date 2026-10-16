@@ -22,7 +22,7 @@ import org.springframework.stereotype.Component;
  * All matching App Roles are unioned; {@code USER} expands Timesheet / Center Roles.
  */
 @Component
-@Profile({"uat", "pre", "prod"})
+@Profile({"dev", "uat", "pre", "prod"})
 @ConditionalOnProperty(name = "app.security.dev-identity.override-enabled", havingValue = "false", matchIfMissing = true)
 public class SsoUserResolver {
 

@@ -14,7 +14,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoders;
  * Azure ID-token decoder for the SSO callback. Not used as a resource server.
  */
 @Configuration
-@Profile({"uat", "pre", "prod"})
+@Profile({"dev", "uat", "pre", "prod"})
 @ConditionalOnProperty(name = "app.security.dev-identity.override-enabled", havingValue = "false", matchIfMissing = true)
 @EnableConfigurationProperties(SsoProperties.class)
 public class SsoConfig {
@@ -26,20 +26,20 @@ public class SsoConfig {
     @Bean
     JwtDecoder jwtDecoder(SsoProperties properties) {
         if (properties.tenantId() == null || properties.tenantId().isBlank()) {
-            throw new IllegalStateException("AZURE_TENANT_ID is required in uat, pre, and prod");
+            throw new IllegalStateException("AZURE_TENANT_ID is required in dev, uat, pre, and prod");
         }
         if (properties.clientId() == null || properties.clientId().isBlank()) {
-            throw new IllegalStateException("AZURE_CLIENT_ID is required in uat, pre, and prod");
+            throw new IllegalStateException("AZURE_CLIENT_ID is required in dev, uat, pre, and prod");
         }
         if (properties.redirectUri() == null || properties.redirectUri().isBlank()) {
-            throw new IllegalStateException("AZURE_REDIRECT_URI is required in uat, pre, and prod");
+            throw new IllegalStateException("AZURE_REDIRECT_URI is required in dev, uat, pre, and prod");
         }
         if (properties.clientSecret() == null || properties.clientSecret().isBlank()) {
-            throw new IllegalStateException("AZURE_CLIENT_SECRET is required in uat, pre, and prod");
+            throw new IllegalStateException("AZURE_CLIENT_SECRET is required in dev, uat, pre, and prod");
         }
         String env = properties.env() == null ? "" : properties.env().trim().toUpperCase(Locale.ROOT);
         if (!SsoRoleParser.ENVS.contains(env)) {
-            throw new IllegalStateException("SSO_ENV must be UAT, PRE, or PROD");
+            throw new IllegalStateException("SSO_ENV must be DEV, UAT, PRE, or PROD");
         }
         return JwtDecoders.fromIssuerLocation(properties.issuer());
     }

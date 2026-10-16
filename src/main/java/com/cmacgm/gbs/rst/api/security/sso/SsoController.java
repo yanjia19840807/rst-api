@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/sso")
-@Profile({"uat", "pre", "prod"})
+@Profile({"dev", "uat", "pre", "prod"})
 @ConditionalOnProperty(name = "app.security.dev-identity.override-enabled", havingValue = "false", matchIfMissing = true)
 public class SsoController {
 

@@ -15,7 +15,7 @@ import org.springframework.security.web.authentication.AnonymousAuthenticationFi
 
 @Configuration
 @EnableMethodSecurity
-@Profile({"uat", "pre", "prod"})
+@Profile({"dev", "uat", "pre", "prod"})
 @ConditionalOnProperty(name = "app.security.dev-identity.override-enabled", havingValue = "false", matchIfMissing = true)
 public class ProductionSecurityConfig {
 

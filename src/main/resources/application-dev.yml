@@ -1,0 +1,63 @@
+# SPRING_PROFILES_ACTIVE=dev  →  https://rightsizingtool-dev.cma-cgm.com
+# Secrets: AZURE_CLIENT_SECRET, DB_PASSWORD, MS_GRAPH_CLIENT_SECRET, FORECAST_API_KEY
+# SSO: https://login.microsoftonline.com/{tenant}/oauth2/v2.0
+# Timesheet sync: SharePoint library Timesheet / 4.RST/0.DEV via Microsoft Graph
+
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/rst}
+
+app:
+  cors:
+    allowed-origins: https://rightsizingtool-dev.cma-cgm.com
+  security:
+    sso:
+      tenant-id: 9d314297-75dc-4329-8f94-a66489b4b9bb
+      env: DEV
+      client-id: ${AZURE_CLIENT_ID:}
+      redirect-uri: https://rightsizingtool-dev.cma-cgm.com/api/sso/callback
+    dev-identity:
+      override-enabled: false
+
+decorator:
+  datasource:
+    enabled: true
+    p6spy:
+      enable-logging: true
+      logging: slf4j
+      multiline: true
+      log-format: "%(executionTime)ms | %(category) | connection %(connectionId)\n%(sql)"
+      exclude-categories: info,debug,result,resultset,batch
+
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true
+
+timesheet:
+  sharepoint:
+    site: https://cmacgmgroup.sharepoint.com/sites/CMA-SharedKPIAutomation
+    library: Timesheet
+    root: 4.RST/0.DEV
+  sync:
+    daily:
+      enabled: ${TIMESHEET_SYNC_DAILY_ENABLED:true}
+      cron: "0 0 6 * * ?"
+    monthly:
+      enabled: ${TIMESHEET_SYNC_MONTHLY_ENABLED:true}
+      cron: "0 30 6 * * ?"
+
+process:
+  remote: ${PROCESS_REMOTE:true}
+  sharepoint:
+    site: https://cmacgmgroup.sharepoint.com/sites/CMA-GlobalBusinessServices
+    list: GBS Process
+
+microsoft:
+  graph:
+    tenant-id: 9d314297-75dc-4329-8f94-a66489b4b9bb
+    client-id: ${MS_GRAPH_CLIENT_ID:}
+
+mail:
+  enabled: ${MAIL_ENABLED:true}

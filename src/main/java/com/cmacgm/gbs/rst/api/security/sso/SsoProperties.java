@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param clientId app registration
  * @param clientSecret app secret
  * @param redirectUri registered {@code /api/sso/callback}
- * @param env UAT / PRE / PROD; must match the token role suffix
+ * @param env DEV / UAT / PRE / PROD; must match the token role suffix
  */
 @ConfigurationProperties("app.security.sso")
 public record SsoProperties(

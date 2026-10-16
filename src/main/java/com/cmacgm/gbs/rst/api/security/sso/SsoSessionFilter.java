@@ -18,7 +18,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * Restores the SSO principal from the HTTP session.
  */
 @Component
-@Profile({"uat", "pre", "prod"})
+@Profile({"dev", "uat", "pre", "prod"})
 @ConditionalOnProperty(name = "app.security.dev-identity.override-enabled", havingValue = "false", matchIfMissing = true)
 public class SsoSessionFilter extends OncePerRequestFilter {
 

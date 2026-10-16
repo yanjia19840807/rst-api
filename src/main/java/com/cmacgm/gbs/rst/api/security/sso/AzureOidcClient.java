@@ -18,7 +18,7 @@ import org.springframework.web.client.RestClient;
  * Authorization-code exchange against Microsoft identity platform.
  */
 @Component
-@Profile({"uat", "pre", "prod"})
+@Profile({"dev", "uat", "pre", "prod"})
 @ConditionalOnProperty(name = "app.security.dev-identity.override-enabled", havingValue = "false", matchIfMissing = true)
 public class AzureOidcClient {
 

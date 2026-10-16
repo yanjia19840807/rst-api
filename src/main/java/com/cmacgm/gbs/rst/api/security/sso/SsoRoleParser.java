@@ -14,7 +14,7 @@ public final class SsoRoleParser {
     public static final String PREFIX = "CMACGM_APP_RST_";
     public static final Set<String> NAMES = Set.of(
             "USER", "LOCAL_TRANSFORMATION_HEAD", "GOVERNANCE", "ADMIN");
-    public static final Set<String> ENVS = Set.of("UAT", "PRE", "PROD");
+    public static final Set<String> ENVS = Set.of("DEV", "UAT", "PRE", "PROD");
 
     private SsoRoleParser() {
     }
@@ -23,7 +23,7 @@ public final class SsoRoleParser {
      * Parsed SSO role.
      *
      * @param name USER / LOCAL_TRANSFORMATION_HEAD / GOVERNANCE / ADMIN
-     * @param env UAT / PRE / PROD
+     * @param env DEV / UAT / PRE / PROD
      */
     public record Parsed(String name, String env) {
     }

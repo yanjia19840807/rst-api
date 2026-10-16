@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 /**
  * GBS Process catalog. {@code remote=false} reads classpath CSV;
- * pre / prod keep {@code remote=true} so the SharePoint list is used.
+ * Deployed profiles keep {@code remote=true} so the SharePoint list is used.
  */
 @ConfigurationProperties(prefix = "process")
 public class ProcessProperties {
