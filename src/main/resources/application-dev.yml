@@ -3,10 +3,6 @@
 # SSO: https://login.microsoftonline.com/{tenant}/oauth2/v2.0
 # Timesheet sync: SharePoint library Timesheet / 4.RST/0.DEV via Microsoft Graph
 
-spring:
-  datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/rst}
-
 app:
   cors:
     allowed-origins: https://rightsizingtool-dev.cma-cgm.com

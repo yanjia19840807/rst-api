@@ -86,7 +86,7 @@ public class SsoController {
             response.sendRedirect(SsoSessions.takeReturnPath(request));
         } catch (SsoException ex) {
             SsoSessions.clear(request);
-            response.sendRedirect("/?ssoError=" + enc(ex.code()));
+            response.sendRedirect("/sign-in?ssoError=" + enc(ex.code()));
         }
     }
 

@@ -11,14 +11,17 @@ Spring Boot API for the Right Sizing Tool.
 
 ### Database
 
-Connect to local PostgreSQL. JDBC URL, username and password come from
-environment variables (local file: `.env`, gitignored). Copy `.env.example`
-to `.env` and fill `DB_PASSWORD`.
+Connect to local PostgreSQL. Host, port, database name, user and password
+come from environment variables (local file: `.env`, gitignored). Copy
+`.env.example` to `.env` and fill `DB_PASSWORD`. The JDBC URL is built in
+`application.yml` as `jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}`.
 
 | Variable | Example |
 | --- | --- |
-| `DB_URL` | `jdbc:postgresql://localhost:5432/rst` |
-| `DB_USERNAME` | `postgres` |
+| `DB_HOST` | `localhost` |
+| `DB_PORT` | `5432` |
+| `DB_NAME` | `rst` |
+| `DB_USER` | `postgres` |
 | `DB_PASSWORD` | local Postgres password |
 | Dev identity CCGID | `ADMIN001` unless the SPA sends `X-Dev-Ccgid` |
 
@@ -70,8 +73,10 @@ JUnit uses `application-test.yml` only.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `DB_URL` | `jdbc:postgresql://localhost:5432/rst` | PostgreSQL JDBC URL |
-| `DB_USERNAME` | `postgres` | Database user |
+| `DB_HOST` | `localhost` | PostgreSQL host |
+| `DB_PORT` | `5432` | PostgreSQL port |
+| `DB_NAME` | `rst` | Database name |
+| `DB_USER` | `postgres` | Database user |
 | `DB_PASSWORD` | empty | Database password; local `.env`, never commit |
 | Entra tenant | `9d314297-75dc-4329-8f94-a66489b4b9bb` in `application.yml` | SSO and Graph; not an environment variable |
 | `AZURE_CLIENT_ID` | empty | RST Azure app |
