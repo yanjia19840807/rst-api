@@ -3,7 +3,7 @@
 
 app:
   cors:
-    allowed-origins: https://rightsizingtool-pre.cma-cgm.com
+    allowed-origins: https://rightsizingtool-pre.cma-cgm.com,http://localhost:5173,http://127.0.0.1:5173
   security:
     sso:
       env: PRE
