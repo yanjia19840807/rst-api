@@ -124,9 +124,9 @@ class VolumeInputValidatorTests {
         SlotImportPlan plan = validator.planSlotImport(rows);
         assertThat(plan.startDate()).isEqualTo(LocalDate.of(2026, 6, 1));
         assertThat(plan.weeks()).isEqualTo((short) 1);
-        assertThat(plan.fileRowCount()).isEqualTo(26 * 3);
-        assertThat(plan.paddedCount()).isEqualTo(26 * 4);
-        assertThat(plan.totalSlots()).isEqualTo(26 * 7);
+        assertThat(plan.fileRowCount()).isEqualTo(48 * 3);
+        assertThat(plan.paddedCount()).isEqualTo(48 * 4);
+        assertThat(plan.totalSlots()).isEqualTo(48 * 7);
     }
 
     @Test

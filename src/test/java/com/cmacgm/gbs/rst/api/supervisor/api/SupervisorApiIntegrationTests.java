@@ -767,7 +767,7 @@ class SupervisorApiIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.exercise.slotStartDate").value("2026-09-07"))
                 .andExpect(jsonPath("$.exercise.slotWeeks").value(1))
-                .andExpect(jsonPath("$.volumes.length()").value(182))
+                .andExpect(jsonPath("$.volumes.length()").value(336))
                 .andExpect(jsonPath("$.volumes[0].actualVolume").isEmpty());
     }
 
@@ -785,7 +785,7 @@ class SupervisorApiIntegrationTests {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.volumes.length()").value(182));
+                .andExpect(jsonPath("$.volumes.length()").value(336));
         mockMvc.perform(delete("/api/v1/exercises/{id}/slot-period", exerciseId)
                         .header("X-Dev-Role", "SUPERVISOR"))
                 .andExpect(status().isOk())
@@ -821,7 +821,7 @@ class SupervisorApiIntegrationTests {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.volumes.length()").value(182));
+                .andExpect(jsonPath("$.volumes.length()").value(336));
         org.junit.jupiter.api.Assertions.assertEquals(
                 Integer.valueOf(1),
                 jdbcTemplate.queryForObject(

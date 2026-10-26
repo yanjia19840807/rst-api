@@ -21,7 +21,7 @@ class ExerciseInitializationRulesTests {
                 VolumeTrainWindows.monthlyTrainMonths(sizingMonth));
         assertEquals(31, VolumeTrainWindows.dailyTrainDates(sizingMonth).size());
         assertEquals(
-                2 * 7 * 26,
+                2 * 7 * 48,
                 VolumeTrainWindows.slotTrainBounds(LocalDate.of(2025, 12, 29), (short) 2)
                         .size());
     }

@@ -334,7 +334,7 @@ public class VolumeInputValidator {
 
     /**
      * Validates an imported slot sheet, infers Start date / Weeks, and pads the grid.
-     * File days must be continuous and each present day must be a full 09:00–22:00 grid.
+     * File days must be continuous and each present day must be a full 00:00–24:00 grid.
      */
     public SlotImportPlan planSlotImport(List<SlotVolumeRequest> request) {
         if (request == null || request.isEmpty()) {
@@ -353,10 +353,11 @@ public class VolumeInputValidator {
                         "Row " + (i + 1) + ": slot_start must be on the hour or half-hour.");
             }
             int minutes = time.getHour() * 60 + time.getMinute();
-            if (minutes < 9 * 60 || minutes >= 22 * 60) {
+            if (minutes < VolumeTrainWindows.SLOT_DAY_START_MINUTES
+                    || minutes >= VolumeTrainWindows.SLOT_DAY_END_MINUTES) {
                 fail(
                         "volume-slot-window",
-                        "Row " + (i + 1) + ": slot_start must be between 09:00 and 21:30.");
+                        "Row " + (i + 1) + ": slot_start must be between 00:00 and 23:30.");
             }
             days.add(day);
             byStart.put(row.slotStartAt(), row);

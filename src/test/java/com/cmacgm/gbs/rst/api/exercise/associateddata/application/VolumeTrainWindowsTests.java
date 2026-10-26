@@ -3,6 +3,7 @@ package com.cmacgm.gbs.rst.api.exercise.associateddata.application;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 
 import org.junit.jupiter.api.Test;
@@ -20,5 +21,16 @@ class VolumeTrainWindowsTests {
         assertThat(VolumeTrainWindows.monthlyInHistoryWindow(YearMonth.of(2026, 10), sizing)).isFalse();
         assertThat(VolumeTrainWindows.dailyInHistoryWindow(LocalDate.of(2023, 9, 30), sizing)).isFalse();
         assertThat(VolumeTrainWindows.dailyInHistoryWindow(LocalDate.of(2026, 9, 30), sizing)).isTrue();
+    }
+
+    @Test
+    void dayBoundsCoverMidnightToMidnightInThirtyMinuteSteps() {
+        LocalDate day = LocalDate.of(2026, 1, 16);
+        var bounds = VolumeTrainWindows.dayBounds(day);
+        assertThat(bounds).hasSize(48);
+        assertThat(bounds.getFirst().start()).isEqualTo(LocalDateTime.of(2026, 1, 16, 0, 0));
+        assertThat(bounds.getFirst().end()).isEqualTo(LocalDateTime.of(2026, 1, 16, 0, 30));
+        assertThat(bounds.getLast().start()).isEqualTo(LocalDateTime.of(2026, 1, 16, 23, 30));
+        assertThat(bounds.getLast().end()).isEqualTo(LocalDateTime.of(2026, 1, 17, 0, 0));
     }
 }

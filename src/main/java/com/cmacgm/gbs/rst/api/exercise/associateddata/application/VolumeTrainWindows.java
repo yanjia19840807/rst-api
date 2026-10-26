@@ -14,16 +14,16 @@ import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
  * Derives chart-history and slot Volume Input windows from Exercise periods.
  *
  * <p>Monthly/daily 3-month and sizing-month day ranges are chart history only; they are not a
- * Volume Input row type. Per-slot rows follow the prototype business-day grid: 09:00–22:00 in
- * 30-minute steps (not a full 24-hour clock).
+ * Volume Input row type. Per-slot rows cover each civil day from 00:00 through 24:00 in
+ * 30-minute steps (last slot 23:30–00:00).
  */
 public final class VolumeTrainWindows {
 
     private static final int SLOT_MINUTES = 30;
-    /** Inclusive start of the first slot each day (09:00). */
-    private static final int SLOT_DAY_START_MINUTES = 9 * 60;
-    /** Exclusive end of the last slot each day (22:00 → last slot 21:30–22:00). */
-    private static final int SLOT_DAY_END_MINUTES = 22 * 60;
+    /** Inclusive start of the first slot each civil day (00:00). */
+    public static final int SLOT_DAY_START_MINUTES = 0;
+    /** Exclusive end of the last slot each civil day (24:00 → last slot 23:30–00:00). */
+    public static final int SLOT_DAY_END_MINUTES = 24 * 60;
     /** Apply Period and import share this cap. */
     public static final int MAX_SLOT_WEEKS = 12;
     /**
@@ -89,7 +89,7 @@ public final class VolumeTrainWindows {
 
     /**
      * 30-minute slot bounds covering the slot training window.
-     * Each day generates slots from 09:00 through 21:30–22:00 (prototype rule).
+     * Each day generates slots from 00:00 through 23:30–00:00.
      */
     public static List<SlotBound> slotTrainBounds(LocalDate slotStartDate, Short slotWeeks) {
         if (slotStartDate == null || slotWeeks == null) {
@@ -109,7 +109,7 @@ public final class VolumeTrainWindows {
         return bounds;
     }
 
-    /** 30-minute bounds for one civil calendar day (09:00–22:00). */
+    /** 30-minute bounds for one civil calendar day (00:00–24:00). */
     public static List<SlotBound> dayBounds(LocalDate day) {
         LocalDateTime dayStart = day.atStartOfDay();
         List<SlotBound> bounds = new ArrayList<>();
