@@ -33,4 +33,4 @@ mail:
   enabled: ${MAIL_ENABLED:true}
 
 forecast:
-  base-url: https://rightsizingtool.cma-cgm.com/forecast
+  base-url: http://rst-forecast-svc.rightsizingtool-prd.svc.cluster.local:8000
