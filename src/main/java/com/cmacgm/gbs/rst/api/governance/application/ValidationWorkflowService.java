@@ -118,15 +118,13 @@ public class ValidationWorkflowService {
         Map<UUID, ReviewState> reviewByExercise = reviewStateFor(underReview);
         Map<UUID, BigDecimal> rightSizingByExercise = rightSizingByExercise(underReview);
         Map<UUID, BigDecimal> supportByExercise = supportByExercise(underReview);
-        Map<UUID, ExerciseTeamSetup> setups = setupsByExercise(underReview);
         List<ValidationWorkflowRow> source = new ArrayList<>();
         for (RstExercise exercise : underReview) {
             source.add(rowFor(
                     exercise,
                     reviewByExercise.get(exercise.getId()),
                     rightSizingByExercise.get(exercise.getId()),
-                    supportByExercise.get(exercise.getId()),
-                    setups.get(exercise.getId())));
+                    supportByExercise.get(exercise.getId())));
         }
         source.sort(Comparator
                 .comparing(ValidationWorkflowRow::agingDays, Comparator.nullsLast(Comparator.reverseOrder()))
@@ -204,12 +202,10 @@ public class ValidationWorkflowService {
             RstExercise exercise,
             ReviewState review,
             BigDecimal rightSizingHc,
-            BigDecimal productionSupport,
-            ExerciseTeamSetup setup) {
+            BigDecimal productionSupport) {
         ExerciseToolkitSnapshot snapshot = exercise.getToolkitSnapshot();
         BigDecimal deliveryHc = deliveryHc(exercise);
-        BigDecimal actualHc = SizingMath.actualHeadcount(
-                setup == null ? null : setup.totalAgents(), deliveryHc);
+        BigDecimal actualHc = SizingMath.actualHeadcount(deliveryHc);
         BigDecimal capacity = ValidationWorkflowMath.capacityCreation(
                 actualHc, rightSizingHc, productionSupport);
         String center = snapshot == null ? null : snapshot.getCenter();
@@ -324,15 +320,6 @@ public class ValidationWorkflowService {
             }
         }
         return result;
-    }
-
-    private Map<UUID, ExerciseTeamSetup> setupsByExercise(List<RstExercise> items) {
-        List<UUID> exerciseIds = items.stream().map(RstExercise::getId).toList();
-        Map<UUID, ExerciseTeamSetup> setups = new HashMap<>();
-        for (ExerciseTeamSetup setup : teamSetups.findAllById(exerciseIds)) {
-            setups.put(setup.getExerciseId(), setup);
-        }
-        return setups;
     }
 
     private Map<UUID, BigDecimal> supportByExercise(List<RstExercise> underReview) {

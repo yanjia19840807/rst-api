@@ -1,6 +1,7 @@
 package com.cmacgm.gbs.rst.api.governance.api;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseSnapshot;
@@ -19,11 +20,13 @@ import com.cmacgm.gbs.rst.api.governance.application.GovernanceExcelService;
 import com.cmacgm.gbs.rst.api.governance.application.RstRepositoryService;
 import com.cmacgm.gbs.rst.api.governance.application.SupportRepositoryService;
 import com.cmacgm.gbs.rst.api.governance.application.ValidationWorkflowService;
+import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -71,12 +74,20 @@ public class GovernanceController {
     /**
      * Global dashboard metrics and center aging tables.
      *
+     * Region and cluster filter only the domain drill-down. Cards and the center chart stay global.
+     *
+     * @param principal signed-in user
+     * @param region selected region names
+     * @param cluster selected cluster names of the signed-in user
      * @return dashboard payload
      */
     @GetMapping("/dashboard")
     @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
-    public DashboardView dashboard() {
-        return dashboardService.build();
+    public DashboardView dashboard(
+            @AuthenticationPrincipal RstPrincipal principal,
+            @RequestParam(required = false) List<String> region,
+            @RequestParam(required = false) List<String> cluster) {
+        return dashboardService.build(principal.realCcgid(), region, cluster);
     }
 
     /**
@@ -89,7 +100,9 @@ public class GovernanceController {
      * @param toolkitName optional exact toolkit name
      * @param carrier optional exact carrier
      * @param site optional exact GBS Site
-     * @param customerCountry optional exact customer country
+     * @param customerCountry optional customer countries; repeated query parameter
+     * @param region optional region names; repeated query parameter
+     * @param cluster optional cluster names of the signed-in user; repeated query parameter
      * @param sizingMonth optional exact sizing month ({@code YYYY-MM})
      * @param validatedFrom optional validated date from
      * @param validatedTo optional validated date to
@@ -100,6 +113,7 @@ public class GovernanceController {
     @GetMapping("/repository")
     @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public RepositoryListView repository(
+            @AuthenticationPrincipal RstPrincipal principal,
             @RequestParam(required = false) String exerciseCode,
             @RequestParam(required = false) String center,
             @RequestParam(required = false) String domain,
@@ -107,7 +121,9 @@ public class GovernanceController {
             @RequestParam(required = false) String toolkitName,
             @RequestParam(required = false) String carrier,
             @RequestParam(required = false) String site,
-            @RequestParam(required = false) String customerCountry,
+            @RequestParam(required = false) List<String> customerCountry,
+            @RequestParam(required = false) List<String> region,
+            @RequestParam(required = false) List<String> cluster,
             @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
@@ -118,6 +134,7 @@ public class GovernanceController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         return rstRepository.listApproved(
+                principal.realCcgid(),
                 new RepositoryListQuery(
                         exerciseCode,
                         center,
@@ -127,6 +144,8 @@ public class GovernanceController {
                         carrier,
                         site,
                         customerCountry,
+                        region,
+                        cluster,
                         sizingMonth,
                         validatedFrom,
                         validatedTo),
@@ -140,6 +159,7 @@ public class GovernanceController {
     @GetMapping("/repository/export")
     @PreAuthorize("hasAnyRole('LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
     public ResponseEntity<byte[]> exportRepository(
+            @AuthenticationPrincipal RstPrincipal principal,
             @RequestParam(required = false) String exerciseCode,
             @RequestParam(required = false) String center,
             @RequestParam(required = false) String domain,
@@ -147,7 +167,9 @@ public class GovernanceController {
             @RequestParam(required = false) String toolkitName,
             @RequestParam(required = false) String carrier,
             @RequestParam(required = false) String site,
-            @RequestParam(required = false) String customerCountry,
+            @RequestParam(required = false) List<String> customerCountry,
+            @RequestParam(required = false) List<String> region,
+            @RequestParam(required = false) List<String> cluster,
             @RequestParam(required = false) String sizingMonth,
             @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
@@ -157,6 +179,7 @@ public class GovernanceController {
                     LocalDate validatedTo) {
         return excelResponse(
                 excel.exportRepository(rstRepository.listApprovedAll(
+                        principal.realCcgid(),
                         new RepositoryListQuery(
                                 exerciseCode,
                                 center,
@@ -166,6 +189,8 @@ public class GovernanceController {
                                 carrier,
                                 site,
                                 customerCountry,
+                                region,
+                                cluster,
                                 sizingMonth,
                                 validatedFrom,
                                 validatedTo))),

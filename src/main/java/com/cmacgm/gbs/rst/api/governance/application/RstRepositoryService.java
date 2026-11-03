@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.time.CenterDates;
@@ -26,6 +27,7 @@ import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
+import com.cmacgm.gbs.rst.api.geography.application.GeographyService;
 import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryListQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryListView;
 import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryRow;
@@ -47,6 +49,7 @@ public class RstRepositoryService {
     private final ExerciseProductionSupportItemRepository supportItems;
     private final ExerciseTeamSetupRepository teamSetups;
     private final WorkingDaysService workingDaysService;
+    private final GeographyService geography;
 
     /**
      * @param exercises Exercise aggregate
@@ -54,32 +57,37 @@ public class RstRepositoryService {
      * @param supportItems production support inputs
      * @param teamSetups Team Setup used for Support FTE
      * @param workingDaysService working days for Support FTE
+     * @param geography region and cluster country limits
      */
     public RstRepositoryService(
             RstExerciseRepository exercises,
             ScenarioRepository scenarios,
             ExerciseProductionSupportItemRepository supportItems,
             ExerciseTeamSetupRepository teamSetups,
-            WorkingDaysService workingDaysService) {
+            WorkingDaysService workingDaysService,
+            GeographyService geography) {
         this.exercises = exercises;
         this.scenarios = scenarios;
         this.supportItems = supportItems;
         this.teamSetups = teamSetups;
         this.workingDaysService = workingDaysService;
+        this.geography = geography;
     }
 
     /**
      * Lists APPROVED Shared KPI repository rows, newest validation first.
      * Filter options are taken from all APPROVED rows so dropdowns do not shrink.
      *
+     * @param ownerCcgid signed-in user, used to resolve personal clusters
      * @param query field filters
      * @param page 1-based page
      * @param pageSize page size
      * @return one page of filtered rows and unfiltered dropdown options
      */
     @Transactional(readOnly = true)
-    public RepositoryListView listApproved(RepositoryListQuery query, int page, int pageSize) {
-        FilteredRepository rows = filteredRows(query);
+    public RepositoryListView listApproved(
+            String ownerCcgid, RepositoryListQuery query, int page, int pageSize) {
+        FilteredRepository rows = filteredRows(ownerCcgid, query);
         if (rows.source().isEmpty()) {
             return pagedView(
                     List.of(),
@@ -109,12 +117,13 @@ public class RstRepositoryService {
     /**
      * Returns every filtered RST Repository row, ignoring pagination.
      *
+     * @param ownerCcgid signed-in user, used to resolve personal clusters
      * @param query field filters
      * @return filtered rows
      */
     @Transactional(readOnly = true)
-    public List<RepositoryRow> listApprovedAll(RepositoryListQuery query) {
-        return filteredRows(query).items();
+    public List<RepositoryRow> listApprovedAll(String ownerCcgid, RepositoryListQuery query) {
+        return filteredRows(ownerCcgid, query).items();
     }
 
     /**
@@ -167,17 +176,18 @@ public class RstRepositoryService {
                 null);
     }
 
-    private FilteredRepository filteredRows(RepositoryListQuery query) {
+    private FilteredRepository filteredRows(String ownerCcgid, RepositoryListQuery query) {
+        Set<String> countryLimit = geography.countryLimit(
+                ownerCcgid, query == null ? null : query.regions(), query == null ? null : query.clusters());
         List<RstExercise> approved = exercises.findApprovedRepositoryExercises();
         if (approved.isEmpty()) {
             return new FilteredRepository(List.of(), List.of());
         }
         Map<UUID, BigDecimal> rightSizingByExercise = rightSizingByExercise(approved);
         Map<UUID, BigDecimal> supportByExercise = supportByExercise(approved);
-        Map<UUID, ExerciseTeamSetup> setups = setupsByExercise(approved);
         List<RepositoryRow> source = new ArrayList<>();
         for (RstExercise exercise : approved) {
-            source.addAll(rowsFor(exercise, rightSizingByExercise, supportByExercise, setups.get(exercise.getId())));
+            source.addAll(rowsFor(exercise, rightSizingByExercise, supportByExercise));
         }
         source.sort(Comparator
                 .comparing(RepositoryRow::validatedDate, Comparator.nullsLast(Comparator.reverseOrder()))
@@ -186,9 +196,19 @@ public class RstRepositoryService {
                 .thenComparing(RepositoryRow::carrier, Comparator.nullsLast(String::compareTo))
                 .thenComparing(RepositoryRow::site, Comparator.nullsLast(String::compareTo)));
         List<RepositoryRow> items = source.stream()
-                .filter(row -> RepositoryRowFilters.matches(row, query))
+                .filter(row -> RepositoryRowFilters.matches(row, query) && countryAllowed(countryLimit, row.kpi()))
                 .toList();
         return new FilteredRepository(source, items);
+    }
+
+    private static boolean countryAllowed(Set<String> limit, String customerCountry) {
+        if (limit == null) {
+            return true;
+        }
+        if (customerCountry == null || customerCountry.isBlank()) {
+            return false;
+        }
+        return limit.contains(customerCountry.trim());
     }
 
     private record FilteredRepository(List<RepositoryRow> source, List<RepositoryRow> items) {
@@ -229,12 +249,10 @@ public class RstRepositoryService {
     private List<RepositoryRow> rowsFor(
             RstExercise exercise,
             Map<UUID, BigDecimal> rightSizingByExercise,
-            Map<UUID, BigDecimal> supportByExercise,
-            ExerciseTeamSetup setup) {
+            Map<UUID, BigDecimal> supportByExercise) {
         ExerciseToolkitSnapshot snapshot = exercise.getToolkitSnapshot();
         String toolkitName = snapshot == null ? "" : snapshot.getToolkitName();
         BigDecimal totalDelivery = deliveryHc(exercise);
-        BigDecimal actualHc = setup == null ? null : setup.totalAgents();
         BigDecimal rightSizingHc = rightSizingByExercise.get(exercise.getId());
         BigDecimal productionSupport = supportByExercise.get(exercise.getId());
         String center = snapshot == null ? null : snapshot.getCenter();
@@ -245,7 +263,7 @@ public class RstRepositoryService {
         List<RepositoryRow> rows = new ArrayList<>();
         for (ExerciseSharedKpiLine line : exercise.getSharedKpiLines()) {
             RepositoryLineMath.LineMetrics metrics = RepositoryLineMath.allocate(
-                    line.getDeliveryHc(), totalDelivery, actualHc, rightSizingHc, productionSupport);
+                    line.getDeliveryHc(), totalDelivery, rightSizingHc, productionSupport);
             rows.add(new RepositoryRow(
                     exercise.getExerciseCode(),
                     exercise.getId(),
@@ -297,15 +315,6 @@ public class RstRepositoryService {
             }
         }
         return result;
-    }
-
-    private Map<UUID, ExerciseTeamSetup> setupsByExercise(List<RstExercise> approved) {
-        List<UUID> exerciseIds = approved.stream().map(RstExercise::getId).toList();
-        Map<UUID, ExerciseTeamSetup> setups = new HashMap<>();
-        for (ExerciseTeamSetup setup : teamSetups.findAllById(exerciseIds)) {
-            setups.put(setup.getExerciseId(), setup);
-        }
-        return setups;
     }
 
     private Map<UUID, BigDecimal> supportByExercise(List<RstExercise> approved) {

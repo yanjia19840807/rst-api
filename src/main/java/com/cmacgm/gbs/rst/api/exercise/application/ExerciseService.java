@@ -711,7 +711,7 @@ public class ExerciseService {
                                         item.getCarrier(), item.getSite(), item.getCustomerCountry())))
                 .toList();
         BigDecimal deliveryHc = deliveryHc(exercise);
-        BigDecimal actualHc = actualHeadcount(exercise, deliveryHc);
+        BigDecimal actualHc = SizingMath.actualHeadcount(deliveryHc);
         BigDecimal rightSizingHc = rightSizingHc(exercise.getOfficialScenarioId());
         BigDecimal productionSupport = productionSupport(exercise.getId());
         BigDecimal capacityCreation = rightSizingHc == null
@@ -947,11 +947,6 @@ public class ExerciseService {
             }
         }
         return sum;
-    }
-
-    private BigDecimal actualHeadcount(RstExercise exercise, BigDecimal deliveryHc) {
-        ExerciseTeamSetup setup = teamSetups.findById(exercise.getId()).orElse(null);
-        return SizingMath.actualHeadcount(setup == null ? null : setup.totalAgents(), deliveryHc);
     }
 
     private BigDecimal rightSizingHc(UUID scenarioId) {

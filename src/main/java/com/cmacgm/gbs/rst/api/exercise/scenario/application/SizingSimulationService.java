@@ -547,7 +547,7 @@ public class SizingSimulationService {
                 delivery = delivery.add(line.getDeliveryHc());
             }
         }
-        BigDecimal actualHc = SizingMath.actualHeadcount(team.totalAgents(), delivery);
+        BigDecimal actualHc = SizingMath.actualHeadcount(delivery);
         BigDecimal maxOt = team.getMaxOvertimeMinutes() != null
                 ? team.getMaxOvertimeMinutes() : BigDecimal.ZERO;
 

@@ -217,7 +217,6 @@ public class BenchmarkingService {
             BigDecimal cycleTimeSeconds,
             ExerciseTeamSetup setup) {
         BigDecimal totalDelivery = deliveryHc(exercise);
-        BigDecimal actualHc = setup == null ? null : setup.totalAgents();
         BigDecimal dailyCapacity = setup == null ? null : setup.dailyCapacityPerAgent(cycleTimeSeconds);
         String center = exercise.getToolkitSnapshot() == null
                 ? null
@@ -232,7 +231,7 @@ public class BenchmarkingService {
                 continue;
             }
             RepositoryLineMath.LineMetrics metrics = RepositoryLineMath.allocate(
-                    line.getDeliveryHc(), totalDelivery, actualHc, rightSizingHc, productionSupport);
+                    line.getDeliveryHc(), totalDelivery, rightSizingHc, productionSupport);
             rows.add(new BenchmarkRow(
                     blank(exercise.getExerciseCode()),
                     blank(line.getCenter()),

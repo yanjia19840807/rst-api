@@ -613,7 +613,7 @@ public class ApprovalService {
         BigDecimal capacityCreation = rightSizingHc == null
                 ? null
                 : SizingMath.capacityCreation(
-                        actualHeadcount(exercise, deliveryHc), rightSizingHc, productionSupport);
+                        SizingMath.actualHeadcount(deliveryHc), rightSizingHc, productionSupport);
 
         TaskActor previous = WorkflowAging.lastApprove(workflow);
         TaskActor last = lastCompletedActor(workflow);
@@ -712,11 +712,6 @@ public class ApprovalService {
             }
         }
         return sum;
-    }
-
-    private BigDecimal actualHeadcount(RstExercise exercise, BigDecimal deliveryHc) {
-        ExerciseTeamSetup setup = teamSetups.findById(exercise.getId()).orElse(null);
-        return SizingMath.actualHeadcount(setup == null ? null : setup.totalAgents(), deliveryHc);
     }
 
     private BigDecimal rightSizingHc(UUID scenarioId) {

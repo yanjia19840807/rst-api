@@ -16,7 +16,7 @@ class RepositoryRowFiltersTests {
     @Test
     void matchesAllWhenQueryIsEmpty() {
         assertThat(RepositoryRowFilters.matches(row("EX-1", "Shanghai", "OPS", "PL3-A", "TK-1", "2026-06", "2026-03-01"),
-                new RepositoryListQuery(null, null, null, null, null, null, null, null, null, null, null))).isTrue();
+                new RepositoryListQuery(null, null, null, null, null, null, null, null, null, null, null, null, null))).isTrue();
     }
 
     @Test
@@ -71,7 +71,7 @@ class RepositoryRowFiltersTests {
     }
 
     @Test
-    void customerCountryFilterMatchesCommaTokens() {
+    void customerCountryFilterMatchesAnySelectedName() {
         RepositoryRow row = new RepositoryRow(
                 "EX-1",
                 UUID.fromString("00000000-0000-0000-0000-000000000001"),
@@ -93,9 +93,7 @@ class RepositoryRowFiltersTests {
                 "2026-06",
                 "2026-03-01");
         assertThat(RepositoryRowFilters.matches(
-                row, query(null, null, null, null, null, null, null, "CHINA", null, null, null))).isTrue();
-        assertThat(RepositoryRowFilters.matches(
-                row, query(null, null, null, null, null, null, null, "HONG KONG SAR", null, null, null)))
+                row, query(null, null, null, null, null, null, null, "HONG KONG SAR, CHINA", null, null, null)))
                 .isTrue();
         assertThat(RepositoryRowFilters.matches(
                 row, query(null, null, null, null, null, null, null, "FRANCE", null, null, null))).isFalse();
@@ -133,7 +131,9 @@ class RepositoryRowFiltersTests {
                 toolkitName,
                 carrier,
                 site,
-                customerCountry,
+                customerCountry == null || customerCountry.isBlank() ? null : List.of(customerCountry),
+                null,
+                null,
                 sizingMonth,
                 validatedFrom,
                 validatedTo);

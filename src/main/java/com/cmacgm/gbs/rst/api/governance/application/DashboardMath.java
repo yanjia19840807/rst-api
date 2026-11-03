@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 import com.cmacgm.gbs.rst.api.governance.api.dto.DashboardCenterRow;
@@ -167,9 +168,21 @@ public final class DashboardMath {
      * @return center → domain rows
      */
     public static Map<String, List<DashboardDomainRow>> domainsByCenter(List<KpiCoverage> items) {
+        return domainsByCenter(items, null);
+    }
+
+    /**
+     * Rolls KPI coverage into domain rows for the selected customer countries.
+     *
+     * @param items one status per applicable Timesheet KPI
+     * @param countries allowed customer countries; null means no country constraint
+     * @return center → domain rows
+     */
+    public static Map<String, List<DashboardDomainRow>> domainsByCenter(
+            List<KpiCoverage> items, Set<String> countries) {
         Map<String, Map<String, Counts>> nested = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         for (KpiCoverage item : items) {
-            if (!hasText(item.center())) {
+            if (!hasText(item.center()) || !countryAllowed(countries, item.customerCountry())) {
                 continue;
             }
             String domain = hasText(item.domain()) ? item.domain() : "";
@@ -313,8 +326,20 @@ public final class DashboardMath {
      * @param domain business domain
      * @param bucket aging bucket
      * @param hc current Timesheet Delivery HC
+     * @param customerCountry Timesheet customer country
      */
-    public record KpiCoverage(String center, String domain, AgingBucket bucket, BigDecimal hc) {
+    public record KpiCoverage(
+            String center, String domain, AgingBucket bucket, BigDecimal hc, String customerCountry) {
+    }
+
+    private static boolean countryAllowed(Set<String> countries, String customerCountry) {
+        if (countries == null) {
+            return true;
+        }
+        if (customerCountry == null || customerCountry.isBlank()) {
+            return false;
+        }
+        return countries.contains(customerCountry.trim());
     }
 
     /**

@@ -20,7 +20,7 @@ public final class ValidationWorkflowMath {
     /**
      * Capacity Creation when Official RS exists: Actual HC − RS − Support. Otherwise empty.
      *
-     * @param actualHc Team Setup TotalAgent, else Shared KPI Delivery HC
+     * @param actualHc Shared KPI Delivery HC
      * @param rightSizingHc Official Scenario RIGHT_SIZING_HC; null leaves Capacity empty
      * @param productionSupportFte Exercise Support FTE total
      * @return Capacity Creation, or null when RS is missing
@@ -37,7 +37,7 @@ public final class ValidationWorkflowMath {
      * Capacity / Actual HC as a percent (one decimal). Empty when Capacity or Actual HC is missing.
      *
      * @param capacityCreation Exercise Capacity Creation
-     * @param actualHc Team Setup TotalAgent, else Shared KPI Delivery HC
+     * @param actualHc Shared KPI Delivery HC
      * @return percent, or null
      */
     public static BigDecimal capacityPct(BigDecimal capacityCreation, BigDecimal actualHc) {

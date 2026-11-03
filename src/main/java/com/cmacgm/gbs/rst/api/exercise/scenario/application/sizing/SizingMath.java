@@ -97,12 +97,10 @@ public final class SizingMath {
     }
 
     /**
-     * Excel Input TotalAgent. Tenure buckets win; otherwise Shared KPI Delivery HC.
+     * Actual HC is the Shared KPI Delivery HC sum.
+     * Tenure buckets stay on Team Setup for average tenure only.
      */
-    public static BigDecimal actualHeadcount(BigDecimal totalAgents, BigDecimal deliveryHc) {
-        if (totalAgents != null && totalAgents.signum() > 0) {
-            return totalAgents;
-        }
+    public static BigDecimal actualHeadcount(BigDecimal deliveryHc) {
         return nz(deliveryHc);
     }
 
@@ -137,7 +135,7 @@ public final class SizingMath {
     }
 
     /**
-     * Capacity creation: Actual HC (TotalAgent) − RS HC − Support.
+     * Capacity creation: Actual HC (Delivery HC) − RS HC − Support.
      * Null Support FTE means it could not be computed — do not treat it as zero.
      */
     public static BigDecimal capacityCreation(

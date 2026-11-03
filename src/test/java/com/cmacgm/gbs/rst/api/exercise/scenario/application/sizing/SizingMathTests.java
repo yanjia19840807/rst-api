@@ -11,11 +11,10 @@ import org.junit.jupiter.api.Test;
 class SizingMathTests {
 
     @Test
-    void actualHeadcountPrefersTeamSetupTotalAgent() {
-        assertThat(SizingMath.actualHeadcount(new BigDecimal("12.6"), new BigDecimal("11.12")))
-                .isEqualByComparingTo("12.6");
-        assertThat(SizingMath.actualHeadcount(null, new BigDecimal("11.12")))
+    void actualHeadcountUsesDeliveryHc() {
+        assertThat(SizingMath.actualHeadcount(new BigDecimal("11.12")))
                 .isEqualByComparingTo("11.12");
+        assertThat(SizingMath.actualHeadcount(null)).isEqualByComparingTo("0");
     }
 
     @Test

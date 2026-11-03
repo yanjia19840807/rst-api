@@ -172,8 +172,7 @@ public class SubmissionSummaryExcelService {
                 alignment == null ? date(exercise.snapshot().timesheetSyncDate())
                         : date(alignment.currentMonthlySyncDate()));
         add(rows, "Timesheet Alignment", alignmentLabel(alignment));
-        add(rows, "Actual size (HC)",
-                decimal(actualSize(team == null ? null : team.totalAgents(), exercise.deliveryHc())));
+        add(rows, "Actual size (HC)", decimal(exercise.deliveryHc()));
         add(rows, "Right size (HC)", decimal(exercise.rightSizingHc()));
         add(rows, "Production support (FTE)", decimal(exercise.productionSupport()));
         add(rows, "Capacity Creation (HC)", signed(exercise.capacityCreation()));
@@ -674,13 +673,6 @@ public class SubmissionSummaryExcelService {
                 ? "Manual"
                 : "System-calculated";
         return decimal(baseline.getMedianSeconds()) + " " + source;
-    }
-
-    private static BigDecimal actualSize(BigDecimal totalAgents, BigDecimal deliveryHc) {
-        if (totalAgents != null && totalAgents.compareTo(BigDecimal.ZERO) > 0) {
-            return totalAgents;
-        }
-        return deliveryHc;
     }
 
     private static String customerCountries(List<ExerciseKpiView> lines) {

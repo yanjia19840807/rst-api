@@ -1,9 +1,11 @@
 package com.cmacgm.gbs.rst.api.governance.api.dto;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * RST Repository list filters (field values applied on the server).
+ * Empty country, region, and cluster lists mean that filter is not applied.
  */
 public record RepositoryListQuery(
         String exerciseCode,
@@ -13,7 +15,9 @@ public record RepositoryListQuery(
         String toolkitName,
         String carrier,
         String site,
-        String customerCountry,
+        List<String> customerCountries,
+        List<String> regions,
+        List<String> clusters,
         String sizingMonth,
         LocalDate validatedFrom,
         LocalDate validatedTo) {

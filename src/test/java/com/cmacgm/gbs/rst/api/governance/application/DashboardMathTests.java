@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.cmacgm.gbs.rst.api.governance.api.dto.DashboardCenterRow;
 import com.cmacgm.gbs.rst.api.governance.api.dto.DashboardDomainRow;
@@ -148,8 +149,26 @@ class DashboardMathTests {
         assertThat(DashboardMath.formatHc(new BigDecimal("1284.44"))).isEqualTo("1,284.4");
     }
 
+    @Test
+    void domainDrillDownKeepsOnlySelectedCountries() {
+        List<KpiCoverage> items = List.of(
+                status("Shanghai", "OPS", AgingBucket.NEVER_DONE, "2", "FR"),
+                status("Shanghai", "FIN", AgingBucket.NEVER_DONE, "3", "CN"));
+        Map<String, List<DashboardDomainRow>> open = DashboardMath.domainsByCenter(items, null);
+        Map<String, List<DashboardDomainRow>> limited = DashboardMath.domainsByCenter(items, Set.of("FR"));
+        Map<String, List<DashboardDomainRow>> empty = DashboardMath.domainsByCenter(items, Set.of());
+        assertThat(open.get("Shanghai")).hasSize(2);
+        assertThat(limited.get("Shanghai")).extracting(DashboardDomainRow::domain).containsExactly("OPS");
+        assertThat(empty).isEmpty();
+    }
+
     private static KpiCoverage status(String center, String domain, AgingBucket bucket, String hc) {
-        return new KpiCoverage(center, domain, bucket, bd(hc));
+        return status(center, domain, bucket, hc, "FR");
+    }
+
+    private static KpiCoverage status(
+            String center, String domain, AgingBucket bucket, String hc, String country) {
+        return new KpiCoverage(center, domain, bucket, bd(hc), country);
     }
 
     private static BigDecimal bd(String value) {

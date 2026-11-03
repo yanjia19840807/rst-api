@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.time.CenterDates;
@@ -20,6 +21,7 @@ import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseToolkitSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
+import com.cmacgm.gbs.rst.api.geography.application.GeographyService;
 import com.cmacgm.gbs.rst.api.governance.api.dto.DashboardView;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
@@ -44,6 +46,7 @@ public class DashboardService {
     private final ExerciseProductionSupportItemRepository supportItems;
     private final ExerciseTeamSetupRepository teamSetups;
     private final WorkingDaysService workingDaysService;
+    private final GeographyService geography;
     private final Clock clock;
 
     /**
@@ -53,6 +56,7 @@ public class DashboardService {
      * @param supportItems production support inputs
      * @param teamSetups Team Setup used for Support FTE
      * @param workingDaysService working days for Support FTE
+     * @param geography region and cluster country limits
      * @param clock as-of clock for quarter and YTD
      */
     public DashboardService(
@@ -62,6 +66,7 @@ public class DashboardService {
             ExerciseProductionSupportItemRepository supportItems,
             ExerciseTeamSetupRepository teamSetups,
             WorkingDaysService workingDaysService,
+            GeographyService geography,
             Clock clock) {
         this.timesheet = timesheet;
         this.exercises = exercises;
@@ -69,16 +74,21 @@ public class DashboardService {
         this.supportItems = supportItems;
         this.teamSetups = teamSetups;
         this.workingDaysService = workingDaysService;
+        this.geography = geography;
         this.clock = clock;
     }
 
     /**
      * Aggregates applicable KPI Delivery HC, aging, stuck reviews, and YTD capacity.
      *
-     * @return dashboard payload
+     * @param ownerCcgid signed-in user, used to resolve personal clusters
+     * @param regions selected region names; empty leaves the domain table unfiltered
+     * @param clusters selected cluster names; empty leaves the domain table unfiltered
+     * @return dashboard payload; header cards and the center chart ignore region and cluster
      */
     @Transactional(readOnly = true)
-    public DashboardView build() {
+    public DashboardView build(String ownerCcgid, List<String> regions, List<String> clusters) {
+        Set<String> domainCountries = geography.countryLimit(ownerCcgid, regions, clusters);
         LocalDate today = LocalDate.now(clock);
         List<RstExercise> approved = exercises.findApprovedRepositoryExercises();
         Map<String, LocalDate> latestApproved = latestApprovedByKpiKey(approved);
@@ -107,7 +117,8 @@ public class DashboardService {
                     row.getCenter(),
                     domain,
                     DashboardMath.bucket(latestApproved.get(coverageKey), today),
-                    row.getHc()));
+                    row.getHc(),
+                    row.getCustomerCountry()));
         }
         return new DashboardView(
                 DashboardMath.metrics(
@@ -116,7 +127,7 @@ public class DashboardService {
                         capacityYtd(approved, today.getYear()),
                         nz(timesheet.sumActiveHeadcount())),
                 DashboardMath.centers(statuses),
-                DashboardMath.domainsByCenter(statuses));
+                DashboardMath.domainsByCenter(statuses, domainCountries));
     }
 
     private Map<String, String> domainByObligation() {
@@ -175,10 +186,6 @@ public class DashboardService {
         }
         Map<UUID, BigDecimal> rightSizingByExercise = rightSizingByExercise(ytd);
         Map<UUID, BigDecimal> supportByExercise = supportByExercise(ytd);
-        Map<UUID, ExerciseTeamSetup> setups = new HashMap<>();
-        for (ExerciseTeamSetup setup : teamSetups.findAllById(ytd.stream().map(RstExercise::getId).toList())) {
-            setups.put(setup.getExerciseId(), setup);
-        }
         BigDecimal total = BigDecimal.ZERO;
         boolean any = false;
         for (RstExercise exercise : ytd) {
@@ -186,10 +193,8 @@ public class DashboardService {
             if (rightSizing == null) {
                 continue;
             }
-            ExerciseTeamSetup setup = setups.get(exercise.getId());
             BigDecimal capacity = SizingMath.capacityCreation(
-                    SizingMath.actualHeadcount(
-                            setup == null ? null : setup.totalAgents(), deliveryHc(exercise)),
+                    SizingMath.actualHeadcount(deliveryHc(exercise)),
                     rightSizing,
                     supportByExercise.get(exercise.getId()));
             if (capacity == null) {

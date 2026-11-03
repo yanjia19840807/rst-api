@@ -53,7 +53,7 @@ public final class RepositoryRowFilters {
         if (hasText(query.site()) && !query.site().equals(row.site())) {
             return false;
         }
-        if (hasText(query.customerCountry()) && !CommaTokens.contains(row.kpi(), query.customerCountry())) {
+        if (!matchesAnyCountry(row.kpi(), query.customerCountries())) {
             return false;
         }
         if (hasText(query.sizingMonth()) && !query.sizingMonth().trim().equals(row.sizingMonth())) {
@@ -85,6 +85,23 @@ public final class RepositoryRowFilters {
                 .distinct()
                 .sorted()
                 .toList();
+    }
+
+    private static boolean matchesAnyCountry(String kpi, List<String> selected) {
+        if (selected == null || selected.isEmpty()) {
+            return true;
+        }
+        boolean required = false;
+        for (String country : selected) {
+            if (country == null || country.isBlank()) {
+                continue;
+            }
+            required = true;
+            if (kpi != null && kpi.trim().equals(country.trim())) {
+                return true;
+            }
+        }
+        return !required;
     }
 
     private static boolean hasText(String value) {

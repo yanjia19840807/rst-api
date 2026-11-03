@@ -35,11 +35,11 @@ public final class RepositoryLineMath {
     }
 
     /**
-     * Splits Exercise totals onto one KPI line. Capacity uses Actual HC (TotalAgent).
+     * Splits Exercise totals onto one KPI line. Capacity uses Actual HC.
      *
      * @param lineDeliveryHc this line's frozen Delivery HC
      * @param totalDeliveryHc sum of Delivery HC on the Exercise
-     * @param actualHc Team Setup TotalAgent; missing or non-positive leaves Capacity empty
+     * @param actualHc Shared KPI Delivery HC; missing or non-positive leaves Capacity empty
      * @param rightSizingHc Official Scenario RIGHT_SIZING_HC; null leaves RS / Capacity empty
      * @param productionSupportFte Exercise Support FTE total
      * @return allocated line metrics
