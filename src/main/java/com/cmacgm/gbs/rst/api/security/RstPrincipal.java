@@ -26,7 +26,7 @@ public record RstPrincipal(
     private static final long serialVersionUID = 1L;
 
     private static final Set<String> GRANTABLE_ROLES = Set.of(
-            "AGENT", "SUPERVISOR", "SR_MANAGER", "DOMAIN_HEAD", "LOCAL_TRANSFORMATION_HEAD");
+            "SUPERVISOR", "SR_MANAGER", "DOMAIN_HEAD", "LOCAL_TRANSFORMATION_HEAD");
 
     /**
      * Builds a non-delegated principal (actor equals effective identity).
@@ -100,7 +100,7 @@ public record RstPrincipal(
     /**
      * Whether the real signed-in user may grant a delegation.
      *
-     * @return true for AGENT / SUPERVISOR / SR_MANAGER / DOMAIN_HEAD / LOCAL_TRANSFORMATION_HEAD
+     * @return true for SUPERVISOR / SR_MANAGER / DOMAIN_HEAD / LOCAL_TRANSFORMATION_HEAD
      */
     public boolean canGrantDelegation() {
         if (isDelegated() || roles == null) {

@@ -454,6 +454,115 @@ public class TimesheetReadService {
     }
 
     /**
+     * Positions below the seats this person holds. The person's own seats are not included.
+     * When {@code roleTypes} is null, every descendant role is kept. The walk still passes
+     * through roles that are not kept, so an Agent under a Supervisor is reachable from a
+     * Sr Manager when only those two roles are requested.
+     *
+     * @param ccgid occupant
+     * @param roleTypes roles to keep, or null for every descendant role
+     * @return descendant position ids
+     */
+    @Transactional(readOnly = true)
+    public List<String> descendantPositionIds(String ccgid, Set<String> roleTypes) {
+        if (ccgid == null || ccgid.isBlank()) {
+            return List.of();
+        }
+        LinkedHashSet<String> ids = new LinkedHashSet<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (TimesheetPersonPositionRole seat : seats.findActiveByCcgid(ccgid.trim())) {
+            if (seat.getPositionId() == null || seat.getPositionId().isBlank()
+                    || seat.getRoleType() == null || seat.getRoleType().isBlank()) {
+                continue;
+            }
+            collectDescendants(seat.getPositionId(), seat.getRoleType(), roleTypes, ids, seen);
+        }
+        return List.copyOf(ids);
+    }
+
+    private void collectDescendants(
+            String positionId,
+            String roleType,
+            Set<String> roleTypes,
+            Set<String> ids,
+            Set<String> seen) {
+        if (!seen.add(positionId + "\0" + roleType)) {
+            return;
+        }
+        for (TimesheetPositionParent edge : parents.findActiveChildren(positionId, roleType)) {
+            if (edge.getPositionId() == null || edge.getPositionId().isBlank()
+                    || edge.getRoleType() == null || edge.getRoleType().isBlank()) {
+                continue;
+            }
+            if (roleTypes == null || roleTypes.contains(edge.getRoleType())) {
+                ids.add(edge.getPositionId());
+            }
+            collectDescendants(edge.getPositionId(), edge.getRoleType(), roleTypes, ids, seen);
+        }
+    }
+
+    /**
+     * Positions in a Center that do not carry the given role.
+     *
+     * @param center GBS center
+     * @param roleType role to exclude
+     * @return position ids
+     */
+    @Transactional(readOnly = true)
+    public List<String> positionIdsInCenterWithoutRole(String center, String roleType) {
+        if (center == null || center.isBlank() || roleType == null || roleType.isBlank()) {
+            return List.of();
+        }
+        return positions.findActivePositionIdsInCenterWithoutRole(center.trim(), roleType.trim());
+    }
+
+    /**
+     * People who occupy these positions in the Center.
+     *
+     * @param positionIds positions
+     * @return uppercase CCGIDs
+     */
+    @Transactional(readOnly = true)
+    public List<String> occupantCcgids(Collection<String> positionIds) {
+        if (positionIds == null || positionIds.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<String> ids = new LinkedHashSet<>();
+        for (TimesheetPersonPositionRole seat : seats.findActiveByPositionIdIn(positionIds)) {
+            if (seat.getCcgid() != null && !seat.getCcgid().isBlank()) {
+                ids.add(seat.getCcgid().trim().toUpperCase(Locale.ROOT));
+            }
+        }
+        return List.copyOf(ids);
+    }
+
+    /**
+     * People in a Center who occupy one of the given positions.
+     *
+     * @param center GBS center
+     * @param positionIds positions whose occupants are eligible
+     * @param name optional name / email / CCGID fragment
+     * @param page 1-based page
+     * @param pageSize page size
+     * @return people
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<CenterPerson> peopleOccupyingPositions(
+            String center, Collection<String> positionIds, String name, int page, int pageSize) {
+        int safePage = Math.max(1, page);
+        int safePageSize = Math.min(100, Math.max(1, pageSize));
+        if (center == null || center.isBlank() || positionIds == null || positionIds.isEmpty()) {
+            return new PageResponse<>(List.of(), safePage, safePageSize, 0, 1);
+        }
+        String needle = name == null ? "" : name.trim();
+        var rows = people.findActiveOccupantsInCenter(
+                center.trim(), positionIds, needle, PageRequest.of(safePage - 1, safePageSize));
+        return PageResponse.from(
+                rows,
+                person -> new CenterPerson(person.getCcgid(), person.getName(), null, person.getEmail()));
+    }
+
+    /**
      * Position occupied by a person for a role.
      *
      * @param ccgid occupant

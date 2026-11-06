@@ -41,7 +41,7 @@ public class DelegationController {
     }
 
     /**
-     * Direct child positions the signed-in user may cover.
+     * Positions the signed-in user may assign a delegate for.
      */
     @GetMapping("/assignments")
     public List<PositionAssignmentView> assignments(@AuthenticationPrincipal RstPrincipal principal) {
@@ -49,12 +49,12 @@ public class DelegationController {
     }
 
     /**
-     * Assigns colleagues to cover the selected child position and every other
-     * direct child position held by the same occupant.
+     * Assigns colleagues to cover the selected position and every other in-scope
+     * position held by the same occupant.
      */
     @PostMapping("/assignments")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('AGENT','SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
+    @PreAuthorize("hasAnyRole('SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
     public List<DelegationView> assign(
             @AuthenticationPrincipal RstPrincipal principal,
             @Valid @RequestBody AssignDelegationRequest request) {
@@ -74,7 +74,7 @@ public class DelegationController {
      */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('AGENT','SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
+    @PreAuthorize("hasAnyRole('SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
     public List<DelegationView> create(
             @AuthenticationPrincipal RstPrincipal principal,
             @Valid @RequestBody CreateDelegationRequest request) {
@@ -85,7 +85,7 @@ public class DelegationController {
      * Revokes an open grant issued by the signed-in user.
      */
     @PostMapping("/{id}/revoke")
-    @PreAuthorize("hasAnyRole('AGENT','SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
+    @PreAuthorize("hasAnyRole('SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
     public DelegationView revoke(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
@@ -110,14 +110,16 @@ public class DelegationController {
 
     /**
      * Timesheet people the grantor may pick.
+     * {@code scope=assignment} limits the list to occupants of assignable positions.
      */
     @GetMapping("/candidates")
-    @PreAuthorize("hasAnyRole('AGENT','SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
+    @PreAuthorize("hasAnyRole('SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
     public PageResponse<DelegationCandidateView> candidates(
             @AuthenticationPrincipal RstPrincipal principal,
             @RequestParam(required = false) String q,
+            @RequestParam(required = false) String scope,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        return delegations.candidates(principal, q, page, pageSize);
+        return delegations.candidates(principal, q, scope, page, pageSize);
     }
 }

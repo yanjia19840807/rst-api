@@ -182,6 +182,55 @@ public interface TimesheetPersonRepository extends JpaRepository<TimesheetPerson
             @Param("center") String center, @Param("name") String name, Pageable pageable);
 
     /**
+     * People in this Center who occupy one of the given positions.
+     *
+     * @param center GBS center
+     * @param positionIds positions whose occupants are eligible
+     * @param name optional name / email / CCGID fragment; blank matches all
+     * @param pageable page
+     * @return people
+     */
+    @Query(
+            value = """
+                    select distinct p
+                    from TimesheetPerson p, TimesheetPersonPositionRole o, TimesheetSyncRun r
+                    where p.id.syncRunId = r.id
+                      and o.id.syncRunId = r.id
+                      and o.id.ccgid = p.id.ccgid
+                      and r.kind = 'DAILY'
+                      and r.status = 'ACTIVE'
+                      and r.center = :center
+                      and p.center = :center
+                      and o.id.positionId in :positionIds
+                      and (:name = ''
+                           or lower(p.name) like lower(concat('%', :name, '%'))
+                           or lower(p.id.ccgid) like lower(concat('%', :name, '%'))
+                           or lower(coalesce(p.email, '')) like lower(concat('%', :name, '%')))
+                    order by p.name, p.id.ccgid
+                    """,
+            countQuery = """
+                    select count(distinct p)
+                    from TimesheetPerson p, TimesheetPersonPositionRole o, TimesheetSyncRun r
+                    where p.id.syncRunId = r.id
+                      and o.id.syncRunId = r.id
+                      and o.id.ccgid = p.id.ccgid
+                      and r.kind = 'DAILY'
+                      and r.status = 'ACTIVE'
+                      and r.center = :center
+                      and p.center = :center
+                      and o.id.positionId in :positionIds
+                      and (:name = ''
+                           or lower(p.name) like lower(concat('%', :name, '%'))
+                           or lower(p.id.ccgid) like lower(concat('%', :name, '%'))
+                           or lower(coalesce(p.email, '')) like lower(concat('%', :name, '%')))
+                    """)
+    Page<TimesheetPerson> findActiveOccupantsInCenter(
+            @Param("center") String center,
+            @Param("positionIds") Collection<String> positionIds,
+            @Param("name") String name,
+            Pageable pageable);
+
+    /**
      * Active people whose name, email or CCGID contains the query.
      *
      * @param query name / email / CCGID fragment; blank matches all

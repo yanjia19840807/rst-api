@@ -201,28 +201,43 @@ class DelegationApiIntegrationTests {
     }
 
     @Test
+    void agentCannotGrant() throws Exception {
+        mockMvc.perform(post("/api/v1/delegations")
+                        .header("X-Dev-Ccgid", "AGENT010")
+                        .header("X-Dev-Role", "AGENT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"delegateCcgids":["AGENT011"]}
+                                """))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void delegateCannotGrantOnwardAndCannotPickSomeoneWhoAlreadyGranted() throws Exception {
+        insertPerson("SUPERVISOR003", "Peer Supervisor", "GBS INDIA");
+        insertPosition("POS-SUP-003", "SUPERVISOR");
+        insertSeat("SUPERVISOR003", "POS-SUP-003", "SUPERVISOR");
         Instant from = Instant.now().minus(1, ChronoUnit.HOURS);
         Instant until = Instant.now().plus(7, ChronoUnit.DAYS);
-        String bodyToAgent = """
-                {"positionId":"POS-SUP-001","delegateCcgids":["AGENT010"],"validFrom":"%s","validUntil":"%s"}
+        String grantToPeer = """
+                {"delegateCcgids":["SUPERVISOR003"],"validFrom":"%s","validUntil":"%s"}
                 """.formatted(from, until);
-        String bodyToAgent11 = """
-                {"positionId":"POS-AGT-010","delegateCcgids":["AGENT011"],"validFrom":"%s","validUntil":"%s"}
+        String peerGrantsOwnSeat = """
+                {"delegateCcgids":["AGENT011"],"validFrom":"%s","validUntil":"%s"}
                 """.formatted(from, until);
 
         mockMvc.perform(post("/api/v1/delegations")
                         .header("X-Dev-Ccgid", "SUPERVISOR001")
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(bodyToAgent))
+                        .content(grantToPeer))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(post("/api/v1/delegations")
-                        .header("X-Dev-Ccgid", "AGENT010")
-                        .header("X-Dev-Role", "AGENT")
+                        .header("X-Dev-Ccgid", "SUPERVISOR003")
+                        .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(bodyToAgent11))
+                        .content(peerGrantsOwnSeat))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.type")
                         .value("https://rst.cmacgm.com/problems/delegation-chain-forbidden"));
@@ -230,17 +245,17 @@ class DelegationApiIntegrationTests {
         jdbcTemplate.update("delete from rst_delegation");
 
         mockMvc.perform(post("/api/v1/delegations")
-                        .header("X-Dev-Ccgid", "AGENT010")
-                        .header("X-Dev-Role", "AGENT")
+                        .header("X-Dev-Ccgid", "SUPERVISOR003")
+                        .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(bodyToAgent11))
+                        .content(peerGrantsOwnSeat))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(post("/api/v1/delegations")
                         .header("X-Dev-Ccgid", "SUPERVISOR001")
                         .header("X-Dev-Role", "SUPERVISOR")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(bodyToAgent))
+                        .content(grantToPeer))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.type")
                         .value("https://rst.cmacgm.com/problems/delegation-chain-forbidden"));
@@ -292,7 +307,7 @@ class DelegationApiIntegrationTests {
                 Set.of("SUPERVISOR"),
                 Set.of("SELF"),
                 null);
-        PageResponse<DelegationCandidateView> page = delegations.candidates(principal, "", 1, 20);
+        PageResponse<DelegationCandidateView> page = delegations.candidates(principal, "", null, 1, 20);
         assertThat(page.items())
                 .extracting(DelegationCandidateView::ccgid)
                 .contains("AGENT010")
@@ -366,6 +381,150 @@ class DelegationApiIntegrationTests {
                 .andExpect(jsonPath("$[0].status").value("ACTIVE"))
                 .andExpect(jsonPath("$[0].validFrom").value(nullValue()))
                 .andExpect(jsonPath("$[0].validUntil").value(nullValue()));
+    }
+
+    @Test
+    void assignmentScopeFollowsRole() throws Exception {
+        insertPerson("SRM001", "Sr Manager", "GBS INDIA");
+        insertPerson("DH001", "Domain Head", "GBS INDIA");
+        insertPerson("AGENT012", "Dual Role", "GBS INDIA");
+        insertPosition("POS-SRM-001", "SR_MANAGER");
+        insertPosition("POS-DH-001", "DOMAIN_HEAD");
+        insertPosition("POS-SUP-003", "SUPERVISOR");
+        insertPosition("POS-AGT-012", "AGENT");
+        insertSeat("SRM001", "POS-SRM-001", "SR_MANAGER");
+        insertSeat("DH001", "POS-DH-001", "DOMAIN_HEAD");
+        insertSeat("AGENT012", "POS-SUP-003", "SUPERVISOR");
+        insertSeat("AGENT012", "POS-AGT-012", "AGENT");
+        insertParent("POS-AGT-010", "AGENT", "POS-SUP-001", "SUPERVISOR");
+        insertParent("POS-AGT-011", "AGENT", "POS-SUP-001", "SUPERVISOR");
+        insertParent("POS-AGT-012", "AGENT", "POS-SUP-003", "SUPERVISOR");
+        insertParent("POS-SUP-001", "SUPERVISOR", "POS-SRM-001", "SR_MANAGER");
+        insertParent("POS-SUP-003", "SUPERVISOR", "POS-SRM-001", "SR_MANAGER");
+        insertParent("POS-SRM-001", "SR_MANAGER", "POS-DH-001", "DOMAIN_HEAD");
+
+        String supervisorPositions = mockMvc.perform(get("/api/v1/delegations/assignments")
+                        .header("X-Dev-Ccgid", "SUPERVISOR001")
+                        .header("X-Dev-Role", "SUPERVISOR"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(JsonPath.<List<String>>read(supervisorPositions, "$[*].positionId"))
+                .containsExactlyInAnyOrder("POS-AGT-010", "POS-AGT-011");
+
+        String supervisorPeople = mockMvc.perform(get("/api/v1/delegations/candidates")
+                        .header("X-Dev-Ccgid", "SUPERVISOR001")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .param("scope", "assignment")
+                        .param("pageSize", "20"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(JsonPath.<List<String>>read(supervisorPeople, "$.items[*].ccgid"))
+                .containsExactlyInAnyOrder("AGENT010", "AGENT011");
+
+        String managerPositions = mockMvc.perform(get("/api/v1/delegations/assignments")
+                        .header("X-Dev-Ccgid", "SRM001")
+                        .header("X-Dev-Role", "SR_MANAGER"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(JsonPath.<List<String>>read(managerPositions, "$[*].positionId"))
+                .containsExactlyInAnyOrder(
+                        "POS-SUP-001", "POS-SUP-003", "POS-AGT-010", "POS-AGT-011", "POS-AGT-012");
+
+        String headPositions = mockMvc.perform(get("/api/v1/delegations/assignments")
+                        .header("X-Dev-Ccgid", "DH001")
+                        .header("X-Dev-Role", "DOMAIN_HEAD"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(JsonPath.<List<String>>read(headPositions, "$[*].positionId"))
+                .contains(
+                        "POS-SUP-001", "POS-SUP-002", "POS-SUP-003", "POS-SRM-001", "POS-DH-001")
+                .doesNotContain("POS-AGT-010", "POS-AGT-011", "POS-AGT-012");
+
+        String headPeople = mockMvc.perform(get("/api/v1/delegations/candidates")
+                        .header("X-Dev-Ccgid", "DH001")
+                        .header("X-Dev-Role", "DOMAIN_HEAD")
+                        .param("scope", "assignment")
+                        .param("pageSize", "20"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(JsonPath.<List<String>>read(headPeople, "$.items[*].ccgid"))
+                .contains("SUPERVISOR001", "SRM001", "DH001", "AGENT012")
+                .doesNotContain("AGENT010", "AGENT011");
+
+        mockMvc.perform(post("/api/v1/delegations/assignments")
+                        .header("X-Dev-Ccgid", "SUPERVISOR001")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"positionId":"POS-AGT-012","delegateCcgids":["AGENT010"]}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.type")
+                        .value("https://rst.cmacgm.com/problems/delegation-position-out-of-scope"));
+
+        mockMvc.perform(post("/api/v1/delegations/assignments")
+                        .header("X-Dev-Ccgid", "SUPERVISOR001")
+                        .header("X-Dev-Role", "SUPERVISOR")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"positionId":"POS-AGT-010","delegateCcgids":["DH001"]}
+                                """))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.type")
+                        .value("https://rst.cmacgm.com/problems/delegate-out-of-scope"));
+
+        String created = mockMvc.perform(post("/api/v1/delegations/assignments")
+                        .header("X-Dev-Ccgid", "DH001")
+                        .header("X-Dev-Role", "DOMAIN_HEAD")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"positionId":"POS-SUP-003","delegateCcgids":["SUPERVISOR001"]}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(JsonPath.<List<String>>read(created, "$[*].subjectPositionId"))
+                .containsExactly("POS-SUP-003");
+    }
+
+    @Test
+    void supervisorCanRevokeCoverageOnAPositionInScope() throws Exception {
+        insertParent("POS-AGT-010", "AGENT", "POS-SUP-001", "SUPERVISOR");
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update(
+                """
+                insert into rst_delegation (
+                    id, delegator_ccgid, delegator_name, delegate_ccgid, delegate_name,
+                    delegator_roles, delegator_center, status, subject_position_id,
+                    assigned_by_ccgid, assigned_by_name, created_at)
+                values (?, 'AGENT010', 'Test Agent AGENT010', 'AGENT011', 'Test Agent AGENT011',
+                    'AGENT', 'GBS INDIA', 'ACTIVE', 'POS-AGT-010', 'AGENT010', 'Test Agent AGENT010', ?)
+                """,
+                id,
+                Instant.now());
+
+        mockMvc.perform(post("/api/v1/delegations/{id}/revoke", id)
+                        .header("X-Dev-Ccgid", "SUPERVISOR002")
+                        .header("X-Dev-Role", "SUPERVISOR"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/v1/delegations/{id}/revoke", id)
+                        .header("X-Dev-Ccgid", "SUPERVISOR001")
+                        .header("X-Dev-Role", "SUPERVISOR"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REVOKED"));
     }
 
     private void insertPerson(String ccgid, String name, String center) {

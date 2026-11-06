@@ -78,30 +78,35 @@ public class DelegationService {
                     "You have no position to delegate.");
         }
         return coverPositions(
-                principal, positions, request.delegateCcgids(), request.validFrom(), request.validUntil());
+                principal, positions, request.delegateCcgids(), request.validFrom(), request.validUntil(), null);
     }
 
     /**
-     * A parent covers the selected child position and every other direct child
-     * position held by the same occupant. Every role on each position is included.
+     * Covers the selected position and every other in-scope position held by the same occupant.
+     * Supervisor sees every role under them. Sr Manager sees Supervisor and Agent roles under them.
+     * Domain Head and LTH see every role in their Center except Agent.
      *
-     * @param principal parent occupant
-     * @param request selected child position and delegates
+     * @param principal grantor
+     * @param request selected position and delegates
      * @return created rows
      */
     @Transactional
     public List<DelegationView> assign(RstPrincipal principal, AssignDelegationRequest request) {
         requireGrantor(principal);
-        List<String> positions = assignablePositionsForSelection(
-                principal.realCcgid(), request.positionId().trim());
+        List<String> positions = assignablePositionsForSelection(principal, request.positionId().trim());
         if (positions.isEmpty()) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
-                    "delegation-not-direct-child",
-                    "You can only assign a direct child position.");
+                    "delegation-position-out-of-scope",
+                    "You can only assign a position in your delegation scope.");
         }
         return coverPositions(
-                principal, positions, request.delegateCcgids(), request.validFrom(), request.validUntil());
+                principal,
+                positions,
+                request.delegateCcgids(),
+                request.validFrom(),
+                request.validUntil(),
+                assignableDelegateCcgids(principal));
     }
 
     /**
@@ -121,11 +126,12 @@ public class DelegationService {
             List<String> positionIds,
             List<String> delegateCcgids,
             Instant validFrom,
-            Instant validUntil) {
+            Instant validUntil,
+            Set<String> allowedDelegates) {
         List<DelegationView> created = new ArrayList<>();
         for (String positionId : positionIds) {
             created.addAll(coverPosition(
-                    principal, positionId, delegateCcgids, validFrom, validUntil, true));
+                    principal, positionId, delegateCcgids, validFrom, validUntil, true, allowedDelegates));
         }
         if (created.isEmpty()) {
             throw new ApiException(
@@ -136,8 +142,9 @@ public class DelegationService {
         return created;
     }
 
-    private List<String> assignablePositionsForSelection(String grantorCcgid, String selectedPositionId) {
-        if (!timesheet.isDirectParentOf(grantorCcgid, selectedPositionId)) {
+    private List<String> assignablePositionsForSelection(RstPrincipal principal, String selectedPositionId) {
+        List<String> allowed = assignablePositionIds(principal);
+        if (!allowed.contains(selectedPositionId)) {
             return List.of();
         }
         var occupant = timesheet.occupant(selectedPositionId);
@@ -148,9 +155,34 @@ public class DelegationService {
             return List.of(selectedPositionId);
         }
         Set<String> held = new LinkedHashSet<>(timesheet.heldPositionIds(occupant.ccgid()));
-        return timesheet.directChildPositionIds(grantorCcgid).stream()
-                .filter(held::contains)
-                .toList();
+        return allowed.stream().filter(held::contains).toList();
+    }
+
+    /**
+     * Positions this grantor may assign. A person who holds more than one of these
+     * roles receives the union.
+     *
+     * @param principal grantor
+     * @return position ids
+     */
+    private List<String> assignablePositionIds(RstPrincipal principal) {
+        Set<String> roles = principal.roles() == null ? Set.of() : principal.roles();
+        LinkedHashSet<String> ids = new LinkedHashSet<>();
+        String ccgid = principal.realCcgid();
+        if (roles.contains("SUPERVISOR")) {
+            ids.addAll(timesheet.descendantPositionIds(ccgid, null));
+        }
+        if (roles.contains("SR_MANAGER")) {
+            ids.addAll(timesheet.descendantPositionIds(ccgid, Set.of("SUPERVISOR", "AGENT")));
+        }
+        if (roles.contains("DOMAIN_HEAD") || roles.contains("LOCAL_TRANSFORMATION_HEAD")) {
+            ids.addAll(timesheet.positionIdsInCenterWithoutRole(requireCenter(principal), "AGENT"));
+        }
+        return List.copyOf(ids);
+    }
+
+    private Set<String> assignableDelegateCcgids(RstPrincipal principal) {
+        return Set.copyOf(timesheet.occupantCcgids(assignablePositionIds(principal)));
     }
 
     private List<DelegationView> coverPosition(
@@ -159,7 +191,8 @@ public class DelegationService {
             List<String> delegateCcgids,
             Instant validFrom,
             Instant validUntil,
-            boolean skipExisting) {
+            boolean skipExisting,
+            Set<String> allowedDelegates) {
         Instant now = clock.instant();
         requireOpenRange(validFrom, validUntil, now);
         if (hasOpenReceived(principal.realCcgid(), now)) {
@@ -214,6 +247,12 @@ public class DelegationService {
                         "delegate-center-mismatch",
                         "You can only assign someone in your Center.");
             }
+            if (allowedDelegates != null && !allowedDelegates.contains(delegateCcgid)) {
+                throw new ApiException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "delegate-out-of-scope",
+                        "You can only assign someone in your delegation scope.");
+            }
             if (!delegations.findOpenPositionDelegate(positionId, delegateCcgid, OPEN).isEmpty()) {
                 if (skipExisting) {
                     continue;
@@ -250,15 +289,15 @@ public class DelegationService {
     }
 
     /**
-     * Direct child positions and their open coverage.
+     * Positions this grantor may assign, with their open coverage.
      *
-     * @param principal parent occupant
+     * @param principal grantor
      * @return rows
      */
     @Transactional
     public List<PositionAssignmentView> assignments(RstPrincipal principal) {
-        requireSignedIn(principal);
-        return positionViews(timesheet.directChildPositionIds(principal.realCcgid()));
+        requireGrantor(principal);
+        return positionViews(assignablePositionIds(principal));
     }
 
     private List<PositionAssignmentView> positionViews(List<String> positionIds) {
@@ -295,7 +334,7 @@ public class DelegationService {
     public DelegationView revoke(RstPrincipal principal, UUID id) {
         requireGrantor(principal);
         Instant now = clock.instant();
-        Delegation row = requireOwnedOpen(principal.realCcgid(), id, now);
+        Delegation row = requireRevocable(principal, id, now);
         row.revoke(now);
         audit(row, AuditAction.DISABLE);
         return DelegationView.from(delegations.save(row));
@@ -341,19 +380,24 @@ public class DelegationService {
     }
 
     /**
-     * People in the grantor's Center, including the caller.
-     * Whether the caller may be chosen is checked when the form is submitted.
+     * People the grantor may pick. {@code assignment} limits the list to people who
+     * occupy a position the grantor may assign. Any other scope is the grantor's
+     * Center, used when delegating the grantor's own positions.
      *
      * @param principal grantor
      * @param q name / email / CCGID
+     * @param scope {@code assignment} or blank
      * @param page 1-based page
      * @param pageSize page size
      * @return candidates
      */
     @Transactional(readOnly = true)
     public PageResponse<DelegationCandidateView> candidates(
-            RstPrincipal principal, String q, int page, int pageSize) {
+            RstPrincipal principal, String q, String scope, int page, int pageSize) {
         requireGrantor(principal);
+        if (scope != null && scope.equalsIgnoreCase("assignment")) {
+            return mapOccupantCandidates(principal, q, page, pageSize);
+        }
         return mapCandidates(principal, q, page, pageSize);
     }
 
@@ -395,6 +439,19 @@ public class DelegationService {
         return new PageResponse<>(items, source.page(), source.pageSize(), source.total(), source.totalPages());
     }
 
+    private PageResponse<DelegationCandidateView> mapOccupantCandidates(
+            RstPrincipal principal, String q, int page, int pageSize) {
+        String center = requireCenter(principal);
+        List<String> positionIds = assignablePositionIds(principal);
+        PageResponse<TimesheetReadService.CenterPerson> source =
+                timesheet.peopleOccupyingPositions(center, positionIds, q, page, pageSize);
+        List<DelegationCandidateView> items = source.items().stream()
+                .map(person -> new DelegationCandidateView(
+                        person.ccgid(), person.name(), center, person.email()))
+                .toList();
+        return new PageResponse<>(items, source.page(), source.pageSize(), source.total(), source.totalPages());
+    }
+
     private String requireCenter(RstPrincipal principal) {
         String center = principal.center();
         if (center != null && !center.isBlank()) {
@@ -426,21 +483,23 @@ public class DelegationService {
         return rows;
     }
 
-    private Delegation requireOwnedOpen(String delegatorCcgid, UUID id, Instant now) {
+    private Delegation requireRevocable(RstPrincipal principal, UUID id, Instant now) {
         Delegation row = delegations.findById(id)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "delegation-not-found", "The delegation was not found."));
         if (row.refresh(now)) {
             delegations.save(row);
         }
-        boolean owner = row.getDelegatorCcgid().equalsIgnoreCase(delegatorCcgid)
-                || (row.getAssignedByCcgid() != null
-                        && row.getAssignedByCcgid().equalsIgnoreCase(delegatorCcgid));
-        if (!owner) {
+        String ccgid = principal.realCcgid();
+        boolean owner = row.getDelegatorCcgid().equalsIgnoreCase(ccgid)
+                || (row.getAssignedByCcgid() != null && row.getAssignedByCcgid().equalsIgnoreCase(ccgid));
+        boolean inScope = row.getSubjectPositionId() != null
+                && assignablePositionIds(principal).contains(row.getSubjectPositionId());
+        if (!owner && !inScope) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
                     "delegation-not-owner",
-                    "Only the delegator can revoke this authorization.");
+                    "You cannot revoke this delegation.");
         }
         if (!row.getStatus().isOpen()) {
             throw new ApiException(

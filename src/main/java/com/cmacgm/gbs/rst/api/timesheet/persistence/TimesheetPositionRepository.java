@@ -54,6 +54,33 @@ public interface TimesheetPositionRepository
             @Param("positionId") String positionId, @Param("roleType") String roleType);
 
     /**
+     * ACTIVE Daily positions in a Center that do not carry the given role.
+     * A position with that role on any row is omitted entirely.
+     *
+     * @param center GBS center
+     * @param roleType role to exclude, such as AGENT
+     * @return position ids
+     */
+    @Query("""
+            select distinct p.id.positionId
+            from TimesheetPosition p, TimesheetSyncRun r
+            where p.id.syncRunId = r.id
+              and r.kind = 'DAILY'
+              and r.status = 'ACTIVE'
+              and r.center = :center
+              and not exists (
+                  select 1
+                  from TimesheetPosition excluded
+                  where excluded.id.syncRunId = r.id
+                    and excluded.id.positionId = p.id.positionId
+                    and excluded.id.roleType = :roleType
+              )
+            order by p.id.positionId
+            """)
+    List<String> findActivePositionIdsInCenterWithoutRole(
+            @Param("center") String center, @Param("roleType") String roleType);
+
+    /**
      * ACTIVE Daily position nodes.
      *
      * @param center exact run center; blank matches all
