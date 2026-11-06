@@ -94,7 +94,7 @@ public class SubmissionSummaryExcelService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "official-scenario-required",
-                    "An Official Scenario is required before Download Summary.");
+                    "Set a scenario as Official before Download Summary.");
         }
         SubmittedDetailsView submitted = submissions.submittedDetailsReadable(actorCcgid, exerciseId);
         UUID scenarioId = exercise.officialScenarioId();

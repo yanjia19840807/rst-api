@@ -491,7 +491,7 @@ public class SubmissionService {
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "official-scenario-required",
-                        "An Official Scenario is required before Submit."));
+                        "Set a scenario as Official before Submit."));
         officialReadiness.requireReady(exercise, scenario, "Submit");
         return scenarioId;
     }

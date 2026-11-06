@@ -136,7 +136,7 @@ public class ExerciseVolumeTrainingService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "official-scenario-required",
-                    "An official Scenario with saved sizing is required before approval.");
+                    "Set a scenario as Official and save Sizing results before approval.");
         }
         ForecastRun monthlyRun = requireAccepted(officialId, "MONTHLY");
         ForecastRun dailyRun = requireAccepted(officialId, "DAILY");

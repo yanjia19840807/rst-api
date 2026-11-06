@@ -354,7 +354,8 @@ public class ForecastOrchestrationService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_CONTENT,
                     "forecast-sizing-actual-required",
-                    "Sizing month must have Actual Volume before forecast.");
+                    "Enter Actual Volume for the sizing month in Associated Data → Volume Input → Monthly "
+                            + "before forecast.");
         }
 
         List<MonthlyActual> history = new ArrayList<>();
@@ -373,7 +374,8 @@ public class ForecastOrchestrationService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_CONTENT,
                     "forecast-history-empty",
-                    "At least one monthly Actual Volume is required through the sizing month.");
+                    "Enter at least one monthly Actual Volume through the sizing month in "
+                            + "Associated Data → Volume Input → Monthly before forecast.");
         }
         return history;
     }
@@ -407,7 +409,8 @@ public class ForecastOrchestrationService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_CONTENT,
                     "forecast-daily-train-end-actual-required",
-                    "Last day of Daily train (" + trainEnd + ") must have Actual Volume.");
+                    "Enter Actual Volume for the last day of Daily train (" + trainEnd
+                            + ") in Associated Data → Volume Input → Daily before forecast.");
         }
 
         List<DailyActual> history = new ArrayList<>();
@@ -425,7 +428,8 @@ public class ForecastOrchestrationService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_CONTENT,
                     "forecast-history-empty",
-                    "At least one daily Actual Volume is required through the sizing month.");
+                    "Enter at least one daily Actual Volume through the sizing month in "
+                            + "Associated Data → Volume Input → Daily before forecast.");
         }
         return history;
     }
@@ -465,13 +469,15 @@ public class ForecastOrchestrationService {
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "team-setup-required",
-                        "Team Setup is required before forecast."));
+                        "Complete Team Setup in Associated Data before forecast."));
         String weekendCode;
         try {
             weekendCode = WeekendCode.storedValue(setup.getWeekendCode());
-        } catch (IllegalArgumentException ex) {
+        } catch (IllegalArgumentException ignored) {
             throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-weekend-code", ex.getMessage());
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "invalid-weekend-code",
+                    "Set Weekend code in Associated Data → Team Setup before forecast.");
         }
         Map<LocalDate, HolidayDayKind> kinds = HolidayDays.kinds(holidays
                 .findByExerciseIdAndDeletedFalseOrderByHolidayDateAscHolidayNameAsc(exerciseId));

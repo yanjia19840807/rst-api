@@ -97,7 +97,7 @@ public class SlotSimulationService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "shifts-required",
-                    "At least one shift is required before slot simulation.");
+                    "Add at least one shift in Shift Inputs before slot simulation.");
         }
         if (request.shifts().size() > Scenario.MAX_SHIFTS) {
             throw new ApiException(
@@ -174,19 +174,19 @@ public class SlotSimulationService {
                 throw new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "shift-start-required",
-                        "Shift start time is required.");
+                        "Enter a start time for each shift in Shift Inputs.");
             }
             if (request.durationMinutes() == null || request.durationMinutes().signum() <= 0) {
                 throw new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "shift-duration-invalid",
-                        "Shift duration must be positive.");
+                        "Enter a positive duration for each shift in Shift Inputs.");
             }
             if (request.headcount() == null || request.headcount().signum() < 0) {
                 throw new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "shift-headcount-invalid",
-                        "Shift headcount must be zero or greater.");
+                        "Enter a headcount of zero or greater for each shift in Shift Inputs.");
             }
             draft.add(new SlotShift(
                     request.shiftNo(),
@@ -340,7 +340,8 @@ public class SlotSimulationService {
                 throw new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "slot-duration-invalid",
-                        "Slot duration must be positive for " + volume.getSlotStartAt());
+                        "Slot duration must be positive for " + volume.getSlotStartAt()
+                                + ". Check the Slot Period in Associated Data → Volume Input.");
             }
 
             BigDecimal raw = nz(volume.getActualVolume());
@@ -423,7 +424,8 @@ public class SlotSimulationService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "slot-volume-required",
-                    "Set Slot Period and fill Per-slot Volume first.");
+                    "Set a Slot Period and fill Per-slot Volume in Associated Data → Volume Input "
+                            + "before slot simulation.");
         }
         List<SlotShift> shiftRows = overrideShifts != null
                 ? overrideShifts
@@ -432,23 +434,31 @@ public class SlotSimulationService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "shifts-required",
-                    "At least one shift is required before slot simulation.");
+                    "Add at least one shift in Shift Inputs before slot simulation.");
         }
         ExerciseTeamSetup team = teamSetups.findById(exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "team-setup-required",
-                        "Team Setup is required before slot simulation."));
+                        "Complete Team Setup in Associated Data before slot simulation."));
         CycleTimeBaseline baseline = baselines.findByExerciseIdAndActiveTrue(exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "cycle-time-required",
-                        "An active Cycle Time baseline is required before slot simulation."));
+                        "Set a Cycle Time median in Associated Data → TMS before slot simulation. "
+                                + "Apply a TMS period, or enter a manual median."));
 
-        BigDecimal availability = requirePositive(team.getAvailabilityRatio(), "Availability ratio");
+        BigDecimal availability = requirePositive(
+                team.getAvailabilityRatio(),
+                "Availability ratio",
+                "Set Availability ratio to a positive value in Associated Data → Team Setup before slot simulation.");
         BigDecimal automation = team.getAutomationRatio() != null
                 ? team.getAutomationRatio() : BigDecimal.ZERO;
-        BigDecimal cycleTime = requirePositive(baseline.getMedianSeconds(), "Cycle time");
+        BigDecimal cycleTime = requirePositive(
+                baseline.getMedianSeconds(),
+                "Cycle time",
+                "Set a positive Cycle Time median in Associated Data → TMS before slot simulation. "
+                        + "Apply a TMS period, or enter a manual median.");
         BigDecimal slaMinutes = team.getSlaTurnaroundMinutes() != null
                 ? team.getSlaTurnaroundMinutes() : BigDecimal.ZERO;
 
@@ -517,18 +527,20 @@ public class SlotSimulationService {
     private static WeekendCode requireWeekend(String raw) {
         try {
             return WeekendCode.parse(raw);
-        } catch (IllegalArgumentException ex) {
+        } catch (IllegalArgumentException ignored) {
             throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-weekend-code", ex.getMessage());
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "invalid-weekend-code",
+                    "Set Team Weekend for each shift in Shift Inputs.");
         }
     }
 
-    private static BigDecimal requirePositive(BigDecimal value, String label) {
+    private static BigDecimal requirePositive(BigDecimal value, String label, String message) {
         if (value == null || value.signum() <= 0) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "invalid-" + label.toLowerCase().replace(' ', '-'),
-                    label + " must be positive.");
+                    message);
         }
         return value;
     }

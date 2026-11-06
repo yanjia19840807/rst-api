@@ -133,7 +133,7 @@ public class SizingSimulationService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "right-sizing-hc-required",
-                    "rightSizingHc must be a positive number.");
+                    "Enter a positive Right Sizing HC on this scenario.");
         }
         Context ctx = loadContext(ownerCcgid, exerciseId, scenarioId, request.rightSizingHc());
         ForecastBundleView forecast =
@@ -270,7 +270,8 @@ public class SizingSimulationService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "sizing-workdays-zero",
-                    "WorkDays is zero for " + month + "; cannot compute Nominal HC.");
+                    "Work days are zero for " + month
+                            + ". Check Weekend code in Associated Data → Team Setup and holidays in Associated Data → Calendar before sizing.");
         }
         BigDecimal workDays = BigDecimal.valueOf(counts.workDays());
         BigDecimal weekendDays = BigDecimal.valueOf(counts.weekendDays());
@@ -398,7 +399,7 @@ public class SizingSimulationService {
                 throw new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "sizing-hc-mismatch",
-                        "Sizing results do not match the submitted RIGHT_SIZING_HC.");
+                        "Sizing results do not match Right Sizing HC on this scenario. Run Sizing Simulation again.");
             }
         }
     }
@@ -507,19 +508,22 @@ public class SizingSimulationService {
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "team-setup-required",
-                        "Team Setup is required before sizing."));
+                        "Complete Team Setup in Associated Data before sizing."));
         CycleTimeBaseline baseline = baselines.findByExerciseIdAndActiveTrue(exerciseId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "cycle-time-required",
-                        "An active Cycle Time baseline is required before sizing."));
+                        "Set a Cycle Time median in Associated Data → TMS before sizing. "
+                                + "Apply a TMS period, or enter a manual median."));
 
         String weekendCode;
         try {
             weekendCode = WeekendCode.storedValue(team.getWeekendCode());
-        } catch (IllegalArgumentException ex) {
+        } catch (IllegalArgumentException ignored) {
             throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-weekend-code", ex.getMessage());
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "invalid-weekend-code",
+                    "Set Weekend code in Associated Data → Team Setup before sizing.");
         }
         Map<LocalDate, HolidayDayKind> kinds = HolidayDays.kinds(holidays
                 .findByExerciseIdAndDeletedFalseOrderByHolidayDateAscHolidayNameAsc(exerciseId));
@@ -528,10 +532,21 @@ public class SizingSimulationService {
         BigDecimal workingDaysYear = BigDecimal.valueOf(
                 workingDaysCalculator.networkDays(year, weekendCode, List.of()));
 
-        BigDecimal workingHours = requirePositive(team.workingHoursPerDay(), "Working hours per day");
-        BigDecimal availability = requirePositive(team.getAvailabilityRatio(), "Availability ratio");
-        BigDecimal capacity = requirePositive(team.capacityRatio(workingDaysYear), "Capacity ratio");
-        BigDecimal cycleTime = requirePositive(baseline.getMedianSeconds(), "Cycle time");
+        BigDecimal workingHours = requirePositive(
+                team.workingHoursPerDay(),
+                "Set SLA clock start and end in Associated Data → Team Setup before sizing. "
+                        + "Working hours / day is calculated from that clock.");
+        BigDecimal availability = requirePositive(
+                team.getAvailabilityRatio(),
+                "Set Availability ratio to a positive value in Associated Data → Team Setup before sizing.");
+        BigDecimal capacity = requirePositive(
+                team.capacityRatio(workingDaysYear),
+                "Capacity ratio must be positive before sizing. Check Weekend code, Paid leave / year "
+                        + "and Other leave / year in Associated Data → Team Setup.");
+        BigDecimal cycleTime = requirePositive(
+                baseline.getMedianSeconds(),
+                "Set a positive Cycle Time median in Associated Data → TMS before sizing. "
+                        + "Apply a TMS period, or enter a manual median.");
         BigDecimal rightSizingHc = rightSizingHcOverride != null
                 ? rightSizingHcOverride
                 : requireRightSizingHc(scenario);
@@ -559,7 +574,8 @@ public class SizingSimulationService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "team-setup-required",
-                    "Team Setup is incomplete; Support FTE cannot be computed.");
+                    "Complete the SLA clock, Availability ratio, Weekend code and leave days in "
+                            + "Associated Data → Team Setup before sizing. Production Support FTE cannot be computed.");
         }
         supportFte = supportFte.setScale(6, RoundingMode.HALF_UP);
 
@@ -628,15 +644,15 @@ public class SizingSimulationService {
         throw new ApiException(
                 HttpStatus.UNPROCESSABLE_ENTITY,
                 "right-sizing-hc-required",
-                "rightSizingHc must be a positive number before sizing.");
+                "Enter a positive Right Sizing HC on this scenario before sizing.");
     }
 
-    private static BigDecimal requirePositive(BigDecimal value, String label) {
+    private static BigDecimal requirePositive(BigDecimal value, String message) {
         if (value == null || value.signum() <= 0) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "sizing-input-required",
-                    label + " must be set to a positive value before sizing.");
+                    message);
         }
         return value;
     }

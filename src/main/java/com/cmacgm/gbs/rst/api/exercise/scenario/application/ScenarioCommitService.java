@@ -224,6 +224,6 @@ public class ScenarioCommitService {
         throw new ApiException(
                 HttpStatus.UNPROCESSABLE_ENTITY,
                 "right-sizing-hc-required",
-                "rightSizingHc must be a positive number when saving sizing results.");
+                "Enter a positive Right Sizing HC on this scenario before saving sizing results.");
     }
 }

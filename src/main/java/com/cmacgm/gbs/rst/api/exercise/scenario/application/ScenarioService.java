@@ -257,7 +257,8 @@ public class ScenarioService {
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "cycle-time-required",
-                        "An active Cycle Time baseline is required before Official."));
+                        "Set a Cycle Time median in Associated Data → TMS before marking Official. "
+                                + "Apply a TMS period, or enter a manual median."));
         officialReadiness.requireReady(exercise, scenario, "Official");
 
         exercise.setOfficialScenario(scenario.getId());
@@ -279,7 +280,7 @@ public class ScenarioService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "official-scenario-required",
-                    "An Official Scenario is required before Submit.");
+                    "Set a scenario as Official before Submit.");
         }
         return scenarioId;
     }
@@ -341,9 +342,11 @@ public class ScenarioService {
     private static String requireWeekendCode(String raw) {
         try {
             return WeekendCode.storedValue(raw);
-        } catch (IllegalArgumentException ex) {
+        } catch (IllegalArgumentException ignored) {
             throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY, "invalid-weekend-code", ex.getMessage());
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "invalid-weekend-code",
+                    "Set Team Weekend for each shift in Shift Inputs.");
         }
     }
 }
