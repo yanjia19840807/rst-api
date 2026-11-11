@@ -22,6 +22,7 @@ import com.cmacgm.gbs.rst.api.exercise.scenario.application.SlotSimulationServic
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.PreviewSlotRequest;
 import com.cmacgm.gbs.rst.api.exercise.scenario.api.dto.SlotSimulationView;
 import com.cmacgm.gbs.rst.api.delegation.application.PositionCoverage;
+import com.cmacgm.gbs.rst.api.security.ExerciseReadAccess;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -42,7 +43,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/exercises/{exerciseId}/scenarios")
-@PreAuthorize("hasAnyRole('SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
+@PreAuthorize(ExerciseReadAccess.AUTHORIZE)
 public class ScenarioController {
 
     private final ScenarioService scenarios;

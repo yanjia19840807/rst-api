@@ -10,6 +10,7 @@ import java.util.List;
 public record ValidationWorkflowRow(
         String exerciseNo,
         String exerciseUuid,
+        String submissionId,
         String gbs,
         String domain,
         String pl1,

@@ -12,6 +12,7 @@ import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.ApprovalQueueView;
 import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.ApproveRequest;
 import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.QueueQuery;
 import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.ReturnRequest;
+import com.cmacgm.gbs.rst.api.security.ApprovalAccess;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -29,7 +30,6 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/approvals")
-@PreAuthorize("hasAnyRole('SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD','SUPERVISOR')")
 public class ApprovalController {
 
     private final ApprovalService approvals;
@@ -69,6 +69,7 @@ public class ApprovalController {
      * @return one page of filtered queue, filter options, and awaiting metrics
      */
     @GetMapping("/queue")
+    @PreAuthorize(ApprovalAccess.DECIDE)
     public ApprovalQueueView queue(
             @RequestParam(required = false, defaultValue = "AWAITING") String status,
             @RequestParam(required = false, defaultValue = "false") boolean completed,
@@ -124,6 +125,7 @@ public class ApprovalController {
      * @return review detail
      */
     @GetMapping("/{submissionId}")
+    @PreAuthorize(ApprovalAccess.READ)
     public ApprovalDetailView detail(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID submissionId) {
@@ -139,6 +141,7 @@ public class ApprovalController {
      * @return updated review detail
      */
     @PostMapping("/{submissionId}/approve")
+    @PreAuthorize(ApprovalAccess.DECIDE)
     public ApprovalDetailView approve(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID submissionId,
@@ -159,6 +162,7 @@ public class ApprovalController {
      * @return updated review detail
      */
     @PostMapping("/{submissionId}/return")
+    @PreAuthorize(ApprovalAccess.DECIDE)
     public ApprovalDetailView returnToSupervisor(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID submissionId,

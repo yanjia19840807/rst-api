@@ -159,6 +159,7 @@ class SupportRepositoryFiltersTests {
         return new SupportRepositoryRow(
                 "EX-1",
                 UUID.fromString("11111111-1111-1111-1111-111111111111"),
+                null,
                 center,
                 "Finance",
                 "PL1",

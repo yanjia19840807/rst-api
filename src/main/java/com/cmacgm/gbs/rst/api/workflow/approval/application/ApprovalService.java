@@ -235,10 +235,10 @@ public class ApprovalService {
         for (ApprovalQueueItem item : awaiting) {
             int days = item.agingDays() == null ? 0 : item.agingDays();
             if (days >= 5) {
-                overdue++;
-                highRisk++;
-            } else if (days >= 3) {
                 dueSoon++;
+                highRisk++;
+            } else if (days >= 2) {
+                overdue++;
             }
         }
         return new QueueMetrics(awaiting.size(), overdue, dueSoon, highRisk);

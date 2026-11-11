@@ -75,6 +75,7 @@ class RepositoryRowFiltersTests {
         RepositoryRow row = new RepositoryRow(
                 "EX-1",
                 UUID.fromString("00000000-0000-0000-0000-000000000001"),
+                null,
                 "CMA",
                 "SITE",
                 "Shanghai",
@@ -150,6 +151,7 @@ class RepositoryRowFiltersTests {
         return new RepositoryRow(
                 exerciseId,
                 UUID.fromString("00000000-0000-0000-0000-000000000001"),
+                null,
                 "CMA",
                 "SITE",
                 country,

@@ -14,6 +14,7 @@ import com.cmacgm.gbs.rst.api.exercise.cycletime.api.dto.ManualBaselineRequest;
 import com.cmacgm.gbs.rst.api.exercise.cycletime.api.dto.PatchTmsSessionRequest;
 import com.cmacgm.gbs.rst.api.exercise.cycletime.api.dto.PatchTmsSessionResult;
 import com.cmacgm.gbs.rst.api.delegation.application.PositionCoverage;
+import com.cmacgm.gbs.rst.api.security.ExerciseReadAccess;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -35,7 +36,7 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @RestController
 @RequestMapping("/api/v1/exercises/{exerciseId}/cycle-time")
-@PreAuthorize("hasAnyRole('SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
+@PreAuthorize(ExerciseReadAccess.AUTHORIZE)
 public class CycleTimeController {
 
     private final CycleTimeService service;

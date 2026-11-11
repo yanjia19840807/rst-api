@@ -28,6 +28,8 @@ import com.cmacgm.gbs.rst.api.governance.api.dto.SupportRepositoryView;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.supportcategory.api.dto.SupportCategoryOption;
 import com.cmacgm.gbs.rst.api.supportcategory.application.SupportCategoryService;
+import com.cmacgm.gbs.rst.api.workflow.domain.ProcessInstance;
+import com.cmacgm.gbs.rst.api.workflow.persistence.ProcessInstanceRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +44,7 @@ public class SupportRepositoryService {
     private final ExerciseTeamSetupRepository teamSetups;
     private final WorkingDaysService workingDaysService;
     private final SupportCategoryService supportCategories;
+    private final ProcessInstanceRepository workflows;
 
     /**
      * @param exercises Exercise aggregate
@@ -49,18 +52,21 @@ public class SupportRepositoryService {
      * @param teamSetups Team Setup used for Support FTE
      * @param workingDaysService working days for Support FTE
      * @param supportCategories Category lookup for dropdowns
+     * @param workflows submission id for each Exercise
      */
     public SupportRepositoryService(
             RstExerciseRepository exercises,
             ExerciseProductionSupportItemRepository supportItems,
             ExerciseTeamSetupRepository teamSetups,
             WorkingDaysService workingDaysService,
-            SupportCategoryService supportCategories) {
+            SupportCategoryService supportCategories,
+            ProcessInstanceRepository workflows) {
         this.exercises = exercises;
         this.supportItems = supportItems;
         this.teamSetups = teamSetups;
         this.workingDaysService = workingDaysService;
         this.supportCategories = supportCategories;
+        this.workflows = workflows;
     }
 
     /**
@@ -122,12 +128,14 @@ public class SupportRepositoryService {
         }
         Map<UUID, List<ExerciseProductionSupportItem>> itemsByExercise = itemsByExercise(approved);
         Map<UUID, ExerciseTeamSetup> setups = setupsByExercise(approved);
+        Map<UUID, UUID> submissionByExercise = submissionIdByExercise(approved);
         List<SupportRepositoryRow> source = new ArrayList<>();
         for (RstExercise exercise : approved) {
             source.addAll(rowsFor(
                     exercise,
                     itemsByExercise.getOrDefault(exercise.getId(), List.of()),
-                    setups.get(exercise.getId())));
+                    setups.get(exercise.getId()),
+                    submissionByExercise.get(exercise.getId())));
         }
         source.sort(Comparator
                 .comparing(SupportRepositoryRow::validatedDate, Comparator.nullsLast(Comparator.reverseOrder()))
@@ -143,10 +151,20 @@ public class SupportRepositoryService {
     private record FilteredSupport(List<SupportRepositoryRow> source, List<SupportRepositoryRow> items) {
     }
 
+    private Map<UUID, UUID> submissionIdByExercise(List<RstExercise> items) {
+        List<UUID> exerciseIds = items.stream().map(RstExercise::getId).toList();
+        Map<UUID, UUID> result = new HashMap<>();
+        for (ProcessInstance workflow : workflows.findByExerciseIdIn(exerciseIds)) {
+            result.put(workflow.getExerciseId(), workflow.getId());
+        }
+        return result;
+    }
+
     private List<SupportRepositoryRow> rowsFor(
             RstExercise exercise,
             List<ExerciseProductionSupportItem> items,
-            ExerciseTeamSetup setup) {
+            ExerciseTeamSetup setup,
+            UUID submissionId) {
         if (items.isEmpty()) {
             return List.of();
         }
@@ -173,6 +191,7 @@ public class SupportRepositoryService {
             rows.add(new SupportRepositoryRow(
                     exercise.getExerciseCode(),
                     exercise.getId(),
+                    submissionId,
                     center,
                     domain,
                     pl1,

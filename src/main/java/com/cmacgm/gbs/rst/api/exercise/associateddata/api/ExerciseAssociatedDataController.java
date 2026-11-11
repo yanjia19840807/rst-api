@@ -24,6 +24,7 @@ import com.cmacgm.gbs.rst.api.exercise.associateddata.api.dto.TeamSetupView;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.ToolkitVolumePointsView;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.ToolkitVolumeSummaryView;
 import com.cmacgm.gbs.rst.api.delegation.application.PositionCoverage;
+import com.cmacgm.gbs.rst.api.security.ExerciseReadAccess;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -48,7 +49,7 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @RestController
 @RequestMapping("/api/v1/exercises/{exerciseId}")
-@PreAuthorize("hasAnyRole('SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
+@PreAuthorize(ExerciseReadAccess.AUTHORIZE)
 public class ExerciseAssociatedDataController {
 
     private final AssociatedDataService service;

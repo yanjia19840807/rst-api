@@ -34,6 +34,8 @@ import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryRow;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.WorkingDaysService;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
+import com.cmacgm.gbs.rst.api.workflow.domain.ProcessInstance;
+import com.cmacgm.gbs.rst.api.workflow.persistence.ProcessInstanceRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,6 +52,7 @@ public class RstRepositoryService {
     private final ExerciseTeamSetupRepository teamSetups;
     private final WorkingDaysService workingDaysService;
     private final GeographyService geography;
+    private final ProcessInstanceRepository workflows;
 
     /**
      * @param exercises Exercise aggregate
@@ -58,6 +61,7 @@ public class RstRepositoryService {
      * @param teamSetups Team Setup used for Support FTE
      * @param workingDaysService working days for Support FTE
      * @param geography region and cluster country limits
+     * @param workflows submission id for each Exercise
      */
     public RstRepositoryService(
             RstExerciseRepository exercises,
@@ -65,13 +69,15 @@ public class RstRepositoryService {
             ExerciseProductionSupportItemRepository supportItems,
             ExerciseTeamSetupRepository teamSetups,
             WorkingDaysService workingDaysService,
-            GeographyService geography) {
+            GeographyService geography,
+            ProcessInstanceRepository workflows) {
         this.exercises = exercises;
         this.scenarios = scenarios;
         this.supportItems = supportItems;
         this.teamSetups = teamSetups;
         this.workingDaysService = workingDaysService;
         this.geography = geography;
+        this.workflows = workflows;
     }
 
     /**
@@ -185,9 +191,14 @@ public class RstRepositoryService {
         }
         Map<UUID, BigDecimal> rightSizingByExercise = rightSizingByExercise(approved);
         Map<UUID, BigDecimal> supportByExercise = supportByExercise(approved);
+        Map<UUID, UUID> submissionByExercise = submissionIdByExercise(approved);
         List<RepositoryRow> source = new ArrayList<>();
         for (RstExercise exercise : approved) {
-            source.addAll(rowsFor(exercise, rightSizingByExercise, supportByExercise));
+            source.addAll(rowsFor(
+                    exercise,
+                    rightSizingByExercise,
+                    supportByExercise,
+                    submissionByExercise.get(exercise.getId())));
         }
         source.sort(Comparator
                 .comparing(RepositoryRow::validatedDate, Comparator.nullsLast(Comparator.reverseOrder()))
@@ -246,10 +257,20 @@ public class RstRepositoryService {
                 totals.capacityCreation());
     }
 
+    private Map<UUID, UUID> submissionIdByExercise(List<RstExercise> items) {
+        List<UUID> exerciseIds = items.stream().map(RstExercise::getId).toList();
+        Map<UUID, UUID> result = new HashMap<>();
+        for (ProcessInstance workflow : workflows.findByExerciseIdIn(exerciseIds)) {
+            result.put(workflow.getExerciseId(), workflow.getId());
+        }
+        return result;
+    }
+
     private List<RepositoryRow> rowsFor(
             RstExercise exercise,
             Map<UUID, BigDecimal> rightSizingByExercise,
-            Map<UUID, BigDecimal> supportByExercise) {
+            Map<UUID, BigDecimal> supportByExercise,
+            UUID submissionId) {
         ExerciseToolkitSnapshot snapshot = exercise.getToolkitSnapshot();
         String toolkitName = snapshot == null ? "" : snapshot.getToolkitName();
         BigDecimal totalDelivery = deliveryHc(exercise);
@@ -267,6 +288,7 @@ public class RstRepositoryService {
             rows.add(new RepositoryRow(
                     exercise.getExerciseCode(),
                     exercise.getId(),
+                    submissionId,
                     line.getCarrier(),
                     line.getSite(),
                     line.getCenter(),

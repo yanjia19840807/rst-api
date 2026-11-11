@@ -6,11 +6,13 @@ import java.util.UUID;
 /**
  * One RST Repository row: a frozen Shared KPI line on an APPROVED Exercise.
  * {@code exerciseId} is the business code shown in the table; {@code exerciseUuid}
- * is the Exercise id used to open Toolkit Info.
+ * is the Exercise id used to open Toolkit Info. {@code submissionId} opens the
+ * read-only Submission Review.
  */
 public record RepositoryRow(
         String exerciseId,
         UUID exerciseUuid,
+        UUID submissionId,
         String carrier,
         String site,
         String country,

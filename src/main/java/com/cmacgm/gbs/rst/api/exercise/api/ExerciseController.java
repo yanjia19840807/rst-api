@@ -18,6 +18,7 @@ import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateSlotPeriodResult;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateTmsPeriodRequest;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
 import com.cmacgm.gbs.rst.api.delegation.application.PositionCoverage;
+import com.cmacgm.gbs.rst.api.security.ExerciseReadAccess;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.exercise.submission.application.SubmissionService;
 import com.cmacgm.gbs.rst.api.exercise.submission.application.SubmissionSummaryExcelService;
@@ -191,7 +192,7 @@ public class ExerciseController {
      * @return Exercise detail
      */
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
+    @PreAuthorize(ExerciseReadAccess.AUTHORIZE)
     public ExerciseResponse detail(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
@@ -278,7 +279,7 @@ public class ExerciseController {
      * Returns how many scenarios have saved Forecast / Simulation snapshots.
      */
     @GetMapping("/{id}/committed-results")
-    @PreAuthorize("hasAnyRole('SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
+    @PreAuthorize(ExerciseReadAccess.AUTHORIZE)
     public CommittedResultsStatus committedResults(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
@@ -338,7 +339,7 @@ public class ExerciseController {
      * @return submitted details
      */
     @GetMapping("/{id}/submitted-details")
-    @PreAuthorize("hasRole('SUPERVISOR')")
+    @PreAuthorize(ExerciseReadAccess.AUTHORIZE)
     public SubmittedDetailsView submittedDetails(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {
@@ -349,7 +350,7 @@ public class ExerciseController {
      * Downloads the Official Scenario package as an Excel annex.
      */
     @GetMapping("/{id}/summary.xlsx")
-    @PreAuthorize("hasAnyRole('SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD')")
+    @PreAuthorize(ExerciseReadAccess.AUTHORIZE)
     public ResponseEntity<byte[]> downloadSummary(
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID id) {

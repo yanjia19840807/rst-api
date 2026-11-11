@@ -36,6 +36,7 @@ class RepositoryListMathTests {
         return new RepositoryRow(
                 "EX-1",
                 UUID.fromString("11111111-1111-1111-1111-111111111111"),
+                null,
                 "CMA",
                 "SHA",
                 "GBS CHINA",

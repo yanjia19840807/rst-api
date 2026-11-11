@@ -224,6 +224,7 @@ public class ValidationWorkflowService {
         return new ValidationWorkflowRow(
                 blankToEmpty(exercise.getExerciseCode()),
                 exercise.getId().toString(),
+                review == null ? "" : blankToEmpty(review.submissionId()),
                 snapshot == null ? "" : blankToEmpty(snapshot.getCenter()),
                 snapshot == null ? "" : blankToEmpty(snapshot.getDomain()),
                 snapshot == null ? "" : blankToEmpty(snapshot.getPl1()),
@@ -269,7 +270,14 @@ public class ValidationWorkflowService {
                             workflowRouter.occupantName(ready.getNode().roleCode(), positionId),
                             displayName(names, ownerCcgid));
             Instant agingFrom = WorkflowAging.currentStepStartedAt(workflow, exercise.getSubmittedAt());
-            result.put(exercise.getId(), new ReviewState(role, owner, ownerCcgid, agingFrom));
+            result.put(
+                    exercise.getId(),
+                    new ReviewState(
+                            role,
+                            owner,
+                            ownerCcgid,
+                            agingFrom,
+                            workflow == null ? "" : workflow.getId().toString()));
         }
         return result;
     }
@@ -463,6 +471,10 @@ public class ValidationWorkflowService {
     }
 
     private record ReviewState(
-            String requiredRole, String currentOwner, String currentOwnerCcgid, Instant agingFrom) {
+            String requiredRole,
+            String currentOwner,
+            String currentOwnerCcgid,
+            Instant agingFrom,
+            String submissionId) {
     }
 }

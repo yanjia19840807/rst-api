@@ -8,10 +8,12 @@ import java.util.UUID;
  * One Support Repository row: a Production Support activity on an APPROVED Exercise.
  * Shared KPI scope is copied from the Exercise (not split by KPI line).
  * {@code exerciseUuid} opens Toolkit Info; {@code exerciseNo} is the business code.
+ * {@code submissionId} opens the read-only Submission Review.
  */
 public record SupportRepositoryRow(
         String exerciseNo,
         UUID exerciseUuid,
+        UUID submissionId,
         String center,
         String domain,
         String pl1,
