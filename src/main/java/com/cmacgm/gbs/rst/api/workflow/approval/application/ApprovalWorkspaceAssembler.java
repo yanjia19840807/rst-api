@@ -10,6 +10,7 @@ import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.ApprovalWorkspaceView;
 import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.ApprovalWorkspaceView.ApprovalCurrentHop;
 import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.ApprovalWorkspaceView.ApprovalHistoryRow;
 import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.ApprovalWorkspaceView.ApprovalStatusBar;
+import com.cmacgm.gbs.rst.api.workflow.approval.api.dto.ApprovalWorkspaceView.NextHandlerView;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
@@ -78,6 +79,7 @@ public class ApprovalWorkspaceAssembler {
                 nextReviewer,
                 next.reviewerCcgid(),
                 nextBy,
+                nextHandlers(next),
                 history(workflow, displayNames, null));
     }
 
@@ -106,7 +108,17 @@ public class ApprovalWorkspaceAssembler {
                 null,
                 null,
                 null,
+                List.of(),
                 history(workflow, displayNames, mineStep));
+    }
+
+    private static List<NextHandlerView> nextHandlers(WorkflowRouter.NextHop next) {
+        if (next.handlers() == null || next.handlers().isEmpty()) {
+            return List.of();
+        }
+        return next.handlers().stream()
+                .map(handler -> new NextHandlerView(handler.positionId(), handler.name(), handler.ccgid()))
+                .toList();
     }
 
     private ApprovalStatusBar completedStatusBar(ProcessInstance workflow, Waiting waiting) {

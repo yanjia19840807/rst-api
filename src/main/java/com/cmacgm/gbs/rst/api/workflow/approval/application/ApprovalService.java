@@ -386,7 +386,9 @@ public class ApprovalService {
             TaskNode next = current.getNode().nextReview();
             if (next == TaskNode.DOMAIN_HEAD) {
                 WorkflowRouter.RoutedStep cdh = workflowRouter.resolveCdh(
-                        toolkitCenter(loaded.exercise()), toolkitDomain(loaded.exercise()));
+                        toolkitCenter(loaded.exercise()),
+                        toolkitDomain(loaded.exercise()),
+                        request.nextPositionId());
                 loaded.workflow().openReview(
                         next,
                         List.of(new ProcessInstance.Assignee(cdh.positionId(), cdh.assigneeCcgid())),

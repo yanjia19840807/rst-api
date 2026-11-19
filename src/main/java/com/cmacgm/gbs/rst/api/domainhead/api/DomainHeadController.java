@@ -61,7 +61,7 @@ public class DomainHeadController {
     }
 
     /**
-     * Saves dirty LTH / Domain Head mappings and remounts READY steps that changed.
+     * Saves dirty LTH / Domain Head mappings and remounts READY LTH steps that changed.
      *
      * @param principal current caller
      * @param request dirty rows (and center for ADMIN)

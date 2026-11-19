@@ -10,7 +10,7 @@ import jakarta.validation.constraints.NotBlank;
  *
  * @param center GBS center; required for ADMIN, ignored for LTH (identity center)
  * @param lthPositionId Center LTH position; blank clears; omit to leave unchanged
- * @param mappings changed Domain Head rows; {@code positionId} blank clears the Domain
+ * @param mappings changed Domain Head rows; an empty {@code positionIds} list clears the Domain
  */
 public record SaveDomainHeadsRequest(
         String center, String lthPositionId, @Valid List<Mapping> mappings) {
@@ -19,8 +19,8 @@ public record SaveDomainHeadsRequest(
      * One Domain mapping.
      *
      * @param domain GBS Domain
-     * @param positionId bindable position, or blank to clear
+     * @param positionIds bindable positions, or empty to clear
      */
-    public record Mapping(@NotBlank String domain, String positionId) {
+    public record Mapping(@NotBlank String domain, List<String> positionIds) {
     }
 }

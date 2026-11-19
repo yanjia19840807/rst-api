@@ -1,7 +1,5 @@
 package com.cmacgm.gbs.rst.api.domainhead.application;
 
-import java.time.Clock;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -15,11 +13,14 @@ import com.cmacgm.gbs.rst.api.audit.domain.AuditAction;
 import com.cmacgm.gbs.rst.api.audit.domain.AuditEntityType;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.domainhead.api.dto.CenterRoleAssigneeView;
+import com.cmacgm.gbs.rst.api.domainhead.api.dto.DomainHeadAssigneeView;
 import com.cmacgm.gbs.rst.api.domainhead.api.dto.DomainHeadPageView;
 import com.cmacgm.gbs.rst.api.domainhead.api.dto.DomainHeadRowView;
 import com.cmacgm.gbs.rst.api.domainhead.api.dto.SaveDomainHeadsRequest;
 import com.cmacgm.gbs.rst.api.domainhead.domain.CenterDomainHead;
+import com.cmacgm.gbs.rst.api.domainhead.domain.CenterDomainHeadAssignee;
 import com.cmacgm.gbs.rst.api.domainhead.domain.CenterLth;
+import com.cmacgm.gbs.rst.api.domainhead.persistence.CenterDomainHeadAssigneeRepository;
 import com.cmacgm.gbs.rst.api.domainhead.persistence.CenterDomainHeadRepository;
 import com.cmacgm.gbs.rst.api.domainhead.persistence.CenterLthRepository;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
@@ -37,8 +38,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Center Roles: one LTH plus Center × Domain CDH mappings, and remount of READY steps.
- * LTH always uses identity Center; ADMIN may select any ACTIVE Person/Scope center.
+ * Center Roles: one LTH plus Center × Domain CDH candidates.
+ * LTH changes remount READY LTH steps. Domain Head changes apply the next time
+ * a reviewer chooses the handler. LTH always uses identity Center; ADMIN may
+ * select any ACTIVE Person/Scope center.
  */
 @Service
 public class DomainHeadConfigService {
@@ -48,35 +51,35 @@ public class DomainHeadConfigService {
     public static final String STATUS_STALE = "STALE";
 
     private final CenterDomainHeadRepository mappings;
+    private final CenterDomainHeadAssigneeRepository assignees;
     private final CenterLthRepository lthMappings;
     private final TimesheetReadService timesheet;
     private final ProcessInstanceRepository workflows;
     private final AuditRecorder audits;
-    private final Clock clock;
 
     /**
      * Creates the Center Roles config service.
      *
      * @param mappings Center × Domain CDH rows
+     * @param assignees Domain Head candidates
      * @param lthMappings Center LTH rows
      * @param timesheet ACTIVE Daily / Monthly org
-     * @param workflows in-flight remount
+     * @param workflows in-flight LTH remount
      * @param audits who changed each mapping
-     * @param clock timestamps
      */
     public DomainHeadConfigService(
             CenterDomainHeadRepository mappings,
+            CenterDomainHeadAssigneeRepository assignees,
             CenterLthRepository lthMappings,
             TimesheetReadService timesheet,
             ProcessInstanceRepository workflows,
-            AuditRecorder audits,
-            Clock clock) {
+            AuditRecorder audits) {
         this.mappings = mappings;
+        this.assignees = assignees;
         this.lthMappings = lthMappings;
         this.timesheet = timesheet;
         this.workflows = workflows;
         this.audits = audits;
-        this.clock = clock;
     }
 
     /**
@@ -102,7 +105,8 @@ public class DomainHeadConfigService {
     }
 
     /**
-     * Saves dirty LTH / Domain Head mappings and remounts READY steps that changed.
+     * Saves dirty LTH / Domain Head mappings. A changed LTH remounts READY LTH steps.
+     * Domain Head candidates are stored for the next approval choice.
      *
      * @param principal current caller
      * @param request dirty rows (and center for ADMIN)
@@ -114,7 +118,6 @@ public class DomainHeadConfigService {
         if (!hasText(center)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "invalid-center", "center is required.");
         }
-        Instant now = clock.instant();
         int remounted = 0;
         if (request != null && request.lthPositionId() != null) {
             remounted += saveLth(center, request.lthPositionId());
@@ -124,64 +127,81 @@ public class DomainHeadConfigService {
                         ? List.of()
                         : request.mappings();
         for (SaveDomainHeadsRequest.Mapping mapping : mappingsToSave) {
-            String domain = requireText(mapping.domain(), "domain");
-            String positionId = blankToNull(mapping.positionId());
-            CenterDomainHead existing = mappings.findByKeyCenterAndKeyDomain(center, domain).orElse(null);
-            String previousPosition = existing == null ? null : existing.getPositionId();
-            if (positionId == null) {
-                if (existing != null && hasText(previousPosition)) {
-                    existing.clear();
-                    audit(existing, AuditAction.DELETE);
-                    remounted += remountReady(center, domain, null, now);
-                }
-                continue;
-            }
-            requireCandidate(center, positionId);
-            if (existing == null) {
-                CenterDomainHead created = CenterDomainHead.create(center, domain, positionId);
-                audit(created, AuditAction.CREATE);
-                mappings.save(created);
-            } else if (!positionId.equals(previousPosition)) {
-                existing.replace(positionId);
-                audit(existing, hasText(previousPosition) ? AuditAction.UPDATE : AuditAction.CREATE);
-            }
-            if (!Objects.equals(previousPosition, positionId)) {
-                remounted += remountReady(center, domain, positionId, now);
-            }
+            saveDomain(center, mapping);
         }
         return page(center, remounted);
     }
 
+    private void saveDomain(String center, SaveDomainHeadsRequest.Mapping mapping) {
+        String domain = requireText(mapping.domain(), "domain");
+        List<String> next = normalizeIds(mapping.positionIds());
+        List<String> previous = storedIds(center, domain);
+        CenterDomainHead existing = mappings.findByKeyCenterAndKeyDomain(center, domain).orElse(null);
+        if (next.isEmpty()) {
+            if (existing != null && !previous.isEmpty()) {
+                replaceAssignees(center, domain, List.of());
+                audit(existing, AuditAction.DELETE);
+            }
+            return;
+        }
+        if (previous.equals(next)) {
+            return;
+        }
+        for (String positionId : next) {
+            requireCandidate(center, positionId);
+        }
+        if (existing == null) {
+            CenterDomainHead created = CenterDomainHead.create(center, domain);
+            audit(created, AuditAction.CREATE);
+            mappings.saveAndFlush(created);
+        } else {
+            audit(existing, previous.isEmpty() ? AuditAction.CREATE : AuditAction.UPDATE);
+        }
+        replaceAssignees(center, domain, next);
+    }
+
     /**
-     * Resolves a valid configured CDH for Center × Domain.
+     * Resolves the Domain Head who will own the next review. One live candidate
+     * is used automatically. Several live candidates require {@code selectedPositionId}.
      *
      * @param center GBS center
      * @param domain GBS domain
+     * @param selectedPositionId position chosen in the confirm dialog, if any
      * @return routed CDH step
      */
     @Transactional(readOnly = true)
-    public WorkflowRouter.RoutedStep requireCdh(String center, String domain) {
-        Resolved resolved = resolve(center, domain);
-        if (resolved == null || !STATUS_CONFIGURED.equals(resolved.status())) {
+    public WorkflowRouter.RoutedStep requireCdh(String center, String domain, String selectedPositionId) {
+        List<WorkflowRouter.RoutedStep> live = liveCdhs(center, domain);
+        if (live.isEmpty()) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
                     "domain-head-not-configured",
                     "Domain Head is not configured for " + nullToBlank(center) + " / " + nullToBlank(domain) + ".");
         }
-        return new WorkflowRouter.RoutedStep(resolved.positionId(), resolved.ccgid(), resolved.name());
+        return CdhSelection.choose(live, selectedPositionId);
     }
 
     /**
-     * Configured CDH position when the mapping is still valid.
+     * Live Domain Head candidates for Center × Domain, in selection order.
      *
      * @param center GBS center
      * @param domain GBS domain
-     * @return position id, or null
+     * @return people still in the Center
      */
     @Transactional(readOnly = true)
-    public String configuredPositionId(String center, String domain) {
-        Resolved resolved = resolve(center, domain);
-        return resolved == null || !STATUS_CONFIGURED.equals(resolved.status()) ? null : resolved.positionId();
+    public List<WorkflowRouter.RoutedStep> liveCdhs(String center, String domain) {
+        if (!hasText(center) || !hasText(domain)) {
+            return List.of();
+        }
+        List<WorkflowRouter.RoutedStep> live = new ArrayList<>();
+        for (CenterDomainHeadAssignee row : assignees.findByKeyCenterAndKeyDomainOrderBySortOrderAsc(center, domain)) {
+            DomainHeadAssigneeView view = toAssignee(center, row.getPositionId());
+            if (!STATUS_CONFIGURED.equals(view.status())) {
+                continue;
+            }
+            live.add(new WorkflowRouter.RoutedStep(view.positionId(), view.ccgid(), view.name()));
+        }
+        return List.copyOf(live);
     }
 
     /**
@@ -199,7 +219,7 @@ public class DomainHeadConfigService {
         }
         String id = ccgid.trim();
         Set<String> keys = new LinkedHashSet<>();
-        for (CenterDomainHead row : mappings.findAll()) {
+        for (CenterDomainHeadAssignee row : assignees.findAll()) {
             if (!hasText(row.getPositionId())) {
                 continue;
             }
@@ -279,8 +299,7 @@ public class DomainHeadConfigService {
      */
     @Transactional(readOnly = true)
     public boolean isConfigured(String center, String domain) {
-        Resolved resolved = resolve(center, domain);
-        return resolved != null && STATUS_CONFIGURED.equals(resolved.status());
+        return !liveCdhs(center, domain).isEmpty();
     }
 
     /**
@@ -307,20 +326,13 @@ public class DomainHeadConfigService {
             return new DomainHeadPageView(
                     nullToBlank(center), dailyAvailable, monthlyAvailable, remountedCount, lth, List.of());
         }
-        Map<String, CenterDomainHead> byDomain = new LinkedHashMap<>();
-        for (CenterDomainHead row : mappings.findByKeyCenterOrderByKeyDomainAsc(center)) {
-            byDomain.put(row.getDomain(), row);
+        Map<String, List<String>> idsByDomain = new LinkedHashMap<>();
+        for (CenterDomainHeadAssignee row : assignees.findByKeyCenterOrderBySortOrderAsc(center)) {
+            idsByDomain.computeIfAbsent(row.getDomain(), ignored -> new ArrayList<>()).add(row.getPositionId());
         }
         List<DomainHeadRowView> domains = new ArrayList<>();
         for (String domain : timesheet.domainsInCenter(center)) {
-            CenterDomainHead row = byDomain.get(domain);
-            Resolved resolved = resolveRow(center, domain, row);
-            domains.add(new DomainHeadRowView(
-                    domain,
-                    resolved.positionId(),
-                    resolved.ccgid(),
-                    resolved.name(),
-                    resolved.status()));
+            domains.add(toDomainRow(center, domain, idsByDomain.getOrDefault(domain, List.of())));
         }
         return new DomainHeadPageView(center, true, true, remountedCount, lth, domains);
     }
@@ -342,23 +354,62 @@ public class DomainHeadConfigService {
                 "Center Roles configuration requires LTH or ADMIN.");
     }
 
-    private Resolved resolve(String center, String domain) {
-        if (!hasText(center) || !hasText(domain)) {
-            return null;
+    private DomainHeadRowView toDomainRow(String center, String domain, List<String> positionIds) {
+        List<DomainHeadAssigneeView> people = new ArrayList<>();
+        for (String positionId : positionIds) {
+            if (hasText(positionId)) {
+                people.add(toAssignee(center, positionId.trim()));
+            }
         }
-        return resolveRow(center, domain, mappings.findByKeyCenterAndKeyDomain(center, domain).orElse(null));
+        return new DomainHeadRowView(domain, List.copyOf(people), aggregateStatus(people));
     }
 
-    private Resolved resolveRow(String center, String domain, CenterDomainHead row) {
-        if (row == null || !hasText(row.getPositionId())) {
-            return new Resolved(domain, null, null, null, STATUS_MISSING);
+    private DomainHeadAssigneeView toAssignee(String center, String positionId) {
+        Occupant occupant = timesheet.occupant(positionId);
+        boolean live = occupant != null
+                && hasText(occupant.ccgid())
+                && timesheet.personInCenter(occupant.ccgid(), center);
+        return new DomainHeadAssigneeView(
+                positionId,
+                occupant == null ? null : blankToNull(occupant.ccgid()),
+                occupant == null ? null : blankToNull(occupant.name()),
+                live ? STATUS_CONFIGURED : STATUS_STALE);
+    }
+
+    private static String aggregateStatus(List<DomainHeadAssigneeView> people) {
+        if (people.isEmpty()) {
+            return STATUS_MISSING;
         }
-        Occupant occupant = timesheet.occupant(row.getPositionId());
-        if (occupant == null || !hasText(occupant.ccgid()) || !timesheet.personInCenter(occupant.ccgid(), center)) {
-            return new Resolved(domain, row.getPositionId(), occupant == null ? null : occupant.ccgid(),
-                    occupant == null ? null : occupant.name(), STATUS_STALE);
+        boolean anyLive = people.stream().anyMatch(person -> STATUS_CONFIGURED.equals(person.status()));
+        return anyLive ? STATUS_CONFIGURED : STATUS_STALE;
+    }
+
+    private List<String> storedIds(String center, String domain) {
+        return assignees.findByKeyCenterAndKeyDomainOrderBySortOrderAsc(center, domain).stream()
+                .map(CenterDomainHeadAssignee::getPositionId)
+                .toList();
+    }
+
+    private void replaceAssignees(String center, String domain, List<String> positionIds) {
+        assignees.deleteByKeyCenterAndKeyDomain(center, domain);
+        assignees.flush();
+        int order = 0;
+        for (String positionId : positionIds) {
+            assignees.save(CenterDomainHeadAssignee.create(center, domain, positionId, order++));
         }
-        return new Resolved(domain, row.getPositionId(), occupant.ccgid(), occupant.name(), STATUS_CONFIGURED);
+    }
+
+    private static List<String> normalizeIds(List<String> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<String> ids = new LinkedHashSet<>();
+        for (String value : raw) {
+            if (hasText(value)) {
+                ids.add(value.trim());
+            }
+        }
+        return List.copyOf(ids);
     }
 
     private int saveLth(String center, String rawPositionId) {
@@ -433,24 +484,6 @@ public class DomainHeadConfigService {
             }
             for (TaskActor actor : ready.getActors()) {
                 actor.remount(RstRoles.LOCAL_TRANSFORMATION_HEAD, ccgid);
-            }
-            workflows.save(workflow);
-            count++;
-        }
-        return count;
-    }
-
-    private int remountReady(String center, String domain, String positionId, Instant now) {
-        Occupant occupant = positionId == null ? null : timesheet.occupant(positionId);
-        String ccgid = occupant == null ? null : occupant.ccgid();
-        int count = 0;
-        for (ProcessInstance workflow : workflows.findOpenCdhByCenterAndDomain(center, domain)) {
-            ProcessTask ready = workflow.findCurrentPendingTask().orElse(null);
-            if (ready == null || ready.getNode() != TaskNode.DOMAIN_HEAD || positionId == null) {
-                continue;
-            }
-            for (TaskActor actor : ready.getActors()) {
-                actor.remount(positionId, ccgid);
             }
             workflows.save(workflow);
             count++;

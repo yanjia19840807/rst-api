@@ -1,6 +1,7 @@
 package com.cmacgm.gbs.rst.api.workflow.application;
 
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
@@ -109,14 +110,15 @@ public class WorkflowRouter {
     }
 
     /**
-     * Resolves the configured CDH for a Toolkit Center × Domain.
+     * Resolves the Domain Head who will own the next review.
      *
      * @param center GBS center
      * @param domain GBS domain
+     * @param selectedPositionId position chosen when several Domain Heads are configured
      * @return CDH position and current occupant
      */
-    public RoutedStep resolveCdh(String center, String domain) {
-        return domainHeads.requireCdh(center, domain);
+    public RoutedStep resolveCdh(String center, String domain, String selectedPositionId) {
+        return domainHeads.requireCdh(center, domain, selectedPositionId);
     }
 
     /**
@@ -149,18 +151,19 @@ public class WorkflowRouter {
      * @param supervisorPositionId toolkit supervisor position
      * @param center toolkit center
      * @param domain toolkit domain
-     * @return next step, Timesheet position, and current occupant when known
+     * @return next step, Timesheet position, and current occupants when known
      */
     public NextHop previewNext(String currentRole, String supervisorPositionId, String center, String domain) {
         if (currentRole == null || currentRole.isBlank()) {
             return NextHop.empty();
         }
         return switch (currentRole) {
-            case "SR_MANAGER" -> {
-                String positionId = blankToNull(domainHeads.configuredPositionId(center, domain));
-                Occupant occupant = hasText(positionId) ? timesheet.occupant(positionId) : null;
-                yield NextHop.of("Center Delivery Head Review", positionId, occupant);
-            }
+            case "SR_MANAGER" -> NextHop.choices(
+                    "Center Delivery Head Review",
+                    domainHeads.liveCdhs(center, domain).stream()
+                            .map(step -> new NextHop.HandlerOption(
+                                    step.positionId(), step.occupantName(), step.assigneeCcgid()))
+                            .toList());
             case "DOMAIN_HEAD" -> {
                 RoutedStep lth = resolveLth(center);
                 yield new NextHop(
@@ -178,12 +181,31 @@ public class WorkflowRouter {
      * Next workflow hop for the Approval Step panel.
      *
      * @param stepLabel next step name
-     * @param positionId Timesheet position of that hop, if known
+     * @param positionId Timesheet position when exactly one handler is known
      * @param reviewerName current occupant name, if known
      * @param reviewerCcgid current occupant CCGID, if known
+     * @param handlers configured handlers; more than one means the caller must choose
      */
     public record NextHop(
-            String stepLabel, String positionId, String reviewerName, String reviewerCcgid) {
+            String stepLabel,
+            String positionId,
+            String reviewerName,
+            String reviewerCcgid,
+            List<HandlerOption> handlers) {
+
+        /**
+         * One person who can take the next step.
+         *
+         * @param positionId Timesheet position
+         * @param name occupant name
+         * @param ccgid occupant CCGID
+         */
+        public record HandlerOption(String positionId, String name, String ccgid) {
+        }
+
+        public NextHop(String stepLabel, String positionId, String reviewerName, String reviewerCcgid) {
+            this(stepLabel, positionId, reviewerName, reviewerCcgid, handlersFor(positionId, reviewerName, reviewerCcgid));
+        }
 
         static NextHop empty() {
             return new NextHop(null, null, null, null);
@@ -198,6 +220,30 @@ public class WorkflowRouter {
                     positionId,
                     blankToNull(occupant.name()),
                     blankToNull(occupant.ccgid()));
+        }
+
+        /**
+         * Builds a hop from the configured handlers. One handler stays selected.
+         * Several handlers leave the position empty until the confirm dialog chooses.
+         *
+         * @param stepLabel next step name
+         * @param handlers configured people
+         * @return hop
+         */
+        static NextHop choices(String stepLabel, List<HandlerOption> handlers) {
+            List<HandlerOption> options = handlers == null ? List.of() : List.copyOf(handlers);
+            if (options.size() == 1) {
+                HandlerOption one = options.get(0);
+                return new NextHop(stepLabel, one.positionId(), one.name(), one.ccgid(), options);
+            }
+            return new NextHop(stepLabel, null, null, null, options);
+        }
+
+        private static List<HandlerOption> handlersFor(String positionId, String name, String ccgid) {
+            if (positionId == null || positionId.isBlank()) {
+                return List.of();
+            }
+            return List.of(new HandlerOption(positionId, name, ccgid));
         }
     }
 

@@ -146,11 +146,11 @@ public class ApprovalController {
             @AuthenticationPrincipal RstPrincipal principal,
             @PathVariable UUID submissionId,
             @RequestBody(required = false) ApproveBody request) {
-        ApproveBody payload = request == null ? new ApproveBody(null, null) : request;
+        ApproveBody payload = request == null ? new ApproveBody(null, null, null) : request;
         return approvals.approve(
                 principal,
                 submissionId,
-                new ApproveRequest(payload.comments(), payload.requestId()));
+                new ApproveRequest(payload.comments(), payload.requestId(), payload.nextPositionId()));
     }
 
     /**
@@ -174,7 +174,7 @@ public class ApprovalController {
     }
 
     /** Approve request body. */
-    public record ApproveBody(String comments, UUID requestId) {
+    public record ApproveBody(String comments, UUID requestId, String nextPositionId) {
     }
 
     /** Return request body. */

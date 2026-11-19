@@ -11,7 +11,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 
 /**
- * LTH-configured CDH approver for one Center × Domain.
+ * Center × Domain row that owns the Domain Head candidate list.
  */
 @Entity
 @Table(name = "center_domain_head")
@@ -23,9 +23,6 @@ public class CenterDomainHead {
     @Column(nullable = false, unique = true)
     private UUID id;
 
-    @Column(name = "position_id", length = 80)
-    private String positionId;
-
     @Column(name = "latest_audit_event_id")
     private UUID latestAuditEventId;
 
@@ -33,35 +30,17 @@ public class CenterDomainHead {
     }
 
     /**
-     * Creates a mapping. The id is stable for audit even after the position is cleared.
+     * Creates a mapping. The id is stable for audit even after every candidate is cleared.
      *
      * @param center GBS center
      * @param domain GBS domain
-     * @param positionId bindable Timesheet position
      * @return row
      */
-    public static CenterDomainHead create(String center, String domain, String positionId) {
+    public static CenterDomainHead create(String center, String domain) {
         CenterDomainHead row = new CenterDomainHead();
         row.key = new Id(center, domain);
         row.id = UUID.randomUUID();
-        row.positionId = positionId;
         return row;
-    }
-
-    /**
-     * Updates the configured position.
-     *
-     * @param positionId bindable Timesheet position
-     */
-    public void replace(String positionId) {
-        this.positionId = positionId;
-    }
-
-    /**
-     * Clears the configured position. The row and its id stay so the audit remains attached to this Center and Domain.
-     */
-    public void clear() {
-        this.positionId = null;
     }
 
     public UUID getId() {
@@ -74,10 +53,6 @@ public class CenterDomainHead {
 
     public String getDomain() {
         return key.domain;
-    }
-
-    public String getPositionId() {
-        return positionId;
     }
 
     public void setLatestAuditEventId(UUID latestAuditEventId) {

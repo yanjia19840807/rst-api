@@ -18,6 +18,7 @@ import com.cmacgm.gbs.rst.api.audit.api.dto.AuditActorView;
  * @param nextReviewer occupant name of that hop, if known
  * @param nextHandlerCcgid occupant CCGID of that hop, if known
  * @param nextReviewerBy occupant plus optional delegate of that hop
+ * @param nextHandlers configured handlers for the next step; more than one requires a choice
  * @param history already-occurred Submit / Approve / Return rows
  */
 public record ApprovalWorkspaceView(
@@ -29,6 +30,7 @@ public record ApprovalWorkspaceView(
         String nextReviewer,
         String nextHandlerCcgid,
         AuditActorView nextReviewerBy,
+        List<NextHandlerView> nextHandlers,
         List<ApprovalHistoryRow> history) {
 
     /** Status strip: In progress / Now / Archived / Returned. */
@@ -42,6 +44,16 @@ public record ApprovalWorkspaceView(
 
     /** Current hop on the in-progress card (step + occupant). */
     public record ApprovalCurrentHop(String step, String reviewer, AuditActorView reviewerBy) {
+    }
+
+    /**
+     * One person configured for the next step.
+     *
+     * @param positionId Timesheet position
+     * @param name occupant name
+     * @param ccgid occupant CCGID
+     */
+    public record NextHandlerView(String positionId, String name, String ccgid) {
     }
 
     /**

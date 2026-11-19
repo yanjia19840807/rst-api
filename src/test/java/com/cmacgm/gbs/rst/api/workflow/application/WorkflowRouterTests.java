@@ -70,6 +70,32 @@ class WorkflowRouterTests {
     }
 
     @Test
+    void managerPreviewListsEveryConfiguredDomainHead() {
+        when(domainHeads.liveCdhs("GBS CHINA", "FINANCE")).thenReturn(List.of(
+                new WorkflowRouter.RoutedStep("POS-1", "DH001", "Ada"),
+                new WorkflowRouter.RoutedStep("POS-2", "DH002", "Ben")));
+
+        WorkflowRouter.NextHop next = router.previewNext("SR_MANAGER", "SUP-1", "GBS CHINA", "FINANCE");
+
+        assertThat(next.positionId()).isNull();
+        assertThat(next.handlers())
+                .extracting(WorkflowRouter.NextHop.HandlerOption::positionId)
+                .containsExactly("POS-1", "POS-2");
+    }
+
+    @Test
+    void managerPreviewKeepsTheOnlyDomainHeadSelected() {
+        when(domainHeads.liveCdhs("GBS CHINA", "FINANCE")).thenReturn(List.of(
+                new WorkflowRouter.RoutedStep("POS-1", "DH001", "Ada")));
+
+        WorkflowRouter.NextHop next = router.previewNext("SR_MANAGER", "SUP-1", "GBS CHINA", "FINANCE");
+
+        assertThat(next.positionId()).isEqualTo("POS-1");
+        assertThat(next.reviewerName()).isEqualTo("Ada");
+        assertThat(next.handlers()).hasSize(1);
+    }
+
+    @Test
     void lthQueueIncludesSentinelWhenCenterRolesAssignsLthWithoutRoleClaim() {
         when(domainHeads.assignedKeysFor("S00690001")).thenReturn(Set.of());
         when(domainHeads.assignedLthKeysFor("S00690001")).thenReturn(Set.of("POS-LTH-1"));

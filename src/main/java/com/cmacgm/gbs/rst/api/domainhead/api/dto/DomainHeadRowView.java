@@ -1,18 +1,16 @@
 package com.cmacgm.gbs.rst.api.domainhead.api.dto;
 
+import java.util.List;
+
 /**
- * One Domain mapping on the LTH page.
+ * One Domain mapping on the Center Roles page.
  *
  * @param domain GBS Domain
- * @param positionId configured bindable position, if any
- * @param ccgid current holder, if resolvable
- * @param name current holder display name
- * @param status CONFIGURED / MISSING / STALE
+ * @param assignees configured Domain Heads, in selection order
+ * @param status CONFIGURED when at least one person is still in the Center, MISSING when empty, otherwise STALE
  */
 public record DomainHeadRowView(
         String domain,
-        String positionId,
-        String ccgid,
-        String name,
+        List<DomainHeadAssigneeView> assignees,
         String status) {
 }
