@@ -74,14 +74,15 @@ class TmsSessionApiIntegrationTests {
         jdbcTemplate.update("delete from toolkit_volume_daily");
         jdbcTemplate.update("delete from toolkit_volume_monthly");
         jdbcTemplate.update("delete from rst_exercise");
-        jdbcTemplate.update("delete from timesheet_sync_issue");
-        jdbcTemplate.update("delete from timesheet_kpi");
-        jdbcTemplate.update("delete from timesheet_scope");
-        jdbcTemplate.update("delete from timesheet_person_position_role");
-        jdbcTemplate.update("delete from timesheet_position_parent");
-        jdbcTemplate.update("delete from timesheet_position");
-        jdbcTemplate.update("delete from timesheet_person");
-        jdbcTemplate.update("delete from timesheet_sync_run");
+        jdbcTemplate.update("delete from source_issue");
+        jdbcTemplate.update("delete from supervisor_delivery_hc");
+        jdbcTemplate.update("delete from supervisor_process");
+        jdbcTemplate.update("delete from process_scope");
+        jdbcTemplate.update("delete from org_seat");
+        jdbcTemplate.update("delete from org_position_parent");
+        jdbcTemplate.update("delete from org_position");
+        jdbcTemplate.update("delete from org_person");
+        jdbcTemplate.update("delete from source_snapshot");
         jdbcTemplate.update("delete from toolkit_shared_kpi_selection");
         jdbcTemplate.update("delete from toolkit_subtask");
         jdbcTemplate.update("delete from toolkit");
@@ -146,7 +147,7 @@ class TmsSessionApiIntegrationTests {
         UUID monthlyRunId = UUID.fromString("40000000-0000-0000-0000-000000000002");
         jdbcTemplate.update(
                 """
-                insert into timesheet_sync_run
+                insert into source_snapshot
                     (id, kind, center, sync_date, attempt_no, status, row_count, started_at, completed_at)
                 values (?, 'DAILY', 'GBS INDIA', current_date, 1, 'ACTIVE', 1, ?, ?)
                 """,
@@ -155,7 +156,7 @@ class TmsSessionApiIntegrationTests {
                 now);
         jdbcTemplate.update(
                 """
-                insert into timesheet_sync_run
+                insert into source_snapshot
                     (id, kind, center, sync_date, attempt_no, status, row_count, started_at, completed_at)
                 values (?, 'MONTHLY', 'GBS INDIA', current_date, 1, 'ACTIVE', 1, ?, ?)
                 """,
@@ -164,7 +165,7 @@ class TmsSessionApiIntegrationTests {
                 now);
         jdbcTemplate.update(
                 """
-                insert into timesheet_person (sync_run_id, ccgid, emp_id, name, center)
+                insert into org_person (source_snapshot_id, ccgid, emp_id, name, center)
                 values (?, ?, ?, ?, ?)
                 """,
                 dailyRunId,
@@ -173,7 +174,7 @@ class TmsSessionApiIntegrationTests {
                 "Test Supervisor",
                 "GBS INDIA");
         jdbcTemplate.update(
-                "insert into timesheet_person (sync_run_id, ccgid, emp_id, name, center) values (?, ?, ?, ?, ?)",
+                "insert into org_person (source_snapshot_id, ccgid, emp_id, name, center) values (?, ?, ?, ?, ?)",
                 dailyRunId,
                 "AGENT001",
                 "AGENT001",
@@ -181,63 +182,69 @@ class TmsSessionApiIntegrationTests {
                 "GBS INDIA");
         jdbcTemplate.update(
                 """
-                insert into timesheet_position (sync_run_id, position_id, role_type)
+                insert into org_position (source_snapshot_id, position_id, role_type)
                 values (?, 'POS-SRM-001', 'SR_MANAGER')
                 """,
                 dailyRunId);
         jdbcTemplate.update(
                 """
-                insert into timesheet_position (sync_run_id, position_id, role_type)
+                insert into org_position (source_snapshot_id, position_id, role_type)
                 values (?, 'POS-SUP-001', 'SUPERVISOR')
                 """,
                 dailyRunId);
         jdbcTemplate.update(
                 """
-                insert into timesheet_position_parent
-                    (sync_run_id, position_id, role_type, parent_position_id, parent_role_type)
+                insert into org_position_parent
+                    (source_snapshot_id, position_id, role_type, parent_position_id, parent_role_type)
                 values (?, 'POS-SUP-001', 'SUPERVISOR', 'POS-SRM-001', 'SR_MANAGER')
                 """,
                 dailyRunId);
         jdbcTemplate.update(
                 """
-                insert into timesheet_position (sync_run_id, position_id, role_type)
+                insert into org_position (source_snapshot_id, position_id, role_type)
                 values (?, 'POS-AGENT-001', 'AGENT')
                 """,
                 dailyRunId);
         jdbcTemplate.update(
                 """
-                insert into timesheet_position_parent
-                    (sync_run_id, position_id, role_type, parent_position_id, parent_role_type)
+                insert into org_position_parent
+                    (source_snapshot_id, position_id, role_type, parent_position_id, parent_role_type)
                 values (?, 'POS-AGENT-001', 'AGENT', 'POS-SUP-001', 'SUPERVISOR')
                 """,
                 dailyRunId);
         jdbcTemplate.update(
                 """
-                insert into timesheet_person_position_role
-                    (sync_run_id, ccgid, position_id, role_type)
+                insert into org_seat
+                    (source_snapshot_id, ccgid, position_id, role_type)
                 values (?, 'SUPERVISOR001', 'POS-SUP-001', 'SUPERVISOR')
                 """,
                 dailyRunId);
         jdbcTemplate.update(
                 """
-                insert into timesheet_person_position_role
-                    (sync_run_id, ccgid, position_id, role_type)
+                insert into org_seat
+                    (source_snapshot_id, ccgid, position_id, role_type)
                 values (?, 'AGENT001', 'POS-AGENT-001', 'AGENT')
                 """,
                 dailyRunId);
         jdbcTemplate.update(
                 """
-                insert into timesheet_scope
-                    (sync_run_id, supervisor_position_id, pl3_code, pl3_name,
-                     center, domain, pl1, pl2)
-                values (?, 'POS-SUP-001', 'BANK_REC', 'Bank Reconciliation',
-                        'GBS INDIA', 'Finance', 'Accounting', 'Record to Report')
+                insert into process_scope
+                    (source_snapshot_id, center, pl3_code, pl3_name, domain, pl1, pl2)
+                values (?, 'GBS INDIA', 'BANK_REC', 'Bank Reconciliation',
+                        'Finance', 'Accounting', 'Record to Report')
                 """,
                 monthlyRunId);
         jdbcTemplate.update(
                 """
-                insert into timesheet_kpi
-                    (sync_run_id, supervisor_position_id, pl3_code, center,
+                insert into supervisor_process
+                    (source_snapshot_id, supervisor_position_id, pl3_code, center)
+                values (?, 'POS-SUP-001', 'BANK_REC', 'GBS INDIA')
+                """,
+                monthlyRunId);
+        jdbcTemplate.update(
+                """
+                insert into supervisor_delivery_hc
+                    (source_snapshot_id, supervisor_position_id, pl3_code, center,
                      carrier, site, customer_country, hc)
                 values (?, 'POS-SUP-001', 'BANK_REC', 'GBS INDIA', 'Carrier A', 'KL', 'Australia', 1)
                 """,

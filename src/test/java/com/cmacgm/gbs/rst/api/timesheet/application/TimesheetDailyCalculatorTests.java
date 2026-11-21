@@ -10,11 +10,11 @@ import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.HcValue;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPersonPositionRole;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPosition;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPositionParent;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPerson;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgSeat;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPosition;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPositionParent;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceIssue;
 import org.junit.jupiter.api.Test;
 
 class TimesheetDailyCalculatorTests {
@@ -35,13 +35,13 @@ class TimesheetDailyCalculatorTests {
 
         assertThat(result.issues()).isEmpty();
         assertThat(result.people())
-                .extracting(TimesheetPerson::getCcgid, TimesheetPerson::getCenter, TimesheetPerson::getEmail)
+                .extracting(OrgPerson::getCcgid, OrgPerson::getCenter, OrgPerson::getEmail)
                 .contains(org.assertj.core.groups.Tuple.tuple("S00000001", "GBS INDIA", "s00000001@dev.local"));
         assertThat(result.people())
-                .extracting(TimesheetPerson::getCcgid)
+                .extracting(OrgPerson::getCcgid)
                 .contains("S00000002", "S00000003", "S00000004");
         assertThat(result.positions())
-                .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
+                .extracting(OrgPosition::getPositionId, OrgPosition::getRoleType)
                 .contains(
                         org.assertj.core.groups.Tuple.tuple("EMP-POS-1", "AGENT"),
                         org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "SUPERVISOR"),
@@ -49,9 +49,9 @@ class TimesheetDailyCalculatorTests {
                         org.assertj.core.groups.Tuple.tuple("POS-DH-1", "DOMAIN_HEAD"));
         assertThat(result.seats())
                 .extracting(
-                        TimesheetPersonPositionRole::getCcgid,
-                        TimesheetPersonPositionRole::getPositionId,
-                        TimesheetPersonPositionRole::getRoleType)
+                        OrgSeat::getCcgid,
+                        OrgSeat::getPositionId,
+                        OrgSeat::getRoleType)
                 .contains(
                         org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-1", "AGENT"),
                         org.assertj.core.groups.Tuple.tuple("S00000002", "POS-SUP-1", "SUPERVISOR"),
@@ -83,11 +83,11 @@ class TimesheetDailyCalculatorTests {
         assertThat(result.issues()).isEmpty();
         assertThat(result.people())
                 .filteredOn(person -> "S00000001".equals(person.getCcgid()))
-                .extracting(TimesheetPerson::getJobRole)
+                .extracting(OrgPerson::getJobRole)
                 .containsExactly("Billing Clerk");
         assertThat(result.people())
                 .filteredOn(person -> !"S00000001".equals(person.getCcgid()))
-                .extracting(TimesheetPerson::getJobRole)
+                .extracting(OrgPerson::getJobRole)
                 .containsOnly((String) null);
     }
 
@@ -102,11 +102,11 @@ class TimesheetDailyCalculatorTests {
                 GbsProcessCatalog.allowing("OTHER"));
 
         assertThat(result.people())
-                .extracting(TimesheetPerson::getCcgid)
+                .extracting(OrgPerson::getCcgid)
                 .contains("S00000002", "S00000003", "S00000004");
         assertThat(result.positions()).isEmpty();
         assertThat(result.seats()).isEmpty();
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("EMPTY_FILE");
+        assertThat(result.issues()).extracting(SourceIssue::getCode).doesNotContain("EMPTY_FILE");
     }
 
     @Test
@@ -120,11 +120,11 @@ class TimesheetDailyCalculatorTests {
                 RST_YES);
 
         assertThat(result.people())
-                .extracting(TimesheetPerson::getCcgid)
+                .extracting(OrgPerson::getCcgid)
                 .contains("S00000001", "S00000002", "S00000003", "S00000004");
         assertThat(result.positions()).isEmpty();
         assertThat(result.seats()).isEmpty();
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("MISSING_FIELD");
+        assertThat(result.issues()).extracting(SourceIssue::getCode).doesNotContain("MISSING_FIELD");
     }
 
     @Test
@@ -137,9 +137,9 @@ class TimesheetDailyCalculatorTests {
                 null,
                 GbsProcessCatalog.allowing("OTHER"));
 
-        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S00000002");
+        assertThat(result.people()).extracting(OrgPerson::getCcgid).contains("S00000002");
         assertThat(result.positions()).isEmpty();
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("MISSING_FIELD");
+        assertThat(result.issues()).extracting(SourceIssue::getCode).doesNotContain("MISSING_FIELD");
     }
 
     @Test
@@ -153,16 +153,16 @@ class TimesheetDailyCalculatorTests {
                 RST_YES);
 
         assertThat(result.issues())
-                .extracting(TimesheetSyncIssue::getCode, TimesheetSyncIssue::getMessage)
+                .extracting(SourceIssue::getCode, SourceIssue::getMessage)
                 .contains(org.assertj.core.groups.Tuple.tuple("MISSING_FIELD", "Missing sr_manager_emp_id."));
         assertThat(result.issues()).allMatch(issue -> TimesheetRowValidator.isAdvisory(issue, "DAILY"));
         assertThat(result.issues())
-                .extracting(TimesheetSyncIssue::getMessage)
+                .extracting(SourceIssue::getMessage)
                 .noneMatch(message -> message.contains("domain_head"));
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("EMPTY_FILE");
-        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S00000001");
+        assertThat(result.issues()).extracting(SourceIssue::getCode).doesNotContain("EMPTY_FILE");
+        assertThat(result.people()).extracting(OrgPerson::getCcgid).contains("S00000001");
         assertThat(result.positions())
-                .extracting(TimesheetPosition::getPositionId)
+                .extracting(OrgPosition::getPositionId)
                 .contains("EMP-POS-1", "POS-SUP-1", "POS-SRM-1");
     }
 
@@ -207,10 +207,10 @@ class TimesheetDailyCalculatorTests {
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId, List.of(withoutDomainHead), Instant.parse("2026-08-23T00:00:00Z"), null, RST_YES);
 
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("MISSING_FIELD");
-        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).doesNotContain("S00000004");
+        assertThat(result.issues()).extracting(SourceIssue::getCode).doesNotContain("MISSING_FIELD");
+        assertThat(result.people()).extracting(OrgPerson::getCcgid).doesNotContain("S00000004");
         assertThat(result.positions())
-                .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
+                .extracting(OrgPosition::getPositionId, OrgPosition::getRoleType)
                 .contains(
                         org.assertj.core.groups.Tuple.tuple("EMP-POS-1", "AGENT"),
                         org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "SUPERVISOR"),
@@ -261,8 +261,8 @@ class TimesheetDailyCalculatorTests {
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId, List.of(withInvalidHc), Instant.parse("2026-08-23T00:00:00Z"), null, RST_YES);
 
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("INVALID_HC", "MISSING_FIELD");
-        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S00000001");
+        assertThat(result.issues()).extracting(SourceIssue::getCode).doesNotContain("INVALID_HC", "MISSING_FIELD");
+        assertThat(result.people()).extracting(OrgPerson::getCcgid).contains("S00000001");
         assertThat(result.positions()).isNotEmpty();
     }
 
@@ -278,13 +278,13 @@ class TimesheetDailyCalculatorTests {
                 null,
                 RST_YES);
 
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).contains("MISSING_FIELD");
+        assertThat(result.issues()).extracting(SourceIssue::getCode).contains("MISSING_FIELD");
         assertThat(result.issues()).allMatch(issue -> TimesheetRowValidator.isAdvisory(issue, "DAILY"));
         assertThat(result.people())
-                .extracting(TimesheetPerson::getCcgid)
+                .extracting(OrgPerson::getCcgid)
                 .contains("S00000001", "S00000006");
         assertThat(result.positions())
-                .extracting(TimesheetPosition::getPositionId)
+                .extracting(OrgPosition::getPositionId)
                 .contains("EMP-POS-1", "EMP-POS-6", "POS-SUP-1", "POS-SRM-1");
     }
 
@@ -330,18 +330,18 @@ class TimesheetDailyCalculatorTests {
                 runId, List.of(emptySupervisor), Instant.parse("2026-08-23T00:00:00Z"), null, RST_YES);
 
         assertThat(result.issues())
-                .extracting(TimesheetSyncIssue::getMessage)
+                .extracting(SourceIssue::getMessage)
                 .contains(
                         "Missing supervisor_emp_id.",
                         "Missing supervisor_ccgid.",
                         "Missing supervisor_name.");
         assertThat(result.issues()).allMatch(issue -> TimesheetRowValidator.isAdvisory(issue, "DAILY"));
-        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S00000001").doesNotContain("");
+        assertThat(result.people()).extracting(OrgPerson::getCcgid).contains("S00000001").doesNotContain("");
         assertThat(result.seats())
-                .extracting(TimesheetPersonPositionRole::getPositionId)
+                .extracting(OrgSeat::getPositionId)
                 .doesNotContain("181664");
         assertThat(result.positions())
-                .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
+                .extracting(OrgPosition::getPositionId, OrgPosition::getRoleType)
                 .contains(org.assertj.core.groups.Tuple.tuple("181664", "SUPERVISOR"));
         assertThat(parentIds(result, "EMP-POS-1", "AGENT")).containsExactly("181664");
     }
@@ -369,7 +369,7 @@ class TimesheetDailyCalculatorTests {
         assertThat(result.syncDate()).isEqualTo(LocalDate.of(2026, 7, 27));
         assertThat(result.people())
                 .filteredOn(person -> "S00000001".equals(person.getCcgid()))
-                .extracting(TimesheetPerson::getCenter)
+                .extracting(OrgPerson::getCenter)
                 .containsExactly("GBS INDIA");
         assertThat(result.positions()).isNotEmpty();
     }
@@ -392,7 +392,7 @@ class TimesheetDailyCalculatorTests {
                 null,
                 GbsProcessCatalog.allowing("OTHER"));
 
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("UNKNOWN_CENTER");
+        assertThat(result.issues()).extracting(SourceIssue::getCode).doesNotContain("UNKNOWN_CENTER");
         assertThat(result.positions()).isEmpty();
     }
 
@@ -406,7 +406,7 @@ class TimesheetDailyCalculatorTests {
                 LocalDate.of(2026, 7, 26),
                 RST_YES);
 
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("DATE_MISMATCH");
+        assertThat(result.issues()).extracting(SourceIssue::getCode).doesNotContain("DATE_MISMATCH");
         assertThat(result.syncDate()).isEqualTo(LocalDate.of(2026, 7, 26));
         assertThat(result.people()).isNotEmpty();
         assertThat(result.positions()).isNotEmpty();
@@ -424,10 +424,10 @@ class TimesheetDailyCalculatorTests {
                 null,
                 RST_YES);
 
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("PERSON_POSITION_CONFLICT");
-        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S00000001");
+        assertThat(result.issues()).extracting(SourceIssue::getCode).doesNotContain("PERSON_POSITION_CONFLICT");
+        assertThat(result.people()).extracting(OrgPerson::getCcgid).contains("S00000001");
         assertThat(result.seats())
-                .extracting(TimesheetPersonPositionRole::getCcgid, TimesheetPersonPositionRole::getPositionId)
+                .extracting(OrgSeat::getCcgid, OrgSeat::getPositionId)
                 .contains(
                         org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-1"),
                         org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-2"));
@@ -512,17 +512,17 @@ class TimesheetDailyCalculatorTests {
                 null,
                 RST_YES);
 
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("PERSON_POSITION_CONFLICT");
+        assertThat(result.issues()).extracting(SourceIssue::getCode).doesNotContain("PERSON_POSITION_CONFLICT");
         assertThat(result.positions())
-                .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
+                .extracting(OrgPosition::getPositionId, OrgPosition::getRoleType)
                 .contains(
                         org.assertj.core.groups.Tuple.tuple("174050", "SUPERVISOR"),
                         org.assertj.core.groups.Tuple.tuple("174050", "SR_MANAGER"));
         assertThat(result.seats())
                 .extracting(
-                        TimesheetPersonPositionRole::getCcgid,
-                        TimesheetPersonPositionRole::getPositionId,
-                        TimesheetPersonPositionRole::getRoleType)
+                        OrgSeat::getCcgid,
+                        OrgSeat::getPositionId,
+                        OrgSeat::getRoleType)
                 .contains(
                         org.assertj.core.groups.Tuple.tuple("S00000002", "174050", "SUPERVISOR"),
                         org.assertj.core.groups.Tuple.tuple("S00000002", "174050", "SR_MANAGER"));
@@ -540,10 +540,10 @@ class TimesheetDailyCalculatorTests {
                 null,
                 RST_YES);
 
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("OCCUPANCY_CONFLICT");
-        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S00000001", "S00000005");
+        assertThat(result.issues()).extracting(SourceIssue::getCode).doesNotContain("OCCUPANCY_CONFLICT");
+        assertThat(result.people()).extracting(OrgPerson::getCcgid).contains("S00000001", "S00000005");
         assertThat(result.seats())
-                .extracting(TimesheetPersonPositionRole::getCcgid, TimesheetPersonPositionRole::getPositionId)
+                .extracting(OrgSeat::getCcgid, OrgSeat::getPositionId)
                 .contains(
                         org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-1"),
                         org.assertj.core.groups.Tuple.tuple("S00000005", "EMP-POS-1"));
@@ -561,13 +561,13 @@ class TimesheetDailyCalculatorTests {
                 null,
                 RST_YES);
 
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("PERSON_POSITION_CONFLICT");
-        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S00000001");
+        assertThat(result.issues()).extracting(SourceIssue::getCode).doesNotContain("PERSON_POSITION_CONFLICT");
+        assertThat(result.people()).extracting(OrgPerson::getCcgid).contains("S00000001");
         assertThat(result.seats())
-                .extracting(TimesheetPersonPositionRole::getCcgid, TimesheetPersonPositionRole::getPositionId)
+                .extracting(OrgSeat::getCcgid, OrgSeat::getPositionId)
                 .contains(org.assertj.core.groups.Tuple.tuple("S00000001", "EMP-POS-1"));
         assertThat(result.positions())
-                .extracting(TimesheetPosition::getPositionId)
+                .extracting(OrgPosition::getPositionId)
                 .contains("EMP-POS-1")
                 .doesNotContain("EMP-POS-2");
     }
@@ -584,9 +584,9 @@ class TimesheetDailyCalculatorTests {
                 null,
                 RST_YES);
 
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("HIERARCHY_CONFLICT");
+        assertThat(result.issues()).extracting(SourceIssue::getCode).doesNotContain("HIERARCHY_CONFLICT");
         assertThat(result.positions())
-                .extracting(TimesheetPosition::getPositionId)
+                .extracting(OrgPosition::getPositionId)
                 .contains("EMP-POS-1", "POS-SUP-1", "POS-SUP-2");
         assertThat(parentIds(result, "EMP-POS-1", "AGENT")).containsExactlyInAnyOrder("POS-SUP-1", "POS-SUP-2");
     }
@@ -603,7 +603,7 @@ class TimesheetDailyCalculatorTests {
                 null,
                 RST_YES);
 
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("HIERARCHY_CONFLICT");
+        assertThat(result.issues()).extracting(SourceIssue::getCode).doesNotContain("HIERARCHY_CONFLICT");
         assertThat(parentIds(result, "EMP-POS-1", "AGENT")).containsExactly("POS-SUP-1");
     }
 
@@ -636,7 +636,7 @@ class TimesheetDailyCalculatorTests {
                 RST_YES);
 
         assertThat(result.issues()).isEmpty();
-        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S00000001");
+        assertThat(result.people()).extracting(OrgPerson::getCcgid).contains("S00000001");
     }
 
     @Test
@@ -650,11 +650,11 @@ class TimesheetDailyCalculatorTests {
                 RST_YES);
 
         assertThat(result.people())
-                .extracting(TimesheetPerson::getCcgid)
+                .extracting(OrgPerson::getCcgid)
                 .contains("S00000001", "S00000002", "S00000003", "S00000004");
         assertThat(result.positions()).isEmpty();
         assertThat(result.seats()).isEmpty();
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("MISSING_FIELD");
+        assertThat(result.issues()).extracting(SourceIssue::getCode).doesNotContain("MISSING_FIELD");
     }
 
     @Test
@@ -700,14 +700,82 @@ class TimesheetDailyCalculatorTests {
                 runId, List.of(missingEmp), Instant.parse("2026-08-23T00:00:00Z"), null, RST_YES);
 
         assertThat(result.issues())
-                .extracting(TimesheetSyncIssue::getCode, TimesheetSyncIssue::getMessage)
-                .contains(org.assertj.core.groups.Tuple.tuple("MISSING_FIELD", "Missing emp_ccgid."));
-        assertThat(result.issues()).allMatch(issue -> !TimesheetRowValidator.isAdvisory(issue, "DAILY"));
+                .extracting(SourceIssue::getCode, SourceIssue::getMessage)
+                .contains(
+                        org.assertj.core.groups.Tuple.tuple("MISSING_FIELD", "Missing emp_ccgid."),
+                        org.assertj.core.groups.Tuple.tuple("EMPTY_FILE", "No rows remained after filtering."));
         assertThat(result.issues())
-                .extracting(TimesheetSyncIssue::getMessage)
+                .filteredOn(issue -> "MISSING_FIELD".equals(issue.getCode()))
+                .allMatch(issue -> TimesheetRowValidator.isAdvisory(issue, "DAILY"));
+        assertThat(result.issues())
+                .filteredOn(issue -> "EMPTY_FILE".equals(issue.getCode()))
+                .allMatch(issue -> !TimesheetRowValidator.isAdvisory(issue, "DAILY"));
+        assertThat(result.issues())
+                .extracting(SourceIssue::getMessage)
                 .noneMatch(message -> message.contains("supervisor") || message.contains("sr_manager"));
         assertThat(result.people()).isEmpty();
         assertThat(result.positions()).isEmpty();
+    }
+
+    @Test
+    void skipsIncompleteEmployeeRowAndKeepsTheRest() {
+        UUID runId = UUID.randomUUID();
+        ReportRow missingEmp = row("S00000999", "EMP-9", "Dropped Agent", "EMP-POS-9", "production", "productive");
+        missingEmp = new ReportRow(
+                3,
+                missingEmp.date(),
+                missingEmp.month(),
+                missingEmp.empId(),
+                "",
+                missingEmp.empName(),
+                missingEmp.empEmail(),
+                missingEmp.empPositionId(),
+                "SUP-DROPPED",
+                "S00000888",
+                "Dropped Supervisor",
+                "POS-DROPPED",
+                missingEmp.srManagerId(),
+                missingEmp.srManagerCcgid(),
+                missingEmp.srManagerName(),
+                missingEmp.srManagerPositionId(),
+                missingEmp.domainHeadId(),
+                missingEmp.domainHeadCcgid(),
+                missingEmp.domainHeadName(),
+                missingEmp.domainHeadPositionId(),
+                missingEmp.center(),
+                missingEmp.site(),
+                missingEmp.domain(),
+                missingEmp.pl1(),
+                missingEmp.pl2(),
+                missingEmp.pl3Code(),
+                missingEmp.pl3Name(),
+                missingEmp.carrier(),
+                missingEmp.customerCountry(),
+                missingEmp.hc(),
+                missingEmp.managementOrProduction(),
+                missingEmp.costType(),
+                missingEmp.empJobRole());
+        ReportRow kept = row("S00000001", "EMP-1", "Agent One", "EMP-POS-1", "production", "productive");
+
+        TimesheetDailyCalculator.Result result = calculator.compute(
+                runId,
+                List.of(missingEmp, kept),
+                Instant.parse("2026-08-23T00:00:00Z"),
+                null,
+                RST_YES);
+
+        assertThat(result.people()).extracting(OrgPerson::getCcgid).contains("S00000001", "S00000002");
+        assertThat(result.people()).extracting(OrgPerson::getCcgid).doesNotContain("S00000888", "S00000999");
+        assertThat(result.positions()).extracting(OrgPosition::getPositionId).contains("EMP-POS-1");
+        assertThat(result.positions()).extracting(OrgPosition::getPositionId).doesNotContain("EMP-POS-9", "POS-DROPPED");
+        assertThat(result.issues())
+                .extracting(SourceIssue::getCode, SourceIssue::getMessage)
+                .contains(org.assertj.core.groups.Tuple.tuple("MISSING_FIELD", "Missing emp_ccgid."));
+        assertThat(result.issues()).extracting(SourceIssue::getCode).doesNotContain("EMPTY_FILE");
+        assertThat(result.issues())
+                .filteredOn(issue -> "MISSING_FIELD".equals(issue.getCode())
+                        && "Missing emp_ccgid.".equals(issue.getMessage()))
+                .allMatch(issue -> TimesheetRowValidator.isAdvisory(issue, "DAILY"));
     }
 
     @Test
@@ -751,12 +819,12 @@ class TimesheetDailyCalculatorTests {
         TimesheetDailyCalculator.Result result = calculator.compute(
                 runId, List.of(agent), Instant.parse("2026-08-23T00:00:00Z"), null, RST_YES);
 
-        assertThat(result.people()).extracting(TimesheetPerson::getCcgid).contains("S01031707");
+        assertThat(result.people()).extracting(OrgPerson::getCcgid).contains("S01031707");
         assertThat(result.seats())
-                .extracting(TimesheetPersonPositionRole::getCcgid, TimesheetPersonPositionRole::getPositionId)
+                .extracting(OrgSeat::getCcgid, OrgSeat::getPositionId)
                 .contains(org.assertj.core.groups.Tuple.tuple("S01031707", "273656"));
         assertThat(result.positions())
-                .extracting(TimesheetPosition::getPositionId, TimesheetPosition::getRoleType)
+                .extracting(OrgPosition::getPositionId, OrgPosition::getRoleType)
                 .contains(org.assertj.core.groups.Tuple.tuple("273656", "SUPERVISOR"));
     }
 
@@ -764,7 +832,7 @@ class TimesheetDailyCalculatorTests {
             TimesheetDailyCalculator.Result result, String positionId, String roleType) {
         return result.parents().stream()
                 .filter(edge -> positionId.equals(edge.getPositionId()) && roleType.equals(edge.getRoleType()))
-                .map(TimesheetPositionParent::getParentPositionId)
+                .map(OrgPositionParent::getParentPositionId)
                 .toList();
     }
 

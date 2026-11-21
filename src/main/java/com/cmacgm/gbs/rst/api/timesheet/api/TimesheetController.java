@@ -7,7 +7,9 @@ import java.util.List;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
+import com.cmacgm.gbs.rst.api.security.SourceDataAccess;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.ActiveSnapshots;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.CenterPerson;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.HierarchyCandidate;
@@ -25,9 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class TimesheetController {
 
     private final TimesheetReadService service;
+    private final WorkforceRead workforce;
 
-    public TimesheetController(TimesheetReadService service) {
+    public TimesheetController(TimesheetReadService service, WorkforceRead workforce) {
         this.service = service;
+        this.workforce = workforce;
     }
 
     @GetMapping("/active")
@@ -47,17 +51,17 @@ public class TimesheetController {
      */
     @GetMapping("/people")
     @PreAuthorize("hasAnyRole('AGENT','SUPERVISOR','SR_MANAGER','DOMAIN_HEAD','LOCAL_TRANSFORMATION_HEAD','GOVERNANCE','ADMIN')")
-    public PageResponse<TimesheetPersonView> people(
+    public PageResponse<OrgPersonView> people(
             @AuthenticationPrincipal RstPrincipal principal,
             @RequestParam(required = false) String center,
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         String resolved = resolveCenter(principal, center);
-        PageResponse<CenterPerson> people = service.peopleInCenter(resolved, q, page, pageSize);
+        PageResponse<CenterPerson> people = workforce.peopleInCenter(resolved, q, page, pageSize);
         return new PageResponse<>(
                 people.items().stream()
-                        .map(person -> new TimesheetPersonView(
+                        .map(person -> new OrgPersonView(
                                 person.positionId(), person.ccgid(), person.name(), person.email()))
                         .toList(),
                 people.page(),
@@ -70,7 +74,7 @@ public class TimesheetController {
     @PreAuthorize("hasRole('SUPERVISOR')")
     public List<HierarchyCandidate> toolkitHierarchy(
             @AuthenticationPrincipal RstPrincipal principal) {
-        return service.supervisorHierarchy(principal.ccgid());
+        return workforce.supervisorHierarchy(principal.ccgid());
     }
 
     @GetMapping("/shared-kpi-candidates")
@@ -81,7 +85,7 @@ public class TimesheetController {
             @RequestParam(required = false) String supervisorPositionId,
             @RequestParam(name = "customerCountry", required = false)
                     List<String> customerCountries) {
-        var positions = service.supervisorHierarchy(principal.ccgid()).stream()
+        var positions = workforce.supervisorHierarchy(principal.ccgid()).stream()
                 .filter(item -> item.pl3Code().equals(pl3Code))
                 .map(HierarchyCandidate::supervisorPositionId)
                 .distinct()
@@ -104,20 +108,20 @@ public class TimesheetController {
                     "timesheet-out-of-scope",
                     "The requested Timesheet scope is not owned by the current Supervisor.");
         }
-        String center = service.supervisorHierarchy(principal.ccgid()).stream()
+        String center = workforce.supervisorHierarchy(principal.ccgid()).stream()
                 .filter(item -> item.supervisorPositionId().equals(resolvedPosition)
                         && item.pl3Code().equals(pl3Code))
                 .map(HierarchyCandidate::center)
                 .findFirst()
                 .orElse(principal.center());
-        var countries = service.countries(center, resolvedPosition, pl3Code);
+        var countries = workforce.countries(center, resolvedPosition, pl3Code);
         var selected = customerCountries == null ? List.<String>of() : customerCountries;
-        var items = service.kpis(center, resolvedPosition, pl3Code, selected).stream()
+        var items = workforce.kpis(center, resolvedPosition, pl3Code, selected).stream()
                 .map(item -> new SharedKpiItem(
                         item.carrier(), item.site(), item.customerCountry(), item.deliveryHc()))
                 .toList();
         return new SharedKpiCandidates(
-                service.activeMonthly(center).syncDate(), countries, items);
+                workforce.requireKpi(center).syncDate(), countries, items);
     }
 
     public record SharedKpiCandidates(
@@ -136,10 +140,13 @@ public class TimesheetController {
      * @param name display name
      * @param email Timesheet emp_email
      */
-    public record TimesheetPersonView(String positionId, String ccgid, String name, String email) {
+    public record OrgPersonView(String positionId, String ccgid, String name, String email) {
     }
 
     private static String resolveCenter(RstPrincipal principal, String requested) {
+        if (SourceDataAccess.centerScoped(principal)) {
+            return SourceDataAccess.visibleCenter(principal, requested);
+        }
         String identity = principal == null || principal.center() == null || principal.center().isBlank()
                 ? null
                 : principal.center().trim();

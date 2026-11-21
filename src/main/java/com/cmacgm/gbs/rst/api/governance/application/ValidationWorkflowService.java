@@ -40,7 +40,7 @@ import com.cmacgm.gbs.rst.api.exercise.associateddata.application.WorkingDaysSer
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
 import com.cmacgm.gbs.rst.api.workflow.domain.ProcessInstance;
 import com.cmacgm.gbs.rst.api.workflow.domain.ProcessTask;
@@ -65,7 +65,7 @@ public class ValidationWorkflowService {
     private final ExerciseTeamSetupRepository teamSetups;
     private final WorkingDaysService workingDaysService;
     private final WorkflowRouter workflowRouter;
-    private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
     private final Clock clock;
 
     /**
@@ -87,7 +87,7 @@ public class ValidationWorkflowService {
             ExerciseTeamSetupRepository teamSetups,
             WorkingDaysService workingDaysService,
             WorkflowRouter workflowRouter,
-            TimesheetReadService timesheet,
+            WorkforceRead workforce,
             Clock clock) {
         this.exercises = exercises;
         this.workflows = workflows;
@@ -96,7 +96,7 @@ public class ValidationWorkflowService {
         this.teamSetups = teamSetups;
         this.workingDaysService = workingDaysService;
         this.workflowRouter = workflowRouter;
-        this.timesheet = timesheet;
+        this.workforce = workforce;
         this.clock = clock;
     }
 
@@ -118,13 +118,15 @@ public class ValidationWorkflowService {
         Map<UUID, ReviewState> reviewByExercise = reviewStateFor(underReview);
         Map<UUID, BigDecimal> rightSizingByExercise = rightSizingByExercise(underReview);
         Map<UUID, BigDecimal> supportByExercise = supportByExercise(underReview);
+        Map<UUID, BigDecimal> actualByExercise = actualByExercise(underReview);
         List<ValidationWorkflowRow> source = new ArrayList<>();
         for (RstExercise exercise : underReview) {
             source.add(rowFor(
                     exercise,
                     reviewByExercise.get(exercise.getId()),
                     rightSizingByExercise.get(exercise.getId()),
-                    supportByExercise.get(exercise.getId())));
+                    supportByExercise.get(exercise.getId()),
+                    actualByExercise.getOrDefault(exercise.getId(), BigDecimal.ZERO)));
         }
         source.sort(Comparator
                 .comparing(ValidationWorkflowRow::agingDays, Comparator.nullsLast(Comparator.reverseOrder()))
@@ -202,10 +204,9 @@ public class ValidationWorkflowService {
             RstExercise exercise,
             ReviewState review,
             BigDecimal rightSizingHc,
-            BigDecimal productionSupport) {
+            BigDecimal productionSupport,
+            BigDecimal actualHc) {
         ExerciseToolkitSnapshot snapshot = exercise.getToolkitSnapshot();
-        BigDecimal deliveryHc = deliveryHc(exercise);
-        BigDecimal actualHc = SizingMath.actualHeadcount(deliveryHc);
         BigDecimal capacity = ValidationWorkflowMath.capacityCreation(
                 actualHc, rightSizingHc, productionSupport);
         String center = snapshot == null ? null : snapshot.getCenter();
@@ -295,7 +296,7 @@ public class ValidationWorkflowService {
         Map<String, String> names = new HashMap<>();
         for (String ccgid : ccgids) {
             if (hasText(ccgid)) {
-                names.put(ccgid, timesheet.displayNameByCcgid(ccgid));
+                names.put(ccgid, workforce.displayNameByCcgid(ccgid));
             }
         }
         return names;
@@ -347,6 +348,15 @@ public class ValidationWorkflowService {
                     itemsByExercise.getOrDefault(exercise.getId(), List.of()),
                     setups.get(exercise.getId()),
                     workingDaysService.workingDaysPerYear(exercise.getId())));
+        }
+        return result;
+    }
+
+    private Map<UUID, BigDecimal> actualByExercise(List<RstExercise> underReview) {
+        List<UUID> exerciseIds = underReview.stream().map(RstExercise::getId).toList();
+        Map<UUID, BigDecimal> result = new HashMap<>();
+        for (ExerciseTeamSetup setup : teamSetups.findAllById(exerciseIds)) {
+            result.put(setup.getExerciseId(), SizingMath.actualHeadcount(setup.totalAgents()));
         }
         return result;
     }
@@ -408,16 +418,6 @@ public class ValidationWorkflowService {
                 customerCountries,
                 currentSteps,
                 currentOwners);
-    }
-
-    private static BigDecimal deliveryHc(RstExercise exercise) {
-        BigDecimal sum = BigDecimal.ZERO;
-        for (ExerciseSharedKpiLine line : exercise.getSharedKpiLines()) {
-            if (line.getDeliveryHc() != null) {
-                sum = sum.add(line.getDeliveryHc());
-            }
-        }
-        return sum;
     }
 
     private static BigDecimal rightSizingHc(Scenario scenario) {

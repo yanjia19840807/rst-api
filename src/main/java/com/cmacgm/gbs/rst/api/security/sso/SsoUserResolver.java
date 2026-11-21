@@ -10,8 +10,9 @@ import com.cmacgm.gbs.rst.api.domainhead.application.DomainHeadConfigService;
 import com.cmacgm.gbs.rst.api.security.RstCenters;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.security.RstRoles;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPerson;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -26,7 +27,7 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(name = "app.security.dev-identity.override-enabled", havingValue = "false", matchIfMissing = true)
 public class SsoUserResolver {
 
-    private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
     private final SsoProperties properties;
     private final DomainHeadConfigService domainHeads;
 
@@ -36,10 +37,10 @@ public class SsoUserResolver {
      * @param domainHeads Center Roles CDH / LTH assignments
      */
     public SsoUserResolver(
-            TimesheetReadService timesheet,
+            WorkforceRead workforce,
             SsoProperties properties,
             DomainHeadConfigService domainHeads) {
-        this.timesheet = timesheet;
+        this.workforce = workforce;
         this.properties = properties;
         this.domainHeads = domainHeads;
     }
@@ -93,7 +94,7 @@ public class SsoUserResolver {
     }
 
     private UserExpansion expandUser(String ccgid) {
-        TimesheetReadService.ProductSeat seat = timesheet.findActiveProductSeat(ccgid).orElse(null);
+        TimesheetReadService.ProductSeat seat = workforce.findActiveProductSeat(ccgid).orElse(null);
         Set<String> roles = new LinkedHashSet<>();
         if (seat != null && seat.roleTypes() != null) {
             for (String roleType : seat.roleTypes()) {
@@ -113,7 +114,7 @@ public class SsoUserResolver {
             roles.add(RstRoles.LOCAL_TRANSFORMATION_HEAD);
         }
 
-        TimesheetPerson person = seat == null ? timesheet.findActivePerson(ccgid).orElse(null) : null;
+        OrgPerson person = seat == null ? workforce.findActivePerson(ccgid).orElse(null) : null;
         String center = RstCenters.canonicalize(
                 seat != null ? seat.center() : person == null ? null : person.getCenter());
         String displayName = seat != null

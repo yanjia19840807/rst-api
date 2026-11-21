@@ -24,7 +24,7 @@ import com.cmacgm.gbs.rst.api.delegation.application.PositionCoverage;
 import com.cmacgm.gbs.rst.api.governance.application.CommaTokens;
 import com.cmacgm.gbs.rst.api.timesheet.api.dto.TimesheetAlignmentView;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetAlignment;
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSession;
 import com.cmacgm.gbs.rst.api.tms.persistence.TmsSessionRepository;
 import com.cmacgm.gbs.rst.api.toolkit.api.dto.CreateToolkitRequest;
@@ -47,7 +47,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ToolkitService {
 
     private final ToolkitRepository toolkits;
-    private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
     private final TmsSessionRepository tmsSessions;
     private final PositionCoverage coverage;
     private final AuditRecorder audits;
@@ -55,13 +55,13 @@ public class ToolkitService {
 
     public ToolkitService(
             ToolkitRepository toolkits,
-            TimesheetReadService timesheet,
+            WorkforceRead workforce,
             TmsSessionRepository tmsSessions,
             PositionCoverage coverage,
             AuditRecorder audits,
             Clock clock) {
         this.toolkits = toolkits;
-        this.timesheet = timesheet;
+        this.workforce = workforce;
         this.tmsSessions = tmsSessions;
         this.coverage = coverage;
         this.audits = audits;
@@ -165,9 +165,9 @@ public class ToolkitService {
     public ToolkitResponse detail(String ccgid, UUID id) {
         Toolkit toolkit = toolkits.findExistingById(id)
                 .orElseThrow(() -> notFound("toolkit-not-found", "The Toolkit was not found."));
-        boolean supervisor = timesheet.supervisorOwnsScope(
+        boolean supervisor = workforce.supervisorOwnsScope(
                 ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), toolkit.getCenter());
-        boolean agent = timesheet.agentCanUse(
+        boolean agent = workforce.agentCanUse(
                 ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), toolkit.getCenter());
         if (!supervisor && !agent) {
             throw forbidden("toolkit-out-of-scope",
@@ -276,7 +276,7 @@ public class ToolkitService {
 
     private List<Toolkit> scopedManagedToolkits(String ccgid) {
         String covered = coveredSupervisorPosition();
-        var positions = new ArrayList<>(timesheet.supervisorHierarchy(ccgid).stream()
+        var positions = new ArrayList<>(workforce.supervisorHierarchy(ccgid).stream()
                 .map(candidate -> candidate.supervisorPositionId())
                 .distinct()
                 .toList());
@@ -292,7 +292,7 @@ public class ToolkitService {
     }
 
     private boolean ownsToolkit(String ccgid, String covered, Toolkit toolkit) {
-        if (timesheet.supervisorOwnsScope(
+        if (workforce.supervisorOwnsScope(
                 ccgid,
                 toolkit.getSupervisorPositionId(),
                 toolkit.getPrimaryPl3Code(),
@@ -301,7 +301,7 @@ public class ToolkitService {
         }
         return covered != null
                 && covered.equals(toolkit.getSupervisorPositionId())
-                && timesheet.positionHasScope(
+                && workforce.positionHasScope(
                         covered, toolkit.getPrimaryPl3Code(), toolkit.getCenter());
     }
 
@@ -328,10 +328,10 @@ public class ToolkitService {
     }
 
     private void ensureScope(String ccgid, CreateToolkitRequest request) {
-        var hierarchy = new ArrayList<>(timesheet.supervisorHierarchy(ccgid));
+        var hierarchy = new ArrayList<>(workforce.supervisorHierarchy(ccgid));
         String covered = coveredSupervisorPosition();
         if (covered != null) {
-            hierarchy.addAll(timesheet.hierarchyForPosition(covered));
+            hierarchy.addAll(workforce.hierarchyForPosition(covered));
         }
         boolean exactPath = hierarchy.stream().anyMatch(candidate ->
                 candidate.supervisorPositionId().equals(request.supervisorPositionId())
@@ -386,7 +386,7 @@ public class ToolkitService {
                 .map(SharedKpiSelectionRequest::customerCountry)
                 .distinct()
                 .toList();
-        var candidates = timesheet.kpis(
+        var candidates = workforce.kpis(
                 toolkit.getCenter(), toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), countries);
         var seen = new HashSet<String>();
         for (SharedKpiSelectionRequest item : requested) {
@@ -411,7 +411,7 @@ public class ToolkitService {
                 .map(selection -> new TimesheetAlignment.Key(
                         selection.getCarrier(), selection.getSite(), selection.getCustomerCountry()))
                 .toList();
-        TimesheetAlignmentView alignment = TimesheetAlignmentView.from(timesheet.align(
+        TimesheetAlignmentView alignment = TimesheetAlignmentView.from(workforce.align(
                 toolkit.getCenter(), toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), keys));
         SessionImpact toolkitImpact = new SessionImpact(
                 (int) tmsSessions.countByToolkit_IdAndEnabled(toolkit.getId(), true),

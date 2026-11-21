@@ -23,8 +23,9 @@ import com.cmacgm.gbs.rst.api.delegation.domain.Delegation;
 import com.cmacgm.gbs.rst.api.delegation.domain.DelegationStatus;
 import com.cmacgm.gbs.rst.api.delegation.persistence.DelegationRepository;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPerson;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,7 +40,7 @@ public class DelegationService {
             List.of(DelegationStatus.PENDING, DelegationStatus.ACTIVE);
 
     private final DelegationRepository delegations;
-    private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
     private final AuditRecorder audits;
     private final Clock clock;
 
@@ -51,11 +52,11 @@ public class DelegationService {
      */
     public DelegationService(
             DelegationRepository delegations,
-            TimesheetReadService timesheet,
+            WorkforceRead workforce,
             AuditRecorder audits,
             Clock clock) {
         this.delegations = delegations;
-        this.timesheet = timesheet;
+        this.workforce = workforce;
         this.audits = audits;
         this.clock = clock;
     }
@@ -70,7 +71,7 @@ public class DelegationService {
     @Transactional
     public List<DelegationView> create(RstPrincipal principal, CreateDelegationRequest request) {
         requireGrantor(principal);
-        List<String> positions = timesheet.heldPositionIds(principal.realCcgid());
+        List<String> positions = workforce.heldPositionIds(principal.realCcgid());
         if (positions.isEmpty()) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
@@ -118,7 +119,7 @@ public class DelegationService {
     @Transactional
     public List<PositionAssignmentView> seats(RstPrincipal principal) {
         requireSignedIn(principal);
-        return positionViews(timesheet.heldPositionIds(principal.realCcgid()));
+        return positionViews(workforce.heldPositionIds(principal.realCcgid()));
     }
 
     private List<DelegationView> coverPositions(
@@ -147,14 +148,14 @@ public class DelegationService {
         if (!allowed.contains(selectedPositionId)) {
             return List.of();
         }
-        var occupant = timesheet.occupant(selectedPositionId);
+        var occupant = workforce.occupant(selectedPositionId);
         if (occupant == null
                 || occupant.ccgid() == null
                 || occupant.ccgid().isBlank()
                 || occupant.ccgid().equalsIgnoreCase(selectedPositionId)) {
             return List.of(selectedPositionId);
         }
-        Set<String> held = new LinkedHashSet<>(timesheet.heldPositionIds(occupant.ccgid()));
+        Set<String> held = new LinkedHashSet<>(workforce.heldPositionIds(occupant.ccgid()));
         return allowed.stream().filter(held::contains).toList();
     }
 
@@ -170,19 +171,19 @@ public class DelegationService {
         LinkedHashSet<String> ids = new LinkedHashSet<>();
         String ccgid = principal.realCcgid();
         if (roles.contains("SUPERVISOR")) {
-            ids.addAll(timesheet.descendantPositionIds(ccgid, null));
+            ids.addAll(workforce.descendantPositionIds(ccgid, null));
         }
         if (roles.contains("SR_MANAGER")) {
-            ids.addAll(timesheet.descendantPositionIds(ccgid, Set.of("SUPERVISOR", "AGENT")));
+            ids.addAll(workforce.descendantPositionIds(ccgid, Set.of("SUPERVISOR", "AGENT")));
         }
         if (roles.contains("DOMAIN_HEAD") || roles.contains("LOCAL_TRANSFORMATION_HEAD")) {
-            ids.addAll(timesheet.positionIdsInCenterWithoutRole(requireCenter(principal), "AGENT"));
+            ids.addAll(workforce.positionIdsInCenterWithoutRole(requireCenter(principal), "AGENT"));
         }
         return List.copyOf(ids);
     }
 
     private Set<String> assignableDelegateCcgids(RstPrincipal principal) {
-        return Set.copyOf(timesheet.occupantCcgids(assignablePositionIds(principal)));
+        return Set.copyOf(workforce.occupantCcgids(assignablePositionIds(principal)));
     }
 
     private List<DelegationView> coverPosition(
@@ -201,7 +202,7 @@ public class DelegationService {
                     "delegation-chain-forbidden",
                     "You cannot delegate a position while you are a delegate for someone else.");
         }
-        List<String> roles = timesheet.roleTypesOfPosition(positionId);
+        List<String> roles = workforce.roleTypesOfPosition(positionId);
         if (roles.isEmpty()) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
@@ -209,7 +210,7 @@ public class DelegationService {
                     "That position is not in the ACTIVE Daily snapshot.");
         }
         String center = requireCenter(principal);
-        var occupant = timesheet.occupant(positionId);
+        var occupant = workforce.occupant(positionId);
         String occupantCcgid = occupant != null && occupant.ccgid() != null && !occupant.ccgid().isBlank()
                 ? occupant.ccgid()
                 : positionId;
@@ -236,12 +237,12 @@ public class DelegationService {
                         "cannot-delegate-self",
                         "The current occupant cannot cover their own position.");
             }
-            TimesheetPerson delegate = timesheet.findActivePerson(delegateCcgid)
+            OrgPerson delegate = workforce.findActivePerson(delegateCcgid)
                     .orElseThrow(() -> new ApiException(
                             HttpStatus.UNPROCESSABLE_ENTITY,
                             "delegate-not-found",
                             "The selected person is not in the active Timesheet snapshot."));
-            if (!timesheet.personInCenter(delegateCcgid, center)) {
+            if (!workforce.personInCenter(delegateCcgid, center)) {
                 throw new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "delegate-center-mismatch",
@@ -308,14 +309,14 @@ public class DelegationService {
         var coverage = refreshAll(delegations.findBySubjectPositionIdIn(positionIds), now);
         List<PositionAssignmentView> rows = new ArrayList<>();
         for (String positionId : positionIds) {
-            var occupant = timesheet.occupant(positionId);
+            var occupant = workforce.occupant(positionId);
             List<DelegationView> open = coverage.stream()
                     .filter(row -> positionId.equals(row.getSubjectPositionId()) && row.getStatus().isOpen())
                     .map(DelegationView::from)
                     .toList();
             rows.add(new PositionAssignmentView(
                     positionId,
-                    timesheet.roleTypesOfPosition(positionId),
+                    workforce.roleTypesOfPosition(positionId),
                     occupant == null ? null : occupant.name(),
                     occupant == null ? null : occupant.ccgid(),
                     open));
@@ -431,7 +432,7 @@ public class DelegationService {
     private PageResponse<DelegationCandidateView> mapCandidates(
             RstPrincipal principal, String q, int page, int pageSize) {
         String center = requireCenter(principal);
-        PageResponse<TimesheetReadService.CenterPerson> source = timesheet.peopleInCenter(center, q, page, pageSize);
+        PageResponse<TimesheetReadService.CenterPerson> source = workforce.peopleInCenter(center, q, page, pageSize);
         List<DelegationCandidateView> items = source.items().stream()
                 .map(person -> new DelegationCandidateView(
                         person.ccgid(), person.name(), center, person.email()))
@@ -444,7 +445,7 @@ public class DelegationService {
         String center = requireCenter(principal);
         List<String> positionIds = assignablePositionIds(principal);
         PageResponse<TimesheetReadService.CenterPerson> source =
-                timesheet.peopleOccupyingPositions(center, positionIds, q, page, pageSize);
+                workforce.peopleOccupyingPositions(center, positionIds, q, page, pageSize);
         List<DelegationCandidateView> items = source.items().stream()
                 .map(person -> new DelegationCandidateView(
                         person.ccgid(), person.name(), center, person.email()))
@@ -457,7 +458,7 @@ public class DelegationService {
         if (center != null && !center.isBlank()) {
             return center.trim();
         }
-        return timesheet.findActiveCenter(principal.realCcgid())
+        return workforce.findActiveCenter(principal.realCcgid())
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.CONFLICT,
                         "identity-center-missing",

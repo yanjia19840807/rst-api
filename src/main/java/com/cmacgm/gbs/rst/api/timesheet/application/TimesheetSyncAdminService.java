@@ -16,6 +16,7 @@ import java.util.regex.Pattern;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,14 +29,17 @@ import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphService;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncAlert;
+import com.cmacgm.gbs.rst.api.security.SourceDataAccess;
+import com.cmacgm.gbs.rst.api.sourcedata.application.CenterSourceService;
+import com.cmacgm.gbs.rst.api.sourcedata.domain.CenterSource;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceAlert;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncAlertRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncIssueRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunSpecification;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceIssue;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceSnapshot;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceAlertRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceIssueRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceSnapshotRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceSnapshotSpecification;
 
 /**
  * LTH monitor and manual upload.
@@ -46,14 +50,16 @@ public class TimesheetSyncAdminService {
     private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
     private static final Pattern MISSING_FIELD = Pattern.compile("(?i)^Missing (.+)\\.$");
     private static final int MAX_RECIPIENTS = 20;
+    private static final List<String> INTERIM_KINDS = List.of("MYHR", "SHARED_KPI");
 
-    private final TimesheetSyncRunRepository syncRuns;
-    private final TimesheetSyncIssueRepository issues;
-    private final TimesheetSyncAlertRepository alerts;
+    private final SourceSnapshotRepository syncRuns;
+    private final SourceIssueRepository issues;
+    private final SourceAlertRepository alerts;
     private final TimesheetSyncService syncService;
     private final AuditRecorder audits;
     private final MicrosoftGraphService graph;
     private final Clock clock;
+    private final CenterSourceService centerSources;
 
     /**
      * @param syncRuns run headers
@@ -63,15 +69,17 @@ public class TimesheetSyncAdminService {
      * @param audits who triggered each run
      * @param graph source file download
      * @param clock timestamps
+     * @param centerSources which centers still use Timesheet
      */
     public TimesheetSyncAdminService(
-            TimesheetSyncRunRepository syncRuns,
-            TimesheetSyncIssueRepository issues,
-            TimesheetSyncAlertRepository alerts,
+            SourceSnapshotRepository syncRuns,
+            SourceIssueRepository issues,
+            SourceAlertRepository alerts,
             TimesheetSyncService syncService,
             AuditRecorder audits,
             MicrosoftGraphService graph,
-            Clock clock) {
+            Clock clock,
+            CenterSourceService centerSources) {
         this.syncRuns = syncRuns;
         this.issues = issues;
         this.alerts = alerts;
@@ -79,6 +87,7 @@ public class TimesheetSyncAdminService {
         this.audits = audits;
         this.graph = graph;
         this.clock = clock;
+        this.centerSources = centerSources;
     }
 
     /**
@@ -90,6 +99,7 @@ public class TimesheetSyncAdminService {
      * @param dateTo inclusive sync date
      * @param page 1-based page
      * @param pageSize page size
+     * @param principal caller; an LTH is limited to the identity Center and Daily or Monthly
      * @return ACTIVE snapshots and a page of recent runs
      */
     @Transactional(readOnly = true)
@@ -101,13 +111,35 @@ public class TimesheetSyncAdminService {
             LocalDate dateFrom,
             LocalDate dateTo,
             int page,
-            int pageSize) {
+            int pageSize,
+            RstPrincipal principal) {
         int safePageSize = Math.min(100, Math.max(1, pageSize));
         int safePage = Math.max(1, page);
-        Page<TimesheetSyncRun> runs = syncRuns.findAll(
-                TimesheetSyncRunSpecification.filtered(kind, status, center, sourceType, dateFrom, dateTo),
-                PageRequest.of(safePage - 1, safePageSize, Sort.by(Sort.Direction.DESC, "startedAt")));
-        return new Overview(snapshots("DAILY"), snapshots("MONTHLY"), headers(runs));
+        String onlyCenter = null;
+        if (SourceDataAccess.centerScoped(principal)) {
+            if (isInterimKind(kind) || isGlobalKind(kind)) {
+                throw new ApiException(
+                        HttpStatus.FORBIDDEN,
+                        "source-global-forbidden",
+                        "MyHR and SKPI files cover more than one Center.");
+            }
+            onlyCenter = SourceDataAccess.ownCenter(principal);
+            center = onlyCenter;
+        }
+        boolean interim = isInterimKind(kind);
+        Specification<SourceSnapshot> spec = SourceSnapshotSpecification.filtered(
+                interim ? null : kind, status, center, sourceType, dateFrom, dateTo);
+        if (interim) {
+            spec = spec.and((root, query, builder) -> root.get("kind").in(INTERIM_KINDS));
+        } else if (limitsToTimesheetCenters(kind)) {
+            spec = spec.and(timesheetCenters());
+            if (kind == null || kind.isBlank()) {
+                spec = spec.and((root, query, builder) -> root.get("kind").in("DAILY", "MONTHLY"));
+            }
+        }
+        Page<SourceSnapshot> runs = syncRuns.findAll(
+                spec, PageRequest.of(safePage - 1, safePageSize, Sort.by(Sort.Direction.DESC, "startedAt")));
+        return new Overview(snapshots("DAILY", onlyCenter), snapshots("MONTHLY", onlyCenter), headers(runs));
     }
 
     /**
@@ -117,9 +149,10 @@ public class TimesheetSyncAdminService {
      * @return file name and bytes
      */
     @Transactional(readOnly = true)
-    public FileDownload downloadSource(UUID id) {
-        TimesheetSyncRun run = syncRuns.findById(id)
+    public FileDownload downloadSource(UUID id, RstPrincipal principal) {
+        SourceSnapshot run = syncRuns.findById(id)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Timesheet sync run not found."));
+        SourceDataAccess.requireOwnSnapshot(principal, run.getKind(), run.getCenter());
         String itemId = run.getSourceDriveItemId();
         if (itemId == null || itemId.isBlank()) {
             throw new ApiException(HttpStatus.NOT_FOUND, "FILE_UNAVAILABLE", "File is no longer available.");
@@ -141,9 +174,10 @@ public class TimesheetSyncAdminService {
      * @return detail with a page of issues
      */
     @Transactional(readOnly = true)
-    public RunDetail run(UUID id, int page, int pageSize) {
-        TimesheetSyncRun run = syncRuns.findById(id)
+    public RunDetail run(UUID id, int page, int pageSize, RstPrincipal principal) {
+        SourceSnapshot run = syncRuns.findById(id)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Timesheet sync run not found."));
+        SourceDataAccess.requireOwnSnapshot(principal, run.getKind(), run.getCenter());
         int safePageSize = Math.min(100, Math.max(1, pageSize));
         int safePage = Math.max(1, page);
         List<IssueView> merged = mergeBySourceRow(issues.findBySyncRunIdOrderBySourceRowAscCreatedAtAsc(id));
@@ -154,7 +188,7 @@ public class TimesheetSyncAdminService {
         return new RunDetail(toHeader(run), issuePage);
     }
 
-    private IssueView runLevelIssue(TimesheetSyncRun run) {
+    private IssueView runLevelIssue(SourceSnapshot run) {
         return new IssueView(
                 run.getId(),
                 run.getErrorCode(),
@@ -172,8 +206,8 @@ public class TimesheetSyncAdminService {
      */
     @Transactional(readOnly = true)
     public AlertConfig alert() {
-        TimesheetSyncAlert row = alerts.findById(TimesheetSyncAlert.SINGLETON_ID)
-                .orElseGet(TimesheetSyncAlert::disabled);
+        SourceAlert row = alerts.findById(SourceAlert.SINGLETON_ID)
+                .orElseGet(SourceAlert::disabled);
         return new AlertConfig(row.isEnabled(), parseRecipients(row.getRecipients()));
     }
 
@@ -194,8 +228,8 @@ public class TimesheetSyncAdminService {
                     "INVALID_ALERT",
                     "At least one recipient is required when email alerts are enabled.");
         }
-        TimesheetSyncAlert row = alerts.findById(TimesheetSyncAlert.SINGLETON_ID)
-                .orElseGet(TimesheetSyncAlert::disabled);
+        SourceAlert row = alerts.findById(SourceAlert.SINGLETON_ID)
+                .orElseGet(SourceAlert::disabled);
         row.replace(
                 incoming.enabled(),
                 String.join("\n", recipients),
@@ -212,12 +246,30 @@ public class TimesheetSyncAdminService {
      * @param file upload
      * @return result header
      */
-    public RunHeader upload(MultipartFile file) {
+    public RunHeader upload(MultipartFile file, RstPrincipal principal) {
         if (file == null || file.isEmpty()) {
             throw new ApiException(
                     HttpStatus.BAD_REQUEST, TimesheetSyncErrorCode.INVALID_HEADER.code(), "Timesheet file is required.");
         }
         String name = file.getOriginalFilename() == null ? "upload.xlsx" : file.getOriginalFilename();
+        if (SourceDataAccess.centerScoped(principal)) {
+            String own = SourceDataAccess.ownCenter(principal);
+            String fileCenter = TimesheetReportName.parse(name)
+                    .map(TimesheetReportName.Parsed::region)
+                    .orElse(null);
+            if (!own.equals(fileCenter)) {
+                throw new ApiException(
+                        HttpStatus.FORBIDDEN,
+                        "source-center-forbidden",
+                        "Source Data is limited to Center " + own + ".");
+            }
+            if (!CenterSource.TIMESHEET.equals(centerSources.sourceMode(own))) {
+                throw new ApiException(
+                        HttpStatus.FORBIDDEN,
+                        "source-global-forbidden",
+                        "This Center uses MyHR and SKPI.");
+            }
+        }
         try {
             TimesheetSyncService.SyncResult result = syncService.syncUploaded(name, file.getBytes());
             return toHeader(syncRuns.findById(result.id()).orElseThrow());
@@ -231,28 +283,71 @@ public class TimesheetSyncAdminService {
         }
     }
 
-    private List<RunHeader> snapshots(String kind) {
-        List<TimesheetSyncRun> rows = syncRuns.findByKindAndStatus(kind, "ACTIVE");
+    private List<RunHeader> snapshots(String kind, String onlyCenter) {
+        Set<String> allowed = timesheetCenterNames();
+        List<SourceSnapshot> rows = syncRuns.findByKindAndStatus(kind, "ACTIVE").stream()
+                .filter(run -> allowed.contains(run.getCenter()))
+                .filter(run -> onlyCenter == null || onlyCenter.equals(run.getCenter()))
+                .toList();
         Map<UUID, AuditActorView> created = createdBy(rows);
         return rows.stream().map(run -> toHeader(run, created.get(run.getId()))).toList();
     }
 
-    private PageResponse<RunHeader> headers(Page<TimesheetSyncRun> page) {
+    /**
+     * Kind token for the MyHR and SKPI list when no single kind is selected.
+     */
+    private static boolean isInterimKind(String kind) {
+        return kind != null && "INTERIM".equalsIgnoreCase(kind.trim());
+    }
+
+    private static boolean isGlobalKind(String kind) {
+        if (kind == null || kind.isBlank()) {
+            return false;
+        }
+        String normalized = kind.trim().toUpperCase(Locale.ROOT);
+        return "MYHR".equals(normalized) || "SHARED_KPI".equals(normalized);
+    }
+
+    /**
+     * Daily and Monthly history belongs to centers that still use Timesheet.
+     * MyHR and SKPI uploads are global and stay on their own list.
+     */
+    private static boolean limitsToTimesheetCenters(String kind) {
+        if (kind == null || kind.isBlank()) {
+            return true;
+        }
+        String normalized = kind.trim().toUpperCase(Locale.ROOT);
+        return "DAILY".equals(normalized) || "MONTHLY".equals(normalized);
+    }
+
+    private Specification<SourceSnapshot> timesheetCenters() {
+        Set<String> allowed = timesheetCenterNames();
+        if (allowed.isEmpty()) {
+            return (root, query, builder) -> builder.disjunction();
+        }
+        return (root, query, builder) -> root.get("center").in(allowed);
+    }
+
+    private Set<String> timesheetCenterNames() {
+        return centerSources.centersWith(CenterSource.TIMESHEET);
+    }
+
+    private PageResponse<RunHeader> headers(Page<SourceSnapshot> page) {
         Map<UUID, AuditActorView> created = createdBy(page.getContent());
         return PageResponse.from(page, run -> toHeader(run, created.get(run.getId())));
     }
 
-    private Map<UUID, AuditActorView> createdBy(List<TimesheetSyncRun> rows) {
+    private Map<UUID, AuditActorView> createdBy(List<SourceSnapshot> rows) {
         return audits.createdBy(
                 AuditEntityType.TIMESHEET_SYNC,
-                rows.stream().map(TimesheetSyncRun::getId).toList());
+                rows.stream().map(SourceSnapshot::getId).toList());
     }
 
-    private RunHeader toHeader(TimesheetSyncRun run) {
+    private RunHeader toHeader(SourceSnapshot run) {
         return toHeader(run, audits.createdBy(AuditEntityType.TIMESHEET_SYNC, run.getId()));
     }
 
-    private RunHeader toHeader(TimesheetSyncRun run, AuditActorView createdBy) {
+    private RunHeader toHeader(SourceSnapshot run, AuditActorView createdBy) {
         String itemId = run.getSourceDriveItemId();
         return new RunHeader(
                 run.getId(),
@@ -279,11 +374,11 @@ public class TimesheetSyncAdminService {
      * @param rows persisted issues in source-row order
      * @return merged views
      */
-    static List<IssueView> mergeBySourceRow(List<TimesheetSyncIssue> rows) {
+    static List<IssueView> mergeBySourceRow(List<SourceIssue> rows) {
         List<IssueView> merged = new ArrayList<>();
-        List<TimesheetSyncIssue> bucket = new ArrayList<>();
+        List<SourceIssue> bucket = new ArrayList<>();
         Integer currentRow = null;
-        for (TimesheetSyncIssue issue : rows == null ? List.<TimesheetSyncIssue>of() : rows) {
+        for (SourceIssue issue : rows == null ? List.<SourceIssue>of() : rows) {
             Integer sourceRow = issue.getSourceRow();
             if (sourceRow == null) {
                 flushMergedRow(merged, bucket);
@@ -301,7 +396,7 @@ public class TimesheetSyncAdminService {
         return merged;
     }
 
-    private static void flushMergedRow(List<IssueView> merged, List<TimesheetSyncIssue> bucket) {
+    private static void flushMergedRow(List<IssueView> merged, List<SourceIssue> bucket) {
         if (bucket.isEmpty()) {
             return;
         }
@@ -309,13 +404,13 @@ public class TimesheetSyncAdminService {
         bucket.clear();
     }
 
-    private static IssueView toMergedIssue(List<TimesheetSyncIssue> bucket) {
-        TimesheetSyncIssue first = bucket.get(0);
+    private static IssueView toMergedIssue(List<SourceIssue> bucket) {
+        SourceIssue first = bucket.get(0);
         if (bucket.size() == 1) {
             return toIssueView(first);
         }
         Set<String> codes = new LinkedHashSet<>();
-        for (TimesheetSyncIssue issue : bucket) {
+        for (SourceIssue issue : bucket) {
             if (issue.getCode() != null && !issue.getCode().isBlank()) {
                 codes.add(issue.getCode());
             }
@@ -324,13 +419,13 @@ public class TimesheetSyncAdminService {
                 first.getId(),
                 codes.isEmpty() ? first.getCode() : String.join(", ", codes),
                 mergeMessages(bucket),
-                firstNonBlank(bucket, TimesheetSyncIssue::getEmpCcgid),
-                firstNonBlank(bucket, TimesheetSyncIssue::getPositionId),
-                firstNonBlank(bucket, TimesheetSyncIssue::getPl3Code),
+                firstNonBlank(bucket, SourceIssue::getEmpCcgid),
+                firstNonBlank(bucket, SourceIssue::getPositionId),
+                firstNonBlank(bucket, SourceIssue::getPl3Code),
                 first.getSourceRow());
     }
 
-    private static IssueView toIssueView(TimesheetSyncIssue issue) {
+    private static IssueView toIssueView(SourceIssue issue) {
         return new IssueView(
                 issue.getId(),
                 issue.getCode(),
@@ -341,10 +436,10 @@ public class TimesheetSyncAdminService {
                 issue.getSourceRow());
     }
 
-    private static String mergeMessages(List<TimesheetSyncIssue> bucket) {
+    private static String mergeMessages(List<SourceIssue> bucket) {
         List<String> missing = new ArrayList<>();
         List<String> others = new ArrayList<>();
-        for (TimesheetSyncIssue issue : bucket) {
+        for (SourceIssue issue : bucket) {
             String text = displayIssueMessage(issue);
             if (text.isBlank()) {
                 continue;
@@ -369,7 +464,7 @@ public class TimesheetSyncAdminService {
         return String.join(" ", parts);
     }
 
-    private static String displayIssueMessage(TimesheetSyncIssue issue) {
+    private static String displayIssueMessage(SourceIssue issue) {
         String text = issue.getMessage() == null ? "" : issue.getMessage().trim();
         if (issue.getSourceRow() != null) {
             text = text.replaceFirst("(?i)^Row\\s+" + issue.getSourceRow() + "\\s+", "");
@@ -380,8 +475,8 @@ public class TimesheetSyncAdminService {
     }
 
     private static String firstNonBlank(
-            List<TimesheetSyncIssue> bucket, java.util.function.Function<TimesheetSyncIssue, String> getter) {
-        for (TimesheetSyncIssue issue : bucket) {
+            List<SourceIssue> bucket, java.util.function.Function<SourceIssue, String> getter) {
+        for (SourceIssue issue : bucket) {
             String value = getter.apply(issue);
             if (value != null && !value.isBlank()) {
                 return value;

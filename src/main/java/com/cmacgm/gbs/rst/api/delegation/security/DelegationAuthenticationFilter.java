@@ -15,7 +15,7 @@ import com.cmacgm.gbs.rst.api.delegation.application.DelegationService;
 import com.cmacgm.gbs.rst.api.delegation.domain.Delegation;
 import com.cmacgm.gbs.rst.api.security.RstAuthenticationToken;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -31,15 +31,15 @@ public class DelegationAuthenticationFilter extends OncePerRequestFilter {
     public static final String HEADER = "X-Rst-Delegation-Id";
 
     private final DelegationService delegations;
-    private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
 
     /**
      * @param delegations activation
      * @param timesheet subject display name
      */
-    public DelegationAuthenticationFilter(DelegationService delegations, TimesheetReadService timesheet) {
+    public DelegationAuthenticationFilter(DelegationService delegations, WorkforceRead workforce) {
         this.delegations = delegations;
-        this.timesheet = timesheet;
+        this.workforce = workforce;
     }
 
     @Override
@@ -83,7 +83,7 @@ public class DelegationAuthenticationFilter extends OncePerRequestFilter {
 
     private RstPrincipal effectivePrincipal(RstPrincipal actor, Delegation delegation) {
         if (delegation.getSubjectPositionId() != null && !delegation.getSubjectPositionId().isBlank()) {
-            java.util.List<String> liveRoles = timesheet.roleTypesOfPosition(delegation.getSubjectPositionId());
+            java.util.List<String> liveRoles = workforce.roleTypesOfPosition(delegation.getSubjectPositionId());
             java.util.Set<String> roles = new java.util.LinkedHashSet<>();
             if (liveRoles != null && !liveRoles.isEmpty()) {
                 roles.addAll(liveRoles);
@@ -104,7 +104,7 @@ public class DelegationAuthenticationFilter extends OncePerRequestFilter {
                     delegation.getId(),
                     delegation.getSubjectPositionId());
         }
-        String subjectName = timesheet.displayNameByCcgid(delegation.getDelegatorCcgid());
+        String subjectName = workforce.displayNameByCcgid(delegation.getDelegatorCcgid());
         if (subjectName == null || subjectName.isBlank()) {
             subjectName = delegation.getDelegatorName();
         }

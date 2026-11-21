@@ -22,7 +22,7 @@ import com.cmacgm.gbs.rst.api.audit.domain.AuditEntityType;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.delegation.application.PositionCoverage;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.TeamAgent;
 import com.cmacgm.gbs.rst.api.tms.api.dto.PausedSessionMatchView;
 import com.cmacgm.gbs.rst.api.tms.api.dto.TmsSessionResponse;
@@ -45,7 +45,7 @@ public class TmsSessionQueryService {
 
     private final TmsSessionRepository sessionRepository;
     private final ToolkitService toolkits;
-    private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
     private final TmsSessionExcelService excel;
     private final PositionCoverage coverage;
     private final AuditRecorder audits;
@@ -54,14 +54,14 @@ public class TmsSessionQueryService {
     public TmsSessionQueryService(
             TmsSessionRepository sessionRepository,
             ToolkitService toolkits,
-            TimesheetReadService timesheet,
+            WorkforceRead workforce,
             TmsSessionExcelService excel,
             PositionCoverage coverage,
             AuditRecorder audits,
             Clock clock) {
         this.sessionRepository = sessionRepository;
         this.toolkits = toolkits;
-        this.timesheet = timesheet;
+        this.workforce = workforce;
         this.excel = excel;
         this.coverage = coverage;
         this.audits = audits;
@@ -325,7 +325,7 @@ public class TmsSessionQueryService {
     public List<TeamAgent> teamAgents(String ccgid) {
         return sessionAgentCcgids(ccgid).stream()
                 .map(agentCcgid -> {
-                    String name = timesheet.displayNameByCcgid(agentCcgid);
+                    String name = workforce.displayNameByCcgid(agentCcgid);
                     return new TeamAgent(
                             agentCcgid,
                             name == null || name.isBlank() ? agentCcgid : name,
@@ -491,7 +491,7 @@ public class TmsSessionQueryService {
         if (positionId == null) {
             return null;
         }
-        var occupant = timesheet.occupant(positionId);
+        var occupant = workforce.occupant(positionId);
         if (occupant == null || occupant.ccgid() == null || occupant.ccgid().isBlank()
                 || occupant.ccgid().equalsIgnoreCase(positionId)) {
             return positionId;

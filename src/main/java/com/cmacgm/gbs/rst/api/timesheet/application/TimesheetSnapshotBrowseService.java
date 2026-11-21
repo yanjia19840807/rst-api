@@ -15,17 +15,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPersonPositionRole;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPositionParent;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonPositionRoleRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionParentRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SupervisorDeliveryHc;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPerson;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgSeat;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPositionParent;
+import com.cmacgm.gbs.rst.api.timesheet.domain.MonthlyScope;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SupervisorDeliveryHcRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgSeatRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgPersonRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgPositionParentRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgPositionRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.MonthlyScopeRepository;
 
 /**
  * Paged ACTIVE snapshot tables for the Timesheet Sync monitor.
@@ -33,12 +33,12 @@ import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
 @Service
 public class TimesheetSnapshotBrowseService {
 
-    private final TimesheetPersonRepository people;
-    private final TimesheetPersonPositionRoleRepository seats;
-    private final TimesheetPositionRepository positions;
-    private final TimesheetPositionParentRepository parents;
-    private final TimesheetScopeRepository scopes;
-    private final TimesheetKpiRepository kpis;
+    private final OrgPersonRepository people;
+    private final OrgSeatRepository seats;
+    private final OrgPositionRepository positions;
+    private final OrgPositionParentRepository parents;
+    private final MonthlyScopeRepository scopes;
+    private final SupervisorDeliveryHcRepository kpis;
 
     /**
      * @param people Daily people
@@ -49,12 +49,12 @@ public class TimesheetSnapshotBrowseService {
      * @param kpis Monthly Delivery HC
      */
     public TimesheetSnapshotBrowseService(
-            TimesheetPersonRepository people,
-            TimesheetPersonPositionRoleRepository seats,
-            TimesheetPositionRepository positions,
-            TimesheetPositionParentRepository parents,
-            TimesheetScopeRepository scopes,
-            TimesheetKpiRepository kpis) {
+            OrgPersonRepository people,
+            OrgSeatRepository seats,
+            OrgPositionRepository positions,
+            OrgPositionParentRepository parents,
+            MonthlyScopeRepository scopes,
+            SupervisorDeliveryHcRepository kpis) {
         this.people = people;
         this.seats = seats;
         this.positions = positions;
@@ -97,7 +97,7 @@ public class TimesheetSnapshotBrowseService {
     public PageResponse<PositionView> positions(String center, String q, int page, int pageSize) {
         var rows = positions.searchActiveNodes(blank(center), blank(q), pageOf(page, pageSize));
         Map<String, String> names = occupantNamesByNode(rows.getContent());
-        Map<String, List<TimesheetPositionParent>> edges = parentsByNode(blank(center), rows.getContent());
+        Map<String, List<OrgPositionParent>> edges = parentsByNode(blank(center), rows.getContent());
         return PageResponse.from(rows, row -> toPosition(row, names, edges));
     }
 
@@ -126,7 +126,7 @@ public class TimesheetSnapshotBrowseService {
     public PageResponse<ScopeView> scopes(String center, String supervisor, String pl3Code, int page, int pageSize) {
         var rows = scopes.searchActive(blank(center), blank(supervisor), blank(pl3Code), pageOf(page, pageSize));
         Set<String> ids = new LinkedHashSet<>();
-        for (TimesheetScope row : rows.getContent()) {
+        for (MonthlyScope row : rows.getContent()) {
             addPositionId(ids, row.getSupervisorPositionId());
         }
         Map<String, String> names = occupantNames(ids);
@@ -164,37 +164,37 @@ public class TimesheetSnapshotBrowseService {
         return PageResponse.from(rows, row -> toKpi(row, kpiLookups(rows.getContent())));
     }
 
-    private PersonView toPerson(TimesheetPerson row) {
+    private PersonView toPerson(OrgPerson row) {
         return new PersonView(
                 row.getCcgid(), row.getEmpId(), row.getName(), row.getEmail(), row.getJobRole(), row.getCenter());
     }
 
     private PositionView toPosition(
-            TimesheetPositionRepository.PositionNode row,
+            OrgPositionRepository.PositionNode row,
             Map<String, String> names,
-            Map<String, List<TimesheetPositionParent>> edges) {
-        List<TimesheetPositionParent> parentsOfNode =
+            Map<String, List<OrgPositionParent>> edges) {
+        List<OrgPositionParent> parentsOfNode =
                 edges.getOrDefault(nodeKey(row.getPositionId(), row.getRoleType()), List.of());
         return new PositionView(
                 row.getPositionId(),
                 row.getRoleType(),
-                joinParent(parentsOfNode, TimesheetPositionParent::getParentPositionId),
-                joinParent(parentsOfNode, TimesheetPositionParent::getParentRoleType),
+                joinParent(parentsOfNode, OrgPositionParent::getParentPositionId),
+                joinParent(parentsOfNode, OrgPositionParent::getParentRoleType),
                 names.get(nodeKey(row.getPositionId(), row.getRoleType())),
                 row.getCenter());
     }
 
-    private Map<String, List<TimesheetPositionParent>> parentsByNode(
-            String center, List<TimesheetPositionRepository.PositionNode> rows) {
+    private Map<String, List<OrgPositionParent>> parentsByNode(
+            String center, List<OrgPositionRepository.PositionNode> rows) {
         Set<String> ids = new LinkedHashSet<>();
-        for (TimesheetPositionRepository.PositionNode row : rows) {
+        for (OrgPositionRepository.PositionNode row : rows) {
             addPositionId(ids, row.getPositionId());
         }
         if (ids.isEmpty()) {
             return Map.of();
         }
-        Map<String, List<TimesheetPositionParent>> grouped = new LinkedHashMap<>();
-        for (TimesheetPositionParent edge : parents.findActiveByPositionIdIn(center, ids)) {
+        Map<String, List<OrgPositionParent>> grouped = new LinkedHashMap<>();
+        for (OrgPositionParent edge : parents.findActiveByPositionIdIn(center, ids)) {
             grouped.computeIfAbsent(nodeKey(edge.getPositionId(), edge.getRoleType()), key -> new ArrayList<>())
                     .add(edge);
         }
@@ -202,14 +202,14 @@ public class TimesheetSnapshotBrowseService {
     }
 
     private static String joinParent(
-            List<TimesheetPositionParent> edges,
-            java.util.function.Function<TimesheetPositionParent, String> value) {
+            List<OrgPositionParent> edges,
+            java.util.function.Function<OrgPositionParent, String> value) {
         String joined = edges.stream().map(value).filter(part -> part != null && !part.isBlank())
                 .collect(Collectors.joining(", "));
         return joined.isBlank() ? null : joined;
     }
 
-    private OccupancyView toOccupancy(TimesheetPersonPositionRoleRepository.OccupancyRow row) {
+    private OccupancyView toOccupancy(OrgSeatRepository.OccupancyRow row) {
         return new OccupancyView(
                 row.getCcgid(), row.getName(), row.getPositionId(), row.getRoleType(), row.getCenter());
     }
@@ -219,19 +219,19 @@ public class TimesheetSnapshotBrowseService {
             return Map.of();
         }
         Map<String, List<String>> grouped = new LinkedHashMap<>();
-        List<TimesheetPersonPositionRole> occupied = seats.findActiveByPositionIdIn(ids);
+        List<OrgSeat> occupied = seats.findActiveByPositionIdIn(ids);
         if (occupied.isEmpty()) {
             return Map.of();
         }
         Set<String> ccgids = new LinkedHashSet<>();
-        for (TimesheetPersonPositionRole seat : occupied) {
+        for (OrgSeat seat : occupied) {
             ccgids.add(seat.getCcgid());
         }
         Map<String, String> nameByCcgid = new LinkedHashMap<>();
-        for (TimesheetPerson person : people.findActiveByCcgidIn(ccgids)) {
+        for (OrgPerson person : people.findActiveByCcgidIn(ccgids)) {
             nameByCcgid.put(person.getCcgid().toUpperCase(Locale.ROOT), person.getName());
         }
-        for (TimesheetPersonPositionRole seat : occupied) {
+        for (OrgSeat seat : occupied) {
             String positionId = seat.getPositionId();
             String name = nameByCcgid.get(seat.getCcgid().toUpperCase(Locale.ROOT));
             if (positionId == null || positionId.isBlank() || name == null || name.isBlank()) {
@@ -253,7 +253,7 @@ public class TimesheetSnapshotBrowseService {
         }
     }
 
-    private ScopeView toScope(TimesheetScope row, Map<String, String> names) {
+    private ScopeView toScope(MonthlyScope row, Map<String, String> names) {
         return new ScopeView(
                 row.getSupervisorPositionId(),
                 names.get(row.getSupervisorPositionId()),
@@ -266,17 +266,17 @@ public class TimesheetSnapshotBrowseService {
     }
 
     private AssignmentLookups assignmentLookups(
-            List<TimesheetPositionRepository.DerivedAssignment> rows) {
+            List<OrgPositionRepository.DerivedAssignment> rows) {
         Set<String> positionIds = new LinkedHashSet<>();
         Set<String> supervisorIds = new LinkedHashSet<>();
-        for (TimesheetPositionRepository.DerivedAssignment row : rows) {
+        for (OrgPositionRepository.DerivedAssignment row : rows) {
             addPositionId(positionIds, row.getAgentPositionId());
             addPositionId(supervisorIds, row.getSupervisorPositionId());
         }
         Map<String, String> names = occupantNames(union(positionIds, supervisorIds));
         Map<String, String> pl3Names = new LinkedHashMap<>();
         if (!supervisorIds.isEmpty()) {
-            for (TimesheetScope scope : scopes.findActiveBySupervisorPositionIdIn(supervisorIds)) {
+            for (MonthlyScope scope : scopes.findActiveBySupervisorPositionIdIn(supervisorIds)) {
                 String key = scopeKey(scope.getSupervisorPositionId(), scope.getPl3Code(), scope.getCenter());
                 if (!pl3Names.containsKey(key) && scope.getPl3Name() != null && !scope.getPl3Name().isBlank()) {
                     pl3Names.put(key, scope.getPl3Name());
@@ -287,7 +287,7 @@ public class TimesheetSnapshotBrowseService {
     }
 
     private AssignmentView toAssignment(
-            TimesheetPositionRepository.DerivedAssignment row, AssignmentLookups lookups) {
+            OrgPositionRepository.DerivedAssignment row, AssignmentLookups lookups) {
         String pl3Name = row.getPl3Name();
         if (pl3Name == null || pl3Name.isBlank()) {
             pl3Name = lookups.pl3Names()
@@ -317,28 +317,28 @@ public class TimesheetSnapshotBrowseService {
         return ids;
     }
 
-    private Map<String, String> occupantNamesByNode(List<TimesheetPositionRepository.PositionNode> rows) {
+    private Map<String, String> occupantNamesByNode(List<OrgPositionRepository.PositionNode> rows) {
         Set<String> ids = new LinkedHashSet<>();
-        for (TimesheetPositionRepository.PositionNode row : rows) {
+        for (OrgPositionRepository.PositionNode row : rows) {
             addPositionId(ids, row.getPositionId());
         }
         if (ids.isEmpty()) {
             return Map.of();
         }
         Map<String, List<String>> grouped = new LinkedHashMap<>();
-        List<TimesheetPersonPositionRole> occupied = seats.findActiveByPositionIdIn(ids);
+        List<OrgSeat> occupied = seats.findActiveByPositionIdIn(ids);
         if (occupied.isEmpty()) {
             return Map.of();
         }
         Set<String> ccgids = new LinkedHashSet<>();
-        for (TimesheetPersonPositionRole seat : occupied) {
+        for (OrgSeat seat : occupied) {
             ccgids.add(seat.getCcgid());
         }
         Map<String, String> nameByCcgid = new LinkedHashMap<>();
-        for (TimesheetPerson person : people.findActiveByCcgidIn(ccgids)) {
+        for (OrgPerson person : people.findActiveByCcgidIn(ccgids)) {
             nameByCcgid.put(person.getCcgid().toUpperCase(Locale.ROOT), person.getName());
         }
-        for (TimesheetPersonPositionRole seat : occupied) {
+        for (OrgSeat seat : occupied) {
             String name = nameByCcgid.get(seat.getCcgid().toUpperCase(Locale.ROOT));
             if (name == null || name.isBlank()) {
                 continue;
@@ -361,15 +361,15 @@ public class TimesheetSnapshotBrowseService {
     private record AssignmentLookups(Map<String, String> names, Map<String, String> pl3Names) {
     }
 
-    private AssignmentLookups kpiLookups(List<TimesheetKpi> rows) {
+    private AssignmentLookups kpiLookups(List<SupervisorDeliveryHc> rows) {
         Set<String> supervisorIds = new LinkedHashSet<>();
-        for (TimesheetKpi row : rows) {
+        for (SupervisorDeliveryHc row : rows) {
             addPositionId(supervisorIds, row.getSupervisorPositionId());
         }
         Map<String, String> names = occupantNames(supervisorIds);
         Map<String, String> pl3Names = new LinkedHashMap<>();
         if (!supervisorIds.isEmpty()) {
-            for (TimesheetScope scope : scopes.findActiveBySupervisorPositionIdIn(supervisorIds)) {
+            for (MonthlyScope scope : scopes.findActiveBySupervisorPositionIdIn(supervisorIds)) {
                 String key = scopeKey(scope.getSupervisorPositionId(), scope.getPl3Code(), scope.getCenter());
                 if (!pl3Names.containsKey(key) && scope.getPl3Name() != null && !scope.getPl3Name().isBlank()) {
                     pl3Names.put(key, scope.getPl3Name());
@@ -379,7 +379,7 @@ public class TimesheetSnapshotBrowseService {
         return new AssignmentLookups(names, pl3Names);
     }
 
-    private KpiView toKpi(TimesheetKpi row, AssignmentLookups lookups) {
+    private KpiView toKpi(SupervisorDeliveryHc row, AssignmentLookups lookups) {
         return new KpiView(
                 row.getSupervisorPositionId(),
                 lookups.names().get(row.getSupervisorPositionId()),

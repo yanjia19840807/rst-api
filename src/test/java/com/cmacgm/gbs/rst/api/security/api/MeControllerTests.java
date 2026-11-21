@@ -12,21 +12,22 @@ import com.cmacgm.gbs.rst.api.mail.application.SsoProfileService;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.security.dev.DevIdentityProperties;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
 class MeControllerTests {
 
     @Test
-    void includesJobRoleFromActiveTimesheetPerson() {
+    void includesJobRoleFromActiveOrgPerson() {
         SsoProfileService profiles = mock(SsoProfileService.class);
         @SuppressWarnings("unchecked")
         ObjectProvider<DevIdentityProperties> devIdentity = mock(ObjectProvider.class);
-        TimesheetReadService timesheet = mock(TimesheetReadService.class);
+        WorkforceRead workforce = mock(WorkforceRead.class);
         when(devIdentity.getIfAvailable()).thenReturn(null);
-        when(timesheet.findActiveJobRole("S00000001")).thenReturn("Billing Clerk");
+        when(workforce.findActiveJobRole("S00000001")).thenReturn("Billing Clerk");
 
-        MeController controller = new MeController(profiles, devIdentity, timesheet);
+        MeController controller = new MeController(profiles, devIdentity, workforce);
         RstPrincipal principal = new RstPrincipal(
                 "S00000001",
                 "Agent One",
@@ -43,11 +44,11 @@ class MeControllerTests {
         SsoProfileService profiles = mock(SsoProfileService.class);
         @SuppressWarnings("unchecked")
         ObjectProvider<DevIdentityProperties> devIdentity = mock(ObjectProvider.class);
-        TimesheetReadService timesheet = mock(TimesheetReadService.class);
+        WorkforceRead workforce = mock(WorkforceRead.class);
         when(devIdentity.getIfAvailable()).thenReturn(null);
-        when(timesheet.findActiveJobRole("ADMIN001")).thenReturn(null);
+        when(workforce.findActiveJobRole("ADMIN001")).thenReturn(null);
 
-        MeController controller = new MeController(profiles, devIdentity, timesheet);
+        MeController controller = new MeController(profiles, devIdentity, workforce);
         RstPrincipal principal = new RstPrincipal(
                 "ADMIN001", "Admin", "admin@dev.local", Set.of("ADMIN"), Set.of(), null);
 
@@ -59,15 +60,15 @@ class MeControllerTests {
         SsoProfileService profiles = mock(SsoProfileService.class);
         @SuppressWarnings("unchecked")
         ObjectProvider<DevIdentityProperties> devIdentity = mock(ObjectProvider.class);
-        TimesheetReadService timesheet = mock(TimesheetReadService.class);
+        WorkforceRead workforce = mock(WorkforceRead.class);
         when(devIdentity.getIfAvailable()).thenReturn(null);
-        when(timesheet.findActiveJobRole("S00813982")).thenReturn("Supervisor");
-        when(timesheet.roleTypesOfPosition("174327")).thenReturn(List.of("AGENT"));
-        when(timesheet.occupant("174327"))
+        when(workforce.findActiveJobRole("S00813982")).thenReturn("Supervisor");
+        when(workforce.roleTypesOfPosition("174327")).thenReturn(List.of("AGENT"));
+        when(workforce.occupant("174327"))
                 .thenReturn(new TimesheetReadService.Occupant("174327", "S00580242", "WU Rongchan"));
         UUID delegationId = UUID.randomUUID();
 
-        MeController controller = new MeController(profiles, devIdentity, timesheet);
+        MeController controller = new MeController(profiles, devIdentity, workforce);
         RstPrincipal principal = new RstPrincipal(
                 "S00813982",
                 "CHEN Cindy",

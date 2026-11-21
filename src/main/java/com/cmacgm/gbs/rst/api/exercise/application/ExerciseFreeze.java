@@ -14,9 +14,9 @@ import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseSnapshot;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseSubtaskView;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.ExerciseToolkitView;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.ActiveSnapshot;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.KpiCandidate;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import com.cmacgm.gbs.rst.api.toolkit.domain.Toolkit;
 import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitSharedKpiSelection;
 import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitSubtask;
@@ -24,8 +24,8 @@ import com.cmacgm.gbs.rst.api.toolkit.persistence.ToolkitRepository;
 import org.springframework.http.HttpStatus;
 
 /**
- * Resolves and holds the Toolkit / Timesheet freeze snapshot for Exercise create.
- * Toolkit scope and KPI HC both freeze the ACTIVE Monthly run.
+ * Resolves and holds the Toolkit freeze snapshot for Exercise create.
+ * Timesheet centers freeze Monthly. MyHR centers freeze the current SKPI snapshot.
  */
 public final class ExerciseFreeze {
 
@@ -40,28 +40,27 @@ public final class ExerciseFreeze {
     }
 
     /**
-     * Validates Supervisor scope and Shared KPI selections against the ACTIVE Timesheet.
+     * Validates Supervisor scope and Shared KPI selections against the current source.
      *
      * @param toolkits Toolkit lookup
-     * @param timesheet ACTIVE Daily / Monthly and KPI candidates
+     * @param workforce org seats and Delivery HC for the Toolkit Center
      * @param ccgid Supervisor CCGID
      * @param toolkitId Toolkit to freeze
      * @return resolved freeze snapshot
      */
     public static ExerciseFreeze resolve(
-            ToolkitRepository toolkits, TimesheetReadService timesheet, String ccgid, UUID toolkitId) {
+            ToolkitRepository toolkits, WorkforceRead workforce, String ccgid, UUID toolkitId) {
         Toolkit toolkit = toolkits.findActiveById(toolkitId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "toolkit-not-found", "The Toolkit was not found."));
-        if (!timesheet.supervisorOwnsScope(
+        if (!workforce.supervisorOwnsScope(
                 ccgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), toolkit.getCenter())) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN, "toolkit-out-of-scope",
                     "The current Supervisor does not own the Toolkit scope.");
         }
-        // Create still requires ACTIVE Daily org for the Toolkit Center; freeze is Monthly.
-        timesheet.activeDaily(toolkit.getCenter());
-        ActiveSnapshot kpi = timesheet.activeMonthly(toolkit.getCenter());
+        workforce.requireOrg(toolkit.getCenter());
+        ActiveSnapshot kpi = workforce.requireKpi(toolkit.getCenter());
         List<ToolkitSharedKpiSelection> selections = toolkit.getSharedKpiSelections().stream()
                 .filter(selection -> !selection.isDeleted())
                 .toList();
@@ -75,7 +74,7 @@ public final class ExerciseFreeze {
                 .map(ToolkitSharedKpiSelection::getCustomerCountry)
                 .distinct()
                 .toList();
-        Map<KpiBusinessKey, KpiCandidate> candidatesByKey = timesheet
+        Map<KpiBusinessKey, KpiCandidate> candidatesByKey = workforce
                 .kpis(toolkit.getCenter(), toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), countries)
                 .stream()
                 .collect(Collectors.toMap(
@@ -96,7 +95,7 @@ public final class ExerciseFreeze {
                 throw new ApiException(
                         HttpStatus.CONFLICT,
                         "stale-shared-kpi-selection",
-                        "A Toolkit Shared KPI selection no longer matches the ACTIVE Timesheet. "
+                        "A Toolkit Shared KPI selection no longer matches the current Delivery HC. "
                                 + "Update the Toolkit Shared KPI selections and try creating the Exercise again.");
             }
             resolved.add(new ResolvedKpi(selection, candidate.deliveryHc()));

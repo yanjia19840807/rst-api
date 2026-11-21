@@ -18,28 +18,12 @@ public final class RepositoryLineMath {
     }
 
     /**
-     * Splits Exercise totals onto one KPI line: {@code line = total × lineDelivery / Σ delivery}.
+     * Splits Exercise totals onto one KPI line by Delivery HC share.
+     * Capacity is Actual HC − RS HC − Support, then the same share.
      *
      * @param lineDeliveryHc this line's frozen Delivery HC
      * @param totalDeliveryHc sum of Delivery HC on the Exercise
-     * @param rightSizingHc Official Scenario RIGHT_SIZING_HC; null leaves RS / Capacity empty
-     * @param productionSupportFte Exercise Support FTE total
-     * @return allocated line metrics
-     */
-    public static LineMetrics allocate(
-            BigDecimal lineDeliveryHc,
-            BigDecimal totalDeliveryHc,
-            BigDecimal rightSizingHc,
-            BigDecimal productionSupportFte) {
-        return allocate(lineDeliveryHc, totalDeliveryHc, totalDeliveryHc, rightSizingHc, productionSupportFte);
-    }
-
-    /**
-     * Splits Exercise totals onto one KPI line. Capacity uses Actual HC.
-     *
-     * @param lineDeliveryHc this line's frozen Delivery HC
-     * @param totalDeliveryHc sum of Delivery HC on the Exercise
-     * @param actualHc Shared KPI Delivery HC; missing or non-positive leaves Capacity empty
+     * @param actualHc Team Setup tenure total; missing or non-positive leaves Capacity empty
      * @param rightSizingHc Official Scenario RIGHT_SIZING_HC; null leaves RS / Capacity empty
      * @param productionSupportFte Exercise Support FTE total
      * @return allocated line metrics

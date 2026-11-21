@@ -58,9 +58,25 @@ public class TimesheetSourceResolver {
      * @return stored source
      */
     public Source storeManual(String fileName, byte[] content) {
-        graph.ensureFolder(sharePoint.manualTimesheetFolder());
+        return storeManualIn(sharePoint.manualTimesheetFolder(), fileName, content);
+    }
+
+    /**
+     * Stores a MyHR or SKPI upload under Manual/{module}.
+     *
+     * @param module folder name
+     * @param fileName original name
+     * @param content file bytes
+     * @return stored source
+     */
+    public Source storeManualModule(String module, String fileName, byte[] content) {
+        return storeManualIn(sharePoint.manualModuleFolder(module), fileName, content);
+    }
+
+    private Source storeManualIn(String folder, String fileName, byte[] content) {
+        graph.ensureFolder(folder);
         GraphDriveItem stored = graph.putDriveItemContent(
-                sharePoint.manualTimesheetFolder(),
+                folder,
                 fileName,
                 content,
                 MediaType.parseMediaType(

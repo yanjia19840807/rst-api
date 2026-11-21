@@ -36,7 +36,6 @@ import com.cmacgm.gbs.rst.api.common.time.MonthKeys;
 import com.cmacgm.gbs.rst.api.exercise.cycletime.domain.CycleTimeBaseline;
 import com.cmacgm.gbs.rst.api.exercise.cycletime.persistence.CycleTimeBaselineRepository;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
-import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.common.workingdays.HolidayDayKind;
 import com.cmacgm.gbs.rst.api.common.workingdays.WeekendCode;
@@ -556,13 +555,7 @@ public class SizingSimulationService {
                 ? team.getWeekendShiftHc() : BigDecimal.ZERO;
         BigDecimal skeleton = team.getSkeletonRatio() != null
                 ? team.getSkeletonRatio() : BigDecimal.ZERO;
-        BigDecimal delivery = BigDecimal.ZERO;
-        for (ExerciseSharedKpiLine line : exercise.getSharedKpiLines()) {
-            if (line.getDeliveryHc() != null) {
-                delivery = delivery.add(line.getDeliveryHc());
-            }
-        }
-        BigDecimal actualHc = SizingMath.actualHeadcount(delivery);
+        BigDecimal actualHc = SizingMath.actualHeadcount(team.totalAgents());
         BigDecimal maxOt = team.getMaxOvertimeMinutes() != null
                 ? team.getMaxOvertimeMinutes() : BigDecimal.ZERO;
 

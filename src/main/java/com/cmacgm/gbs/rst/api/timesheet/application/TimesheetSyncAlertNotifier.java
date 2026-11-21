@@ -11,11 +11,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.cmacgm.gbs.rst.api.mail.application.MailNotificationService;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncAlert;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncAlertRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncIssueRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceAlert;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceSnapshot;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceAlertRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceIssueRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceSnapshotRepository;
 
 /**
  * Sends a short failure mail after a Timesheet sync run is persisted as FAILED.
@@ -26,9 +26,9 @@ public class TimesheetSyncAlertNotifier {
 
     private static final Logger log = LoggerFactory.getLogger(TimesheetSyncAlertNotifier.class);
 
-    private final TimesheetSyncAlertRepository alerts;
-    private final TimesheetSyncRunRepository syncRuns;
-    private final TimesheetSyncIssueRepository issues;
+    private final SourceAlertRepository alerts;
+    private final SourceSnapshotRepository syncRuns;
+    private final SourceIssueRepository issues;
     private final MailNotificationService mail;
 
     /**
@@ -38,9 +38,9 @@ public class TimesheetSyncAlertNotifier {
      * @param mail outgoing mail + LTH / Admin recipients
      */
     public TimesheetSyncAlertNotifier(
-            TimesheetSyncAlertRepository alerts,
-            TimesheetSyncRunRepository syncRuns,
-            TimesheetSyncIssueRepository issues,
+            SourceAlertRepository alerts,
+            SourceSnapshotRepository syncRuns,
+            SourceIssueRepository issues,
             MailNotificationService mail) {
         this.alerts = alerts;
         this.syncRuns = syncRuns;
@@ -71,12 +71,12 @@ public class TimesheetSyncAlertNotifier {
     }
 
     private void send(UUID runId) {
-        TimesheetSyncRun run = syncRuns.findById(runId).orElse(null);
+        SourceSnapshot run = syncRuns.findById(runId).orElse(null);
         if (run == null || !"FAILED".equals(run.getStatus())) {
             return;
         }
-        TimesheetSyncAlert config = alerts.findById(TimesheetSyncAlert.SINGLETON_ID)
-                .orElseGet(TimesheetSyncAlert::disabled);
+        SourceAlert config = alerts.findById(SourceAlert.SINGLETON_ID)
+                .orElseGet(SourceAlert::disabled);
         Set<String> recipients = new LinkedHashSet<>();
         if (config.isEnabled()) {
             recipients.addAll(TimesheetSyncAdminService.parseRecipients(config.getRecipients()));
@@ -94,7 +94,7 @@ public class TimesheetSyncAlertNotifier {
         mail.sendAddresses(subject, html(run, issueCount), List.copyOf(recipients));
     }
 
-    private static String html(TimesheetSyncRun run, long issueCount) {
+    private static String html(SourceSnapshot run, long issueCount) {
         String[][] rows = {
             {"Kind", blankToDash(run.getKind())},
             {"Date", run.getSyncDate() == null ? "—" : run.getSyncDate().toString()},

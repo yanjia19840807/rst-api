@@ -27,7 +27,7 @@ import com.cmacgm.gbs.rst.api.exercise.cycletime.persistence.ExerciseTmsSessionR
 import com.cmacgm.gbs.rst.api.exercise.cycletime.persistence.ExerciseTmsSessionRepository.ExerciseTmsSessionRow;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -59,7 +59,7 @@ public class CycleTimeService {
     private final ExerciseTmsSessionRepository exerciseTmsSessions;
     private final SystemCycleTimeBaselineWriter systemCycleTime;
     private final TmsRatioCalculator tmsRatioCalculator;
-    private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
     private final Clock clock;
 
     /**
@@ -74,7 +74,7 @@ public class CycleTimeService {
             ExerciseTmsSessionRepository exerciseTmsSessions,
             SystemCycleTimeBaselineWriter systemCycleTime,
             TmsRatioCalculator tmsRatioCalculator,
-            TimesheetReadService timesheet,
+            WorkforceRead workforce,
             Clock clock) {
         this.exercises = exercises;
         this.baselines = baselines;
@@ -84,7 +84,7 @@ public class CycleTimeService {
         this.exerciseTmsSessions = exerciseTmsSessions;
         this.systemCycleTime = systemCycleTime;
         this.tmsRatioCalculator = tmsRatioCalculator;
-        this.timesheet = timesheet;
+        this.workforce = workforce;
         this.clock = clock;
     }
 
@@ -361,7 +361,7 @@ public class CycleTimeService {
         if (seconds != null && stats.available()) {
             zScore = Math.abs(seconds - stats.mean()) / stats.stdev();
         }
-        String agentName = names.computeIfAbsent(row.getAgentCcgid(), timesheet::displayNameByCcgid);
+        String agentName = names.computeIfAbsent(row.getAgentCcgid(), workforce::displayNameByCcgid);
         return new ExerciseTmsSessionResponse(
                 row.getSessionNo(),
                 row.getReference(),

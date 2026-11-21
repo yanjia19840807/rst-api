@@ -28,8 +28,8 @@ import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SupervisorDeliveryHc;
+import com.cmacgm.gbs.rst.api.timesheet.domain.MonthlyScope;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -94,7 +94,7 @@ public class DashboardService {
         Map<String, LocalDate> latestApproved = latestApprovedByKpiKey(approved);
         Map<String, String> domainByObligation = domainByObligation();
         List<DashboardMath.KpiCoverage> statuses = new ArrayList<>();
-        for (TimesheetKpi row : timesheet.dashboardKpis()) {
+        for (SupervisorDeliveryHc row : timesheet.dashboardKpis()) {
             if (row.getHc() == null || row.getHc().signum() <= 0) {
                 continue;
             }
@@ -132,7 +132,7 @@ public class DashboardService {
 
     private Map<String, String> domainByObligation() {
         Map<String, String> domains = new HashMap<>();
-        for (TimesheetScope row : timesheet.dashboardObligations()) {
+        for (MonthlyScope row : timesheet.dashboardObligations()) {
             String key = DashboardMath.key(row.getCenter(), row.getSupervisorPositionId(), row.getPl3Code());
             if (key.isEmpty()) {
                 continue;
@@ -186,6 +186,7 @@ public class DashboardService {
         }
         Map<UUID, BigDecimal> rightSizingByExercise = rightSizingByExercise(ytd);
         Map<UUID, BigDecimal> supportByExercise = supportByExercise(ytd);
+        Map<UUID, BigDecimal> actualByExercise = actualByExercise(ytd);
         BigDecimal total = BigDecimal.ZERO;
         boolean any = false;
         for (RstExercise exercise : ytd) {
@@ -194,7 +195,7 @@ public class DashboardService {
                 continue;
             }
             BigDecimal capacity = SizingMath.capacityCreation(
-                    SizingMath.actualHeadcount(deliveryHc(exercise)),
+                    actualByExercise.getOrDefault(exercise.getId(), BigDecimal.ZERO),
                     rightSizing,
                     supportByExercise.get(exercise.getId()));
             if (capacity == null) {
@@ -256,14 +257,13 @@ public class DashboardService {
         return result;
     }
 
-    private static BigDecimal deliveryHc(RstExercise exercise) {
-        BigDecimal sum = BigDecimal.ZERO;
-        for (ExerciseSharedKpiLine line : exercise.getSharedKpiLines()) {
-            if (line.getDeliveryHc() != null) {
-                sum = sum.add(line.getDeliveryHc());
-            }
+    private Map<UUID, BigDecimal> actualByExercise(List<RstExercise> exercises) {
+        List<UUID> exerciseIds = exercises.stream().map(RstExercise::getId).toList();
+        Map<UUID, BigDecimal> result = new HashMap<>();
+        for (ExerciseTeamSetup setup : teamSetups.findAllById(exerciseIds)) {
+            result.put(setup.getExerciseId(), SizingMath.actualHeadcount(setup.totalAgents()));
         }
-        return sum;
+        return result;
     }
 
     private static BigDecimal rightSizingHc(Scenario scenario) {

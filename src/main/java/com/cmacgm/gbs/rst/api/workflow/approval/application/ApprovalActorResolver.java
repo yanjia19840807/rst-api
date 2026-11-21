@@ -11,7 +11,7 @@ import com.cmacgm.gbs.rst.api.delegation.domain.Delegation;
 import com.cmacgm.gbs.rst.api.delegation.persistence.DelegationRepository;
 import com.cmacgm.gbs.rst.api.security.Handler;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.Occupant;
 import com.cmacgm.gbs.rst.api.workflow.domain.TaskActor;
 import org.springframework.stereotype.Component;
@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class ApprovalActorResolver {
 
-    private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
     private final DelegationRepository delegations;
     private final Clock clock;
 
@@ -35,10 +35,10 @@ public class ApprovalActorResolver {
      * @param clock now for usable grants
      */
     public ApprovalActorResolver(
-            TimesheetReadService timesheet,
+            WorkforceRead workforce,
             DelegationRepository delegations,
             Clock clock) {
-        this.timesheet = timesheet;
+        this.workforce = workforce;
         this.delegations = delegations;
         this.clock = clock;
     }
@@ -56,7 +56,7 @@ public class ApprovalActorResolver {
         }
         String positionId = principal.delegatedPositionId();
         if (hasText(positionId)) {
-            Occupant occupant = timesheet.occupant(positionId);
+            Occupant occupant = workforce.occupant(positionId);
             if (occupant != null
                     && hasText(occupant.ccgid())
                     && !occupant.ccgid().equalsIgnoreCase(positionId)) {
@@ -79,7 +79,7 @@ public class ApprovalActorResolver {
      * @return actor view, or null when nobody is known
      */
     public AuditActorView forPosition(String positionId, String fallbackCcgid, Map<String, String> names) {
-        Occupant occupant = hasText(positionId) ? timesheet.occupant(positionId) : null;
+        Occupant occupant = hasText(positionId) ? workforce.occupant(positionId) : null;
         String subjectCcgid = occupant != null && hasText(occupant.ccgid())
                 ? occupant.ccgid()
                 : fallbackCcgid;
@@ -152,7 +152,7 @@ public class ApprovalActorResolver {
                 return mapped;
             }
         }
-        return timesheet.displayNameByCcgid(ccgid);
+        return workforce.displayNameByCcgid(ccgid);
     }
 
     private static String firstNonBlank(String first, String second) {

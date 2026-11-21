@@ -10,7 +10,7 @@ import com.cmacgm.gbs.rst.api.delegation.persistence.DelegationRepository;
 import com.cmacgm.gbs.rst.api.domainhead.application.DomainHeadConfigService;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.security.RstRoles;
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,7 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class WorkflowRouterTests {
 
     @Mock
-    private TimesheetReadService timesheet;
+    private WorkforceRead workforce;
 
     @Mock
     private DomainHeadConfigService domainHeads;
@@ -33,12 +33,12 @@ class WorkflowRouterTests {
 
     @BeforeEach
     void setUp() {
-        router = new WorkflowRouter(timesheet, domainHeads, delegations);
+        router = new WorkflowRouter(workforce, domainHeads, delegations);
     }
 
     @Test
     void domainHeadQueueIncludesCenterRolesCcgidAssignment() {
-        when(timesheet.positionsForRole("S00683842", "DOMAIN_HEAD")).thenReturn(List.of());
+        when(workforce.positionsForRole("S00683842", "DOMAIN_HEAD")).thenReturn(List.of());
         when(domainHeads.assignedKeysFor("S00683842")).thenReturn(Set.of("S00683842"));
         when(domainHeads.assignedLthKeysFor("S00683842")).thenReturn(Set.of());
 
@@ -49,7 +49,7 @@ class WorkflowRouterTests {
 
     @Test
     void domainHeadQueueIncludesCcgidWhenRoleIsForcedWithoutTimesheetSeat() {
-        when(timesheet.positionsForRole("S00683842", "DOMAIN_HEAD")).thenReturn(List.of());
+        when(workforce.positionsForRole("S00683842", "DOMAIN_HEAD")).thenReturn(List.of());
         when(domainHeads.assignedKeysFor("S00683842")).thenReturn(Set.of());
         when(domainHeads.assignedLthKeysFor("S00683842")).thenReturn(Set.of());
 
@@ -60,7 +60,7 @@ class WorkflowRouterTests {
 
     @Test
     void managerQueueDoesNotPickUpUnrelatedCdhKeys() {
-        when(timesheet.positionsForRole("S00628202", "SR_MANAGER")).thenReturn(List.of("174210"));
+        when(workforce.positionsForRole("S00628202", "SR_MANAGER")).thenReturn(List.of("174210"));
         when(domainHeads.assignedKeysFor("S00628202")).thenReturn(Set.of());
         when(domainHeads.assignedLthKeysFor("S00628202")).thenReturn(Set.of());
 

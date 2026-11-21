@@ -76,6 +76,45 @@ public class GbsProcessCatalogSource {
         return loadClasspath();
     }
 
+    /**
+     * Loads the catalog including Level 3 name, domain, PL1, and PL2.
+     * The Timesheet path keeps {@link #load()}. This call asks SharePoint for
+     * the extra columns and is used only by SKPI import.
+     *
+     * @return parsed catalog
+     */
+    public GbsProcessCatalog loadDetailed() {
+        if (fixed != null) {
+            return fixed;
+        }
+        if (!properties.isRemote()) {
+            return loadClasspath();
+        }
+        if (graph == null) {
+            throw new ApiException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    TimesheetSyncErrorCode.SOURCE_UNAVAILABLE.code(),
+                    "Microsoft Graph is not available for GBS Process.");
+        }
+        ProcessProperties.SharePoint sharePoint = properties.getSharepoint();
+        try {
+            List<Map<String, Object>> rows = graph.getListItemFields(
+                    sharePoint.getSite(),
+                    sharePoint.getList(),
+                    new String[]{
+                            "id", "ID", "RSTApplicability", "Title", "LinkTitle",
+                            "Level_x0020_3", "Level_x0020_1", "Level_x0020_2", "Domain"});
+            return GbsProcessCatalog.fromSharePointFields(rows);
+        } catch (ApiException ex) {
+            throw ex;
+        } catch (RuntimeException ex) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    TimesheetSyncErrorCode.SOURCE_UNAVAILABLE.code(),
+                    "Unable to read GBS Process names: " + ex.getMessage());
+        }
+    }
+
     private GbsProcessCatalog loadClasspath() {
         String location = properties.getClasspathLocation();
         Resource resource = resources.getResource(

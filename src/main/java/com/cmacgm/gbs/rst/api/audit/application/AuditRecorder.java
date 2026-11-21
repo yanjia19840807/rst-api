@@ -16,7 +16,7 @@ import com.cmacgm.gbs.rst.api.audit.domain.AuditEvent;
 import com.cmacgm.gbs.rst.api.audit.persistence.AuditEventRepository;
 import com.cmacgm.gbs.rst.api.delegation.application.PositionCoverage;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,7 +29,7 @@ public class AuditRecorder {
 
     private final AuditEventRepository events;
     private final PositionCoverage coverage;
-    private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
     private final Clock clock;
 
     /**
@@ -41,11 +41,11 @@ public class AuditRecorder {
     public AuditRecorder(
             AuditEventRepository events,
             PositionCoverage coverage,
-            TimesheetReadService timesheet,
+            WorkforceRead workforce,
             Clock clock) {
         this.events = events;
         this.coverage = coverage;
-        this.timesheet = timesheet;
+        this.workforce = workforce;
         this.clock = clock;
     }
 
@@ -123,7 +123,7 @@ public class AuditRecorder {
                 : principal == null ? null : principal.delegatedPositionId();
         String subjectCcgid = actorCcgid;
         if (principal != null && positionId != null) {
-            var occupant = timesheet.occupant(positionId);
+            var occupant = workforce.occupant(positionId);
             if (occupant != null
                     && occupant.ccgid() != null
                     && !occupant.ccgid().isBlank()
@@ -280,7 +280,7 @@ public class AuditRecorder {
 
     private String displayName(String ccgid, String fallback) {
         if (ccgid != null && !ccgid.isBlank()) {
-            String live = timesheet.findDisplayName(ccgid).orElse(null);
+            String live = workforce.findDisplayName(ccgid).orElse(null);
             if (live != null && !live.isBlank()) {
                 return live;
             }

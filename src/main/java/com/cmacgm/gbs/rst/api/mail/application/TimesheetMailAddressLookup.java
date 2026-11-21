@@ -1,7 +1,7 @@
 package com.cmacgm.gbs.rst.api.mail.application;
 
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPerson;
 import org.springframework.stereotype.Service;
 
 /**
@@ -10,13 +10,13 @@ import org.springframework.stereotype.Service;
 @Service
 public class TimesheetMailAddressLookup implements MailAddressLookup {
 
-    private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
 
     /**
      * @param timesheet active Daily people
      */
-    public TimesheetMailAddressLookup(TimesheetReadService timesheet) {
-        this.timesheet = timesheet;
+    public TimesheetMailAddressLookup(WorkforceRead workforce) {
+        this.workforce = workforce;
     }
 
     @Override
@@ -24,8 +24,8 @@ public class TimesheetMailAddressLookup implements MailAddressLookup {
         if (ccgid == null || ccgid.isBlank()) {
             return null;
         }
-        return timesheet.findActivePerson(ccgid.trim())
-                .map(TimesheetPerson::getEmail)
+        return workforce.findActivePerson(ccgid.trim())
+                .map(OrgPerson::getEmail)
                 .map(String::trim)
                 .filter(value -> !value.isEmpty())
                 .orElse(null);

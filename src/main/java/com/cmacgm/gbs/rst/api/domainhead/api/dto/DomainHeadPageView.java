@@ -10,7 +10,8 @@ import java.util.List;
  * @param monthlyAvailable whether an ACTIVE Monthly snapshot exists
  * @param remountedCount READY CDH / LTH steps remounted by the last save; null on GET
  * @param lth Center-level LTH assignee
- * @param domains one row per Monthly Domain in the Center
+ * @param domains one row per Domain in the Center's current process snapshot
+ * @param sourceMode TIMESHEET or MYHR_SKPI
  */
 public record DomainHeadPageView(
         String center,
@@ -18,5 +19,6 @@ public record DomainHeadPageView(
         boolean monthlyAvailable,
         Integer remountedCount,
         CenterRoleAssigneeView lth,
-        List<DomainHeadRowView> domains) {
+        List<DomainHeadRowView> domains,
+        String sourceMode) {
 }

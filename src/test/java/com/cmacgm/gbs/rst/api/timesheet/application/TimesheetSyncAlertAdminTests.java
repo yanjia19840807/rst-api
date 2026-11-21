@@ -15,8 +15,8 @@ import java.util.Set;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSyncAdminService.AlertConfig;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncAlert;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncAlertRepository;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceAlert;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceAlertRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -24,17 +24,17 @@ class TimesheetSyncAlertAdminTests {
 
     private static final Instant NOW = Instant.parse("2026-08-28T00:00:00Z");
 
-    private TimesheetSyncAlert stored;
+    private SourceAlert stored;
     private TimesheetSyncAdminService admin;
 
     @BeforeEach
     void setUp() {
-        stored = TimesheetSyncAlert.disabled();
-        TimesheetSyncAlertRepository alerts = proxy(TimesheetSyncAlertRepository.class, (proxy, method, args) ->
+        stored = SourceAlert.disabled();
+        SourceAlertRepository alerts = proxy(SourceAlertRepository.class, (proxy, method, args) ->
                 switch (method.getName()) {
                     case "findById" -> Optional.of(stored);
                     case "save" -> {
-                        stored = (TimesheetSyncAlert) args[0];
+                        stored = (SourceAlert) args[0];
                         yield stored;
                     }
                     default -> throw new AssertionError("Unexpected " + method.getName());
@@ -46,7 +46,8 @@ class TimesheetSyncAlertAdminTests {
                 null,
                 null,
                 null,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                null);
     }
 
     @Test

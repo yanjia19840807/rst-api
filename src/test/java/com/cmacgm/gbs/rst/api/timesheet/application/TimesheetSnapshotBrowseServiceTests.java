@@ -10,17 +10,17 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPersonPositionRole;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPositionParent;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonPositionRoleRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionParentRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SupervisorDeliveryHc;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPerson;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgSeat;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPositionParent;
+import com.cmacgm.gbs.rst.api.timesheet.domain.MonthlyScope;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SupervisorDeliveryHcRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgSeatRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgPersonRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgPositionParentRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgPositionRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.MonthlyScopeRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageImpl;
@@ -28,22 +28,22 @@ import org.springframework.data.domain.PageRequest;
 
 class TimesheetSnapshotBrowseServiceTests {
 
-    private TimesheetPersonRepository people;
-    private TimesheetPersonPositionRoleRepository seats;
-    private TimesheetPositionRepository positions;
-    private TimesheetPositionParentRepository parents;
-    private TimesheetScopeRepository scopes;
-    private TimesheetKpiRepository kpis;
+    private OrgPersonRepository people;
+    private OrgSeatRepository seats;
+    private OrgPositionRepository positions;
+    private OrgPositionParentRepository parents;
+    private MonthlyScopeRepository scopes;
+    private SupervisorDeliveryHcRepository kpis;
     private TimesheetSnapshotBrowseService service;
 
     @BeforeEach
     void setUp() {
-        people = mock(TimesheetPersonRepository.class);
-        seats = mock(TimesheetPersonPositionRoleRepository.class);
-        positions = mock(TimesheetPositionRepository.class);
-        parents = mock(TimesheetPositionParentRepository.class);
-        scopes = mock(TimesheetScopeRepository.class);
-        kpis = mock(TimesheetKpiRepository.class);
+        people = mock(OrgPersonRepository.class);
+        seats = mock(OrgSeatRepository.class);
+        positions = mock(OrgPositionRepository.class);
+        parents = mock(OrgPositionParentRepository.class);
+        scopes = mock(MonthlyScopeRepository.class);
+        kpis = mock(SupervisorDeliveryHcRepository.class);
         service = new TimesheetSnapshotBrowseService(people, seats, positions, parents, scopes, kpis);
     }
 
@@ -52,7 +52,7 @@ class TimesheetSnapshotBrowseServiceTests {
         UUID runId = UUID.randomUUID();
         when(people.searchActive(eq(""), eq("anna"), any()))
                 .thenReturn(new PageImpl<>(
-                        List.of(TimesheetPerson.create(
+                        List.of(OrgPerson.create(
                                 runId,
                                 "S00000001",
                                 "EMP-1",
@@ -87,12 +87,12 @@ class TimesheetSnapshotBrowseServiceTests {
 
         UUID runId = UUID.randomUUID();
         when(parents.findActiveByPositionIdIn(eq("GBS INDIA"), any()))
-                .thenReturn(List.of(TimesheetPositionParent.create(
+                .thenReturn(List.of(OrgPositionParent.create(
                         runId, "174050", "SUPERVISOR", "173171", "SR_MANAGER")));
         stubOccupants(
                 runId,
-                TimesheetPersonPositionRole.create(runId, "S00000002", "174050", "SUPERVISOR"),
-                TimesheetPersonPositionRole.create(runId, "S00000002", "174050", "SR_MANAGER"));
+                OrgSeat.create(runId, "S00000002", "174050", "SUPERVISOR"),
+                OrgSeat.create(runId, "S00000002", "174050", "SR_MANAGER"));
 
         assertThat(service.positions("GBS INDIA", "174", 1, 10).items())
                 .extracting(
@@ -133,7 +133,7 @@ class TimesheetSnapshotBrowseServiceTests {
         UUID runId = UUID.randomUUID();
         when(scopes.searchActive(eq("GBS INDIA"), eq(""), eq(""), any()))
                 .thenReturn(new PageImpl<>(
-                        List.of(TimesheetScope.create(
+                        List.of(MonthlyScope.create(
                                 runId, "POS-SUP-1", "PL3", "GBS INDIA", "PL3 Name", "Finance", "PL1", "PL2")),
                         PageRequest.of(0, 10),
                         1));
@@ -143,18 +143,18 @@ class TimesheetSnapshotBrowseServiceTests {
                         PageRequest.of(0, 10),
                         1));
         when(scopes.findActiveBySupervisorPositionIdIn(any()))
-                .thenReturn(List.of(TimesheetScope.create(
+                .thenReturn(List.of(MonthlyScope.create(
                         runId, "POS-SUP-1", "PL3", "GBS INDIA", "PL3 Name", "Finance", "PL1", "PL2")));
         when(kpis.searchActive(eq("GBS INDIA"), eq(""), eq(""), any()))
                 .thenReturn(new PageImpl<>(
-                        List.of(TimesheetKpi.create(
+                        List.of(SupervisorDeliveryHc.create(
                                 runId, "POS-SUP-1", "PL3", "GBS INDIA", "CMA", "Site A", "MY", new BigDecimal("1.5"))),
                         PageRequest.of(0, 10),
                         1));
         stubOccupants(
                 runId,
-                TimesheetPersonPositionRole.create(runId, "S00000001", "172545", "AGENT"),
-                TimesheetPersonPositionRole.create(runId, "S00000002", "POS-SUP-1", "SUPERVISOR"));
+                OrgSeat.create(runId, "S00000001", "172545", "AGENT"),
+                OrgSeat.create(runId, "S00000002", "POS-SUP-1", "SUPERVISOR"));
 
         assertThat(service.scopes("GBS INDIA", null, null, 1, 10).items())
                 .extracting(
@@ -179,18 +179,18 @@ class TimesheetSnapshotBrowseServiceTests {
                         "TANG Lavender", "GBS INDIA", "PL3 Name", new BigDecimal("1.5")));
     }
 
-    private void stubOccupants(UUID runId, TimesheetPersonPositionRole... occupied) {
+    private void stubOccupants(UUID runId, OrgSeat... occupied) {
         when(seats.findActiveByPositionIdIn(any())).thenReturn(List.of(occupied));
         when(people.findActiveByCcgidIn(any())).thenReturn(List.of(
-                TimesheetPerson.create(
+                OrgPerson.create(
                         runId, "S00000001", "EMP-1", "GBS INDIA", "TIAN Anna", "a@cma-cgm.com", "Billing Clerk"),
-                TimesheetPerson.create(
+                OrgPerson.create(
                         runId, "S00000002", "EMP-2", "GBS INDIA", "TANG Lavender", "b@cma-cgm.com", null)));
     }
 
-    private static TimesheetPositionRepository.PositionNode node(
+    private static OrgPositionRepository.PositionNode node(
             String positionId, String roleType, String center) {
-        return new TimesheetPositionRepository.PositionNode() {
+        return new OrgPositionRepository.PositionNode() {
             @Override
             public String getPositionId() {
                 return positionId;
@@ -208,9 +208,9 @@ class TimesheetSnapshotBrowseServiceTests {
         };
     }
 
-    private static TimesheetPersonPositionRoleRepository.OccupancyRow occupancy(
+    private static OrgSeatRepository.OccupancyRow occupancy(
             String ccgid, String name, String positionId, String roleType, String center) {
-        return new TimesheetPersonPositionRoleRepository.OccupancyRow() {
+        return new OrgSeatRepository.OccupancyRow() {
             @Override
             public String getCcgid() {
                 return ccgid;
@@ -238,13 +238,13 @@ class TimesheetSnapshotBrowseServiceTests {
         };
     }
 
-    private static TimesheetPositionRepository.DerivedAssignment derived(
+    private static OrgPositionRepository.DerivedAssignment derived(
             String agentPositionId,
             String supervisorPositionId,
             String pl3Code,
             String pl3Name,
             String center) {
-        return new TimesheetPositionRepository.DerivedAssignment() {
+        return new OrgPositionRepository.DerivedAssignment() {
             @Override
             public String getAgentPositionId() {
                 return agentPositionId;

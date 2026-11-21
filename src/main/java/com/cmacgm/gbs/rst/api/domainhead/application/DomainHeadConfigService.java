@@ -23,10 +23,15 @@ import com.cmacgm.gbs.rst.api.domainhead.domain.CenterLth;
 import com.cmacgm.gbs.rst.api.domainhead.persistence.CenterDomainHeadAssigneeRepository;
 import com.cmacgm.gbs.rst.api.domainhead.persistence.CenterDomainHeadRepository;
 import com.cmacgm.gbs.rst.api.domainhead.persistence.CenterLthRepository;
+import com.cmacgm.gbs.rst.api.security.RstCenters;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.security.RstRoles;
+import com.cmacgm.gbs.rst.api.sourcedata.application.CenterSourceService;
+import com.cmacgm.gbs.rst.api.sourcedata.domain.CenterSource;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.Occupant;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgPersonRepository;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
 import com.cmacgm.gbs.rst.api.workflow.domain.ProcessInstance;
 import com.cmacgm.gbs.rst.api.workflow.domain.ProcessTask;
@@ -41,7 +46,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Center Roles: one LTH plus Center × Domain CDH candidates.
  * LTH changes remount READY LTH steps. Domain Head changes apply the next time
  * a reviewer chooses the handler. LTH always uses identity Center; ADMIN may
- * select any ACTIVE Person/Scope center.
+ * select any configured center. Timesheet centers use Daily people and Monthly
+ * domains. MyHR centers use MyHR people and SKPI domains.
  */
 @Service
 public class DomainHeadConfigService {
@@ -54,6 +60,9 @@ public class DomainHeadConfigService {
     private final CenterDomainHeadAssigneeRepository assignees;
     private final CenterLthRepository lthMappings;
     private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
+    private final CenterSourceService centerSources;
+    private final OrgPersonRepository people;
     private final ProcessInstanceRepository workflows;
     private final AuditRecorder audits;
 
@@ -63,7 +72,10 @@ public class DomainHeadConfigService {
      * @param mappings Center × Domain CDH rows
      * @param assignees Domain Head candidates
      * @param lthMappings Center LTH rows
-     * @param timesheet ACTIVE Daily / Monthly org
+     * @param timesheet ACTIVE Daily / Monthly headers
+     * @param workforce people and domains for the Center's current source
+     * @param centerSources center source mode
+     * @param people MyHR people counts
      * @param workflows in-flight LTH remount
      * @param audits who changed each mapping
      */
@@ -72,24 +84,35 @@ public class DomainHeadConfigService {
             CenterDomainHeadAssigneeRepository assignees,
             CenterLthRepository lthMappings,
             TimesheetReadService timesheet,
+            WorkforceRead workforce,
+            CenterSourceService centerSources,
+            OrgPersonRepository people,
             ProcessInstanceRepository workflows,
             AuditRecorder audits) {
         this.mappings = mappings;
         this.assignees = assignees;
         this.lthMappings = lthMappings;
         this.timesheet = timesheet;
+        this.workforce = workforce;
+        this.centerSources = centerSources;
+        this.people = people;
         this.workflows = workflows;
         this.audits = audits;
     }
 
     /**
-     * Distinct GBS centers from ACTIVE Daily people and Monthly scopes.
+     * Every configured center, including centers that use MyHR and SKPI.
      *
      * @return centers for the Admin picker
      */
     @Transactional(readOnly = true)
     public List<String> availableCenters() {
-        return timesheet.activeCenters();
+        return centerSources.list().stream()
+                .map(CenterSource::getCenter)
+                .filter(DomainHeadConfigService::hasText)
+                .distinct()
+                .sorted()
+                .toList();
     }
 
     /**
@@ -228,7 +251,7 @@ public class DomainHeadConfigService {
                 keys.add(key);
                 continue;
             }
-            Occupant occupant = timesheet.occupant(key);
+            Occupant occupant = occupantFor(row.getCenter(), key);
             if (occupant != null && hasText(occupant.ccgid()) && id.equalsIgnoreCase(occupant.ccgid())) {
                 keys.add(key);
             }
@@ -271,7 +294,7 @@ public class DomainHeadConfigService {
                 keys.add(key);
                 continue;
             }
-            Occupant occupant = timesheet.occupant(key);
+            Occupant occupant = occupantFor(row.getCenter(), key);
             if (occupant != null && hasText(occupant.ccgid()) && id.equalsIgnoreCase(occupant.ccgid())) {
                 keys.add(key);
             }
@@ -319,22 +342,51 @@ public class DomainHeadConfigService {
     }
 
     private DomainHeadPageView page(String center, Integer remountedCount) {
+        if (!hasText(center)) {
+            return new DomainHeadPageView("", false, false, remountedCount, missingAssignee(), List.of(), null);
+        }
+        if (myHr(center)) {
+            return myHrPage(center, remountedCount);
+        }
         boolean dailyAvailable = timesheet.findActiveDaily(center).isPresent();
         boolean monthlyAvailable = timesheet.findActiveMonthly(center).isPresent();
         CenterRoleAssigneeView lth = toLthView(center, dailyAvailable && monthlyAvailable);
-        if (!hasText(center) || !dailyAvailable || !monthlyAvailable) {
+        if (!dailyAvailable || !monthlyAvailable) {
             return new DomainHeadPageView(
-                    nullToBlank(center), dailyAvailable, monthlyAvailable, remountedCount, lth, List.of());
+                    center, dailyAvailable, monthlyAvailable, remountedCount, lth, List.of(), CenterSource.TIMESHEET);
         }
+        return new DomainHeadPageView(
+                center, true, true, remountedCount, lth, domainRows(center, workforce.domainsInCenter(center)),
+                CenterSource.TIMESHEET);
+    }
+
+    private DomainHeadPageView myHrPage(String center, Integer remountedCount) {
+        String canonical = RstCenters.canonicalize(center);
+        boolean peopleAvailable = canonical != null && people.countActiveMyHrInCenter(canonical) > 0;
+        CenterRoleAssigneeView lth = toLthView(center, peopleAvailable);
+        if (!peopleAvailable) {
+            return new DomainHeadPageView(
+                    center, false, false, remountedCount, lth, List.of(), CenterSource.MYHR_SKPI);
+        }
+        List<String> domains = workforce.domainsInCenter(canonical);
+        return new DomainHeadPageView(
+                center, true, true, remountedCount, lth, domainRows(center, domains), CenterSource.MYHR_SKPI);
+    }
+
+    private List<DomainHeadRowView> domainRows(String center, List<String> domains) {
         Map<String, List<String>> idsByDomain = new LinkedHashMap<>();
         for (CenterDomainHeadAssignee row : assignees.findByKeyCenterOrderBySortOrderAsc(center)) {
             idsByDomain.computeIfAbsent(row.getDomain(), ignored -> new ArrayList<>()).add(row.getPositionId());
         }
-        List<DomainHeadRowView> domains = new ArrayList<>();
-        for (String domain : timesheet.domainsInCenter(center)) {
-            domains.add(toDomainRow(center, domain, idsByDomain.getOrDefault(domain, List.of())));
+        List<DomainHeadRowView> rows = new ArrayList<>();
+        for (String domain : domains) {
+            rows.add(toDomainRow(center, domain, idsByDomain.getOrDefault(domain, List.of())));
         }
-        return new DomainHeadPageView(center, true, true, remountedCount, lth, domains);
+        return rows;
+    }
+
+    private static CenterRoleAssigneeView missingAssignee() {
+        return new CenterRoleAssigneeView(null, null, null, STATUS_MISSING);
     }
 
     /**
@@ -365,10 +417,8 @@ public class DomainHeadConfigService {
     }
 
     private DomainHeadAssigneeView toAssignee(String center, String positionId) {
-        Occupant occupant = timesheet.occupant(positionId);
-        boolean live = occupant != null
-                && hasText(occupant.ccgid())
-                && timesheet.personInCenter(occupant.ccgid(), center);
+        Occupant occupant = occupantFor(center, positionId);
+        boolean live = occupant != null && hasText(occupant.ccgid()) && personInCenter(center, occupant.ccgid());
         return new DomainHeadAssigneeView(
                 positionId,
                 occupant == null ? null : blankToNull(occupant.ccgid()),
@@ -452,8 +502,8 @@ public class DomainHeadConfigService {
         if (row == null || !hasText(row.getPositionId())) {
             return new Resolved("", null, null, null, STATUS_MISSING);
         }
-        Occupant occupant = timesheet.occupant(row.getPositionId());
-        if (occupant == null || !hasText(occupant.ccgid()) || !timesheet.personInCenter(occupant.ccgid(), center)) {
+        Occupant occupant = occupantFor(center, row.getPositionId());
+        if (occupant == null || !hasText(occupant.ccgid()) || !personInCenter(center, occupant.ccgid())) {
             return new Resolved(
                     "",
                     row.getPositionId(),
@@ -474,7 +524,7 @@ public class DomainHeadConfigService {
     }
 
     private int remountReadyLth(String center, String positionId) {
-        Occupant occupant = positionId == null ? null : timesheet.occupant(positionId);
+        Occupant occupant = positionId == null ? null : occupantFor(center, positionId);
         String ccgid = occupant == null ? null : occupant.ccgid();
         int count = 0;
         for (ProcessInstance workflow : workflows.findOpenLthByCenter(center)) {
@@ -492,14 +542,32 @@ public class DomainHeadConfigService {
     }
 
     private void requireCandidate(String center, String positionId) {
-        boolean allowed = timesheet.positionInCenter(center, positionId)
-                || timesheet.personInCenter(positionId, center);
+        boolean allowed = positionInCenter(center, positionId) || personInCenter(center, positionId);
         if (!allowed) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "domain-head-candidate-invalid",
                     "Selected approver is not in Center " + center + ".");
         }
+    }
+
+    private boolean myHr(String center) {
+        return CenterSource.MYHR_SKPI.equals(centerSources.sourceMode(center));
+    }
+
+    private Occupant occupantFor(String center, String key) {
+        if (!hasText(key)) {
+            return null;
+        }
+        return workforce.occupantInCenter(center, key);
+    }
+
+    private boolean personInCenter(String center, String ccgid) {
+        return workforce.personInCenter(ccgid, center);
+    }
+
+    private boolean positionInCenter(String center, String positionId) {
+        return workforce.positionInCenter(center, positionId);
     }
 
     private static String requireIdentityCenter(RstPrincipal principal) {

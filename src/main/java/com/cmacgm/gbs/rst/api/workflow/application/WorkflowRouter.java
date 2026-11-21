@@ -10,7 +10,7 @@ import com.cmacgm.gbs.rst.api.delegation.persistence.DelegationRepository;
 import com.cmacgm.gbs.rst.api.domainhead.application.DomainHeadConfigService;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.security.RstRoles;
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.Occupant;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class WorkflowRouter {
 
-    private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
     private final DomainHeadConfigService domainHeads;
     private final DelegationRepository delegations;
 
@@ -35,10 +35,10 @@ public class WorkflowRouter {
      * @param domainHeads Center × Domain CDH mapping
      */
     public WorkflowRouter(
-            TimesheetReadService timesheet,
+            WorkforceRead workforce,
             DomainHeadConfigService domainHeads,
             DelegationRepository delegations) {
-        this.timesheet = timesheet;
+        this.workforce = workforce;
         this.domainHeads = domainHeads;
         this.delegations = delegations;
     }
@@ -68,11 +68,11 @@ public class WorkflowRouter {
         Set<String> roles = principal.roles() == null ? Set.of() : principal.roles();
         Set<String> positions = new LinkedHashSet<>();
         if (roles.contains("SR_MANAGER")) {
-            positions.addAll(timesheet.positionsForRole(principal.ccgid(), "SR_MANAGER"));
+            positions.addAll(workforce.positionsForRole(principal.ccgid(), "SR_MANAGER"));
         }
         Set<String> cdhKeys = domainHeads.assignedKeysFor(principal.ccgid());
         if (roles.contains("DOMAIN_HEAD") || !cdhKeys.isEmpty()) {
-            positions.addAll(timesheet.positionsForRole(principal.ccgid(), "DOMAIN_HEAD"));
+            positions.addAll(workforce.positionsForRole(principal.ccgid(), "DOMAIN_HEAD"));
             positions.addAll(cdhKeys);
             positions.add(principal.ccgid().trim());
         }
@@ -282,7 +282,7 @@ public class WorkflowRouter {
     }
 
     private RoutedStep routed(String positionId) {
-        Occupant occupant = timesheet.occupant(positionId);
+        Occupant occupant = workforce.occupant(positionId);
         if (occupant == null) {
             return new RoutedStep(positionId, null, null);
         }
@@ -301,7 +301,7 @@ public class WorkflowRouter {
         if (!hasText(positionId)) {
             return null;
         }
-        return blankToNull(timesheet.parentPositionId(positionId));
+        return blankToNull(workforce.parentPositionId(positionId));
     }
 
     private static String blankToNull(String value) {

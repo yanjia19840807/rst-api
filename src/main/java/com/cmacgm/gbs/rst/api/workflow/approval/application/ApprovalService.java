@@ -47,7 +47,7 @@ import com.cmacgm.gbs.rst.api.mail.application.MailNotificationService;
 import com.cmacgm.gbs.rst.api.mail.application.MailNotificationService.OwnerOutcome;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetAlignment;
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.ActionView;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.ScopeView;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.StepView;
@@ -91,7 +91,7 @@ public class ApprovalService {
     private final ExerciseTeamSetupRepository teamSetups;
     private final ExerciseProductionSupportItemRepository supportItems;
     private final WorkingDaysService workingDaysService;
-    private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
     private final WorkflowRouter workflowRouter;
     private final WorkflowViews workflowViews;
     private final ApprovalWorkspaceAssembler workspaceAssembler;
@@ -113,7 +113,7 @@ public class ApprovalService {
             ExerciseTeamSetupRepository teamSetups,
             ExerciseProductionSupportItemRepository supportItems,
             WorkingDaysService workingDaysService,
-            TimesheetReadService timesheet,
+            WorkforceRead workforce,
             WorkflowRouter workflowRouter,
             WorkflowViews workflowViews,
             ApprovalWorkspaceAssembler workspaceAssembler,
@@ -130,7 +130,7 @@ public class ApprovalService {
         this.teamSetups = teamSetups;
         this.supportItems = supportItems;
         this.workingDaysService = workingDaysService;
-        this.timesheet = timesheet;
+        this.workforce = workforce;
         this.workflowRouter = workflowRouter;
         this.workflowViews = workflowViews;
         this.workspaceAssembler = workspaceAssembler;
@@ -611,11 +611,14 @@ public class ApprovalService {
         BigDecimal deliveryHc = deliveryHc(exercise);
         UUID scenarioId = exercise.getOfficialScenarioId();
         BigDecimal rightSizingHc = rightSizingHc(scenarioId);
-        BigDecimal productionSupport = productionSupport(exercise.getId());
+        ExerciseTeamSetup setup = teamSetups.findById(exercise.getId()).orElse(null);
+        BigDecimal productionSupport = productionSupport(exercise.getId(), setup);
         BigDecimal capacityCreation = rightSizingHc == null
                 ? null
                 : SizingMath.capacityCreation(
-                        SizingMath.actualHeadcount(deliveryHc), rightSizingHc, productionSupport);
+                        SizingMath.actualHeadcount(setup == null ? null : setup.totalAgents()),
+                        rightSizingHc,
+                        productionSupport);
 
         TaskActor previous = WorkflowAging.lastApprove(workflow);
         TaskActor last = lastCompletedActor(workflow);
@@ -693,7 +696,7 @@ public class ApprovalService {
                 .map(item -> new TimesheetAlignment.Key(
                         item.getCarrier(), item.getSite(), item.getCustomerCountry()))
                 .toList();
-        return timesheet.align(snapshot.getCenter(), snapshot.getSupervisorPositionId(), snapshot.getPl3Code(), keys)
+        return workforce.align(snapshot.getCenter(), snapshot.getSupervisorPositionId(), snapshot.getPl3Code(), keys)
                 .structuralDrift();
     }
 
@@ -727,10 +730,10 @@ public class ApprovalService {
         return scenario.getRightSizingHc();
     }
 
-    private BigDecimal productionSupport(UUID exerciseId) {
+    private BigDecimal productionSupport(UUID exerciseId, ExerciseTeamSetup setup) {
         return SupportWorkloadMath.totalSupportFte(
                 supportItems.findByExerciseIdAndDeletedFalseOrderByCategoryAscActivityAsc(exerciseId),
-                teamSetups.findById(exerciseId).orElse(null),
+                setup,
                 workingDaysService.workingDaysPerYear(exerciseId));
     }
 
@@ -795,7 +798,7 @@ public class ApprovalService {
         }));
         Map<String, String> names = new HashMap<>();
         for (String ccgid : ids) {
-            names.put(ccgid, timesheet.displayNameByCcgid(ccgid));
+            names.put(ccgid, workforce.displayNameByCcgid(ccgid));
         }
         return names;
     }

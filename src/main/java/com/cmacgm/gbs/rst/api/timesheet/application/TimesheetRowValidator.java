@@ -8,7 +8,7 @@ import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceIssue;
 
 /**
  * Shared row checks for Daily / Monthly.
@@ -22,8 +22,9 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
  * Production + Productive). Daily date and Center come from the file
  * name. Daily never validates {@code hc}.
  *
- * <p>Person identity {@code MISSING_FIELD} and Monthly {@code INVALID_HC}
- * fail the run. Daily empty supervisor / Sr Manager cells and
+ * <p>Monthly {@code INVALID_HC} and Monthly {@code MISSING_FIELD} fail the
+ * run. A Daily row missing employee id, CCGID, name, or position is
+ * skipped and recorded. Daily empty supervisor / Sr Manager cells and
  * {@code HIERARCHY_CONFLICT} stay advisory. Daily does not treat one
  * person on two seats as a conflict. Historical {@code ASSIGNMENT_CONFLICT}
  * stays advisory.
@@ -31,6 +32,10 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 final class TimesheetRowValidator {
 
     private static final Set<String> DAILY_ADVISORY_MISSING_FIELDS = Set.of(
+            "emp_emp_id",
+            "emp_ccgid",
+            "emp_name",
+            "emp_position_id",
             "supervisor_emp_id",
             "supervisor_ccgid",
             "supervisor_name",
@@ -43,7 +48,7 @@ final class TimesheetRowValidator {
     private TimesheetRowValidator() {
     }
 
-    static List<TimesheetSyncIssue> validate(
+    static List<SourceIssue> validate(
             UUID runId, String kind, LocalDate expectedDate, List<ReportRow> rows, java.time.Instant now) {
         return validate(runId, kind, expectedDate, rows, now, GbsProcessCatalog.allowing());
     }
@@ -59,7 +64,7 @@ final class TimesheetRowValidator {
      * @param catalog RST-applicable PL3 codes
      * @return issues
      */
-    static List<TimesheetSyncIssue> validate(
+    static List<SourceIssue> validate(
             UUID runId,
             String kind,
             LocalDate expectedDate,
@@ -67,7 +72,7 @@ final class TimesheetRowValidator {
             java.time.Instant now,
             GbsProcessCatalog catalog) {
         GbsProcessCatalog processes = catalog == null ? GbsProcessCatalog.allowing() : catalog;
-        List<TimesheetSyncIssue> issues = new ArrayList<>();
+        List<SourceIssue> issues = new ArrayList<>();
         for (ReportRow row : rows) {
             if ("DAILY".equals(kind)) {
                 issues.addAll(validateDailyPeople(runId, List.of(row), now));
@@ -102,8 +107,8 @@ final class TimesheetRowValidator {
      * @param now issue timestamp
      * @return person-field issues
      */
-    static List<TimesheetSyncIssue> validateDailyPeople(UUID runId, List<ReportRow> rows, java.time.Instant now) {
-        List<TimesheetSyncIssue> issues = new ArrayList<>();
+    static List<SourceIssue> validateDailyPeople(UUID runId, List<ReportRow> rows, java.time.Instant now) {
+        List<SourceIssue> issues = new ArrayList<>();
         for (ReportRow row : rows) {
             requireDailyPerson(issues, runId, now, row);
         }
@@ -120,9 +125,9 @@ final class TimesheetRowValidator {
      * @param catalog RST-applicable PL3 codes
      * @return position-field issues
      */
-    static List<TimesheetSyncIssue> validateDailyPositions(
+    static List<SourceIssue> validateDailyPositions(
             UUID runId, List<ReportRow> rows, java.time.Instant now, GbsProcessCatalog catalog) {
-        List<TimesheetSyncIssue> issues = new ArrayList<>();
+        List<SourceIssue> issues = new ArrayList<>();
         for (ReportRow row : rows) {
             if (!inScope("DAILY", row, catalog)) {
                 continue;
@@ -162,16 +167,20 @@ final class TimesheetRowValidator {
 
     /**
      * Whether the employee identity on a Daily row can be persisted.
+     * A row that fails this check is skipped and recorded.
      *
      * @param row parsed row
-     * @return true when ccgid, name and position are present
+     * @return true when employee id, CCGID, name, and position are present
      */
     static boolean isCompleteDaily(ReportRow row) {
-        return hasText(row.empCcgid()) && hasText(row.empName()) && hasText(row.empPositionId());
+        return hasText(row.empId())
+                && hasText(row.empCcgid())
+                && hasText(row.empName())
+                && hasText(row.empPositionId());
     }
 
     private static void requireDailyPerson(
-            List<TimesheetSyncIssue> issues, UUID runId, java.time.Instant now, ReportRow row) {
+            List<SourceIssue> issues, UUID runId, java.time.Instant now, ReportRow row) {
         require(issues, runId, now, row, "emp_emp_id", hasText(row.empId()));
         require(issues, runId, now, row, "emp_ccgid", hasText(row.empCcgid()));
         require(issues, runId, now, row, "emp_name", hasText(row.empName()));
@@ -179,7 +188,7 @@ final class TimesheetRowValidator {
     }
 
     private static void requireDailyHierarchy(
-            List<TimesheetSyncIssue> issues, UUID runId, java.time.Instant now, ReportRow row) {
+            List<SourceIssue> issues, UUID runId, java.time.Instant now, ReportRow row) {
         require(issues, runId, now, row, "supervisor_emp_id", hasText(row.supervisorId()));
         require(issues, runId, now, row, "supervisor_ccgid", hasText(row.supervisorCcgid()));
         require(issues, runId, now, row, "supervisor_name", hasText(row.supervisorName()));
@@ -216,13 +225,13 @@ final class TimesheetRowValidator {
     /**
      * Whether this issue should be stored without failing the run.
      * Historical {@code ASSIGNMENT_CONFLICT} stays advisory. Daily empty
-     * hierarchy cells and dual parents are advisory; person identity
-     * {@code MISSING_FIELD} still fails the run.
+     * employee identity cells, hierarchy cells, and dual parents are
+     * advisory.
      *
      * @param issue persisted or computed issue
      * @return true when the code is advisory for Daily
      */
-    static boolean isAdvisory(TimesheetSyncIssue issue) {
+    static boolean isAdvisory(SourceIssue issue) {
         return isAdvisory(issue, "DAILY");
     }
 
@@ -233,7 +242,7 @@ final class TimesheetRowValidator {
      * @param kind DAILY or MONTHLY
      * @return true when the code is advisory for this kind
      */
-    static boolean isAdvisory(TimesheetSyncIssue issue, String kind) {
+    static boolean isAdvisory(SourceIssue issue, String kind) {
         String code = issue.getCode();
         if (TimesheetSyncErrorCode.ASSIGNMENT_CONFLICT.code().equals(code)) {
             return true;
@@ -245,10 +254,10 @@ final class TimesheetRowValidator {
             return true;
         }
         return TimesheetSyncErrorCode.MISSING_FIELD.code().equals(code)
-                && isDailyHierarchyMissingField(issue.getMessage());
+                && isDailyAdvisoryMissingField(issue.getMessage());
     }
 
-    private static boolean isDailyHierarchyMissingField(String message) {
+    private static boolean isDailyAdvisoryMissingField(String message) {
         if (message == null || !message.startsWith("Missing ") || !message.endsWith(".")) {
             return false;
         }
@@ -267,9 +276,9 @@ final class TimesheetRowValidator {
     }
 
     private static void requireHc(
-            List<TimesheetSyncIssue> issues, UUID runId, java.time.Instant now, ReportRow row) {
+            List<SourceIssue> issues, UUID runId, java.time.Instant now, ReportRow row) {
         if (row.hc() != null && row.hc().invalid()) {
-            issues.add(TimesheetSyncIssue.error(
+            issues.add(SourceIssue.error(
                     runId,
                     TimesheetSyncErrorCode.INVALID_HC,
                     "hc is not a valid number.",
@@ -289,7 +298,7 @@ final class TimesheetRowValidator {
     }
 
     private static void require(
-            List<TimesheetSyncIssue> issues,
+            List<SourceIssue> issues,
             UUID runId,
             java.time.Instant now,
             ReportRow row,
@@ -298,7 +307,7 @@ final class TimesheetRowValidator {
         if (ok) {
             return;
         }
-        issues.add(TimesheetSyncIssue.error(
+        issues.add(SourceIssue.error(
                 runId,
                 TimesheetSyncErrorCode.MISSING_FIELD,
                 "Missing " + field + ".",

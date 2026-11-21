@@ -10,9 +10,9 @@ import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.HcValue;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SupervisorDeliveryHc;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SupervisorProcess;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceIssue;
 import org.junit.jupiter.api.Test;
 
 class TimesheetMonthlyCalculatorTests {
@@ -35,10 +35,10 @@ class TimesheetMonthlyCalculatorTests {
 
         assertThat(result.issues()).isEmpty();
         assertThat(result.scopes())
-                .extracting(TimesheetScope::getSupervisorPositionId, TimesheetScope::getCenter, TimesheetScope::getPl3Code)
+                .extracting(SupervisorProcess::getSupervisorPositionId, SupervisorProcess::getCenter, SupervisorProcess::getPl3Code)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "GBS INDIA", "PL3"));
         assertThat(result.kpis())
-                .extracting(TimesheetKpi::getSupervisorPositionId, TimesheetKpi::getCenter, TimesheetKpi::getHc)
+                .extracting(SupervisorDeliveryHc::getSupervisorPositionId, SupervisorDeliveryHc::getCenter, SupervisorDeliveryHc::getHc)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "GBS INDIA", new BigDecimal("2.0")));
     }
 
@@ -54,9 +54,9 @@ class TimesheetMonthlyCalculatorTests {
                 null,
                 RST_YES);
 
-        assertThat(result.issues()).extracting(TimesheetSyncIssue::getCode).doesNotContain("ASSIGNMENT_CONFLICT");
+        assertThat(result.issues()).extracting(SourceIssue::getCode).doesNotContain("ASSIGNMENT_CONFLICT");
         assertThat(result.scopes())
-                .extracting(TimesheetScope::getSupervisorPositionId)
+                .extracting(SupervisorProcess::getSupervisorPositionId)
                 .containsExactly("POS-SUP-1", "POS-SUP-2");
     }
 
@@ -73,11 +73,11 @@ class TimesheetMonthlyCalculatorTests {
                 RST_YES);
 
         assertThat(result.issues())
-                .extracting(TimesheetSyncIssue::getMessage)
+                .extracting(SourceIssue::getMessage)
                 .contains("Missing emp_ccgid.");
         assertThat(result.issues()).allMatch(issue -> !TimesheetRowValidator.isAdvisory(issue, "MONTHLY"));
         assertThat(result.scopes())
-                .extracting(TimesheetScope::getSupervisorPositionId)
+                .extracting(SupervisorProcess::getSupervisorPositionId)
                 .containsExactly("POS-SUP-1");
     }
 
@@ -92,7 +92,7 @@ class TimesheetMonthlyCalculatorTests {
                 RST_YES);
 
         assertThat(result.issues())
-                .extracting(TimesheetSyncIssue::getMessage)
+                .extracting(SourceIssue::getMessage)
                 .contains("Missing supervisor_position_id.");
     }
 
@@ -109,7 +109,7 @@ class TimesheetMonthlyCalculatorTests {
                 RST_YES);
 
         assertThat(result.issues()).isEmpty();
-        assertThat(result.scopes()).extracting(TimesheetScope::getPl3Code).containsExactly("PL3");
+        assertThat(result.scopes()).extracting(SupervisorProcess::getPl3Code).containsExactly("PL3");
     }
 
     @Test
@@ -123,7 +123,7 @@ class TimesheetMonthlyCalculatorTests {
                 RST_YES);
 
         assertThat(result.issues()).isEmpty();
-        assertThat(result.scopes()).extracting(TimesheetScope::getCenter).containsExactly("GBS VIETNAM");
+        assertThat(result.scopes()).extracting(SupervisorProcess::getCenter).containsExactly("GBS VIETNAM");
     }
 
     @Test
@@ -157,13 +157,13 @@ class TimesheetMonthlyCalculatorTests {
 
         assertThat(result.issues()).isEmpty();
         assertThat(result.scopes())
-                .extracting(TimesheetScope::getSupervisorPositionId, TimesheetScope::getPl3Code)
+                .extracting(SupervisorProcess::getSupervisorPositionId, SupervisorProcess::getPl3Code)
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple("POS-SUP-1", "PL3"),
                         org.assertj.core.groups.Tuple.tuple("POS-SUP-2", "PL3"),
                         org.assertj.core.groups.Tuple.tuple("182894", "344"));
         assertThat(result.kpis())
-                .extracting(TimesheetKpi::getSupervisorPositionId, TimesheetKpi::getHc)
+                .extracting(SupervisorDeliveryHc::getSupervisorPositionId, SupervisorDeliveryHc::getHc)
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple("POS-SUP-1", new BigDecimal("1")),
                         org.assertj.core.groups.Tuple.tuple("POS-SUP-2", new BigDecimal("1")),
@@ -183,8 +183,8 @@ class TimesheetMonthlyCalculatorTests {
                 RST_YES);
 
         assertThat(result.issues()).isEmpty();
-        assertThat(result.scopes()).extracting(TimesheetScope::getPl3Code).containsExactly("PL3");
-        assertThat(result.kpis()).extracting(TimesheetKpi::getPl3Code).containsExactly("PL3");
+        assertThat(result.scopes()).extracting(SupervisorProcess::getPl3Code).containsExactly("PL3");
+        assertThat(result.kpis()).extracting(SupervisorDeliveryHc::getPl3Code).containsExactly("PL3");
     }
 
     @Test
@@ -199,7 +199,7 @@ class TimesheetMonthlyCalculatorTests {
 
         assertThat(result.issues()).isEmpty();
         assertThat(result.syncDate()).isEqualTo(java.time.LocalDate.of(2026, 7, 31));
-        assertThat(result.scopes()).extracting(TimesheetScope::getPl3Code).containsExactly("PL3");
+        assertThat(result.scopes()).extracting(SupervisorProcess::getPl3Code).containsExactly("PL3");
     }
 
     @Test
@@ -214,8 +214,8 @@ class TimesheetMonthlyCalculatorTests {
                 "GBS INDIA");
 
         assertThat(result.issues()).isEmpty();
-        assertThat(result.scopes()).extracting(TimesheetScope::getCenter).containsExactly("GBS INDIA");
-        assertThat(result.kpis()).extracting(TimesheetKpi::getCenter).containsExactly("GBS INDIA");
+        assertThat(result.scopes()).extracting(SupervisorProcess::getCenter).containsExactly("GBS INDIA");
+        assertThat(result.kpis()).extracting(SupervisorDeliveryHc::getCenter).containsExactly("GBS INDIA");
     }
 
     @Test
@@ -229,7 +229,7 @@ class TimesheetMonthlyCalculatorTests {
                 RST_YES);
 
         assertThat(result.issues())
-                .extracting(TimesheetSyncIssue::getCode, TimesheetSyncIssue::getMessage)
+                .extracting(SourceIssue::getCode, SourceIssue::getMessage)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("INVALID_HC", "hc is not a valid number."));
         assertThat(result.kpis()).isEmpty();
     }
@@ -247,7 +247,7 @@ class TimesheetMonthlyCalculatorTests {
                 RST_YES);
 
         assertThat(result.issues()).isEmpty();
-        assertThat(result.kpis()).extracting(TimesheetKpi::getPl3Code).containsExactly("PL3");
+        assertThat(result.kpis()).extracting(SupervisorDeliveryHc::getPl3Code).containsExactly("PL3");
     }
 
     private static ReportRow row(

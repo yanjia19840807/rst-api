@@ -8,6 +8,7 @@ import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.security.api.dto.CurrentUserResponse;
 import com.cmacgm.gbs.rst.api.security.dev.DevIdentityProperties;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -24,7 +25,7 @@ public class MeController {
 
     private final SsoProfileService profiles;
     private final ObjectProvider<DevIdentityProperties> devIdentity;
-    private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
 
     /**
      * @param profiles SSO directory
@@ -34,10 +35,10 @@ public class MeController {
     public MeController(
             SsoProfileService profiles,
             ObjectProvider<DevIdentityProperties> devIdentity,
-            TimesheetReadService timesheet) {
+            WorkforceRead workforce) {
         this.profiles = profiles;
         this.devIdentity = devIdentity;
-        this.timesheet = timesheet;
+        this.workforce = workforce;
     }
 
     /**
@@ -55,13 +56,13 @@ public class MeController {
         profiles.touch(principal);
         DevIdentityProperties properties = devIdentity.getIfAvailable();
         Boolean overrideEnabled = properties == null ? null : properties.isOverrideEnabled();
-        String jobRole = timesheet.findActiveJobRole(principal.ccgid());
+        String jobRole = workforce.findActiveJobRole(principal.ccgid());
         List<String> coveredRoles = principal.delegatedPositionId() == null
                 ? List.of()
-                : timesheet.roleTypesOfPosition(principal.delegatedPositionId());
+                : workforce.roleTypesOfPosition(principal.delegatedPositionId());
         String occupantName = null;
         if (principal.delegatedPositionId() != null) {
-            TimesheetReadService.Occupant occupant = timesheet.occupant(principal.delegatedPositionId());
+            TimesheetReadService.Occupant occupant = workforce.occupant(principal.delegatedPositionId());
             occupantName = occupant == null ? null : occupant.name();
         }
         return CurrentUserResponse.from(principal, overrideEnabled, jobRole, coveredRoles, occupantName);

@@ -12,8 +12,8 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.graph.MicrosoftGraphProperties;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceSnapshot;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceSnapshotRepository;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -61,7 +61,7 @@ class TimesheetSyncLiveIT {
     private TimesheetSyncService sync;
 
     @Autowired
-    private TimesheetSyncRunRepository syncRuns;
+    private SourceSnapshotRepository syncRuns;
 
     @Autowired
     private JdbcTemplate jdbc;
@@ -92,12 +92,12 @@ class TimesheetSyncLiveIT {
         assertThat(result.kind()).isEqualTo("DAILY");
         assertThat(result.status()).isEqualTo("ACTIVE");
         assertThat(result.syncDate()).isNotNull();
-        TimesheetSyncRun run = syncRuns.findById(result.id()).orElseThrow();
+        SourceSnapshot run = syncRuns.findById(result.id()).orElseThrow();
         assertThat(run.getSourceType()).isEqualTo("SHAREPOINT");
         assertThat(run.getSourceFileName()).isNotBlank();
-        assertThat(count("timesheet_person", result.id())).isPositive();
-        assertThat(count("timesheet_position", result.id())).isPositive();
-        assertThat(count("timesheet_person_position_role", result.id())).isPositive();
+        assertThat(count("org_person", result.id())).isPositive();
+        assertThat(count("org_position", result.id())).isPositive();
+        assertThat(count("org_seat", result.id())).isPositive();
     }
 
     @Test
@@ -107,16 +107,17 @@ class TimesheetSyncLiveIT {
         assertThat(result.kind()).isEqualTo("MONTHLY");
         assertThat(result.status()).isEqualTo("ACTIVE");
         assertThat(result.syncDate()).isNotNull();
-        TimesheetSyncRun run = syncRuns.findById(result.id()).orElseThrow();
+        SourceSnapshot run = syncRuns.findById(result.id()).orElseThrow();
         assertThat(run.getSourceType()).isEqualTo("SHAREPOINT");
         assertThat(run.getSourceFileName()).isNotBlank();
-        assertThat(count("timesheet_scope", result.id())).isPositive();
-        assertThat(count("timesheet_kpi", result.id())).isPositive();
+        assertThat(count("supervisor_process", result.id())).isPositive();
+        assertThat(count("process_scope", result.id())).isPositive();
+        assertThat(count("supervisor_delivery_hc", result.id())).isPositive();
     }
 
     private long count(String table, UUID syncRunId) {
         Long rows = jdbc.queryForObject(
-                "select count(*) from " + table + " where sync_run_id = ?",
+                "select count(*) from " + table + " where source_snapshot_id = ?",
                 Long.class,
                 syncRunId);
         return rows == null ? 0L : rows;

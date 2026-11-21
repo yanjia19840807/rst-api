@@ -40,6 +40,39 @@ class GbsProcessCatalogTests {
     }
 
     @Test
+    void level3NameSuppliesCodeAndKeepsSkpiDomainSpelling() {
+        String csv =
+                """
+                ID,RST Applicability,Level 1,Level 2,Level 3,Domain
+                4507,Yes,PL1,PL2,Supplier Qualification - Loi Sapin 2,Procurement
+                768,Yes,,,Standard Bookings,Finance
+                769,Yes,A,B,Standard Bookings,Finance
+                321,No,A,B,Closed Process,Finance
+                """;
+
+        GbsProcessCatalog catalog = GbsProcessCatalog.parse(
+                new ByteArrayInputStream(csv.getBytes(StandardCharsets.UTF_8)));
+
+        assertThat(catalog.level3ByName("standard bookings"))
+                .isEmpty();
+        assertThat(catalog.level3Ambiguous("Standard Bookings")).isTrue();
+        assertThat(catalog.level3ByName("Supplier Qualification - Loi Sapin 2"))
+                .get()
+                .extracting(GbsProcessCatalog.Level3::pl3Code, GbsProcessCatalog.Level3::domain)
+                .containsExactly("4507", "Procurement");
+        assertThat(catalog.level3ByName("Closed Process")).isEmpty();
+        assertThat(catalog.canonicalDomain("FINANCE")).isEqualTo("Finance");
+        assertThat(catalog.level3ByName("Standard Bookings".toLowerCase())).isEmpty();
+        GbsProcessCatalog.Level3 blankLevels = GbsProcessCatalog.parse(new ByteArrayInputStream(
+                "ID,RST Applicability,Level 3,Domain,Level 1,Level 2\n768,Yes,Standard Bookings,Finance,,\n"
+                        .getBytes(StandardCharsets.UTF_8)))
+                .level3ByName("Standard Bookings")
+                .orElseThrow();
+        assertThat(blankLevels.pl1()).isEmpty();
+        assertThat(blankLevels.pl2()).isEmpty();
+    }
+
+    @Test
     void parseRejectsMissingApplicabilityHeader() {
         String csv = "ID,Process\n320,AP\n";
         assertThatThrownBy(() -> GbsProcessCatalog.parse(new ByteArrayInputStream(csv.getBytes(StandardCharsets.UTF_8))))
@@ -57,6 +90,23 @@ class GbsProcessCatalogTests {
         assertThat(catalog.rstYesPl3Codes()).containsExactlyInAnyOrder("313", "497");
         assertThat(catalog.applies("313")).isTrue();
         assertThat(catalog.applies("321")).isFalse();
+    }
+
+    @Test
+    void fromSharePointFieldsReadsEncodedLevelNames() {
+        GbsProcessCatalog catalog = GbsProcessCatalog.fromSharePointFields(List.of(Map.of(
+                "id", "768",
+                "RSTApplicability", "Yes",
+                "Level_x0020_3", "Standard Bookings",
+                "Level_x0020_1", "Ocean",
+                "Level_x0020_2", "Booking",
+                "Domain", "Finance")));
+
+        GbsProcessCatalog.Level3 level3 = catalog.level3ByName("standard bookings").orElseThrow();
+        assertThat(level3.pl3Code()).isEqualTo("768");
+        assertThat(level3.pl1()).isEqualTo("Ocean");
+        assertThat(level3.pl2()).isEqualTo("Booking");
+        assertThat(level3.domain()).isEqualTo("Finance");
     }
 
     @Test

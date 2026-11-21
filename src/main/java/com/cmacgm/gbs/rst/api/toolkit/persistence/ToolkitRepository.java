@@ -15,9 +15,9 @@ public interface ToolkitRepository extends JpaRepository<Toolkit, UUID> {
     @EntityGraph(attributePaths = "subtasks")
     @Query("""
             select distinct toolkit
-            from Toolkit toolkit, TimesheetPerson person, TimesheetPersonPositionRole occupancy,
-                 TimesheetPosition seat, TimesheetPositionParent edge, TimesheetScope scope,
-                 TimesheetSyncRun daily, TimesheetSyncRun monthly
+            from Toolkit toolkit, OrgPerson person, OrgSeat occupancy,
+                 OrgPosition seat, OrgPositionParent edge, MonthlyScope scope,
+                 SourceSnapshot daily, SourceSnapshot monthly
             where person.id.syncRunId = daily.id
               and occupancy.id.syncRunId = daily.id
               and occupancy.id.ccgid = person.id.ccgid
@@ -52,8 +52,8 @@ public interface ToolkitRepository extends JpaRepository<Toolkit, UUID> {
     @EntityGraph(attributePaths = "subtasks")
     @Query("""
             select distinct toolkit
-            from Toolkit toolkit, TimesheetPosition seat, TimesheetPositionParent edge,
-                 TimesheetScope scope, TimesheetSyncRun daily, TimesheetSyncRun monthly
+            from Toolkit toolkit, OrgPosition seat, OrgPositionParent edge,
+                 MonthlyScope scope, SourceSnapshot daily, SourceSnapshot monthly
             where seat.id.syncRunId = daily.id
               and edge.id.syncRunId = daily.id
               and edge.id.positionId = seat.id.positionId

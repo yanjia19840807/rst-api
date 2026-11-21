@@ -15,11 +15,11 @@ class RepositoryLineMathTests {
         BigDecimal support = new BigDecimal("1.48");
 
         RepositoryLineMath.LineMetrics first = RepositoryLineMath.allocate(
-                new BigDecimal("16.55"), totalDelivery, rs, support);
+                new BigDecimal("16.55"), totalDelivery, totalDelivery, rs, support);
         RepositoryLineMath.LineMetrics second = RepositoryLineMath.allocate(
-                new BigDecimal("2.27"), totalDelivery, rs, support);
+                new BigDecimal("2.27"), totalDelivery, totalDelivery, rs, support);
         RepositoryLineMath.LineMetrics third = RepositoryLineMath.allocate(
-                new BigDecimal("1.59"), totalDelivery, rs, support);
+                new BigDecimal("1.59"), totalDelivery, totalDelivery, rs, support);
 
         assertThat(first.rightSizingHc().add(second.rightSizingHc()).add(third.rightSizingHc()))
                 .isCloseTo(rs, org.assertj.core.data.Offset.offset(new BigDecimal("0.00001")));
@@ -36,6 +36,7 @@ class RepositoryLineMathTests {
         RepositoryLineMath.LineMetrics metrics = RepositoryLineMath.allocate(
                 new BigDecimal("10"),
                 new BigDecimal("10"),
+                new BigDecimal("10"),
                 null,
                 new BigDecimal("1.5"));
         assertThat(metrics.deliveryHc()).isEqualByComparingTo("10");
@@ -48,6 +49,7 @@ class RepositoryLineMathTests {
     @Test
     void leavesSupportAndCapacityEmptyWhenSupportFteUnknown() {
         RepositoryLineMath.LineMetrics metrics = RepositoryLineMath.allocate(
+                new BigDecimal("10"),
                 new BigDecimal("10"),
                 new BigDecimal("10"),
                 new BigDecimal("12"),
@@ -73,9 +75,23 @@ class RepositoryLineMathTests {
     }
 
     @Test
+    void capacityUsesActualHcWhileWeightsUseDeliveryHc() {
+        RepositoryLineMath.LineMetrics metrics = RepositoryLineMath.allocate(
+                new BigDecimal("5"),
+                new BigDecimal("20"),
+                new BigDecimal("8"),
+                new BigDecimal("5"),
+                new BigDecimal("1"));
+        assertThat(metrics.rightSizingHc()).isEqualByComparingTo("1.250000");
+        assertThat(metrics.productionSupport()).isEqualByComparingTo("0.250000");
+        assertThat(metrics.capacityCreation()).isEqualByComparingTo("0.500000");
+        assertThat(metrics.capacityPct()).isEqualByComparingTo("25.0");
+    }
+
+    @Test
     void skipsAllocationWhenTotalDeliveryIsZero() {
         RepositoryLineMath.LineMetrics metrics = RepositoryLineMath.allocate(
-                BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("4"), new BigDecimal("1"));
+                BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("8"), new BigDecimal("4"), new BigDecimal("1"));
         assertThat(metrics.rightSizingHc()).isNull();
         assertThat(metrics.productionSupport()).isNull();
         assertThat(metrics.capacityCreation()).isNull();

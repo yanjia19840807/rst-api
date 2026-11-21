@@ -11,12 +11,12 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPersonPositionRole;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPosition;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPositionParent;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPerson;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgSeat;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPosition;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPositionParent;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceIssue;
 
 /**
  * Daily people come from every complete identity on the file, including
@@ -34,11 +34,11 @@ public class TimesheetDailyCalculator {
      */
     public record Result(
             LocalDate syncDate,
-            List<TimesheetPerson> people,
-            List<TimesheetPosition> positions,
-            List<TimesheetPositionParent> parents,
-            List<TimesheetPersonPositionRole> seats,
-            List<TimesheetSyncIssue> issues) {
+            List<OrgPerson> people,
+            List<OrgPosition> positions,
+            List<OrgPositionParent> parents,
+            List<OrgSeat> seats,
+            List<SourceIssue> issues) {
     }
 
     /**
@@ -103,27 +103,37 @@ public class TimesheetDailyCalculator {
         GbsProcessCatalog processes = catalog == null ? GbsProcessCatalog.allowing() : catalog;
         LocalDate syncDate = expectedDate != null ? expectedDate : firstRowDate(rows);
         String snapshotCenter = hasText(center) ? center.trim() : null;
-        List<TimesheetSyncIssue> issues = new ArrayList<>(TimesheetRowValidator.validateDailyPeople(runId, rows, now));
-        if (hasBlocking(issues)) {
+        List<SourceIssue> issues = new ArrayList<>(TimesheetRowValidator.validateDailyPeople(runId, rows, now));
+        List<ReportRow> kept = rows.stream().filter(TimesheetRowValidator::isCompleteDaily).toList();
+        Map<String, PersonDraft> people = new LinkedHashMap<>();
+        for (ReportRow row : kept) {
+            rememberPeopleFromRow(people, row, snapshotCenter);
+        }
+        if (people.isEmpty()) {
+            issues.add(SourceIssue.error(
+                    runId,
+                    TimesheetSyncErrorCode.EMPTY_FILE,
+                    "No rows remained after filtering.",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    now));
             addFileDateIfMissing(issues, runId, now, syncDate);
             return new Result(syncDate, List.of(), List.of(), List.of(), List.of(), issues);
         }
 
-        Map<String, PersonDraft> people = new LinkedHashMap<>();
-        for (ReportRow row : rows) {
-            rememberPeopleFromRow(people, row, snapshotCenter);
-        }
-
-        issues.addAll(TimesheetRowValidator.validateDailyPositions(runId, rows, now, processes));
+        issues.addAll(TimesheetRowValidator.validateDailyPositions(runId, kept, now, processes));
         if (hasBlocking(issues)) {
-            addEmptyFileIfNeeded(issues, runId, now, people, List.of());
+            addFileDateIfMissing(issues, runId, now, syncDate);
             return toResult(runId, syncDate, people, List.of(), List.of(), List.of(), issues);
         }
 
         Map<String, PositionDraft> positions = new LinkedHashMap<>();
         Map<String, ParentEdge> parents = new LinkedHashMap<>();
         Map<String, SeatDraft> seats = new LinkedHashMap<>();
-        for (ReportRow row : rows) {
+        for (ReportRow row : kept) {
             if (!processes.applies(row.pl3Code()) || !TimesheetRowValidator.isProductionLine(row)) {
                 continue;
             }
@@ -152,11 +162,11 @@ public class TimesheetDailyCalculator {
             java.util.Collection<PositionDraft> positions,
             java.util.Collection<ParentEdge> parents,
             java.util.Collection<SeatDraft> seats,
-            List<TimesheetSyncIssue> issues) {
+            List<SourceIssue> issues) {
         return new Result(
                 syncDate,
                 people.values().stream()
-                        .map(draft -> TimesheetPerson.create(
+                        .map(draft -> OrgPerson.create(
                                 runId,
                                 draft.ccgid,
                                 draft.empId,
@@ -166,12 +176,12 @@ public class TimesheetDailyCalculator {
                                 draft.jobRole))
                         .toList(),
                 positions.stream()
-                        .map(draft -> TimesheetPosition.create(runId, draft.positionId, draft.roleType))
+                        .map(draft -> OrgPosition.create(runId, draft.positionId, draft.roleType))
                         .toList(),
                 parents.stream()
                         .filter(edge -> hasNode(positions, edge.positionId, edge.roleType))
                         .filter(edge -> hasNode(positions, edge.parentPositionId, edge.parentRoleType))
-                        .map(edge -> TimesheetPositionParent.create(
+                        .map(edge -> OrgPositionParent.create(
                                 runId,
                                 edge.positionId,
                                 edge.roleType,
@@ -181,7 +191,7 @@ public class TimesheetDailyCalculator {
                 seats.stream()
                         .filter(seat -> people.containsKey(seat.ccgid))
                         .filter(seat -> hasNode(positions, seat.positionId, seat.roleType))
-                        .map(seat -> TimesheetPersonPositionRole.create(
+                        .map(seat -> OrgSeat.create(
                                 runId, seat.ccgid, seat.positionId, seat.roleType))
                         .toList(),
                 issues);
@@ -197,16 +207,16 @@ public class TimesheetDailyCalculator {
         return rows.stream().map(ReportRow::date).filter(date -> date != null).findFirst().orElse(null);
     }
 
-    private static boolean hasBlocking(List<TimesheetSyncIssue> issues) {
+    private static boolean hasBlocking(List<SourceIssue> issues) {
         return issues.stream().anyMatch(issue -> !TimesheetRowValidator.isAdvisory(issue, "DAILY"));
     }
 
     private static void addFileDateIfMissing(
-            List<TimesheetSyncIssue> issues, UUID runId, Instant now, LocalDate syncDate) {
+            List<SourceIssue> issues, UUID runId, Instant now, LocalDate syncDate) {
         if (syncDate != null) {
             return;
         }
-        issues.add(TimesheetSyncIssue.error(
+        issues.add(SourceIssue.error(
                 runId,
                 TimesheetSyncErrorCode.INVALID_DATE,
                 "Daily file has no valid date.",
@@ -219,7 +229,7 @@ public class TimesheetDailyCalculator {
     }
 
     private static void addEmptyFileIfNeeded(
-            List<TimesheetSyncIssue> issues,
+            List<SourceIssue> issues,
             UUID runId,
             Instant now,
             Map<String, PersonDraft> people,
@@ -227,7 +237,7 @@ public class TimesheetDailyCalculator {
         if (!people.isEmpty() || !positions.isEmpty() || !issues.isEmpty()) {
             return;
         }
-        issues.add(TimesheetSyncIssue.error(
+        issues.add(SourceIssue.error(
                 runId,
                 TimesheetSyncErrorCode.EMPTY_FILE,
                 "Daily file produced no person or position rows.",

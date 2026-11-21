@@ -25,7 +25,7 @@ import com.cmacgm.gbs.rst.api.tms.api.dto.UpdateTmsSessionRequest;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSession;
 import com.cmacgm.gbs.rst.api.tms.domain.TmsSessionStatus;
 import com.cmacgm.gbs.rst.api.tms.persistence.TmsSessionRepository;
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import com.cmacgm.gbs.rst.api.toolkit.domain.Toolkit;
 import com.cmacgm.gbs.rst.api.toolkit.domain.ToolkitSubtask;
 import com.cmacgm.gbs.rst.api.toolkit.persistence.ToolkitRepository;
@@ -40,7 +40,7 @@ public class TmsSessionCommandService {
 
     private final TmsSessionRepository sessionRepository;
     private final ToolkitRepository toolkitRepository;
-    private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
     private final PositionCoverage coverage;
     private final AuditRecorder audits;
     private final Clock clock;
@@ -48,13 +48,13 @@ public class TmsSessionCommandService {
     public TmsSessionCommandService(
             TmsSessionRepository sessionRepository,
             ToolkitRepository toolkitRepository,
-            TimesheetReadService timesheet,
+            WorkforceRead workforce,
             PositionCoverage coverage,
             AuditRecorder audits,
             Clock clock) {
         this.sessionRepository = sessionRepository;
         this.toolkitRepository = toolkitRepository;
-        this.timesheet = timesheet;
+        this.workforce = workforce;
         this.coverage = coverage;
         this.audits = audits;
         this.clock = clock;
@@ -157,7 +157,7 @@ public class TmsSessionCommandService {
                         "tms-session-not-found",
                         "The TMS session was not found."));
         Toolkit toolkit = session.getToolkit();
-        if (!timesheet.supervisorOwnsScope(
+        if (!workforce.supervisorOwnsScope(
                 supervisorCcgid, toolkit.getSupervisorPositionId(), toolkit.getPrimaryPl3Code(), toolkit.getCenter())) {
             throw new ApiException(
                     HttpStatus.NOT_FOUND,
@@ -273,7 +273,7 @@ public class TmsSessionCommandService {
         if (positionId == null) {
             return subjectCcgid;
         }
-        var occupant = timesheet.occupant(positionId);
+        var occupant = workforce.occupant(positionId);
         if (occupant == null || occupant.ccgid() == null || occupant.ccgid().isBlank()
                 || occupant.ccgid().equalsIgnoreCase(positionId)) {
             return null;
@@ -304,14 +304,14 @@ public class TmsSessionCommandService {
     }
 
     private boolean canUseToolkit(String agentCcgid, Toolkit toolkit) {
-        if (timesheet.agentCanUse(
+        if (workforce.agentCanUse(
                 agentCcgid,
                 toolkit.getSupervisorPositionId(),
                 toolkit.getPrimaryPl3Code(),
                 toolkit.getCenter())) {
             return true;
         }
-        return timesheet.agentPositionCanUse(
+        return workforce.agentPositionCanUse(
                 coverage.positionId("AGENT"),
                 toolkit.getSupervisorPositionId(),
                 toolkit.getPrimaryPl3Code(),
@@ -376,7 +376,7 @@ public class TmsSessionCommandService {
         return TmsSessionResponse.from(
                 session,
                 now,
-                timesheet.displayNameByCcgid(session.getAgentCcgid()),
+                workforce.displayNameByCcgid(session.getAgentCcgid()),
                 createdBy,
                 audits.actor(session.getLatestAuditEventId()));
     }

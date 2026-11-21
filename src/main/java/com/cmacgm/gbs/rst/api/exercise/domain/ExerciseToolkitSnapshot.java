@@ -32,7 +32,7 @@ public class ExerciseToolkitSnapshot {
     private long sourceToolkitVersion;
 
     /** ACTIVE Monthly run that supplied Toolkit scope at freeze. */
-    @Column(name = "timesheet_sync_run_id", nullable = false)
+    @Column(name = "source_snapshot_id", nullable = false)
     private UUID timesheetSyncRunId;
 
     @Column(name = "toolkit_name", nullable = false, length = 200)
@@ -113,7 +113,7 @@ public class ExerciseToolkitSnapshot {
         return sourceToolkitVersion;
     }
 
-    public UUID getTimesheetSyncRunId() {
+    public UUID getSourceSnapshotId() {
         return timesheetSyncRunId;
     }
 

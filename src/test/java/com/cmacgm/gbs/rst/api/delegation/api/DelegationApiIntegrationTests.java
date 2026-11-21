@@ -50,18 +50,19 @@ class DelegationApiIntegrationTests {
     void seed() {
         jdbcTemplate.update("delete from audit_event where entity_type = 'DELEGATION'");
         jdbcTemplate.update("delete from rst_delegation");
-        jdbcTemplate.update("delete from timesheet_sync_issue");
-        jdbcTemplate.update("delete from timesheet_kpi");
-        jdbcTemplate.update("delete from timesheet_scope");
-        jdbcTemplate.update("delete from timesheet_person_position_role");
-        jdbcTemplate.update("delete from timesheet_position_parent");
-        jdbcTemplate.update("delete from timesheet_position");
-        jdbcTemplate.update("delete from timesheet_person");
-        jdbcTemplate.update("delete from timesheet_sync_run");
+        jdbcTemplate.update("delete from source_issue");
+        jdbcTemplate.update("delete from supervisor_delivery_hc");
+        jdbcTemplate.update("delete from supervisor_process");
+        jdbcTemplate.update("delete from process_scope");
+        jdbcTemplate.update("delete from org_seat");
+        jdbcTemplate.update("delete from org_position_parent");
+        jdbcTemplate.update("delete from org_position");
+        jdbcTemplate.update("delete from org_person");
+        jdbcTemplate.update("delete from source_snapshot");
 
         jdbcTemplate.update(
                 """
-                insert into timesheet_sync_run
+                insert into source_snapshot
                     (id, kind, center, sync_date, attempt_no, status, row_count, started_at, completed_at)
                 values (?, 'DAILY', 'GBS INDIA', date '2026-08-05', 1, 'ACTIVE', 2, ?, ?)
                 """,
@@ -530,8 +531,8 @@ class DelegationApiIntegrationTests {
     private void insertPerson(String ccgid, String name, String center) {
         jdbcTemplate.update(
                 """
-                insert into timesheet_person
-                    (sync_run_id, ccgid, emp_id, name, center)
+                insert into org_person
+                    (source_snapshot_id, ccgid, emp_id, name, center)
                 values (?, ?, ?, ?, ?)
                 """,
                 DAILY_RUN_ID,
@@ -544,8 +545,8 @@ class DelegationApiIntegrationTests {
     private void insertPosition(String positionId, String roleType) {
         jdbcTemplate.update(
                 """
-                insert into timesheet_position
-                    (sync_run_id, position_id, role_type)
+                insert into org_position
+                    (source_snapshot_id, position_id, role_type)
                 values (?, ?, ?)
                 """,
                 DAILY_RUN_ID,
@@ -557,8 +558,8 @@ class DelegationApiIntegrationTests {
             String positionId, String roleType, String parentPositionId, String parentRoleType) {
         jdbcTemplate.update(
                 """
-                insert into timesheet_position_parent
-                    (sync_run_id, position_id, role_type, parent_position_id, parent_role_type)
+                insert into org_position_parent
+                    (source_snapshot_id, position_id, role_type, parent_position_id, parent_role_type)
                 values (?, ?, ?, ?, ?)
                 """,
                 DAILY_RUN_ID,
@@ -571,8 +572,8 @@ class DelegationApiIntegrationTests {
     private void insertSeat(String ccgid, String positionId, String roleType) {
         jdbcTemplate.update(
                 """
-                insert into timesheet_person_position_role
-                    (sync_run_id, ccgid, position_id, role_type)
+                insert into org_seat
+                    (source_snapshot_id, ccgid, position_id, role_type)
                 values (?, ?, ?, ?)
                 """,
                 DAILY_RUN_ID,

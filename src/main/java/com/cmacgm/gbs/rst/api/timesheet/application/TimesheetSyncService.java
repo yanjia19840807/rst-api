@@ -26,16 +26,17 @@ import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSourceResolver.Source;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonPositionRoleRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionParentRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncIssueRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceIssue;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceSnapshot;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SupervisorDeliveryHcRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgSeatRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgPersonRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgPositionParentRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgPositionRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.ProcessScopeRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SupervisorProcessRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceIssueRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceSnapshotRepository;
 
 /**
  * One pipeline for Daily and Monthly Timesheet sync.
@@ -50,14 +51,15 @@ public class TimesheetSyncService {
     private final TimesheetMonthlyCalculator monthlyCalculator;
     private final TimesheetSourceResolver sources;
     private final GbsProcessCatalogSource processCatalogs;
-    private final TimesheetSyncRunRepository syncRuns;
-    private final TimesheetPersonRepository people;
-    private final TimesheetPositionRepository positions;
-    private final TimesheetPositionParentRepository parents;
-    private final TimesheetPersonPositionRoleRepository seats;
-    private final TimesheetScopeRepository scopes;
-    private final TimesheetKpiRepository kpis;
-    private final TimesheetSyncIssueRepository issues;
+    private final SourceSnapshotRepository syncRuns;
+    private final OrgPersonRepository people;
+    private final OrgPositionRepository positions;
+    private final OrgPositionParentRepository parents;
+    private final OrgSeatRepository seats;
+    private final SupervisorProcessRepository scopes;
+    private final ProcessScopeRepository processes;
+    private final SupervisorDeliveryHcRepository kpis;
+    private final SourceIssueRepository issues;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
     private final TimesheetSyncAlertNotifier alertNotifier;
@@ -74,7 +76,8 @@ public class TimesheetSyncService {
      * @param positions position repository
      * @param parents parent-edge repository
      * @param seats occupancy repository
-     * @param scopes scope repository
+     * @param scopes supervisor-process repository
+     * @param processes process repository
      * @param kpis KPI repository
      * @param issues issue repository
      * @param transactionManager cutover transactions
@@ -88,14 +91,15 @@ public class TimesheetSyncService {
             TimesheetMonthlyCalculator monthlyCalculator,
             TimesheetSourceResolver sources,
             GbsProcessCatalogSource processCatalogs,
-            TimesheetSyncRunRepository syncRuns,
-            TimesheetPersonRepository people,
-            TimesheetPositionRepository positions,
-            TimesheetPositionParentRepository parents,
-            TimesheetPersonPositionRoleRepository seats,
-            TimesheetScopeRepository scopes,
-            TimesheetKpiRepository kpis,
-            TimesheetSyncIssueRepository issues,
+            SourceSnapshotRepository syncRuns,
+            OrgPersonRepository people,
+            OrgPositionRepository positions,
+            OrgPositionParentRepository parents,
+            OrgSeatRepository seats,
+            SupervisorProcessRepository scopes,
+            ProcessScopeRepository processes,
+            SupervisorDeliveryHcRepository kpis,
+            SourceIssueRepository issues,
             PlatformTransactionManager transactionManager,
             Clock clock,
             TimesheetSyncAlertNotifier alertNotifier,
@@ -111,6 +115,7 @@ public class TimesheetSyncService {
         this.parents = parents;
         this.seats = seats;
         this.scopes = scopes;
+        this.processes = processes;
         this.kpis = kpis;
         this.issues = issues;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -241,7 +246,7 @@ public class TimesheetSyncService {
             return toResult(unchanged.get());
         }
         LocalDate previewDate = source.filenameDate() != null ? source.filenameDate() : previewDate(kind, rows);
-        TimesheetSyncRun run = TimesheetSyncRun.startLoading(
+        SourceSnapshot run = SourceSnapshot.startLoading(
                 kind, previewDate, nextAttemptNo(kind, center, previewDate), now);
         run.setSource(source.driveItemId(), source.etag(), source.sourceType(), source.fileName());
         run.setCenter(resolveCenter(source));
@@ -262,6 +267,7 @@ public class TimesheetSyncService {
             TimesheetMonthlyCalculator.Result computed = monthlyCalculator.compute(
                     run.getId(), rows, now, source.filenameDate(), catalog, resolveCenter(source));
             return activateOrFail(run, rows.size(), hash, computed.issues(), () -> {
+                processes.saveAll(computed.processes());
                 scopes.saveAll(computed.scopes());
                 kpis.saveAll(computed.kpis());
             });
@@ -300,15 +306,15 @@ public class TimesheetSyncService {
     }
 
     private SyncResult activateOrFail(
-            TimesheetSyncRun run,
+            SourceSnapshot run,
             int rowCount,
             String dataHash,
-            List<TimesheetSyncIssue> computedIssues,
+            List<SourceIssue> computedIssues,
             Runnable persistRows) {
         if (!computedIssues.isEmpty()) {
             issues.saveAll(computedIssues);
         }
-        List<TimesheetSyncIssue> blocking = computedIssues.stream()
+        List<SourceIssue> blocking = computedIssues.stream()
                 .filter(issue -> !TimesheetRowValidator.isAdvisory(issue, run.getKind()))
                 .toList();
         if (!blocking.isEmpty()) {
@@ -320,7 +326,7 @@ public class TimesheetSyncService {
         }
         persistRows.run();
         activate(run.getId(), run.getKind(), run.getCenter(), rowCount, dataHash);
-        TimesheetSyncRun active = syncRuns.findById(run.getId()).orElseThrow();
+        SourceSnapshot active = syncRuns.findById(run.getId()).orElseThrow();
         log.info(
                 "Timesheet {} {} activated: id={} syncDate={} rows={}",
                 active.getKind(),
@@ -341,7 +347,7 @@ public class TimesheetSyncService {
     private void activate(UUID runId, String kind, String center, int rowCount, String dataHash) {
         transactionTemplate.executeWithoutResult(status -> {
             Instant now = clock.instant();
-            TimesheetSyncRun run = syncRuns.findById(runId)
+            SourceSnapshot run = syncRuns.findById(runId)
                     .orElseThrow(() -> new ApiException(
                             HttpStatus.CONFLICT,
                             TimesheetSyncErrorCode.COUNT_MISMATCH.code(),
@@ -370,19 +376,21 @@ public class TimesheetSyncService {
             return;
         }
         int scopesDropped = scopes.deleteStaleForCenter(kind, center, keepRunId);
+        int processesDropped = processes.deleteStaleForCenter(kind, center, keepRunId);
         int kpisDropped = kpis.deleteStaleForCenter(kind, center, keepRunId);
         log.info(
-                "Timesheet MONTHLY {} kept computed rows for {}; dropped scopes={} kpis={}",
+                "Timesheet MONTHLY {} kept computed rows for {}; dropped links={} processes={} kpis={}",
                 center,
                 keepRunId,
                 scopesDropped,
+                processesDropped,
                 kpisDropped);
     }
 
     private void failWithoutRows(String kind, Source source, String code, String message) {
         Instant now = clock.instant();
         LocalDate date = source.filenameDate() != null ? source.filenameDate() : LocalDate.now(clock);
-        TimesheetSyncRun run = TimesheetSyncRun.startLoading(
+        SourceSnapshot run = SourceSnapshot.startLoading(
                 kind, date, nextAttemptNo(kind, resolveCenter(source), date), now);
         run.setSource(source.driveItemId(), source.etag(), source.sourceType(), source.fileName());
         run.setCenter(resolveCenter(source));
@@ -393,7 +401,7 @@ public class TimesheetSyncService {
         notifyFailed(run.getId());
     }
 
-    private void attachAudit(TimesheetSyncRun run) {
+    private void attachAudit(SourceSnapshot run) {
         run.setLatestAuditEventId(audits.recordSync(run.getId()).getId());
         syncRuns.save(run);
     }
@@ -402,7 +410,7 @@ public class TimesheetSyncService {
         if (!issues.findBySyncRunIdOrderBySourceRowAscCreatedAtAsc(runId).isEmpty()) {
             return;
         }
-        issues.save(TimesheetSyncIssue.error(runId, code, message, null, null, null, null, null, now));
+        issues.save(SourceIssue.error(runId, code, message, null, null, null, null, null, now));
     }
 
     private static String normalizeKind(String kind) {
@@ -436,7 +444,7 @@ public class TimesheetSyncService {
         return source != null && "MANUAL".equalsIgnoreCase(source.sourceType());
     }
 
-    private static SyncResult toResult(TimesheetSyncRun run) {
+    private static SyncResult toResult(SourceSnapshot run) {
         return new SyncResult(
                 run.getId(),
                 run.getKind(),

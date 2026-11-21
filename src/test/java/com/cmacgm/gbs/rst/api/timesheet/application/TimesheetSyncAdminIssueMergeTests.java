@@ -8,7 +8,7 @@ import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSyncAdminService.IssueView;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceIssue;
 import org.junit.jupiter.api.Test;
 
 class TimesheetSyncAdminIssueMergeTests {
@@ -38,7 +38,7 @@ class TimesheetSyncAdminIssueMergeTests {
         UUID runId = UUID.randomUUID();
         Instant now = Instant.parse("2026-09-21T00:00:00Z");
         List<IssueView> merged = TimesheetSyncAdminService.mergeBySourceRow(List.of(
-                TimesheetSyncIssue.error(
+                SourceIssue.error(
                         runId,
                         TimesheetSyncErrorCode.EMPTY_FILE,
                         "Daily file produced no person or position rows.",
@@ -48,7 +48,7 @@ class TimesheetSyncAdminIssueMergeTests {
                         null,
                         null,
                         now),
-                TimesheetSyncIssue.error(
+                SourceIssue.error(
                         runId,
                         TimesheetSyncErrorCode.HIERARCHY_CONFLICT,
                         "position_id 174050 role SUPERVISOR maps to multiple parent_position_id: 1, 2",
@@ -70,7 +70,7 @@ class TimesheetSyncAdminIssueMergeTests {
         Instant now = Instant.parse("2026-09-21T00:00:00Z");
         List<IssueView> merged = TimesheetSyncAdminService.mergeBySourceRow(List.of(
                 missing(runId, "hc", 8, now),
-                TimesheetSyncIssue.error(
+                SourceIssue.error(
                         runId,
                         TimesheetSyncErrorCode.INVALID_HC,
                         "hc is not a valid number.",
@@ -87,8 +87,8 @@ class TimesheetSyncAdminIssueMergeTests {
         assertThat(merged.get(0).empCcgid()).isEqualTo("S00000001");
     }
 
-    private static TimesheetSyncIssue missing(UUID runId, String field, int sourceRow, Instant now) {
-        return TimesheetSyncIssue.error(
+    private static SourceIssue missing(UUID runId, String field, int sourceRow, Instant now) {
+        return SourceIssue.error(
                 runId,
                 TimesheetSyncErrorCode.MISSING_FIELD,
                 "Missing " + field + ".",

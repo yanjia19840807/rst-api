@@ -60,9 +60,9 @@ import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
 import com.cmacgm.gbs.rst.api.timesheet.api.dto.TimesheetAlignmentView;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetAlignment;
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPerson;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceSnapshotRepository;
 import com.cmacgm.gbs.rst.api.toolkit.persistence.ToolkitRepository;
 import com.cmacgm.gbs.rst.api.workflow.application.WorkflowRouter;
 import com.cmacgm.gbs.rst.api.workflow.approval.application.ApprovalActorResolver;
@@ -87,8 +87,8 @@ public class ExerciseService {
     private final RstExerciseRepository exercises;
     private final ExerciseAccess access;
     private final ToolkitRepository toolkits;
-    private final TimesheetReadService timesheet;
-    private final TimesheetSyncRunRepository syncRuns;
+    private final WorkforceRead workforce;
+    private final SourceSnapshotRepository syncRuns;
     private final ExerciseTeamSetupRepository teamSetups;
     private final ExerciseInitializationService initialization;
     private final WorkingDaysService workingDaysService;
@@ -108,8 +108,8 @@ public class ExerciseService {
             RstExerciseRepository exercises,
             ExerciseAccess access,
             ToolkitRepository toolkits,
-            TimesheetReadService timesheet,
-            TimesheetSyncRunRepository syncRuns,
+            WorkforceRead workforce,
+            SourceSnapshotRepository syncRuns,
             ExerciseTeamSetupRepository teamSetups,
             ExerciseInitializationService initialization,
             WorkingDaysService workingDaysService,
@@ -124,7 +124,7 @@ public class ExerciseService {
         this.exercises = exercises;
         this.access = access;
         this.toolkits = toolkits;
-        this.timesheet = timesheet;
+        this.workforce = workforce;
         this.syncRuns = syncRuns;
         this.teamSetups = teamSetups;
         this.initialization = initialization;
@@ -152,7 +152,7 @@ public class ExerciseService {
     public CreateExerciseResult create(String ownerCcgid, CreateExerciseRequest request) {
         // Resolve under repeatable-read so an ACTIVE switch cannot mix snapshots.
         validateSizingMonth(request.sizingMonth());
-        ExerciseFreeze freeze = ExerciseFreeze.resolve(toolkits, timesheet, ownerCcgid, request.toolkitId());
+        ExerciseFreeze freeze = ExerciseFreeze.resolve(toolkits, workforce, ownerCcgid, request.toolkitId());
 
         Instant now = clock.instant();
         UUID exerciseId = UUID.randomUUID();
@@ -672,7 +672,7 @@ public class ExerciseService {
         if (snapshot == null) {
             throw notFound("exercise-not-found", "The Exercise was not found.");
         }
-        LocalDate syncDate = syncRuns.findById(snapshot.getTimesheetSyncRunId())
+        LocalDate syncDate = syncRuns.findById(snapshot.getSourceSnapshotId())
                 .map(run -> run.getSyncDate())
                 .orElseThrow(() -> notFound("exercise-not-found", "The Exercise was not found."));
         var toolkitView = new ExerciseToolkitView(
@@ -711,9 +711,10 @@ public class ExerciseService {
                                         item.getCarrier(), item.getSite(), item.getCustomerCountry())))
                 .toList();
         BigDecimal deliveryHc = deliveryHc(exercise);
-        BigDecimal actualHc = SizingMath.actualHeadcount(deliveryHc);
+        ExerciseTeamSetup setup = teamSetups.findById(exercise.getId()).orElse(null);
+        BigDecimal actualHc = SizingMath.actualHeadcount(setup == null ? null : setup.totalAgents());
         BigDecimal rightSizingHc = rightSizingHc(exercise.getOfficialScenarioId());
-        BigDecimal productionSupport = productionSupport(exercise.getId());
+        BigDecimal productionSupport = productionSupport(exercise.getId(), setup);
         BigDecimal capacityCreation = rightSizingHc == null
                 ? null
                 : SizingMath.capacityCreation(actualHc, rightSizingHc, productionSupport);
@@ -767,7 +768,7 @@ public class ExerciseService {
                 .map(item -> new TimesheetAlignment.Key(
                         item.getCarrier(), item.getSite(), item.getCustomerCountry()))
                 .toList();
-        return TimesheetAlignmentView.from(timesheet.align(
+        return TimesheetAlignmentView.from(workforce.align(
                 snapshot.getCenter(), snapshot.getSupervisorPositionId(), snapshot.getPl3Code(), keys));
     }
 
@@ -814,7 +815,7 @@ public class ExerciseService {
                 }
             }));
         });
-        Map<String, TimesheetPerson> people = timesheet.findActivePeopleByCcgids(ccgids);
+        Map<String, OrgPerson> people = workforce.findActivePeopleByCcgids(ccgids);
         Map<UUID, ReviewProgress> result = new HashMap<>();
         for (RstExercise exercise : tracked) {
             ProcessInstance workflow = workflowByExercise.get(exercise.getId());
@@ -847,7 +848,7 @@ public class ExerciseService {
                     : roleForStep(workflow.getCurrentStep());
             String positionId = pending == null ? null : pending.getPositionId();
             String reviewerCcgid = pending == null ? null : pending.getCcgid();
-            TimesheetPerson person = personOf(people, reviewerCcgid);
+            OrgPerson person = personOf(people, reviewerCcgid);
             AuditActorView reviewerBy = ready == null || pending == null
                     ? null
                     : actors.forPosition(positionId, reviewerCcgid, Map.of());
@@ -891,21 +892,21 @@ public class ExerciseService {
         return List.copyOf(unique.values());
     }
 
-    private static TimesheetPerson personOf(Map<String, TimesheetPerson> people, String ccgid) {
+    private static OrgPerson personOf(Map<String, OrgPerson> people, String ccgid) {
         if (ccgid == null || ccgid.isBlank()) {
             return null;
         }
         return people.get(ccgid.trim().toUpperCase(Locale.ROOT));
     }
 
-    private static String personName(TimesheetPerson person, String ccgid) {
+    private static String personName(OrgPerson person, String ccgid) {
         if (person != null && person.getName() != null && !person.getName().isBlank()) {
             return person.getName();
         }
         return ccgid;
     }
 
-    private static String emailOf(TimesheetPerson person) {
+    private static String emailOf(OrgPerson person) {
         if (person == null || person.getEmail() == null || person.getEmail().isBlank()) {
             return null;
         }
@@ -960,10 +961,10 @@ public class ExerciseService {
         return scenario.getRightSizingHc();
     }
 
-    private BigDecimal productionSupport(UUID exerciseId) {
+    private BigDecimal productionSupport(UUID exerciseId, ExerciseTeamSetup setup) {
         return SupportWorkloadMath.totalSupportFte(
                 supportItems.findByExerciseIdAndDeletedFalseOrderByCategoryAscActivityAsc(exerciseId),
-                teamSetups.findById(exerciseId).orElse(null),
+                setup,
                 workingDaysService.workingDaysPerYear(exerciseId));
     }
 

@@ -32,6 +32,7 @@ import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryListQuery;
 import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryListView;
 import com.cmacgm.gbs.rst.api.governance.api.dto.RepositoryRow;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.WorkingDaysService;
+import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
 import com.cmacgm.gbs.rst.api.exercise.scenario.persistence.ScenarioRepository;
 import com.cmacgm.gbs.rst.api.workflow.domain.ProcessInstance;
@@ -191,6 +192,7 @@ public class RstRepositoryService {
         }
         Map<UUID, BigDecimal> rightSizingByExercise = rightSizingByExercise(approved);
         Map<UUID, BigDecimal> supportByExercise = supportByExercise(approved);
+        Map<UUID, BigDecimal> actualByExercise = actualByExercise(approved);
         Map<UUID, UUID> submissionByExercise = submissionIdByExercise(approved);
         List<RepositoryRow> source = new ArrayList<>();
         for (RstExercise exercise : approved) {
@@ -198,6 +200,7 @@ public class RstRepositoryService {
                     exercise,
                     rightSizingByExercise,
                     supportByExercise,
+                    actualByExercise.getOrDefault(exercise.getId(), BigDecimal.ZERO),
                     submissionByExercise.get(exercise.getId())));
         }
         source.sort(Comparator
@@ -270,6 +273,7 @@ public class RstRepositoryService {
             RstExercise exercise,
             Map<UUID, BigDecimal> rightSizingByExercise,
             Map<UUID, BigDecimal> supportByExercise,
+            BigDecimal actualHc,
             UUID submissionId) {
         ExerciseToolkitSnapshot snapshot = exercise.getToolkitSnapshot();
         String toolkitName = snapshot == null ? "" : snapshot.getToolkitName();
@@ -284,7 +288,7 @@ public class RstRepositoryService {
         List<RepositoryRow> rows = new ArrayList<>();
         for (ExerciseSharedKpiLine line : exercise.getSharedKpiLines()) {
             RepositoryLineMath.LineMetrics metrics = RepositoryLineMath.allocate(
-                    line.getDeliveryHc(), totalDelivery, rightSizingHc, productionSupport);
+                    line.getDeliveryHc(), totalDelivery, actualHc, rightSizingHc, productionSupport);
             rows.add(new RepositoryRow(
                     exercise.getExerciseCode(),
                     exercise.getId(),
@@ -356,6 +360,15 @@ public class RstRepositoryService {
                     itemsByExercise.getOrDefault(exercise.getId(), List.of()),
                     setups.get(exercise.getId()),
                     workingDaysService.workingDaysPerYear(exercise.getId())));
+        }
+        return result;
+    }
+
+    private Map<UUID, BigDecimal> actualByExercise(List<RstExercise> approved) {
+        List<UUID> exerciseIds = approved.stream().map(RstExercise::getId).toList();
+        Map<UUID, BigDecimal> result = new HashMap<>();
+        for (ExerciseTeamSetup setup : teamSetups.findAllById(exerciseIds)) {
+            result.put(setup.getExerciseId(), SizingMath.actualHeadcount(setup.totalAgents()));
         }
         return result;
     }

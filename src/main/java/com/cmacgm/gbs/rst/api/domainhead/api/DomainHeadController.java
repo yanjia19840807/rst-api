@@ -37,7 +37,7 @@ public class DomainHeadController {
     }
 
     /**
-     * Distinct GBS centers from ACTIVE Daily people and Monthly scopes.
+     * Every configured GBS center. MyHR centers are included with Timesheet centers.
      *
      * @return centers for the Admin center picker
      */

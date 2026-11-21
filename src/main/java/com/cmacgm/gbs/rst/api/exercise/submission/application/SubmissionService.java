@@ -45,7 +45,7 @@ import com.cmacgm.gbs.rst.api.exercise.submission.api.dto.ValidationFinding;
 import com.cmacgm.gbs.rst.api.workflow.domain.SubmissionScope;
 import com.cmacgm.gbs.rst.api.timesheet.api.dto.TimesheetAlignmentView;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetAlignment;
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.ActionView;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.ScopeView;
 import com.cmacgm.gbs.rst.api.workflow.api.dto.StepView;
@@ -85,7 +85,7 @@ public class SubmissionService {
     private final WorkflowRouter workflowRouter;
     private final WorkflowViews workflowViews;
     private final ApprovalWorkspaceAssembler workspaceAssembler;
-    private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
     private final MailNotificationService mail;
     private final AuditRecorder audits;
     private final ApprovalActorResolver actors;
@@ -109,7 +109,7 @@ public class SubmissionService {
             WorkflowRouter workflowRouter,
             WorkflowViews workflowViews,
             ApprovalWorkspaceAssembler workspaceAssembler,
-            TimesheetReadService timesheet,
+            WorkforceRead workforce,
             MailNotificationService mail,
             AuditRecorder audits,
             ApprovalActorResolver actors,
@@ -128,7 +128,7 @@ public class SubmissionService {
         this.workflowRouter = workflowRouter;
         this.workflowViews = workflowViews;
         this.workspaceAssembler = workspaceAssembler;
-        this.timesheet = timesheet;
+        this.workforce = workforce;
         this.mail = mail;
         this.audits = audits;
         this.actors = actors;
@@ -480,7 +480,7 @@ public class SubmissionService {
         }));
         Map<String, String> names = new HashMap<>();
         for (String ccgid : ids) {
-            names.put(ccgid, timesheet.displayNameByCcgid(ccgid));
+            names.put(ccgid, workforce.displayNameByCcgid(ccgid));
         }
         return names;
     }
@@ -510,7 +510,7 @@ public class SubmissionService {
             return TimesheetAlignmentView.from(
                     TimesheetAlignment.evaluate(false, null, keys, Map.of()));
         }
-        return TimesheetAlignmentView.from(timesheet.align(
+        return TimesheetAlignmentView.from(workforce.align(
                 snapshot.getCenter(), snapshot.getSupervisorPositionId(), snapshot.getPl3Code(), keys));
     }
 

@@ -100,14 +100,15 @@ class SupervisorApiIntegrationTests {
         jdbcTemplate.update("delete from toolkit_shared_kpi_selection");
         jdbcTemplate.update("delete from toolkit_subtask");
         jdbcTemplate.update("delete from toolkit");
-        jdbcTemplate.update("delete from timesheet_sync_issue");
-        jdbcTemplate.update("delete from timesheet_kpi");
-        jdbcTemplate.update("delete from timesheet_scope");
-        jdbcTemplate.update("delete from timesheet_person_position_role");
-        jdbcTemplate.update("delete from timesheet_position_parent");
-        jdbcTemplate.update("delete from timesheet_position");
-        jdbcTemplate.update("delete from timesheet_person");
-        jdbcTemplate.update("delete from timesheet_sync_run");
+        jdbcTemplate.update("delete from source_issue");
+        jdbcTemplate.update("delete from supervisor_delivery_hc");
+        jdbcTemplate.update("delete from supervisor_process");
+        jdbcTemplate.update("delete from process_scope");
+        jdbcTemplate.update("delete from org_seat");
+        jdbcTemplate.update("delete from org_position_parent");
+        jdbcTemplate.update("delete from org_position");
+        jdbcTemplate.update("delete from org_person");
+        jdbcTemplate.update("delete from source_snapshot");
 
         insertSyncRun(DAILY_RUN_ID, "DAILY", 3);
         insertSyncRun(MONTHLY_RUN_ID, "MONTHLY", 2);
@@ -503,14 +504,14 @@ class SupervisorApiIntegrationTests {
         org.junit.jupiter.api.Assertions.assertEquals(
                 MONTHLY_RUN_ID,
                 jdbcTemplate.queryForObject(
-                        "select timesheet_sync_run_id from exercise_toolkit_snapshot where exercise_id = ?",
+                        "select source_snapshot_id from exercise_toolkit_snapshot where exercise_id = ?",
                         UUID.class,
                         createdExerciseId));
         org.junit.jupiter.api.Assertions.assertEquals(
                 MONTHLY_RUN_ID,
                 jdbcTemplate.queryForObject(
                         """
-                        select distinct timesheet_sync_run_id
+                        select distinct source_snapshot_id
                         from exercise_shared_kpi_line
                         where exercise_id = ?
                         """,
@@ -546,8 +547,8 @@ class SupervisorApiIntegrationTests {
                 UUID.fromString(toolkitId));
         jdbcTemplate.update(
                 """
-                update timesheet_kpi set hc = 99
-                where sync_run_id = ? and carrier = 'Carrier A'
+                update supervisor_delivery_hc set hc = 99
+                where source_snapshot_id = ? and carrier = 'Carrier A'
                   and site = 'GBS INDIA' and customer_country = 'Australia'
                 """,
                 MONTHLY_RUN_ID);
@@ -1281,7 +1282,7 @@ class SupervisorApiIntegrationTests {
     private void insertSyncRun(UUID id, String kind, int rowCount) {
         jdbcTemplate.update(
                 """
-                insert into timesheet_sync_run
+                insert into source_snapshot
                     (id, kind, center, sync_date, attempt_no, status, row_count, started_at, completed_at)
                 values (?, ?, 'GBS INDIA', date '2026-08-05', 1, 'ACTIVE', ?, ?, ?)
                 """,
@@ -1294,7 +1295,7 @@ class SupervisorApiIntegrationTests {
 
     private void insertPerson(UUID runId, String ccgid, String name) {
         jdbcTemplate.update(
-                "insert into timesheet_person (sync_run_id, ccgid, emp_id, name, center) values (?, ?, ?, ?, ?)",
+                "insert into org_person (source_snapshot_id, ccgid, emp_id, name, center) values (?, ?, ?, ?, ?)",
                 runId,
                 ccgid,
                 ccgid,
@@ -1311,8 +1312,8 @@ class SupervisorApiIntegrationTests {
         insertPositionNode(runId, parentPositionId, parentRole);
         Long edges = jdbcTemplate.queryForObject(
                 """
-                select count(*) from timesheet_position_parent
-                where sync_run_id = ? and position_id = ? and role_type = ?
+                select count(*) from org_position_parent
+                where source_snapshot_id = ? and position_id = ? and role_type = ?
                   and parent_position_id = ? and parent_role_type = ?
                 """,
                 Long.class,
@@ -1326,8 +1327,8 @@ class SupervisorApiIntegrationTests {
         }
         jdbcTemplate.update(
                 """
-                insert into timesheet_position_parent
-                    (sync_run_id, position_id, role_type, parent_position_id, parent_role_type)
+                insert into org_position_parent
+                    (source_snapshot_id, position_id, role_type, parent_position_id, parent_role_type)
                 values (?, ?, ?, ?, ?)
                 """,
                 runId,
@@ -1340,8 +1341,8 @@ class SupervisorApiIntegrationTests {
     private void insertPositionNode(UUID runId, String positionId, String roleType) {
         Long existing = jdbcTemplate.queryForObject(
                 """
-                select count(*) from timesheet_position
-                where sync_run_id = ? and position_id = ? and role_type = ?
+                select count(*) from org_position
+                where source_snapshot_id = ? and position_id = ? and role_type = ?
                 """,
                 Long.class,
                 runId,
@@ -1352,7 +1353,7 @@ class SupervisorApiIntegrationTests {
         }
         jdbcTemplate.update(
                 """
-                insert into timesheet_position (sync_run_id, position_id, role_type)
+                insert into org_position (source_snapshot_id, position_id, role_type)
                 values (?, ?, ?)
                 """,
                 runId,
@@ -1363,8 +1364,8 @@ class SupervisorApiIntegrationTests {
     private void insertSeat(UUID runId, String ccgid, String positionId, String roleType) {
         jdbcTemplate.update(
                 """
-                insert into timesheet_person_position_role
-                    (sync_run_id, ccgid, position_id, role_type)
+                insert into org_seat
+                    (source_snapshot_id, ccgid, position_id, role_type)
                 values (?, ?, ?, ?)
                 """,
                 runId,
@@ -1387,26 +1388,34 @@ class SupervisorApiIntegrationTests {
     private void insertScope(UUID runId) {
         jdbcTemplate.update(
                 """
-                insert into timesheet_scope
-                    (sync_run_id, supervisor_position_id, pl3_code, pl3_name,
-                     center, domain, pl1, pl2)
-                values (?, ?, ?, ?, ?, ?, ?, ?)
+                insert into process_scope
+                    (source_snapshot_id, center, pl3_code, pl3_name, domain, pl1, pl2)
+                values (?, ?, ?, ?, ?, ?, ?)
+                """,
+                runId,
+                "GBS INDIA",
+                PL3_CODE,
+                "Bank Reconciliation",
+                "Finance",
+                "Accounting",
+                "Record to Report");
+        jdbcTemplate.update(
+                """
+                insert into supervisor_process
+                    (source_snapshot_id, supervisor_position_id, pl3_code, center)
+                values (?, ?, ?, ?)
                 """,
                 runId,
                 SUPERVISOR_POSITION_ID,
                 PL3_CODE,
-                "Bank Reconciliation",
-                "GBS INDIA",
-                "Finance",
-                "Accounting",
-                "Record to Report");
+                "GBS INDIA");
     }
 
     private void insertKpi(UUID runId, String carrier, String site, String country, String hc) {
         jdbcTemplate.update(
                 """
-                insert into timesheet_kpi
-                    (sync_run_id, supervisor_position_id, pl3_code, center,
+                insert into supervisor_delivery_hc
+                    (source_snapshot_id, supervisor_position_id, pl3_code, center,
                      carrier, site, customer_country, hc)
                 values (?, ?, ?, ?, ?, ?, ?, ?)
                 """,

@@ -2,7 +2,7 @@ package com.cmacgm.gbs.rst.api.delegation.application;
 
 import com.cmacgm.gbs.rst.api.delegation.persistence.DelegationRepository;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
-import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
@@ -13,15 +13,15 @@ import org.springframework.stereotype.Component;
 public class PositionCoverage {
 
     private final DelegationRepository delegations;
-    private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
 
     /**
      * @param delegations open coverage rows
      * @param timesheet current occupant of a covered position
      */
-    public PositionCoverage(DelegationRepository delegations, TimesheetReadService timesheet) {
+    public PositionCoverage(DelegationRepository delegations, WorkforceRead workforce) {
         this.delegations = delegations;
-        this.timesheet = timesheet;
+        this.workforce = workforce;
     }
 
     /**
@@ -56,7 +56,7 @@ public class PositionCoverage {
         if (covered == null) {
             return actorCcgid;
         }
-        var occupant = timesheet.occupant(covered);
+        var occupant = workforce.occupant(covered);
         if (occupant == null || occupant.ccgid() == null || occupant.ccgid().isBlank()) {
             return actorCcgid;
         }

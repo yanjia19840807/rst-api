@@ -12,10 +12,11 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReportParser.ReportRow;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
+import com.cmacgm.gbs.rst.api.timesheet.domain.ProcessScope;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceIssue;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SupervisorDeliveryHc;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SupervisorProcess;
 import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
 
 /**
  * Builds Monthly scope and Delivery HC from every complete RST-applicable
@@ -32,9 +33,10 @@ public class TimesheetMonthlyCalculator {
      */
     public record Result(
             LocalDate syncDate,
-            List<TimesheetScope> scopes,
-            List<TimesheetKpi> kpis,
-            List<TimesheetSyncIssue> issues) {
+            List<SupervisorProcess> scopes,
+            List<ProcessScope> processes,
+            List<SupervisorDeliveryHc> kpis,
+            List<SourceIssue> issues) {
     }
 
     /**
@@ -97,9 +99,10 @@ public class TimesheetMonthlyCalculator {
             GbsProcessCatalog catalog,
             String center) {
         GbsProcessCatalog processes = catalog == null ? GbsProcessCatalog.allowing() : catalog;
-        List<TimesheetSyncIssue> issues = new ArrayList<>(
+        List<SourceIssue> issues = new ArrayList<>(
                 TimesheetRowValidator.validate(runId, "MONTHLY", expectedDate, rows, now, processes));
         Map<String, ScopeDraft> scopes = new LinkedHashMap<>();
+        Map<String, ScopeDraft> processDrafts = new LinkedHashMap<>();
         Map<String, KpiDraft> totals = new LinkedHashMap<>();
         LocalDate syncDate = expectedDate;
         String snapshotCenter = hasText(center) ? center.trim() : null;
@@ -111,16 +114,16 @@ public class TimesheetMonthlyCalculator {
                 continue;
             }
             String rowCenter = firstText(snapshotCenter, row.center());
-            scopes.putIfAbsent(
-                    key(row.supervisorPositionId(), row.pl3Code(), rowCenter),
-                    new ScopeDraft(
-                            row.supervisorPositionId(),
-                            row.pl3Code(),
-                            rowCenter,
-                            row.pl3Name(),
-                            row.domain(),
-                            row.pl1(),
-                            row.pl2()));
+            ScopeDraft draft = new ScopeDraft(
+                    row.supervisorPositionId(),
+                    row.pl3Code(),
+                    rowCenter,
+                    row.pl3Name(),
+                    row.domain(),
+                    row.pl1(),
+                    row.pl2());
+            scopes.putIfAbsent(key(row.supervisorPositionId(), row.pl3Code(), rowCenter), draft);
+            processDrafts.putIfAbsent(key(rowCenter, row.pl3Code()), draft);
             if (row.hc() == null || row.hc().value() == null) {
                 continue;
             }
@@ -152,7 +155,7 @@ public class TimesheetMonthlyCalculator {
                             left.hc.add(right.hc)));
         }
         if (syncDate == null) {
-            issues.add(TimesheetSyncIssue.error(
+            issues.add(SourceIssue.error(
                     runId,
                     TimesheetSyncErrorCode.INVALID_MONTH,
                     "Monthly file has no valid date or month.",
@@ -164,7 +167,7 @@ public class TimesheetMonthlyCalculator {
                     now));
         }
         if (scopes.isEmpty() && totals.isEmpty() && issues.isEmpty()) {
-            issues.add(TimesheetSyncIssue.error(
+            issues.add(SourceIssue.error(
                     runId,
                     TimesheetSyncErrorCode.EMPTY_FILE,
                     "Monthly file produced no scope or KPI rows.",
@@ -178,18 +181,24 @@ public class TimesheetMonthlyCalculator {
         return new Result(
                 syncDate,
                 scopes.values().stream()
-                        .map(draft -> TimesheetScope.create(
+                        .map(draft -> SupervisorProcess.create(
                                 runId,
                                 draft.supervisorPositionId,
                                 draft.pl3Code,
+                                draft.center))
+                        .toList(),
+                processDrafts.values().stream()
+                        .map(draft -> ProcessScope.create(
+                                runId,
                                 draft.center,
+                                draft.pl3Code,
                                 draft.pl3Name,
                                 draft.domain,
                                 draft.pl1,
                                 draft.pl2))
                         .toList(),
                 totals.values().stream()
-                        .map(draft -> TimesheetKpi.create(
+                        .map(draft -> SupervisorDeliveryHc.create(
                                 runId,
                                 draft.supervisorPositionId,
                                 draft.pl3Code,

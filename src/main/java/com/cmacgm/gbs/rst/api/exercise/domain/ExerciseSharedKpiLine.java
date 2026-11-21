@@ -33,7 +33,7 @@ public class ExerciseSharedKpiLine {
     private UUID toolkitSharedKpiSelectionId;
 
     /** ACTIVE Monthly run that supplied this line's Delivery HC at freeze. */
-    @Column(name = "timesheet_sync_run_id", nullable = false)
+    @Column(name = "source_snapshot_id", nullable = false)
     private UUID timesheetSyncRunId;
 
     @Column(nullable = false, length = 120)
@@ -122,7 +122,7 @@ public class ExerciseSharedKpiLine {
     /**
      * @return Timesheet sync run used when freezing this line
      */
-    public UUID getTimesheetSyncRunId() {
+    public UUID getSourceSnapshotId() {
         return timesheetSyncRunId;
     }
 

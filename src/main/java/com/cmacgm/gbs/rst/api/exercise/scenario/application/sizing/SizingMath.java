@@ -97,11 +97,11 @@ public final class SizingMath {
     }
 
     /**
-     * Actual HC is the Shared KPI Delivery HC sum.
-     * Tenure buckets stay on Team Setup for average tenure only.
+     * Actual HC is the Team Setup tenure total.
+     * An empty setup counts as zero. Delivery HC is not an input.
      */
-    public static BigDecimal actualHeadcount(BigDecimal deliveryHc) {
-        return nz(deliveryHc);
+    public static BigDecimal actualHeadcount(BigDecimal tenureTotal) {
+        return nz(tenureTotal);
     }
 
     /** Inclusive daily-chart history: sizingMonth − 2 … sizingMonth. */
@@ -135,7 +135,7 @@ public final class SizingMath {
     }
 
     /**
-     * Capacity creation: Actual HC (Delivery HC) − RS HC − Support.
+     * Capacity creation: Actual HC − RS HC − Support.
      * Null Support FTE means it could not be computed — do not treat it as zero.
      */
     public static BigDecimal capacityCreation(

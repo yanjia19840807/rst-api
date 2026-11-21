@@ -18,6 +18,7 @@ import com.cmacgm.gbs.rst.api.domainhead.application.DomainHeadConfigService;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
 import com.cmacgm.gbs.rst.api.security.RstRoles;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService;
+import com.cmacgm.gbs.rst.api.workforce.WorkforceRead;
 
 /**
  * Resolves a configured CCGID into an {@link RstPrincipal} without persisting a local user row.
@@ -30,12 +31,12 @@ public class DevIdentityService {
 
     private static final Logger log = LoggerFactory.getLogger(DevIdentityService.class);
 
-    private final TimesheetReadService timesheet;
+    private final WorkforceRead workforce;
     private final DomainHeadConfigService domainHeads;
     private final ConcurrentHashMap<String, RstPrincipal> cache = new ConcurrentHashMap<>();
 
-    public DevIdentityService(TimesheetReadService timesheet, DomainHeadConfigService domainHeads) {
-        this.timesheet = timesheet;
+    public DevIdentityService(WorkforceRead workforce, DomainHeadConfigService domainHeads) {
+        this.workforce = workforce;
         this.domainHeads = domainHeads;
     }
 
@@ -47,7 +48,7 @@ public class DevIdentityService {
      *         held by the person (Timesheet seat and/or Center Roles)
      */
     public Set<String> timesheetRoles(String ccgid) {
-        Set<String> roles = timesheet.findActiveProductSeat(ccgid)
+        Set<String> roles = workforce.findActiveProductSeat(ccgid)
                 .map(TimesheetReadService.ProductSeat::roleTypes)
                 .orElse(Set.of());
         Set<String> allowed = new LinkedHashSet<>();
@@ -86,7 +87,7 @@ public class DevIdentityService {
     }
 
     private RstPrincipal load(String ccgid, Set<String> roles, String center) {
-        String displayName = timesheet.findDisplayName(ccgid).orElse(null);
+        String displayName = workforce.findDisplayName(ccgid).orElse(null);
         if (displayName == null) {
             displayName = "Dev User " + ccgid;
             log.warn(
@@ -95,7 +96,7 @@ public class DevIdentityService {
         }
         String email = ccgid.toLowerCase(Locale.ROOT) + "@dev.local";
         String resolvedCenter = center == null || center.isBlank()
-                ? timesheet.findActiveCenter(ccgid).orElse(null)
+                ? workforce.findActiveCenter(ccgid).orElse(null)
                 : center;
         log.info(
                 "Dev identity ready: ccgid={} name={} roles={} center={}",

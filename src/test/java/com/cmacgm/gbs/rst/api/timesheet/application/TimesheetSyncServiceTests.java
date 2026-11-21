@@ -29,18 +29,20 @@ import com.cmacgm.gbs.rst.api.audit.domain.AuditEvent;
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
 import com.cmacgm.gbs.rst.api.timesheet.config.TimesheetSharePointProperties;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSourceResolver.Source;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncIssue;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonPositionRoleRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionParentRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncIssueRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
+import com.cmacgm.gbs.rst.api.timesheet.domain.ProcessScope;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceIssue;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceSnapshot;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SupervisorDeliveryHc;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SupervisorProcess;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgPersonRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgPositionParentRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgPositionRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgSeatRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.ProcessScopeRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SupervisorDeliveryHcRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SupervisorProcessRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceIssueRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceSnapshotRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.mockito.Mockito;
 import org.junit.jupiter.api.Test;
@@ -54,21 +56,23 @@ class TimesheetSyncServiceTests {
 
     private static final Instant NOW = Instant.parse("2026-08-27T00:00:00Z");
 
-    private final Map<UUID, TimesheetSyncRun> runStore = new LinkedHashMap<>();
-    private final List<TimesheetScope> savedScopes = new ArrayList<>();
-    private final List<TimesheetKpi> savedKpis = new ArrayList<>();
+    private final Map<UUID, SourceSnapshot> runStore = new LinkedHashMap<>();
+    private final List<SupervisorProcess> savedScopes = new ArrayList<>();
+    private final List<ProcessScope> savedProcesses = new ArrayList<>();
+    private final List<SupervisorDeliveryHc> savedKpis = new ArrayList<>();
     private TimesheetSyncService service;
 
     @BeforeEach
     void setUp() {
-        TimesheetSyncRunRepository syncRuns = syncRunRepository();
-        TimesheetScopeRepository scopes = capturingRepository(TimesheetScopeRepository.class, savedScopes);
-        TimesheetKpiRepository kpis = capturingRepository(TimesheetKpiRepository.class, savedKpis);
-        TimesheetSyncIssueRepository issues = proxy(TimesheetSyncIssueRepository.class, (proxy, method, args) -> {
+        SourceSnapshotRepository syncRuns = syncRunRepository();
+        SupervisorProcessRepository scopes = capturingRepository(SupervisorProcessRepository.class, savedScopes);
+        ProcessScopeRepository processes = capturingRepository(ProcessScopeRepository.class, savedProcesses);
+        SupervisorDeliveryHcRepository kpis = capturingRepository(SupervisorDeliveryHcRepository.class, savedKpis);
+        SourceIssueRepository issues = proxy(SourceIssueRepository.class, (proxy, method, args) -> {
             throw new AssertionError("Monthly happy path must not persist issues: " + method.getName());
         });
-        TimesheetPersonRepository people = unusedRepository(TimesheetPersonRepository.class);
-        TimesheetPositionRepository positions = unusedRepository(TimesheetPositionRepository.class);
+        OrgPersonRepository people = unusedRepository(OrgPersonRepository.class);
+        OrgPositionRepository positions = unusedRepository(OrgPositionRepository.class);
 
         TimesheetSourceResolver sources = new TimesheetSourceResolver(
                 new TimesheetSharePointProperties(null, null, "4.RST/2.UAT"), null) {
@@ -88,9 +92,10 @@ class TimesheetSyncServiceTests {
                 syncRuns,
                 people,
                 positions,
-                unusedRepository(TimesheetPositionParentRepository.class),
-                unusedRepository(TimesheetPersonPositionRoleRepository.class),
+                unusedRepository(OrgPositionParentRepository.class),
+                unusedRepository(OrgSeatRepository.class),
                 scopes,
+                processes,
                 kpis,
                 issues,
                 noOpTransactions(),
@@ -110,7 +115,7 @@ class TimesheetSyncServiceTests {
         assertThat(result.attemptNo()).isEqualTo((short) 1);
         assertThat(result.dataHash()).isNotBlank();
 
-        TimesheetSyncRun run = runStore.get(result.id());
+        SourceSnapshot run = runStore.get(result.id());
         assertThat(run.getStatus()).isEqualTo("ACTIVE");
         assertThat(run.getCenter()).isEqualTo("GBS INDIA");
         assertThat(run.getSourceDriveItemId()).isEqualTo("drive-monthly-1");
@@ -118,14 +123,16 @@ class TimesheetSyncServiceTests {
 
         assertThat(savedScopes)
                 .extracting(
-                        TimesheetScope::getSupervisorPositionId,
-                        TimesheetScope::getPl3Code,
-                        TimesheetScope::getCenter,
-                        TimesheetScope::getDomain)
+                        SupervisorProcess::getSupervisorPositionId,
+                        SupervisorProcess::getPl3Code,
+                        SupervisorProcess::getCenter)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple(
-                        "POS-SUP-1", "PL3", "GBS INDIA", "Finance"));
+                        "POS-SUP-1", "PL3", "GBS INDIA"));
+        assertThat(savedProcesses)
+                .extracting(ProcessScope::getCenter, ProcessScope::getPl3Code, ProcessScope::getDomain)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("GBS INDIA", "PL3", "Finance"));
         assertThat(savedKpis)
-                .extracting(TimesheetKpi::getSite, TimesheetKpi::getCustomerCountry, TimesheetKpi::getHc)
+                .extracting(SupervisorDeliveryHc::getSite, SupervisorDeliveryHc::getCustomerCountry, SupervisorDeliveryHc::getHc)
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple("Site A", "MY", new BigDecimal("2.000000")),
                         org.assertj.core.groups.Tuple.tuple("Site B", "SG", new BigDecimal("1.000000")));
@@ -161,13 +168,14 @@ class TimesheetSyncServiceTests {
                 china,
                 GbsProcessCatalogSource.of(GbsProcessCatalog.allowing("PL3")),
                 syncRunRepository(),
-                unusedRepository(TimesheetPersonRepository.class),
-                unusedRepository(TimesheetPositionRepository.class),
-                unusedRepository(TimesheetPositionParentRepository.class),
-                unusedRepository(TimesheetPersonPositionRoleRepository.class),
-                capturingRepository(TimesheetScopeRepository.class, savedScopes),
-                capturingRepository(TimesheetKpiRepository.class, savedKpis),
-                proxy(TimesheetSyncIssueRepository.class, (proxy, method, args) -> {
+                unusedRepository(OrgPersonRepository.class),
+                unusedRepository(OrgPositionRepository.class),
+                unusedRepository(OrgPositionParentRepository.class),
+                unusedRepository(OrgSeatRepository.class),
+                capturingRepository(SupervisorProcessRepository.class, savedScopes),
+                capturingRepository(ProcessScopeRepository.class, savedProcesses),
+                capturingRepository(SupervisorDeliveryHcRepository.class, savedKpis),
+                proxy(SourceIssueRepository.class, (proxy, method, args) -> {
                     throw new AssertionError("China Monthly must not persist issues: " + method.getName());
                 }),
                 noOpTransactions(),
@@ -182,7 +190,7 @@ class TimesheetSyncServiceTests {
         assertThat(runStore.get(chinaResult.id()).getStatus()).isEqualTo("ACTIVE");
         assertThat(runStore.get(chinaResult.id()).getCenter()).isEqualTo("GBS CHINA");
         assertThat(savedScopes)
-                .extracting(TimesheetScope::getCenter)
+                .extracting(SupervisorProcess::getCenter)
                 .contains("GBS INDIA", "GBS CHINA");
     }
 
@@ -216,9 +224,9 @@ class TimesheetSyncServiceTests {
                 new TimesheetMonthlyCalculator(),
                 replacement,
                 GbsProcessCatalogSource.of(GbsProcessCatalog.allowing("PL3")),
-                proxy(TimesheetSyncRunRepository.class, (proxy, method, args) ->
+                proxy(SourceSnapshotRepository.class, (proxy, method, args) ->
                         switch (method.getName()) {
-                            case "saveAndFlush", "save" -> store((TimesheetSyncRun) args[0]);
+                            case "saveAndFlush", "save" -> store((SourceSnapshot) args[0]);
                             case "findById" -> Optional.ofNullable(runStore.get(args[0]));
                             case "findByKindAndStatus" -> runStore.values().stream()
                                     .filter(run -> run.getKind().equals(args[0]) && run.getStatus().equals(args[1]))
@@ -234,13 +242,14 @@ class TimesheetSyncServiceTests {
                                     (String) args[0], (String) args[1], (UUID) args[2], (Instant) args[3]);
                             default -> unsupported(method);
                         }),
-                unusedRepository(TimesheetPersonRepository.class),
-                unusedRepository(TimesheetPositionRepository.class),
-                unusedRepository(TimesheetPositionParentRepository.class),
-                unusedRepository(TimesheetPersonPositionRoleRepository.class),
-                capturingRepository(TimesheetScopeRepository.class, savedScopes),
-                capturingRepository(TimesheetKpiRepository.class, savedKpis),
-                proxy(TimesheetSyncIssueRepository.class, (proxy, method, args) -> {
+                unusedRepository(OrgPersonRepository.class),
+                unusedRepository(OrgPositionRepository.class),
+                unusedRepository(OrgPositionParentRepository.class),
+                unusedRepository(OrgSeatRepository.class),
+                capturingRepository(SupervisorProcessRepository.class, savedScopes),
+                capturingRepository(ProcessScopeRepository.class, savedProcesses),
+                capturingRepository(SupervisorDeliveryHcRepository.class, savedKpis),
+                proxy(SourceIssueRepository.class, (proxy, method, args) -> {
                     throw new AssertionError("Replacement Monthly must not persist issues: " + method.getName());
                 }),
                 noOpTransactions(),
@@ -255,7 +264,7 @@ class TimesheetSyncServiceTests {
         assertThat(runStore.get(second.id()).getStatus()).isEqualTo("ACTIVE");
         assertThat(savedScopes).isNotEmpty().allMatch(scope -> scope.getSyncRunId().equals(second.id()));
         assertThat(savedKpis).isNotEmpty().allMatch(row -> row.getSyncRunId().equals(second.id()));
-        assertThat(savedKpis).extracting(TimesheetKpi::getHc).containsExactly(new BigDecimal("3.000000"));
+        assertThat(savedKpis).extracting(SupervisorDeliveryHc::getHc).containsExactly(new BigDecimal("3.000000"));
     }
 
     @Test
@@ -289,9 +298,9 @@ class TimesheetSyncServiceTests {
                 new TimesheetMonthlyCalculator(),
                 manual,
                 GbsProcessCatalogSource.of(GbsProcessCatalog.allowing("PL3")),
-                proxy(TimesheetSyncRunRepository.class, (proxy, method, args) ->
+                proxy(SourceSnapshotRepository.class, (proxy, method, args) ->
                         switch (method.getName()) {
-                            case "saveAndFlush", "save" -> store((TimesheetSyncRun) args[0]);
+                            case "saveAndFlush", "save" -> store((SourceSnapshot) args[0]);
                             case "findById" -> Optional.ofNullable(runStore.get(args[0]));
                             case "findByKindAndStatus" -> runStore.values().stream()
                                     .filter(run -> run.getKind().equals(args[0]) && run.getStatus().equals(args[1]))
@@ -307,13 +316,14 @@ class TimesheetSyncServiceTests {
                                     (String) args[0], (String) args[1], (UUID) args[2], (Instant) args[3]);
                             default -> unsupported(method);
                         }),
-                unusedRepository(TimesheetPersonRepository.class),
-                unusedRepository(TimesheetPositionRepository.class),
-                unusedRepository(TimesheetPositionParentRepository.class),
-                unusedRepository(TimesheetPersonPositionRoleRepository.class),
-                capturingRepository(TimesheetScopeRepository.class, savedScopes),
-                capturingRepository(TimesheetKpiRepository.class, savedKpis),
-                proxy(TimesheetSyncIssueRepository.class, (proxy, method, args) -> {
+                unusedRepository(OrgPersonRepository.class),
+                unusedRepository(OrgPositionRepository.class),
+                unusedRepository(OrgPositionParentRepository.class),
+                unusedRepository(OrgSeatRepository.class),
+                capturingRepository(SupervisorProcessRepository.class, savedScopes),
+                capturingRepository(ProcessScopeRepository.class, savedProcesses),
+                capturingRepository(SupervisorDeliveryHcRepository.class, savedKpis),
+                proxy(SourceIssueRepository.class, (proxy, method, args) -> {
                     throw new AssertionError("Manual older Monthly must not persist issues: " + method.getName());
                 }),
                 noOpTransactions(),
@@ -329,16 +339,16 @@ class TimesheetSyncServiceTests {
         assertThat(uploaded.syncDate()).isEqualTo(LocalDate.of(2026, 5, 31));
         assertThat(runStore.get(firstId).getStatus()).isEqualTo("ARCHIVED");
         assertThat(runStore.get(uploaded.id()).getSourceType()).isEqualTo("MANUAL");
-        assertThat(savedKpis).extracting(TimesheetKpi::getHc).containsExactly(new BigDecimal("4.000000"));
+        assertThat(savedKpis).extracting(SupervisorDeliveryHc::getHc).containsExactly(new BigDecimal("4.000000"));
     }
 
     @Test
     void validationFailureEmailsOnceAndDoesNotCreateASecondRun() {
         AtomicInteger mails = new AtomicInteger();
-        List<TimesheetSyncIssue> savedIssues = new ArrayList<>();
-        TimesheetSyncRunRepository syncRuns = proxy(TimesheetSyncRunRepository.class, (proxy, method, args) ->
+        List<SourceIssue> savedIssues = new ArrayList<>();
+        SourceSnapshotRepository syncRuns = proxy(SourceSnapshotRepository.class, (proxy, method, args) ->
                 switch (method.getName()) {
-                    case "saveAndFlush", "save" -> store((TimesheetSyncRun) args[0]);
+                    case "saveAndFlush", "save" -> store((SourceSnapshot) args[0]);
                     case "findById" -> Optional.ofNullable(runStore.get(args[0]));
                     case "findByKindAndStatus" -> runStore.values().stream()
                             .filter(run -> run.getKind().equals(args[0]) && run.getStatus().equals(args[1]))
@@ -354,11 +364,11 @@ class TimesheetSyncServiceTests {
                             (String) args[0], (String) args[1], (UUID) args[2], (Instant) args[3]);
                     default -> unsupported(method);
                 });
-        TimesheetSyncIssueRepository issues = proxy(TimesheetSyncIssueRepository.class, (proxy, method, args) ->
+        SourceIssueRepository issues = proxy(SourceIssueRepository.class, (proxy, method, args) ->
                 switch (method.getName()) {
                     case "saveAll" -> {
                         @SuppressWarnings("unchecked")
-                        Iterable<TimesheetSyncIssue> rows = (Iterable<TimesheetSyncIssue>) args[0];
+                        Iterable<SourceIssue> rows = (Iterable<SourceIssue>) args[0];
                         rows.forEach(savedIssues::add);
                         yield savedIssues;
                     }
@@ -398,12 +408,13 @@ class TimesheetSyncServiceTests {
                 sources,
                 GbsProcessCatalogSource.of(GbsProcessCatalog.allowing("PL3")),
                 syncRuns,
-                unusedRepository(TimesheetPersonRepository.class),
-                unusedRepository(TimesheetPositionRepository.class),
-                unusedRepository(TimesheetPositionParentRepository.class),
-                unusedRepository(TimesheetPersonPositionRoleRepository.class),
-                capturingRepository(TimesheetScopeRepository.class, savedScopes),
-                capturingRepository(TimesheetKpiRepository.class, savedKpis),
+                unusedRepository(OrgPersonRepository.class),
+                unusedRepository(OrgPositionRepository.class),
+                unusedRepository(OrgPositionParentRepository.class),
+                unusedRepository(OrgSeatRepository.class),
+                capturingRepository(SupervisorProcessRepository.class, savedScopes),
+                capturingRepository(ProcessScopeRepository.class, savedProcesses),
+                capturingRepository(SupervisorDeliveryHcRepository.class, savedKpis),
                 issues,
                 noOpTransactions(),
                 Clock.fixed(NOW, ZoneOffset.UTC),
@@ -418,7 +429,7 @@ class TimesheetSyncServiceTests {
     @Test
     void missingFieldOnMonthlyRstFailsTheRun() {
         AtomicInteger mails = new AtomicInteger();
-        List<TimesheetSyncIssue> savedIssues = new ArrayList<>();
+        List<SourceIssue> savedIssues = new ArrayList<>();
         TimesheetSourceResolver sources = new TimesheetSourceResolver(
                 new TimesheetSharePointProperties(null, null, "4.RST/2.UAT"), null) {
             @Override
@@ -450,9 +461,9 @@ class TimesheetSyncServiceTests {
                 new TimesheetMonthlyCalculator(),
                 sources,
                 GbsProcessCatalogSource.of(GbsProcessCatalog.allowing("PL3")),
-                proxy(TimesheetSyncRunRepository.class, (proxy, method, args) ->
+                proxy(SourceSnapshotRepository.class, (proxy, method, args) ->
                         switch (method.getName()) {
-                            case "saveAndFlush", "save" -> store((TimesheetSyncRun) args[0]);
+                            case "saveAndFlush", "save" -> store((SourceSnapshot) args[0]);
                             case "findById" -> Optional.ofNullable(runStore.get(args[0]));
                             case "findByKindAndStatus" -> runStore.values().stream()
                                     .filter(run -> run.getKind().equals(args[0]) && run.getStatus().equals(args[1]))
@@ -468,17 +479,18 @@ class TimesheetSyncServiceTests {
                                     (String) args[0], (String) args[1], (UUID) args[2], (Instant) args[3]);
                             default -> unsupported(method);
                         }),
-                unusedRepository(TimesheetPersonRepository.class),
-                unusedRepository(TimesheetPositionRepository.class),
-                unusedRepository(TimesheetPositionParentRepository.class),
-                unusedRepository(TimesheetPersonPositionRoleRepository.class),
-                capturingRepository(TimesheetScopeRepository.class, savedScopes),
-                capturingRepository(TimesheetKpiRepository.class, savedKpis),
-                proxy(TimesheetSyncIssueRepository.class, (proxy, method, args) ->
+                unusedRepository(OrgPersonRepository.class),
+                unusedRepository(OrgPositionRepository.class),
+                unusedRepository(OrgPositionParentRepository.class),
+                unusedRepository(OrgSeatRepository.class),
+                capturingRepository(SupervisorProcessRepository.class, savedScopes),
+                capturingRepository(ProcessScopeRepository.class, savedProcesses),
+                capturingRepository(SupervisorDeliveryHcRepository.class, savedKpis),
+                proxy(SourceIssueRepository.class, (proxy, method, args) ->
                         switch (method.getName()) {
                             case "saveAll" -> {
                                 @SuppressWarnings("unchecked")
-                                Iterable<TimesheetSyncIssue> rows = (Iterable<TimesheetSyncIssue>) args[0];
+                                Iterable<SourceIssue> rows = (Iterable<SourceIssue>) args[0];
                                 rows.forEach(savedIssues::add);
                                 yield savedIssues;
                             }
@@ -495,7 +507,7 @@ class TimesheetSyncServiceTests {
         assertThatThrownBy(() -> tolerant.sync("MONTHLY")).isInstanceOf(ApiException.class);
         assertThat(mails.get()).isEqualTo(1);
         assertThat(runStore.values()).hasSize(1).allMatch(run -> "FAILED".equals(run.getStatus()));
-        assertThat(savedIssues).extracting(TimesheetSyncIssue::getCode).containsExactly("MISSING_FIELD");
+        assertThat(savedIssues).extracting(SourceIssue::getCode).containsExactly("MISSING_FIELD");
         assertThat(savedScopes).isEmpty();
         assertThat(savedKpis).isEmpty();
     }
@@ -515,14 +527,14 @@ class TimesheetSyncServiceTests {
         return audits;
     }
 
-    private TimesheetSyncRun store(TimesheetSyncRun run) {
+    private SourceSnapshot store(SourceSnapshot run) {
         runStore.put(run.getId(), run);
         return run;
     }
 
     private int archiveOther(String kind, String center, UUID keepRunId, Instant completedAt) {
         int archived = 0;
-        for (TimesheetSyncRun run : runStore.values()) {
+        for (SourceSnapshot run : runStore.values()) {
             if (kind.equals(run.getKind())
                     && center.equals(run.getCenter())
                     && "ACTIVE".equals(run.getStatus())
@@ -534,10 +546,10 @@ class TimesheetSyncServiceTests {
         return archived;
     }
 
-    private TimesheetSyncRunRepository syncRunRepository() {
-        return proxy(TimesheetSyncRunRepository.class, (proxy, method, args) ->
+    private SourceSnapshotRepository syncRunRepository() {
+        return proxy(SourceSnapshotRepository.class, (proxy, method, args) ->
                 switch (method.getName()) {
-                    case "saveAndFlush", "save" -> store((TimesheetSyncRun) args[0]);
+                    case "saveAndFlush", "save" -> store((SourceSnapshot) args[0]);
                     case "findById" -> Optional.ofNullable(runStore.get(args[0]));
                     case "findByKindAndStatus" -> runStore.values().stream()
                             .filter(run -> run.getKind().equals(args[0]) && run.getStatus().equals(args[1]))
@@ -597,16 +609,18 @@ class TimesheetSyncServiceTests {
 
     private static UUID syncRunIdOf(Object row) {
         return switch (row) {
-            case TimesheetScope scope -> scope.getSyncRunId();
-            case TimesheetKpi kpi -> kpi.getSyncRunId();
+            case SupervisorProcess scope -> scope.getSyncRunId();
+            case ProcessScope process -> process.getSyncRunId();
+            case SupervisorDeliveryHc kpi -> kpi.getSyncRunId();
             default -> throw new AssertionError("Unexpected computed row: " + row);
         };
     }
 
     private static String centerOf(Object row) {
         return switch (row) {
-            case TimesheetScope scope -> scope.getCenter();
-            case TimesheetKpi kpi -> kpi.getCenter();
+            case SupervisorProcess scope -> scope.getCenter();
+            case ProcessScope process -> process.getCenter();
+            case SupervisorDeliveryHc kpi -> kpi.getCenter();
             default -> throw new AssertionError("Unexpected computed row: " + row);
         };
     }

@@ -172,7 +172,7 @@ public class SubmissionSummaryExcelService {
                 alignment == null ? date(exercise.snapshot().timesheetSyncDate())
                         : date(alignment.currentMonthlySyncDate()));
         add(rows, "Timesheet Alignment", alignmentLabel(alignment));
-        add(rows, "Actual size (HC)", decimal(exercise.deliveryHc()));
+        add(rows, "Actual size (HC)", decimal(team == null ? null : team.totalAgents()));
         add(rows, "Right size (HC)", decimal(exercise.rightSizingHc()));
         add(rows, "Production support (FTE)", decimal(exercise.productionSupport()));
         add(rows, "Capacity Creation (HC)", signed(exercise.capacityCreation()));

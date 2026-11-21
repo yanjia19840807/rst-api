@@ -15,21 +15,21 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetKpi;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPerson;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPersonPositionRole;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPosition;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetScope;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncRun;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetKpiRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonPositionRoleRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPersonRepository;
-import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetPositionParent;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionParentRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetPositionRepository;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetScopeRepository;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SupervisorDeliveryHc;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPerson;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgSeat;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPosition;
+import com.cmacgm.gbs.rst.api.timesheet.domain.MonthlyScope;
+import com.cmacgm.gbs.rst.api.timesheet.domain.SourceSnapshot;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SupervisorDeliveryHcRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgSeatRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgPersonRepository;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPositionParent;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgPositionParentRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.OrgPositionRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.MonthlyScopeRepository;
 import com.cmacgm.gbs.rst.api.common.paging.PageResponse;
-import com.cmacgm.gbs.rst.api.timesheet.persistence.TimesheetSyncRunRepository;
+import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceSnapshotRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -41,13 +41,13 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class TimesheetReadService {
 
-    private final TimesheetSyncRunRepository syncRuns;
-    private final TimesheetPersonRepository people;
-    private final TimesheetPersonPositionRoleRepository seats;
-    private final TimesheetPositionRepository positions;
-    private final TimesheetPositionParentRepository parents;
-    private final TimesheetScopeRepository scopes;
-    private final TimesheetKpiRepository kpis;
+    private final SourceSnapshotRepository syncRuns;
+    private final OrgPersonRepository people;
+    private final OrgSeatRepository seats;
+    private final OrgPositionRepository positions;
+    private final OrgPositionParentRepository parents;
+    private final MonthlyScopeRepository scopes;
+    private final SupervisorDeliveryHcRepository kpis;
 
     /**
      * @param syncRuns run headers
@@ -59,13 +59,13 @@ public class TimesheetReadService {
      * @param kpis Monthly KPIs
      */
     public TimesheetReadService(
-            TimesheetSyncRunRepository syncRuns,
-            TimesheetPersonRepository people,
-            TimesheetPersonPositionRoleRepository seats,
-            TimesheetPositionRepository positions,
-            TimesheetPositionParentRepository parents,
-            TimesheetScopeRepository scopes,
-            TimesheetKpiRepository kpis) {
+            SourceSnapshotRepository syncRuns,
+            OrgPersonRepository people,
+            OrgSeatRepository seats,
+            OrgPositionRepository positions,
+            OrgPositionParentRepository parents,
+            MonthlyScopeRepository scopes,
+            SupervisorDeliveryHcRepository kpis) {
         this.syncRuns = syncRuns;
         this.people = people;
         this.seats = seats;
@@ -127,7 +127,7 @@ public class TimesheetReadService {
                 .toList();
     }
 
-    private ActiveSnapshot toSnapshot(TimesheetSyncRun run) {
+    private ActiveSnapshot toSnapshot(SourceSnapshot run) {
         return new ActiveSnapshot(
                 run.getId(),
                 run.getKind(),
@@ -320,7 +320,7 @@ public class TimesheetReadService {
     @Transactional(readOnly = true)
     public List<TeamAgent> teamAgents(String supervisorCcgid) {
         LinkedHashMap<String, TeamAgent> unique = new LinkedHashMap<>();
-        for (TimesheetPerson person : people.findActiveReportsBySupervisorCcgid(supervisorCcgid)) {
+        for (OrgPerson person : people.findActiveReportsBySupervisorCcgid(supervisorCcgid)) {
             unique.computeIfAbsent(
                     person.getCcgid(),
                     ccgid -> new TeamAgent(
@@ -378,7 +378,7 @@ public class TimesheetReadService {
                 return Optional.of(fromPerson);
             }
             return syncRuns.findById(person.getSyncRunId())
-                    .map(TimesheetSyncRun::getCenter)
+                    .map(SourceSnapshot::getCenter)
                     .map(this::trimToNull);
         });
     }
@@ -403,7 +403,7 @@ public class TimesheetReadService {
             return List.of();
         }
         return positions.findActiveByPositionId(positionId.trim()).stream()
-                .map(TimesheetPosition::getRoleType)
+                .map(OrgPosition::getRoleType)
                 .filter(role -> role != null && !role.isBlank())
                 .distinct()
                 .toList();
@@ -421,7 +421,7 @@ public class TimesheetReadService {
         if (ccgid == null || ccgid.isBlank() || childPositionId == null || childPositionId.isBlank()) {
             return false;
         }
-        for (TimesheetPersonPositionRole seat : seats.findActiveByCcgid(ccgid.trim())) {
+        for (OrgSeat seat : seats.findActiveByCcgid(ccgid.trim())) {
             boolean parent = parents.findActiveChildren(seat.getPositionId(), seat.getRoleType()).stream()
                     .anyMatch(edge -> childPositionId.trim().equals(edge.getPositionId()));
             if (parent) {
@@ -443,8 +443,8 @@ public class TimesheetReadService {
             return List.of();
         }
         java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>();
-        for (TimesheetPersonPositionRole seat : seats.findActiveByCcgid(ccgid.trim())) {
-            for (TimesheetPositionParent edge : parents.findActiveChildren(seat.getPositionId(), seat.getRoleType())) {
+        for (OrgSeat seat : seats.findActiveByCcgid(ccgid.trim())) {
+            for (OrgPositionParent edge : parents.findActiveChildren(seat.getPositionId(), seat.getRoleType())) {
                 if (edge.getPositionId() != null && !edge.getPositionId().isBlank()) {
                     ids.add(edge.getPositionId());
                 }
@@ -470,7 +470,7 @@ public class TimesheetReadService {
         }
         LinkedHashSet<String> ids = new LinkedHashSet<>();
         Set<String> seen = new LinkedHashSet<>();
-        for (TimesheetPersonPositionRole seat : seats.findActiveByCcgid(ccgid.trim())) {
+        for (OrgSeat seat : seats.findActiveByCcgid(ccgid.trim())) {
             if (seat.getPositionId() == null || seat.getPositionId().isBlank()
                     || seat.getRoleType() == null || seat.getRoleType().isBlank()) {
                 continue;
@@ -489,7 +489,7 @@ public class TimesheetReadService {
         if (!seen.add(positionId + "\0" + roleType)) {
             return;
         }
-        for (TimesheetPositionParent edge : parents.findActiveChildren(positionId, roleType)) {
+        for (OrgPositionParent edge : parents.findActiveChildren(positionId, roleType)) {
             if (edge.getPositionId() == null || edge.getPositionId().isBlank()
                     || edge.getRoleType() == null || edge.getRoleType().isBlank()) {
                 continue;
@@ -528,7 +528,7 @@ public class TimesheetReadService {
             return List.of();
         }
         LinkedHashSet<String> ids = new LinkedHashSet<>();
-        for (TimesheetPersonPositionRole seat : seats.findActiveByPositionIdIn(positionIds)) {
+        for (OrgSeat seat : seats.findActiveByPositionIdIn(positionIds)) {
             if (seat.getCcgid() != null && !seat.getCcgid().isBlank()) {
                 ids.add(seat.getCcgid().trim().toUpperCase(Locale.ROOT));
             }
@@ -592,15 +592,15 @@ public class TimesheetReadService {
         if (positionId == null || positionId.isBlank()) {
             return null;
         }
-        List<TimesheetPerson> rows = people.findActiveByPositionId(positionId);
+        List<OrgPerson> rows = people.findActiveByPositionId(positionId);
         if (rows.isEmpty()) {
             return people.findActiveByCcgid(positionId.trim())
                     .map(person -> new Occupant(positionId, person.getCcgid(), person.getName()))
                     .orElse(null);
         }
-        TimesheetPerson first = rows.getFirst();
+        OrgPerson first = rows.getFirst();
         String names = rows.stream()
-                .map(TimesheetPerson::getName)
+                .map(OrgPerson::getName)
                 .filter(name -> name != null && !name.isBlank())
                 .distinct()
                 .collect(Collectors.joining(", "));
@@ -619,7 +619,7 @@ public class TimesheetReadService {
             return List.of();
         }
         return seats.findActiveByCcgid(ccgid.trim()).stream()
-                .map(TimesheetPersonPositionRole::getPositionId)
+                .map(OrgSeat::getPositionId)
                 .filter(id -> id != null && !id.isBlank())
                 .distinct()
                 .toList();
@@ -634,12 +634,12 @@ public class TimesheetReadService {
     @Transactional(readOnly = true)
     public Optional<ProductSeat> findActiveProductSeat(String ccgid) {
         return findActivePerson(ccgid).flatMap(person -> {
-            List<TimesheetPersonPositionRole> occupied = seats.findActiveByCcgid(person.getCcgid());
+            List<OrgSeat> occupied = seats.findActiveByCcgid(person.getCcgid());
             if (occupied.isEmpty()) {
                 return Optional.empty();
             }
             Set<String> roleTypes = new LinkedHashSet<>();
-            for (TimesheetPersonPositionRole seat : occupied) {
+            for (OrgSeat seat : occupied) {
                 if (seat.getRoleType() != null && !seat.getRoleType().isBlank()) {
                     roleTypes.add(seat.getRoleType().trim().toUpperCase(Locale.ROOT));
                 }
@@ -649,7 +649,7 @@ public class TimesheetReadService {
             }
             String center = firstNonBlank(
                     person.getCenter(),
-                    syncRuns.findById(person.getSyncRunId()).map(TimesheetSyncRun::getCenter).orElse(null));
+                    syncRuns.findById(person.getSyncRunId()).map(SourceSnapshot::getCenter).orElse(null));
             return Optional.of(new ProductSeat(Set.copyOf(roleTypes), center, person.getName(), person.getEmail()));
         });
     }
@@ -668,7 +668,7 @@ public class TimesheetReadService {
      * @return person when present
      */
     @Transactional(readOnly = true)
-    public Optional<TimesheetPerson> findActivePerson(String ccgid) {
+    public Optional<OrgPerson> findActivePerson(String ccgid) {
         if (ccgid == null || ccgid.isBlank()) {
             return Optional.empty();
         }
@@ -682,7 +682,7 @@ public class TimesheetReadService {
      * @return people
      */
     @Transactional(readOnly = true)
-    public Map<String, TimesheetPerson> findActivePeopleByCcgids(Collection<String> ccgids) {
+    public Map<String, OrgPerson> findActivePeopleByCcgids(Collection<String> ccgids) {
         if (ccgids == null || ccgids.isEmpty()) {
             return Map.of();
         }
@@ -694,8 +694,8 @@ public class TimesheetReadService {
         if (keys.isEmpty()) {
             return Map.of();
         }
-        Map<String, TimesheetPerson> result = new HashMap<>();
-        for (TimesheetPerson person : people.findActiveByCcgidIn(keys)) {
+        Map<String, OrgPerson> result = new HashMap<>();
+        for (OrgPerson person : people.findActiveByCcgidIn(keys)) {
             if (person.getCcgid() == null || person.getCcgid().isBlank()) {
                 continue;
             }
@@ -744,7 +744,7 @@ public class TimesheetReadService {
         String needle = name == null ? "" : name.trim();
         var rows = people.findActiveByCenter(center.trim(), needle, PageRequest.of(safePage - 1, safePageSize));
         Map<String, String> positionByCcgid = positionIdsByCcgid(
-                rows.getContent().stream().map(TimesheetPerson::getCcgid).toList());
+                rows.getContent().stream().map(OrgPerson::getCcgid).toList());
         return PageResponse.from(
                 rows,
                 person -> new CenterPerson(
@@ -841,10 +841,10 @@ public class TimesheetReadService {
             return null;
         }
         return kpis.findActiveKpis(supervisorPositionId, pl3Code, center.trim()).stream()
-                .map(TimesheetKpi::getSyncRunId)
+                .map(SupervisorDeliveryHc::getSyncRunId)
                 .findFirst()
                 .flatMap(syncRuns::findById)
-                .map(TimesheetSyncRun::getSyncDate)
+                .map(SourceSnapshot::getSyncDate)
                 .orElse(null);
     }
 
@@ -859,11 +859,11 @@ public class TimesheetReadService {
         if (positionId == null || positionId.isBlank()) {
             return null;
         }
-        List<TimesheetPositionParent> edges = parents.findActiveByPositionId(positionId.trim());
-        List<TimesheetPositionParent> supervisorEdges = edges.stream()
+        List<OrgPositionParent> edges = parents.findActiveByPositionId(positionId.trim());
+        List<OrgPositionParent> supervisorEdges = edges.stream()
                 .filter(edge -> "SUPERVISOR".equals(edge.getRoleType()))
                 .toList();
-        List<TimesheetPositionParent> chosen = supervisorEdges.isEmpty() ? edges : supervisorEdges;
+        List<OrgPositionParent> chosen = supervisorEdges.isEmpty() ? edges : supervisorEdges;
         if (chosen.size() != 1) {
             return null;
         }
@@ -882,7 +882,7 @@ public class TimesheetReadService {
             return null;
         }
         return people.findActiveByCcgid(ccgid.trim())
-                .map(TimesheetPerson::getJobRole)
+                .map(OrgPerson::getJobRole)
                 .filter(value -> value != null && !value.isBlank())
                 .orElse(null);
     }
@@ -892,7 +892,7 @@ public class TimesheetReadService {
             return Map.of();
         }
         Map<String, String> positionByCcgid = new LinkedHashMap<>();
-        for (TimesheetPersonPositionRole seat : seats.findActiveByCcgidIn(ccgids)) {
+        for (OrgSeat seat : seats.findActiveByCcgidIn(ccgids)) {
             positionByCcgid.putIfAbsent(seat.getCcgid().toUpperCase(Locale.ROOT), seat.getPositionId());
         }
         return positionByCcgid;
@@ -904,7 +904,7 @@ public class TimesheetReadService {
      * @return scopes
      */
     @Transactional(readOnly = true)
-    public List<TimesheetScope> dashboardObligations() {
+    public List<MonthlyScope> dashboardObligations() {
         return scopes.findActiveDashboardObligations();
     }
 
@@ -914,7 +914,7 @@ public class TimesheetReadService {
      * @return KPI rows
      */
     @Transactional(readOnly = true)
-    public List<TimesheetKpi> dashboardKpis() {
+    public List<SupervisorDeliveryHc> dashboardKpis() {
         return kpis.findActiveDashboardKpis();
     }
 
