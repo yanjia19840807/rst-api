@@ -19,6 +19,7 @@ import com.cmacgm.gbs.rst.api.sourcedata.application.SharedKpiCalculator.SiteRef
 import com.cmacgm.gbs.rst.api.sourcedata.application.SharedKpiWorkbookParser.KpiRow;
 import com.cmacgm.gbs.rst.api.timesheet.application.GbsProcessCatalog;
 import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPerson;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPosition;
 import com.cmacgm.gbs.rst.api.timesheet.domain.OrgSeat;
 import com.cmacgm.gbs.rst.api.timesheet.domain.SourceIssue;
 
@@ -69,6 +70,60 @@ class SourceImportCalculatorTests {
     }
 
     @Test
+    void myHrKeepsVacantParentPositionAndEdge() {
+        MyHrOrgCalculator.Result result = myHr.compute(RUN, List.of(
+                person(2, "P1", "S1", "Active", "IND-India", "A1", "0", LocalDate.of(2026, 3, 1)),
+                person(3, "P4", "S4", "Active", "IND-India", "A9", "0", LocalDate.of(2026, 3, 1)),
+                person(4, "P5", "S5", "Active", "IND-India", "A5", "0", LocalDate.of(2026, 3, 1)),
+                person(5, "PC", "SC", "Active", "CHN-China", "CHN", "0", LocalDate.of(2026, 3, 1)),
+                person(6, "P6", "S6", "Active", "IND-India", "A3", "0", LocalDate.of(2026, 3, 1)),
+                person(7, "P7", "S7", "Active", "IND-India", "TWO", "1", LocalDate.of(2026, 3, 1)),
+                person(8, "P8", "S8", "Active", "IND-India", "TWO", "1", LocalDate.of(2026, 3, 1))),
+                List.of(
+                        new PositionRow(2, "A1", "A", "SUP"),
+                        new PositionRow(3, "SUP", "A", "SR"),
+                        new PositionRow(4, "SR", "A", null),
+                        new PositionRow(5, "A9", "A", "CHN"),
+                        new PositionRow(6, "CHN", "A", null),
+                        new PositionRow(7, "A5", "A", "OLD"),
+                        new PositionRow(8, "OLD", "I", null),
+                        new PositionRow(9, "A3", "A", "TWO"),
+                        new PositionRow(10, "TWO", "A", null)),
+                MYHR,
+                NOW);
+
+        assertThat(result.people()).extracting(OrgPerson::getCcgid)
+                .containsExactly("S1", "S4", "S5", "S6", "S7", "S8");
+        assertThat(result.seats()).extracting(OrgSeat::getCcgid, OrgSeat::getPositionId, OrgSeat::getRoleType)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple("S1", "A1", "AGENT"),
+                        org.assertj.core.groups.Tuple.tuple("S4", "A9", "AGENT"),
+                        org.assertj.core.groups.Tuple.tuple("S5", "A5", "AGENT"),
+                        org.assertj.core.groups.Tuple.tuple("S6", "A3", "AGENT"),
+                        org.assertj.core.groups.Tuple.tuple("S7", "TWO", "SUPERVISOR"),
+                        org.assertj.core.groups.Tuple.tuple("S8", "TWO", "SUPERVISOR"));
+        assertThat(result.positions()).extracting(OrgPosition::getPositionId, OrgPosition::getRoleType)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple("A1", "AGENT"),
+                        org.assertj.core.groups.Tuple.tuple("SUP", "SUPERVISOR"),
+                        org.assertj.core.groups.Tuple.tuple("SR", "SR_MANAGER"),
+                        org.assertj.core.groups.Tuple.tuple("A9", "AGENT"),
+                        org.assertj.core.groups.Tuple.tuple("A5", "AGENT"),
+                        org.assertj.core.groups.Tuple.tuple("A3", "AGENT"),
+                        org.assertj.core.groups.Tuple.tuple("TWO", "SUPERVISOR"));
+        assertThat(result.parents()).extracting(
+                        edge -> edge.getPositionId() + ":" + edge.getRoleType() + ">" + edge.getParentPositionId())
+                .containsExactlyInAnyOrder("A1:AGENT>SUP", "SUP:SUPERVISOR>SR");
+        assertThat(result.issues()).extracting(SourceIssue::getMessage)
+                .contains(
+                        "Parent position SUP has no occupant in a MyHR + SKPI center.",
+                        "Parent position SR has no occupant in a MyHR + SKPI center.",
+                        "Parent position CHN has no occupant in a MyHR + SKPI center.",
+                        "Parent position OLD has no occupant in a MyHR + SKPI center.",
+                        "Parent position TWO has more than one occupant.");
+    }
+
+    @Test
     void skpiMapsSiteSumsHcAndSkipsTimesheetCenters() {
         GbsProcessCatalog catalog = GbsProcessCatalog.parse(new java.io.ByteArrayInputStream(
                 """
@@ -109,6 +164,33 @@ class SourceImportCalculatorTests {
                 .containsExactly("Shipping Ops, Log & Interm");
         assertThat(result.issues()).extracting(SourceIssue::getCode)
                 .containsExactly("UNMAPPED_SITE", "INVALID_HC");
+        assertThat(SharedKpiCalculator.periodError(List.of(
+                kpi(2, "Chennai-1", "Standard Bookings", "CMA CGM", "China", "1.5", "FINANCE"))))
+                .isNull();
+    }
+
+    @Test
+    void skpiRejectsMixedOrInvalidPeriods() {
+        assertThat(SharedKpiCalculator.periodError(List.of(
+                kpiPeriod(2, "202608"),
+                kpiPeriod(3, "202609"))))
+                .isEqualTo("Period must be the same YYYYMM on every row. Found 202608, 202609.");
+        assertThat(SharedKpiCalculator.periodError(List.of(
+                kpiPeriod(2, "202609"),
+                kpiPeriod(4, " "))))
+                .isEqualTo("Period must be the same YYYYMM on every row. Found 202609, blank.");
+        assertThat(SharedKpiCalculator.periodError(List.of(kpiPeriod(2, "2026-09"))))
+                .isEqualTo("Period must be the same YYYYMM on every row. Found 2026-09.");
+        assertThat(SharedKpiCalculator.periodError(List.of())).isNull();
+    }
+
+    @Test
+    void skpiPeriodDecidesWhichUploadIsCurrent() {
+        assertThat(SharedKpiCalculator.replacesCurrent("202609", "202610")).isTrue();
+        assertThat(SharedKpiCalculator.replacesCurrent("202609", "202609")).isTrue();
+        assertThat(SharedKpiCalculator.replacesCurrent("202609", "202608")).isFalse();
+        assertThat(SharedKpiCalculator.replacesCurrent(null, "202609")).isTrue();
+        assertThat(SharedKpiCalculator.replacesCurrent("202609", null)).isFalse();
     }
 
     private static PersonRow person(
@@ -128,5 +210,9 @@ class SourceImportCalculatorTests {
     private static KpiRow kpi(
             int row, String site, String process, String carrier, String country, String hc, String domain) {
         return new KpiRow(row, "202609", carrier, site, domain, process, country, hc);
+    }
+
+    private static KpiRow kpiPeriod(int row, String period) {
+        return new KpiRow(row, period, "CMA CGM", "CHENNAI-1", "Finance", "Standard Bookings", "China", "1");
     }
 }

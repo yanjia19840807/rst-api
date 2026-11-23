@@ -21,6 +21,18 @@ public interface ExerciseVolumeDailyInputRepository extends JpaRepository<Exerci
     List<ExerciseVolumeDailyInput> findByExerciseIdOrderByVolumeDateAsc(UUID exerciseId);
 
     /**
+     * Whether this Exercise has at least one Daily Actual Volume.
+     * Toolkit daily history does not count.
+     *
+     * @param exerciseId Exercise id
+     * @return true when a saved daily row has an actual
+     */
+    default boolean hasActualVolume(UUID exerciseId) {
+        return findByExerciseIdOrderByVolumeDateAsc(exerciseId).stream()
+                .anyMatch(row -> row.getActualVolume() != null);
+    }
+
+    /**
      * Deletes all daily volumes for an Exercise.
      *
      * @param exerciseId Exercise id

@@ -1,7 +1,10 @@
 package com.cmacgm.gbs.rst.api.exercise.scenario.application;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
@@ -105,11 +108,19 @@ public class ScenarioCommitService {
         CommitResults results = request.results();
         if (results != null) {
             BigDecimal hc = requireRightSizingHc(request.rightSizingHc());
-            if (results.forecast() == null || results.monthly() == null || results.daily() == null) {
+            if (results.forecast() == null
+                    || results.forecast().monthly() == null
+                    || results.monthly() == null) {
                 throw new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "sizing-results-incomplete",
-                        "Forecast, monthly and daily sizing results must be provided together.");
+                        "Monthly forecast and monthly sizing results are required.");
+            }
+            if ((results.forecast().daily() == null) != (results.daily() == null)) {
+                throw new ApiException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "sizing-results-incomplete",
+                        "Daily forecast and daily sizing must be saved together.");
             }
             PersistedForecastIds forecastIds =
                     forecasts.persistForecastBundle(scenarioId, ownerCcgid, results.forecast());
@@ -155,23 +166,27 @@ public class ScenarioCommitService {
      */
     @Transactional(readOnly = true)
     public int countScenariosWithResults(UUID exerciseId) {
+        return countScenariosWithResults(exerciseId, ResultClearScope.ALL);
+    }
+
+    /**
+     * Counts scenarios that still have a result this scope would delete.
+     *
+     * @param exerciseId Exercise id
+     * @param scope result set that a pending edit would clear
+     * @return number of scenarios with those results
+     */
+    @Transactional(readOnly = true)
+    public int countScenariosWithResults(UUID exerciseId, ResultClearScope scope) {
         int count = 0;
         for (Scenario scenario : scenarios.findByExerciseIdAndDeletedFalseOrderByCreatedAtAsc(exerciseId)) {
-            if (!simulationRuns.findByScenarioId(scenario.getId()).isEmpty()
-                    || !forecastRuns.findByScenarioId(scenario.getId()).isEmpty()) {
+            if (scenarioHasScopedResults(scenario.getId(), scope)) {
                 count++;
             }
         }
         return count;
     }
 
-    /**
-     * Clears saved Forecast / Simulation snapshots for every Scenario on an Exercise.
-     * Used when Exercise periods or Associated Data change so charts cannot show stale results.
-     *
-     * @param exerciseId Exercise id
-     * @return number of scenarios that had results cleared
-     */
     /**
      * Clears only Slot Simulation snapshots for every Scenario on an Exercise.
      * Monthly/Daily Sizing and Forecast results are kept.
@@ -181,40 +196,96 @@ public class ScenarioCommitService {
      */
     @Transactional
     public int clearSlotResultsForExercise(UUID exerciseId) {
-        List<Scenario> items = scenarios.findByExerciseIdAndDeletedFalseOrderByCreatedAtAsc(exerciseId);
-        int cleared = 0;
-        for (Scenario scenario : items) {
-            List<SimulationRun> slotRuns = simulationRuns.findByScenarioId(scenario.getId()).stream()
-                    .filter(run -> "SLOT".equals(run.getRunType()))
-                    .toList();
-            if (slotRuns.isEmpty()) {
-                continue;
-            }
-            for (SimulationRun run : slotRuns) {
-                slotResults.deleteBySimulationRunId(run.getId());
-            }
-            simulationRuns.deleteAll(slotRuns);
-            cleared++;
-        }
-        if (cleared > 0) {
-            entityManager.flush();
-        }
-        return cleared;
+        return clearResults(exerciseId, ResultClearScope.SLOT);
     }
 
+    /**
+     * Clears every saved Forecast and Simulation snapshot on the Exercise.
+     *
+     * @param exerciseId Exercise id
+     * @return number of scenarios that had results cleared
+     */
     @Transactional
     public int clearResultsForExercise(UUID exerciseId) {
-        List<Scenario> items = scenarios.findByExerciseIdAndDeletedFalseOrderByCreatedAtAsc(exerciseId);
+        return clearResults(exerciseId, ResultClearScope.ALL);
+    }
+
+    /**
+     * Clears the forecast and simulation rows selected by {@code scope}.
+     * Kept Slot runs that pointed at a deleted Monthly forecast have that reference removed first.
+     *
+     * @param exerciseId Exercise id
+     * @param scope which results the edit invalidates
+     * @return number of scenarios that had something in that scope
+     */
+    @Transactional
+    public int clearResults(UUID exerciseId, ResultClearScope scope) {
         int cleared = 0;
-        for (Scenario scenario : items) {
-            boolean hadResults = !simulationRuns.findByScenarioId(scenario.getId()).isEmpty()
-                    || !forecastRuns.findByScenarioId(scenario.getId()).isEmpty();
-            clearScenarioResults(scenario.getId());
-            if (hadResults) {
+        for (Scenario scenario : scenarios.findByExerciseIdAndDeletedFalseOrderByCreatedAtAsc(exerciseId)) {
+            if (clearScenario(scenario.getId(), scope)) {
                 cleared++;
             }
         }
         return cleared;
+    }
+
+    private boolean scenarioHasScopedResults(UUID scenarioId, ResultClearScope scope) {
+        for (SimulationRun run : simulationRuns.findByScenarioId(scenarioId)) {
+            if (scope.dropsRun(run.getRunType())) {
+                return true;
+            }
+        }
+        for (ForecastRun forecast : forecastRuns.findByScenarioId(scenarioId)) {
+            if (scope.dropsForecast(forecast.getForecastLevel())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean clearScenario(UUID scenarioId, ResultClearScope scope) {
+        List<SimulationRun> runs = simulationRuns.findByScenarioId(scenarioId);
+        List<ForecastRun> forecasts = forecastRuns.findByScenarioId(scenarioId);
+        List<SimulationRun> dropRuns = new ArrayList<>();
+        for (SimulationRun run : runs) {
+            if (scope.dropsRun(run.getRunType())) {
+                dropRuns.add(run);
+            }
+        }
+        List<ForecastRun> dropForecasts = new ArrayList<>();
+        Set<UUID> dropForecastIds = new HashSet<>();
+        for (ForecastRun forecast : forecasts) {
+            if (scope.dropsForecast(forecast.getForecastLevel())) {
+                dropForecasts.add(forecast);
+                dropForecastIds.add(forecast.getId());
+            }
+        }
+        if (dropRuns.isEmpty() && dropForecasts.isEmpty()) {
+            return false;
+        }
+        for (SimulationRun run : dropRuns) {
+            monthlyResults.deleteBySimulationRunId(run.getId());
+            dailyResults.deleteBySimulationRunId(run.getId());
+            slotResults.deleteBySimulationRunId(run.getId());
+        }
+        if (!dropRuns.isEmpty()) {
+            simulationRuns.deleteAll(dropRuns);
+            entityManager.flush();
+        }
+        if (!dropForecastIds.isEmpty()) {
+            for (SimulationRun run : runs) {
+                if (dropRuns.contains(run)) {
+                    continue;
+                }
+                if (run.getForecastRunId() != null && dropForecastIds.contains(run.getForecastRunId())) {
+                    run.detachForecast();
+                }
+            }
+            entityManager.flush();
+            forecastRuns.deleteAll(dropForecasts);
+            entityManager.flush();
+        }
+        return true;
     }
 
     private static BigDecimal requireRightSizingHc(BigDecimal rightSizingHc) {

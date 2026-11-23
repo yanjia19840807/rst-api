@@ -26,6 +26,10 @@ import com.cmacgm.gbs.rst.api.timesheet.domain.TimesheetSyncErrorCode;
 /**
  * Keeps qualified people for MyHR + SKPI centers. Roles and parent edges are
  * written when the file can support them. A missing parent does not reject the file.
+ * An active parent with no occupant is still stored, with its chain role and
+ * parent edge, so a Domain Head or Local Transformation Head can assign a delegate.
+ * The missing-occupant issue stays. A parent occupied only outside a MyHR center,
+ * an inactive parent, or a parent with more than one occupant does not get that edge.
  */
 @Component
 public class MyHrOrgCalculator {
@@ -89,6 +93,7 @@ public class MyHrOrgCalculator {
         Map<String, PersonRow> latest = latestByPerson(people, runId, issues, now);
         List<Kept> qualified = qualify(latest.values(), myhrCenters);
         Map<String, PositionRow> activePositions = activePositions(positions, runId, issues, now);
+        Set<String> occupiedOutside = occupiedOutside(latest.values(), myhrCenters, activePositions);
         List<Kept> seated = new ArrayList<>();
         Map<String, List<Kept>> byPosition = new LinkedHashMap<>();
         for (Kept person : qualified) {
@@ -117,13 +122,13 @@ public class MyHrOrgCalculator {
                 continue;
             }
             String parent = parentCode(activePositions, person.positionCode);
-            if (parent != null && byPosition.containsKey(parent)) {
+            if (parent != null && chainPosition(parent, byPosition, occupiedOutside, activePositions)) {
                 supervisors.add(parent);
             }
         }
         for (String supervisor : supervisors) {
             String grandparent = parentCode(activePositions, supervisor);
-            if (grandparent != null && byPosition.containsKey(grandparent)) {
+            if (grandparent != null && chainPosition(grandparent, byPosition, occupiedOutside, activePositions)) {
                 managers.add(grandparent);
             }
         }
@@ -131,9 +136,10 @@ public class MyHrOrgCalculator {
         for (Kept person : seated) {
             addRoles(runId, now, issues, seats, person, supervisors, managers);
         }
-        List<OrgPositionParent> edges = edges(runId, now, issues, seats, byPosition, activePositions);
+        List<OrgPositionParent> edges = edges(
+                runId, now, issues, seats, byPosition, activePositions, supervisors, managers);
         List<OrgPerson> storedPeople = peopleOf(runId, qualified);
-        List<OrgPosition> storedPositions = positionsOf(runId, seats.values());
+        List<OrgPosition> storedPositions = positionsOf(runId, seats.values(), supervisors, managers, byPosition);
         List<OrgSeat> storedSeats = seats.values().stream()
                 .map(seat -> OrgSeat.create(runId, seat.ccgid, seat.positionId, seat.roleType))
                 .toList();
@@ -217,6 +223,41 @@ public class MyHrOrgCalculator {
         return kept;
     }
 
+    /**
+     * Active positions held by an included person who is not in a MyHR center.
+     * Those parents are occupied, so they are not treated as vacant.
+     */
+    private static Set<String> occupiedOutside(
+            Iterable<PersonRow> rows,
+            Set<String> myhrCenters,
+            Map<String, PositionRow> activePositions) {
+        Set<String> centers = myhrCenters == null ? Set.of() : myhrCenters;
+        Set<String> ids = new LinkedHashSet<>();
+        for (PersonRow row : rows) {
+            if (!includedStatus(row.status())) {
+                continue;
+            }
+            String center = centerOf(row.companyCountry());
+            if (center != null && centers.contains(center)) {
+                continue;
+            }
+            String code = SourceValues.fit(row.positionCode(), 80);
+            if (code != null && activePositions.containsKey(code)) {
+                ids.add(code);
+            }
+        }
+        return ids;
+    }
+
+    private static boolean chainPosition(
+            String positionId,
+            Map<String, List<Kept>> byPosition,
+            Set<String> occupiedOutside,
+            Map<String, PositionRow> activePositions) {
+        return activePositions.containsKey(positionId)
+                && (byPosition.containsKey(positionId) || !occupiedOutside.contains(positionId));
+    }
+
     private static Map<String, PositionRow> activePositions(
             List<PositionRow> rows, UUID runId, List<SourceIssue> issues, Instant now) {
         Map<String, PositionRow> index = new LinkedHashMap<>();
@@ -276,15 +317,35 @@ public class MyHrOrgCalculator {
             List<SourceIssue> issues,
             Map<String, SeatDraft> seats,
             Map<String, List<Kept>> byPosition,
-            Map<String, PositionRow> positions) {
+            Map<String, PositionRow> positions,
+            Set<String> supervisors,
+            Set<String> managers) {
         List<OrgPositionParent> edges = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         for (SeatDraft seat : seats.values()) {
             if ("AGENT".equals(seat.roleType)) {
-                addEdge(runId, now, issues, edges, seen, seats, byPosition, positions, seat, "SUPERVISOR");
+                addEdge(
+                        runId, now, issues, edges, seen, seats, byPosition, positions,
+                        supervisors, managers, seat, "SUPERVISOR");
             } else if ("SUPERVISOR".equals(seat.roleType)) {
-                addEdge(runId, now, issues, edges, seen, seats, byPosition, positions, seat, "SR_MANAGER");
+                addEdge(
+                        runId, now, issues, edges, seen, seats, byPosition, positions,
+                        supervisors, managers, seat, "SR_MANAGER");
             }
+        }
+        for (String supervisor : supervisors) {
+            if (byPosition.containsKey(supervisor)) {
+                continue;
+            }
+            PositionRow row = positions.get(supervisor);
+            if (row == null) {
+                continue;
+            }
+            addEdge(
+                    runId, now, issues, edges, seen, seats, byPosition, positions,
+                    supervisors, managers,
+                    new SeatDraft(null, supervisor, "SUPERVISOR", row.sourceRow()),
+                    "SR_MANAGER");
         }
         return edges;
     }
@@ -298,6 +359,8 @@ public class MyHrOrgCalculator {
             Map<String, SeatDraft> seats,
             Map<String, List<Kept>> byPosition,
             Map<String, PositionRow> positions,
+            Set<String> supervisors,
+            Set<String> managers,
             SeatDraft seat,
             String parentRole) {
         String parent = parentCode(positions, seat.positionId);
@@ -326,6 +389,9 @@ public class MyHrOrgCalculator {
                     null,
                     seat.sourceRow,
                     now));
+            if (isChainParent(parent, parentRole, supervisors, managers)) {
+                remember(runId, edges, seen, seat, parent, parentRole);
+            }
             return;
         }
         if (occupants.size() > 1) {
@@ -345,6 +411,22 @@ public class MyHrOrgCalculator {
         if (!seats.containsKey(seatKey(parentCcgid, parent, parentRole))) {
             return;
         }
+        remember(runId, edges, seen, seat, parent, parentRole);
+    }
+
+    private static boolean isChainParent(
+            String parent, String parentRole, Set<String> supervisors, Set<String> managers) {
+        return ("SUPERVISOR".equals(parentRole) && supervisors.contains(parent))
+                || ("SR_MANAGER".equals(parentRole) && managers.contains(parent));
+    }
+
+    private static void remember(
+            UUID runId,
+            List<OrgPositionParent> edges,
+            Set<String> seen,
+            SeatDraft seat,
+            String parent,
+            String parentRole) {
         String key = seat.positionId + "|" + seat.roleType + "|" + parent + "|" + parentRole;
         if (seen.add(key)) {
             edges.add(OrgPositionParent.create(runId, seat.positionId, seat.roleType, parent, parentRole));
@@ -392,14 +474,36 @@ public class MyHrOrgCalculator {
         return rows;
     }
 
-    private static List<OrgPosition> positionsOf(UUID runId, Iterable<SeatDraft> seats) {
+    private static List<OrgPosition> positionsOf(
+            UUID runId,
+            Iterable<SeatDraft> seats,
+            Set<String> supervisors,
+            Set<String> managers,
+            Map<String, List<Kept>> byPosition) {
         Map<String, OrgPosition> positions = new LinkedHashMap<>();
         for (SeatDraft seat : seats) {
             positions.putIfAbsent(
                     seat.positionId + "|" + seat.roleType,
                     OrgPosition.create(runId, seat.positionId, seat.roleType));
         }
+        addVacant(runId, positions, supervisors, "SUPERVISOR", byPosition);
+        addVacant(runId, positions, managers, "SR_MANAGER", byPosition);
         return List.copyOf(positions.values());
+    }
+
+    private static void addVacant(
+            UUID runId,
+            Map<String, OrgPosition> positions,
+            Set<String> positionIds,
+            String role,
+            Map<String, List<Kept>> byPosition) {
+        for (String positionId : positionIds) {
+            if (byPosition.containsKey(positionId)) {
+                continue;
+            }
+            positions.putIfAbsent(
+                    positionId + "|" + role, OrgPosition.create(runId, positionId, role));
+        }
     }
 
     private static void addSeat(Map<String, SeatDraft> seats, Kept person, String role) {

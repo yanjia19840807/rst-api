@@ -54,6 +54,7 @@ import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
 import com.cmacgm.gbs.rst.api.governance.application.CommaTokens;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.application.WorkingDaysService;
+import com.cmacgm.gbs.rst.api.exercise.scenario.application.ResultClearScope;
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.ScenarioCommitService;
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.sizing.SizingMath;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
@@ -319,12 +320,9 @@ public class ExerciseService {
             notices.add(
                     "Monthly and Daily Volume were reset from Toolkit for the new Sizing Month. "
                             + "Volume edits on this Exercise were discarded.");
-            int cleared = scenarioCommits.clearResultsForExercise(exerciseId);
+            int cleared = scenarioCommits.clearResults(exerciseId, ResultClearScope.SIZING);
             if (cleared > 0) {
-                notices.add(
-                        "Cleared saved Forecast and Simulation results for "
-                                + cleared
-                                + " scenario(s). Run Sizing Simulation on each scenario.");
+                notices.add(ResultClearScope.SIZING.notice(cleared));
             }
         }
         // Volume sync may run bulk @Modifying deletes that clear the
@@ -357,12 +355,9 @@ public class ExerciseService {
         List<String> notices = new ArrayList<>();
         notices.add(initialization.syncTmsPopulation(exercise, ownerCcgid, true));
         if (tmsChanged) {
-            int cleared = scenarioCommits.clearResultsForExercise(exerciseId);
+            int cleared = scenarioCommits.clearResults(exerciseId, ResultClearScope.ALL);
             if (cleared > 0) {
-                notices.add(
-                        "Cleared saved Forecast and Simulation results for "
-                                + cleared
-                                + " scenario(s). Run Sizing Simulation on each scenario.");
+                notices.add(ResultClearScope.ALL.notice(cleared));
             }
         }
         RstExercise reloaded = access.requireOwned(ownerCcgid, exerciseId);
@@ -390,12 +385,9 @@ public class ExerciseService {
         List<String> notices = new ArrayList<>();
         notices.add(initialization.clearTmsPopulation(exercise));
         if (hadPeriod) {
-            int cleared = scenarioCommits.clearResultsForExercise(exerciseId);
+            int cleared = scenarioCommits.clearResults(exerciseId, ResultClearScope.ALL);
             if (cleared > 0) {
-                notices.add(
-                        "Cleared saved Forecast and Simulation results for "
-                                + cleared
-                                + " scenario(s). Run Sizing Simulation on each scenario.");
+                notices.add(ResultClearScope.ALL.notice(cleared));
             }
         }
         RstExercise reloaded = access.requireOwned(ownerCcgid, exerciseId);
@@ -424,10 +416,7 @@ public class ExerciseService {
         List<String> notices = new ArrayList<>();
         notices.add("Per-slot Volume grid generated for the selected Slot Period.");
         if (cleared > 0) {
-            notices.add(
-                    "Cleared saved Slot Simulation results for "
-                            + cleared
-                            + " scenario(s).");
+            notices.add(ResultClearScope.SLOT.notice(cleared));
         }
         RstExercise reloaded = access.requireOwned(ownerCcgid, exerciseId);
         List<SlotVolumeView> volumes = rows.stream()
@@ -463,10 +452,7 @@ public class ExerciseService {
         List<String> notices = new ArrayList<>();
         notices.add("Slot Period cleared.");
         if (cleared > 0) {
-            notices.add(
-                    "Cleared saved Slot Simulation results for "
-                            + cleared
-                            + " scenario(s).");
+            notices.add(ResultClearScope.SLOT.notice(cleared));
         }
         RstExercise reloaded = access.requireOwned(ownerCcgid, exerciseId);
         return new UpdateSlotPeriodResult(
@@ -474,23 +460,27 @@ public class ExerciseService {
     }
 
     /**
-     * Returns how many scenarios currently have saved Forecast / Simulation snapshots.
+     * Returns how many scenarios still have results in the given scope.
      */
     @Transactional(readOnly = true)
-    public CommittedResultsStatus committedResults(String ownerCcgid, UUID exerciseId) {
+    public CommittedResultsStatus committedResults(
+            String ownerCcgid, UUID exerciseId, ResultClearScope scope) {
         access.requireOwned(ownerCcgid, exerciseId);
-        return new CommittedResultsStatus(scenarioCommits.countScenariosWithResults(exerciseId));
+        ResultClearScope resolved = scope == null ? ResultClearScope.ALL : scope;
+        return new CommittedResultsStatus(scenarioCommits.countScenariosWithResults(exerciseId, resolved));
     }
 
     /**
-     * Clears saved Forecast / Simulation snapshots for every scenario.
+     * Clears the forecast and simulation rows selected by {@code scope}.
      * Scenario inputs (name, Right Sizing HC, shifts, Official) are kept.
      */
     @Transactional
-    public CommittedResultsStatus clearCommittedResults(String ownerCcgid, UUID exerciseId) {
+    public CommittedResultsStatus clearCommittedResults(
+            String ownerCcgid, UUID exerciseId, ResultClearScope scope) {
         RstExercise exercise = access.requireOwned(ownerCcgid, exerciseId);
         access.requireEditable(exercise);
-        return new CommittedResultsStatus(scenarioCommits.clearResultsForExercise(exerciseId));
+        ResultClearScope resolved = scope == null ? ResultClearScope.ALL : scope;
+        return new CommittedResultsStatus(scenarioCommits.clearResults(exerciseId, resolved));
     }
 
     private static void validateTmsPeriod(LocalDate tmsFrom, LocalDate tmsTo) {

@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -50,6 +51,50 @@ public class SharedKpiCalculator {
             List<CenterDeliveryHc> lines,
             List<SourceIssue> issues,
             boolean activate) {
+    }
+
+    /**
+     * Requires every data row to carry the same YYYYMM.
+     *
+     * @param rows parsed rows
+     * @return error message, or null when the file is empty or has one period
+     */
+    public static String periodError(List<KpiRow> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return null;
+        }
+        LinkedHashSet<String> found = new LinkedHashSet<>();
+        for (KpiRow row : rows) {
+            String period = periodOf(row.period());
+            if (period == null) {
+                String raw = row.period();
+                found.add(raw == null || raw.isBlank() ? "blank" : raw.trim());
+            } else {
+                found.add(period);
+            }
+        }
+        if (found.size() == 1 && periodOf(found.getFirst()) != null) {
+            return null;
+        }
+        return "Period must be the same YYYYMM on every row. Found " + summarize(found) + ".";
+    }
+
+    /**
+     * A later period replaces the current snapshot. The same period does too,
+     * because the later upload is a correction of that month.
+     *
+     * @param activePeriod period of the current snapshot
+     * @param incomingPeriod period of the upload
+     * @return true when the upload becomes current
+     */
+    public static boolean replacesCurrent(String activePeriod, String incomingPeriod) {
+        if (incomingPeriod == null || !incomingPeriod.matches("\\d{6}")) {
+            return false;
+        }
+        if (activePeriod == null || !activePeriod.matches("\\d{6}")) {
+            return true;
+        }
+        return incomingPeriod.compareTo(activePeriod) >= 0;
     }
 
     /**
@@ -247,6 +292,16 @@ public class SharedKpiCalculator {
     private static SourceIssue missing(UUID runId, Instant now, KpiRow row, String message) {
         return SourceIssue.error(
                 runId, TimesheetSyncErrorCode.MISSING_FIELD, message, null, null, null, null, row.sourceRow(), now);
+    }
+
+    private static String summarize(Set<String> found) {
+        List<String> values = new ArrayList<>(found);
+        int shown = Math.min(values.size(), 8);
+        String joined = String.join(", ", values.subList(0, shown));
+        if (values.size() > shown) {
+            return joined + ", and " + (values.size() - shown) + " more";
+        }
+        return joined;
     }
 
     private static String display(String gbsSite) {

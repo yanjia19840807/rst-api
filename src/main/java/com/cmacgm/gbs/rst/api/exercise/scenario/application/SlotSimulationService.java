@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.cmacgm.gbs.rst.api.exercise.associateddata.application.VolumeTrainWindows;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseTeamSetup;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.domain.ExerciseVolumeSlotInput;
 import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseTeamSetupRepository;
@@ -418,14 +419,21 @@ public class SlotSimulationService {
 
         List<ExerciseVolumeSlotInput> volumes =
                 slotVolumes.findByExerciseIdOrderBySlotStartAtAsc(exerciseId);
-        boolean empty = volumes.isEmpty()
-                || volumes.stream().allMatch(row -> row.getActualVolume() == null);
-        if (empty) {
+        if (volumes.isEmpty()) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "slot-volume-required",
-                    "Set a Slot Period and fill Per-slot Volume in Associated Data → Volume Input "
-                            + "before slot simulation.");
+                    "Set a Slot Period in Associated Data → Volume Input → Per-slot before slot simulation. "
+                            + "Sizing Simulation does not use Per-slot Volume.");
+        }
+        if (volumes.stream().allMatch(row -> row.getActualVolume() == null)) {
+            String period = slotPeriodLabel(exercise);
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "slot-volume-required",
+                    "Enter Actual Volume for at least one slot"
+                            + period
+                            + " in Associated Data → Volume Input → Per-slot. A blank slot counts as 0.");
         }
         List<SlotShift> shiftRows = overrideShifts != null
                 ? overrideShifts
@@ -547,6 +555,16 @@ public class SlotSimulationService {
 
     private static BigDecimal nz(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private static String slotPeriodLabel(RstExercise exercise) {
+        LocalDate start = exercise.getSlotStartDate();
+        Short weeks = exercise.getSlotWeeks();
+        if (start == null || weeks == null) {
+            return "";
+        }
+        LocalDate end = VolumeTrainWindows.slotTrainEnd(start, weeks);
+        return " in " + start + " – " + end;
     }
 
     private static String sha256Hex(String raw) {

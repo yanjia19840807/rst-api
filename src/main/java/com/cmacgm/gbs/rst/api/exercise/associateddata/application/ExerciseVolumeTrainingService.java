@@ -92,6 +92,18 @@ public class ExerciseVolumeTrainingService {
     }
 
     /**
+     * Whether the Exercise Daily Volume grid has at least one Actual Volume.
+     * Toolkit daily history is not included.
+     *
+     * @param exerciseId Exercise id
+     * @return true when Daily sizing should run
+     */
+    @Transactional(readOnly = true)
+    public boolean hasExerciseDailyActual(UUID exerciseId) {
+        return exerciseDaily.hasActualVolume(exerciseId);
+    }
+
+    /**
      * Daily actuals for FastAPI forecast: Toolkit overlaid by this Exercise, last 36 months
      * through the end of Sizing Month. Older Volume Input rows stay on the Exercise but are not sent.
      */

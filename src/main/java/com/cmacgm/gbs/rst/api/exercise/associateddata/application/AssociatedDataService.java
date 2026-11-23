@@ -48,6 +48,7 @@ import com.cmacgm.gbs.rst.api.exercise.application.ExerciseAccess;
 import com.cmacgm.gbs.rst.api.exercise.domain.ExerciseSharedKpiLine;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.persistence.RstExerciseRepository;
+import com.cmacgm.gbs.rst.api.exercise.scenario.application.ResultClearScope;
 import com.cmacgm.gbs.rst.api.exercise.scenario.application.ScenarioCommitService;
 import com.cmacgm.gbs.rst.api.supportcategory.application.SupportCategoryService;
 import com.cmacgm.gbs.rst.api.supportcategory.application.SupportCategoryService.ResolvedCategory;
@@ -820,7 +821,7 @@ public class AssociatedDataService {
             notices.add("Filled " + plan.paddedCount() + " empty slots to complete the period.");
         }
         if (cleared > 0) {
-            notices.add("Cleared saved Slot Simulation results for " + cleared + " scenario(s).");
+            notices.add(ResultClearScope.SLOT.notice(cleared));
         }
         return new SlotImportResult(
                 plan.startDate(),

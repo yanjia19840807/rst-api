@@ -81,32 +81,81 @@ public interface OrgPositionRepository
             @Param("center") String center, @Param("roleType") String roleType);
 
     /**
+     * Roles stored for one position on the ACTIVE MyHR snapshot, including a
+     * vacant Supervisor or Senior Manager position.
+     *
+     * @param positionId position
+     * @return position nodes
+     */
+    @Query("""
+            select p
+            from OrgPosition p, SourceSnapshot r
+            where p.id.syncRunId = r.id
+              and r.kind = 'MYHR'
+              and r.status = 'ACTIVE'
+              and p.id.positionId = :positionId
+            """)
+    List<OrgPosition> findActiveMyHrByPositionId(@Param("positionId") String positionId);
+
+    /**
      * MyHR positions in a Center that do not carry the given role.
+     * A vacant parent is included when a person in the Center sits one or two
+     * levels below it.
      *
      * @param center GBS center
      * @param roleType role to exclude
      * @return position ids
      */
     @Query("""
-            select distinct o.id.positionId
-            from OrgSeat o, OrgPerson p, SourceSnapshot r
-            where o.id.syncRunId = r.id
-              and p.id.syncRunId = r.id
-              and o.id.ccgid = p.id.ccgid
+            select distinct p.id.positionId
+            from OrgPosition p, SourceSnapshot r
+            where p.id.syncRunId = r.id
               and r.kind = 'MYHR'
               and r.status = 'ACTIVE'
-              and p.center = :center
+              and p.id.roleType <> :roleType
               and not exists (
                   select 1
-                  from OrgSeat excluded, OrgPerson holder
+                  from OrgPosition excluded
                   where excluded.id.syncRunId = r.id
-                    and holder.id.syncRunId = r.id
-                    and excluded.id.ccgid = holder.id.ccgid
-                    and excluded.id.positionId = o.id.positionId
+                    and excluded.id.positionId = p.id.positionId
                     and excluded.id.roleType = :roleType
-                    and holder.center = :center
               )
-            order by o.id.positionId
+              and (
+                  exists (
+                      select 1
+                      from OrgSeat seat, OrgPerson person
+                      where seat.id.syncRunId = r.id
+                        and person.id.syncRunId = r.id
+                        and person.id.ccgid = seat.id.ccgid
+                        and seat.id.positionId = p.id.positionId
+                        and person.center = :center
+                  )
+                  or exists (
+                      select 1
+                      from OrgPositionParent edge, OrgSeat child, OrgPerson person
+                      where edge.id.syncRunId = r.id
+                        and child.id.syncRunId = r.id
+                        and person.id.syncRunId = r.id
+                        and person.id.ccgid = child.id.ccgid
+                        and edge.id.parentPositionId = p.id.positionId
+                        and edge.id.positionId = child.id.positionId
+                        and person.center = :center
+                  )
+                  or exists (
+                      select 1
+                      from OrgPositionParent edge, OrgPositionParent mid, OrgSeat child, OrgPerson person
+                      where edge.id.syncRunId = r.id
+                        and mid.id.syncRunId = r.id
+                        and child.id.syncRunId = r.id
+                        and person.id.syncRunId = r.id
+                        and person.id.ccgid = child.id.ccgid
+                        and edge.id.parentPositionId = p.id.positionId
+                        and edge.id.positionId = mid.id.parentPositionId
+                        and mid.id.positionId = child.id.positionId
+                        and person.center = :center
+                  )
+              )
+            order by p.id.positionId
             """)
     List<String> findActiveMyHrPositionIdsInCenterWithoutRole(
             @Param("center") String center, @Param("roleType") String roleType);
@@ -448,6 +497,9 @@ public interface OrgPositionRepository
     /**
      * Positions occupied by people of one center in the ACTIVE MyHR snapshot.
      *
+     * Includes a vacant Supervisor or Senior Manager when someone in the Center
+     * sits one or two levels below it.
+     *
      * @param center GBS center
      * @param q position, role, occupant name, or CCGID
      * @param pageable page
@@ -460,20 +512,62 @@ public interface OrgPositionRepository
                     where p.id.syncRunId = r.id
                       and r.kind = 'MYHR'
                       and r.status = 'ACTIVE'
-                      and exists (
-                          select 1
-                          from OrgSeat s, OrgPerson person
-                          where s.id.syncRunId = r.id
-                            and person.id.syncRunId = r.id
-                            and person.id.ccgid = s.id.ccgid
-                            and s.id.positionId = p.id.positionId
-                            and s.id.roleType = p.id.roleType
-                            and person.center = :center
-                            and (:q = ''
-                                 or lower(p.id.positionId) like lower(concat('%', :q, '%'))
-                                 or lower(p.id.roleType) like lower(concat('%', :q, '%'))
-                                 or lower(person.name) like lower(concat('%', :q, '%'))
-                                 or lower(s.id.ccgid) like lower(concat('%', :q, '%'))))
+                      and (
+                          exists (
+                              select 1
+                              from OrgSeat s, OrgPerson person
+                              where s.id.syncRunId = r.id
+                                and person.id.syncRunId = r.id
+                                and person.id.ccgid = s.id.ccgid
+                                and s.id.positionId = p.id.positionId
+                                and s.id.roleType = p.id.roleType
+                                and person.center = :center
+                                and (:q = ''
+                                     or lower(p.id.positionId) like lower(concat('%', :q, '%'))
+                                     or lower(p.id.roleType) like lower(concat('%', :q, '%'))
+                                     or lower(person.name) like lower(concat('%', :q, '%'))
+                                     or lower(s.id.ccgid) like lower(concat('%', :q, '%'))))
+                          or exists (
+                              select 1
+                              from OrgPositionParent edge, OrgSeat child, OrgPerson person
+                              where edge.id.syncRunId = r.id
+                                and child.id.syncRunId = r.id
+                                and person.id.syncRunId = r.id
+                                and person.id.ccgid = child.id.ccgid
+                                and edge.id.parentPositionId = p.id.positionId
+                                and edge.id.positionId = child.id.positionId
+                                and person.center = :center
+                                and not exists (
+                                    select 1
+                                    from OrgSeat own
+                                    where own.id.syncRunId = r.id
+                                      and own.id.positionId = p.id.positionId
+                                      and own.id.roleType = p.id.roleType)
+                                and (:q = ''
+                                     or lower(p.id.positionId) like lower(concat('%', :q, '%'))
+                                     or lower(p.id.roleType) like lower(concat('%', :q, '%'))))
+                          or exists (
+                              select 1
+                              from OrgPositionParent edge, OrgPositionParent mid,
+                                   OrgSeat child, OrgPerson person
+                              where edge.id.syncRunId = r.id
+                                and mid.id.syncRunId = r.id
+                                and child.id.syncRunId = r.id
+                                and person.id.syncRunId = r.id
+                                and person.id.ccgid = child.id.ccgid
+                                and edge.id.parentPositionId = p.id.positionId
+                                and edge.id.positionId = mid.id.parentPositionId
+                                and mid.id.positionId = child.id.positionId
+                                and person.center = :center
+                                and not exists (
+                                    select 1
+                                    from OrgSeat own
+                                    where own.id.syncRunId = r.id
+                                      and own.id.positionId = p.id.positionId
+                                      and own.id.roleType = p.id.roleType)
+                                and (:q = ''
+                                     or lower(p.id.positionId) like lower(concat('%', :q, '%'))
+                                     or lower(p.id.roleType) like lower(concat('%', :q, '%')))))
                     order by p.id.positionId, p.id.roleType
                     """,
             countQuery = """
@@ -482,20 +576,62 @@ public interface OrgPositionRepository
                     where p.id.syncRunId = r.id
                       and r.kind = 'MYHR'
                       and r.status = 'ACTIVE'
-                      and exists (
-                          select 1
-                          from OrgSeat s, OrgPerson person
-                          where s.id.syncRunId = r.id
-                            and person.id.syncRunId = r.id
-                            and person.id.ccgid = s.id.ccgid
-                            and s.id.positionId = p.id.positionId
-                            and s.id.roleType = p.id.roleType
-                            and person.center = :center
-                            and (:q = ''
-                                 or lower(p.id.positionId) like lower(concat('%', :q, '%'))
-                                 or lower(p.id.roleType) like lower(concat('%', :q, '%'))
-                                 or lower(person.name) like lower(concat('%', :q, '%'))
-                                 or lower(s.id.ccgid) like lower(concat('%', :q, '%'))))
+                      and (
+                          exists (
+                              select 1
+                              from OrgSeat s, OrgPerson person
+                              where s.id.syncRunId = r.id
+                                and person.id.syncRunId = r.id
+                                and person.id.ccgid = s.id.ccgid
+                                and s.id.positionId = p.id.positionId
+                                and s.id.roleType = p.id.roleType
+                                and person.center = :center
+                                and (:q = ''
+                                     or lower(p.id.positionId) like lower(concat('%', :q, '%'))
+                                     or lower(p.id.roleType) like lower(concat('%', :q, '%'))
+                                     or lower(person.name) like lower(concat('%', :q, '%'))
+                                     or lower(s.id.ccgid) like lower(concat('%', :q, '%'))))
+                          or exists (
+                              select 1
+                              from OrgPositionParent edge, OrgSeat child, OrgPerson person
+                              where edge.id.syncRunId = r.id
+                                and child.id.syncRunId = r.id
+                                and person.id.syncRunId = r.id
+                                and person.id.ccgid = child.id.ccgid
+                                and edge.id.parentPositionId = p.id.positionId
+                                and edge.id.positionId = child.id.positionId
+                                and person.center = :center
+                                and not exists (
+                                    select 1
+                                    from OrgSeat own
+                                    where own.id.syncRunId = r.id
+                                      and own.id.positionId = p.id.positionId
+                                      and own.id.roleType = p.id.roleType)
+                                and (:q = ''
+                                     or lower(p.id.positionId) like lower(concat('%', :q, '%'))
+                                     or lower(p.id.roleType) like lower(concat('%', :q, '%'))))
+                          or exists (
+                              select 1
+                              from OrgPositionParent edge, OrgPositionParent mid,
+                                   OrgSeat child, OrgPerson person
+                              where edge.id.syncRunId = r.id
+                                and mid.id.syncRunId = r.id
+                                and child.id.syncRunId = r.id
+                                and person.id.syncRunId = r.id
+                                and person.id.ccgid = child.id.ccgid
+                                and edge.id.parentPositionId = p.id.positionId
+                                and edge.id.positionId = mid.id.parentPositionId
+                                and mid.id.positionId = child.id.positionId
+                                and person.center = :center
+                                and not exists (
+                                    select 1
+                                    from OrgSeat own
+                                    where own.id.syncRunId = r.id
+                                      and own.id.positionId = p.id.positionId
+                                      and own.id.roleType = p.id.roleType)
+                                and (:q = ''
+                                     or lower(p.id.positionId) like lower(concat('%', :q, '%'))
+                                     or lower(p.id.roleType) like lower(concat('%', :q, '%')))))
                     """)
     Page<OrgPosition> searchActiveMyHr(
             @Param("center") String center, @Param("q") String q, Pageable pageable);

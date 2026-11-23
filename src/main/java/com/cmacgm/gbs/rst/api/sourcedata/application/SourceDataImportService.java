@@ -42,9 +42,10 @@ import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceIssueRepository;
 import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceSnapshotRepository;
 
 /**
- * Imports one global MyHR or SKPI file. A successful file becomes the
- * current snapshot of that kind. Row defects are stored and do not block it.
- * The previous snapshot is archived and its rows are kept.
+ * Imports one global MyHR or SKPI file. A successful MyHR file becomes the
+ * current snapshot. A successful SKPI file becomes current when its period is
+ * the same or later than the current one; an earlier period stays in history.
+ * Row defects are stored and do not block a file that has one period.
  */
 @Service
 public class SourceDataImportService {
@@ -142,7 +143,7 @@ public class SourceDataImportService {
      *
      * @param id snapshot id
      * @param kind MYHR or SHARED_KPI
-     * @param status ACTIVE
+     * @param status ACTIVE, or ARCHIVED when an SKPI period is already newer
      * @param syncDate business date
      * @param period SKPI period, otherwise null
      * @param rowCount stored rows
@@ -188,7 +189,7 @@ public class SourceDataImportService {
             positions.saveAll(computed.positions());
             parents.saveAll(computed.parents());
             seats.saveAll(computed.seats());
-            return activate(run, computed.people().size(), hash(bytes), computed.issues().size());
+            return activate(run, computed.people().size(), hash(bytes), computed.issues().size(), false);
         } catch (ApiException ex) {
             throw ex;
         } catch (RuntimeException ex) {
@@ -210,6 +211,11 @@ public class SourceDataImportService {
         StoredFile stored = store("SharedKpi", fileName, bytes);
         List<SharedKpiWorkbookParser.KpiRow> rows = parse(
                 kind, stored, () -> skpiParser.parse(new ByteArrayInputStream(bytes)));
+        String periodError = SharedKpiCalculator.periodError(rows);
+        if (periodError != null) {
+            failWithoutRows(kind, stored, TimesheetSyncErrorCode.PERIOD_MISMATCH.code(), periodError);
+            throw new ApiException(HttpStatus.CONFLICT, TimesheetSyncErrorCode.PERIOD_MISMATCH.code(), periodError);
+        }
         String period = SharedKpiCalculator.period(rows);
         SourceSnapshot run = start(
                 kind, SharedKpiCalculator.syncDate(period, LocalDate.now(clock)), period, stored);
@@ -227,7 +233,7 @@ public class SourceDataImportService {
             saveIssues(computed.issues());
             processes.saveAll(computed.processes());
             deliveryHc.saveAll(computed.lines());
-            return activate(run, computed.lines().size(), hash(bytes), computed.issues().size());
+            return activate(run, computed.lines().size(), hash(bytes), computed.issues().size(), true);
         } catch (ApiException ex) {
             throw ex;
         } catch (RuntimeException ex) {
@@ -297,23 +303,28 @@ public class SourceDataImportService {
         throw new ApiException(HttpStatus.CONFLICT, code, message);
     }
 
-    private ImportResult activate(SourceSnapshot run, int rowCount, String dataHash, int issueCount) {
+    private ImportResult activate(
+            SourceSnapshot run, int rowCount, String dataHash, int issueCount, boolean byPeriod) {
         transactionTemplate.executeWithoutResult(status -> {
             Instant now = clock.instant();
+            if (byPeriod && !replacesActive(run)) {
+                SourceSnapshot current = reload(run.getId());
+                current.markKept(rowCount, dataHash, now);
+                snapshots.saveAndFlush(current);
+                return;
+            }
             snapshots.archiveOtherActive(run.getKind(), GLOBAL, run.getId(), now);
-            SourceSnapshot current = snapshots.findById(run.getId())
-                    .orElseThrow(() -> new ApiException(
-                            HttpStatus.CONFLICT,
-                            TimesheetSyncErrorCode.COUNT_MISMATCH.code(),
-                            "Import disappeared before activation."));
+            SourceSnapshot current = reload(run.getId());
             current.markActive(rowCount, dataHash, now);
             snapshots.saveAndFlush(current);
         });
         SourceSnapshot active = snapshots.findById(run.getId()).orElseThrow();
         log.info(
-                "Source {} activated: id={} rows={} issues={}",
+                "Source {} {}: id={} period={} rows={} issues={}",
                 active.getKind(),
+                active.getStatus(),
                 active.getId(),
+                active.getPeriod(),
                 active.getRowCount(),
                 issueCount);
         return new ImportResult(
@@ -324,6 +335,20 @@ public class SourceDataImportService {
                 active.getPeriod(),
                 active.getRowCount(),
                 issueCount);
+    }
+
+    private SourceSnapshot reload(UUID runId) {
+        return snapshots.findById(runId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.CONFLICT,
+                        TimesheetSyncErrorCode.COUNT_MISMATCH.code(),
+                        "Import disappeared before activation."));
+    }
+
+    private boolean replacesActive(SourceSnapshot incoming) {
+        return snapshots.findByKindAndStatusAndCenter(incoming.getKind(), "ACTIVE", GLOBAL)
+                .map(active -> SharedKpiCalculator.replacesCurrent(active.getPeriod(), incoming.getPeriod()))
+                .orElse(true);
     }
 
     private void saveIssues(List<SourceIssue> rowIssues) {

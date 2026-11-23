@@ -17,6 +17,7 @@ import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateSlotPeriodRequest;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateSlotPeriodResult;
 import com.cmacgm.gbs.rst.api.exercise.api.dto.UpdateTmsPeriodRequest;
 import com.cmacgm.gbs.rst.api.exercise.application.ExerciseService;
+import com.cmacgm.gbs.rst.api.exercise.scenario.application.ResultClearScope;
 import com.cmacgm.gbs.rst.api.delegation.application.PositionCoverage;
 import com.cmacgm.gbs.rst.api.security.ExerciseReadAccess;
 import com.cmacgm.gbs.rst.api.security.RstPrincipal;
@@ -276,25 +277,28 @@ public class ExerciseController {
     }
 
     /**
-     * Returns how many scenarios have saved Forecast / Simulation snapshots.
+     * Returns how many scenarios still have results the given scope would clear.
      */
     @GetMapping("/{id}/committed-results")
     @PreAuthorize(ExerciseReadAccess.AUTHORIZE)
     public CommittedResultsStatus committedResults(
             @AuthenticationPrincipal RstPrincipal principal,
-            @PathVariable UUID id) {
-        return service.committedResults(supervisor(principal), id);
+            @PathVariable UUID id,
+            @RequestParam(name = "scope", defaultValue = "ALL") ResultClearScope scope) {
+        return service.committedResults(supervisor(principal), id, scope);
     }
 
     /**
-     * Clears saved Forecast / Simulation snapshots. Scenario inputs and Official are kept.
+     * Clears the forecast and simulation rows selected by {@code scope}.
+     * Scenario inputs and Official are kept.
      */
     @PostMapping("/{id}/committed-results/clear")
     @PreAuthorize("hasRole('SUPERVISOR')")
     public CommittedResultsStatus clearCommittedResults(
             @AuthenticationPrincipal RstPrincipal principal,
-            @PathVariable UUID id) {
-        return service.clearCommittedResults(supervisor(principal), id);
+            @PathVariable UUID id,
+            @RequestParam(name = "scope", defaultValue = "ALL") ResultClearScope scope) {
+        return service.clearCommittedResults(supervisor(principal), id, scope);
     }
 
     /**

@@ -26,6 +26,7 @@ import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.KpiCand
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.Occupant;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetReadService.ProductSeat;
 import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPerson;
+import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPosition;
 import com.cmacgm.gbs.rst.api.timesheet.domain.OrgPositionParent;
 import com.cmacgm.gbs.rst.api.timesheet.domain.OrgSeat;
 import com.cmacgm.gbs.rst.api.timesheet.domain.ProcessScope;
@@ -99,13 +100,16 @@ public class MyHrWorkforceSource {
 
     /**
      * @param positionId position or CCGID
-     * @return true when the position or person belongs to a MyHR center
+     * @return true when the position is on the active MyHR snapshot, or the person belongs to a MyHR center
      */
     public boolean servesPosition(String positionId) {
         if (positionId == null || positionId.isBlank()) {
             return false;
         }
         String key = positionId.trim();
+        if (!positions.findActiveMyHrByPositionId(key).isEmpty()) {
+            return true;
+        }
         for (OrgPerson person : people.findActiveMyHrByPositionId(key)) {
             if (myHrCenter(person.getCenter())) {
                 return true;
@@ -298,14 +302,14 @@ public class MyHrWorkforceSource {
 
     /**
      * @param positionId position
-     * @return roles on the MyHR position
+     * @return roles on the MyHR position, including a vacant Supervisor or Senior Manager
      */
     public List<String> roleTypesOfPosition(String positionId) {
         if (!servesPosition(positionId)) {
             return List.of();
         }
-        return seats.findActiveMyHrByPositionId(positionId.trim()).stream()
-                .map(OrgSeat::getRoleType)
+        return positions.findActiveMyHrByPositionId(positionId.trim()).stream()
+                .map(OrgPosition::getRoleType)
                 .filter(role -> role != null && !role.isBlank())
                 .map(role -> role.trim().toUpperCase(Locale.ROOT))
                 .distinct()
@@ -407,7 +411,7 @@ public class MyHrWorkforceSource {
             return List.of();
         }
         LinkedHashSet<String> ids = new LinkedHashSet<>();
-        for (OrgSeat seat : seats.findMyHrByPositionIdIn(positionIds)) {
+        for (OrgSeat seat : seats.findActiveMyHrByPositionIdIn(positionIds)) {
             if (seat.getCcgid() != null && !seat.getCcgid().isBlank() && serves(seat.getCcgid())) {
                 ids.add(upper(seat.getCcgid()));
             }

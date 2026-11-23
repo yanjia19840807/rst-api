@@ -1,6 +1,7 @@
 package com.cmacgm.gbs.rst.api.exercise.scenario.application;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -12,6 +13,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseVolumeDailyInputRepository;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.DailySimulationResult;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.MonthlySizingResult;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
@@ -36,7 +38,13 @@ class ScenarioOfficialReadinessTests {
         simulationRuns = mock(SimulationRunRepository.class);
         monthlyResults = mock(MonthlySizingResultRepository.class);
         dailyResults = mock(DailySimulationResultRepository.class);
-        readiness = new ScenarioOfficialReadiness(simulationRuns, monthlyResults, dailyResults);
+        readiness = new ScenarioOfficialReadiness(
+                simulationRuns,
+                monthlyResults,
+                dailyResults,
+                mock(ExerciseVolumeDailyInputRepository.class));
+        when(simulationRuns.findFirstByScenarioIdAndRunTypeAndStatusOrderByRunNoDesc(any(), any(), any()))
+                .thenReturn(Optional.empty());
     }
 
     @Test
@@ -76,6 +84,34 @@ class ScenarioOfficialReadinessTests {
     }
 
     @Test
+    void acceptsMonthlySizingWhenDailyVolumeWasNotEntered() {
+        Scenario scenario = draft(new BigDecimal("12"));
+        stubMonthly(scenario.getId(), new BigDecimal("12"));
+
+        readiness.requireReady(scenario, "Submit", false);
+    }
+
+    @Test
+    void rejectsStaleDailySizingAfterDailyVolumeWasRemoved() {
+        Scenario scenario = draft(new BigDecimal("12"));
+        stubSizing(scenario.getId(), new BigDecimal("12"));
+
+        assertThatThrownBy(() -> readiness.requireReady(scenario, "Submit", false))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("Daily Volume was removed");
+    }
+
+    @Test
+    void rejectsDailyVolumeWithoutSavedDailySizing() {
+        Scenario scenario = draft(new BigDecimal("12"));
+        stubMonthly(scenario.getId(), new BigDecimal("12"));
+
+        assertThatThrownBy(() -> readiness.requireReady(scenario, "Submit", true))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("Daily sizing was not saved");
+    }
+
+    @Test
     void acceptsCommittedSizingWhenSlotSimulationAlsoPresent() {
         Scenario scenario = draft(new BigDecimal("12"));
         stubSizing(scenario.getId(), new BigDecimal("12"));
@@ -91,31 +127,39 @@ class ScenarioOfficialReadinessTests {
                 UUID.randomUUID(), "S1", "Draft", null, hc, NOW);
     }
 
-    private void stubSizing(UUID scenarioId, BigDecimal snapshotHc) {
+    private void stubMonthly(UUID scenarioId, BigDecimal snapshotHc) {
         SimulationRun monthly = run(scenarioId, "MONTHLY_SIZING");
-        SimulationRun daily = run(scenarioId, "DAILY");
         when(simulationRuns.findFirstByScenarioIdAndRunTypeAndStatusOrderByRunNoDesc(
                 scenarioId, "MONTHLY_SIZING", "ACCEPTED"))
                 .thenReturn(Optional.of(monthly));
+        when(monthlyResults.findBySimulationRunId(monthly.getId()))
+                .thenReturn(List.of(monthlyRow(monthly.getId(), snapshotHc)));
+    }
+
+    private void stubSizing(UUID scenarioId, BigDecimal snapshotHc) {
+        stubMonthly(scenarioId, snapshotHc);
+        SimulationRun daily = run(scenarioId, "DAILY");
         when(simulationRuns.findFirstByScenarioIdAndRunTypeAndStatusOrderByRunNoDesc(
                 scenarioId, "DAILY", "ACCEPTED"))
                 .thenReturn(Optional.of(daily));
-        when(monthlyResults.findBySimulationRunId(monthly.getId()))
-                .thenReturn(List.of(MonthlySizingResult.create(
-                        monthly.getId(),
-                        LocalDate.of(2026, 9, 1),
-                        BigDecimal.ONE,
-                        null,
-                        BigDecimal.ONE,
-                        BigDecimal.ZERO,
-                        BigDecimal.ONE,
-                        BigDecimal.ONE,
-                        BigDecimal.ONE,
-                        BigDecimal.ZERO,
-                        snapshotHc,
-                        BigDecimal.ONE)));
         when(dailyResults.findBySimulationRunIdOrderByResultDateAsc(daily.getId()))
                 .thenReturn(List.of(mock(DailySimulationResult.class)));
+    }
+
+    private static MonthlySizingResult monthlyRow(UUID runId, BigDecimal snapshotHc) {
+        return MonthlySizingResult.create(
+                runId,
+                LocalDate.of(2026, 9, 1),
+                BigDecimal.ONE,
+                null,
+                BigDecimal.ONE,
+                BigDecimal.ZERO,
+                BigDecimal.ONE,
+                BigDecimal.ONE,
+                BigDecimal.ONE,
+                BigDecimal.ZERO,
+                snapshotHc,
+                BigDecimal.ONE);
     }
 
     private static SimulationRun run(UUID scenarioId, String type) {

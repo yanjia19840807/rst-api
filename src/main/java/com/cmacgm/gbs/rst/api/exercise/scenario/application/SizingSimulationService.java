@@ -138,7 +138,9 @@ public class SizingSimulationService {
         ForecastBundleView forecast =
                 forecasts.previewMonthlyAndDailyForecast(ownerCcgid, exerciseId, scenarioId);
         MonthlySizingView monthly = computeMonthlyView(ownerCcgid, scenarioId, ctx, forecast.monthly());
-        DailySizingView daily = computeDailyView(ownerCcgid, scenarioId, ctx, forecast.daily());
+        DailySizingView daily = forecast.daily() == null
+                ? null
+                : computeDailyView(ownerCcgid, scenarioId, ctx, forecast.daily());
         return new SizingPreviewBundle(forecast, monthly, daily);
     }
 
@@ -154,11 +156,17 @@ public class SizingSimulationService {
             MonthlySizingView monthly,
             DailySizingView daily,
             BigDecimal rightSizingHc) {
-        if (monthly == null || daily == null) {
+        if (monthly == null) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "sizing-results-required",
-                    "Monthly and daily sizing results are required to persist.");
+                    "Monthly sizing results are required to persist.");
+        }
+        if ((daily == null) != (dailyForecastRunId == null)) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "sizing-results-required",
+                    "Daily forecast and daily sizing must be saved together.");
         }
         validateMonthlyHc(monthly, rightSizingHc);
         Instant now = clock.instant();
@@ -190,6 +198,9 @@ public class SizingSimulationService {
                     row.capacityCreation()));
         }
         monthlyResults.saveAll(monthlyRows);
+        if (daily == null) {
+            return;
+        }
 
         SimulationRun dailyRun = SimulationRun.accepted(
                 scenarioId,

@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.cmacgm.gbs.rst.api.common.error.ApiException;
+import com.cmacgm.gbs.rst.api.exercise.associateddata.persistence.ExerciseVolumeDailyInputRepository;
 import com.cmacgm.gbs.rst.api.exercise.domain.RstExercise;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.MonthlySizingResult;
 import com.cmacgm.gbs.rst.api.exercise.scenario.domain.Scenario;
@@ -17,7 +18,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 /**
- * Official / Submit package: measured Right Sizing HC plus committed sizing snapshots.
+ * Official / Submit package: measured Right Sizing HC plus committed monthly sizing.
+ * Daily sizing is required only when the Exercise has Daily Actual Volume.
+ * A saved Daily sizing snapshot with no Daily Volume is stale and blocks the gate.
+ * Slot Simulation is optional even when a Slot Period is set.
  */
 @Component
 public class ScenarioOfficialReadiness {
@@ -27,41 +31,57 @@ public class ScenarioOfficialReadiness {
     private final SimulationRunRepository simulationRuns;
     private final MonthlySizingResultRepository monthlyResults;
     private final DailySimulationResultRepository dailyResults;
+    private final ExerciseVolumeDailyInputRepository dailyVolumes;
 
     public ScenarioOfficialReadiness(
             SimulationRunRepository simulationRuns,
             MonthlySizingResultRepository monthlyResults,
-            DailySimulationResultRepository dailyResults) {
+            DailySimulationResultRepository dailyResults,
+            ExerciseVolumeDailyInputRepository dailyVolumes) {
         this.simulationRuns = simulationRuns;
         this.monthlyResults = monthlyResults;
         this.dailyResults = dailyResults;
+        this.dailyVolumes = dailyVolumes;
     }
 
     /**
-     * Ensures the scenario has a positive Right Sizing HC and matching committed
-     * monthly / daily sizing. Slot Simulation is optional even when a Slot Period is set.
+     * Ensures the scenario has a positive Right Sizing HC and matching committed monthly sizing.
      *
      * @param exercise owning Exercise
      * @param scenario candidate Official scenario
      * @param gate {@code Official} or {@code Submit}
      */
     public void requireReady(RstExercise exercise, Scenario scenario, String gate) {
-        requireReady(scenario, gate);
+        requireReady(scenario, gate, dailyVolumes.hasActualVolume(exercise.getId()));
     }
 
     void requireReady(Scenario scenario, String gate) {
+        requireReady(scenario, gate, true);
+    }
+
+    void requireReady(Scenario scenario, String gate, boolean dailyVolumeEntered) {
         BigDecimal hc = scenario.getRightSizingHc();
         SimulationRun monthly = accepted(scenario.getId(), "MONTHLY_SIZING");
         SimulationRun daily = accepted(scenario.getId(), "DAILY");
         List<MonthlySizingResult> rows =
                 monthly == null ? List.of() : monthlyResults.findBySimulationRunId(monthly.getId());
-        boolean hasSizing =
-                monthly != null
-                        && daily != null
-                        && !rows.isEmpty()
-                        && !dailyResults.findBySimulationRunIdOrderByResultDateAsc(daily.getId()).isEmpty();
-        if (hc == null || hc.signum() <= 0 || !hasSizing) {
+        boolean hasMonthly = monthly != null && !rows.isEmpty();
+        boolean hasDailySnapshot = daily != null
+                && !dailyResults.findBySimulationRunIdOrderByResultDateAsc(daily.getId()).isEmpty();
+        if (hc == null || hc.signum() <= 0 || !hasMonthly) {
             throw unprocessable("sizing-results-required", missingSizingMessage(gate));
+        }
+        if (dailyVolumeEntered && !hasDailySnapshot) {
+            throw unprocessable(
+                    "sizing-results-required",
+                    "Daily Volume is entered, but Daily sizing was not saved. "
+                            + "Run Sizing Simulation before " + gate + ".");
+        }
+        if (!dailyVolumeEntered && hasDailySnapshot) {
+            throw unprocessable(
+                    "daily-sizing-stale",
+                    "Daily Volume was removed after Daily sizing was saved. "
+                            + "Run Sizing Simulation again before " + gate + ".");
         }
         BigDecimal expected = hc.setScale(6, RoundingMode.HALF_UP);
         for (MonthlySizingResult row : rows) {

@@ -122,7 +122,7 @@ public class CurrentDataService {
      * @param q search text
      * @param page 1-based page
      * @param pageSize page size
-     * @return positions occupied by people of this center
+     * @return positions of this center, including a vacant parent one or two levels above a seated person
      */
     @Transactional(readOnly = true)
     public PageResponse<PositionView> positions(String center, String q, int page, int pageSize) {

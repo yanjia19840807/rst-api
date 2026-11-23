@@ -121,6 +121,15 @@ public class ValidationResult {
         }
 
         /**
+         * Daily sizing was skipped because the Exercise has no Daily Actual Volume.
+         *
+         * @return detail
+         */
+        public static Detail dailySizingOmitted() {
+            return new Detail("no-daily-volume", 0, List.of(), null, null, null, null, null);
+        }
+
+        /**
          * TMS ratio payload.
          *
          * @param reason comparison outcome

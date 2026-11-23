@@ -94,6 +94,13 @@ public class SimulationRun {
     public Instant getCompletedAt() { return completedAt; }
     public UUID getScenarioId() { return scenarioId; }
     public UUID getForecastRunId() { return forecastRunId; }
+
+    /**
+     * Drops the forecast reference so a kept run does not block deletion of that forecast.
+     */
+    public void detachForecast() {
+        this.forecastRunId = null;
+    }
     public String getRunType() { return runType; }
     public int getRunNo() { return runNo; }
     public String getStatus() { return status; }

@@ -783,7 +783,7 @@ public class ApprovalService {
         if (ccgid == null) {
             return null;
         }
-        return names.computeIfAbsent(ccgid, timesheet::displayNameByCcgid);
+        return names.computeIfAbsent(ccgid, workforce::displayNameByCcgid);
     }
 
     private Map<String, String> displayNames(ProcessInstance workflow) {

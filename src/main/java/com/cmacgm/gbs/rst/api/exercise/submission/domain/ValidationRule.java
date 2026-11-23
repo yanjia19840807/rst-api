@@ -5,7 +5,9 @@ package com.cmacgm.gbs.rst.api.exercise.submission.domain;
  */
 public enum ValidationRule {
     DAILY_VS_MONTHLY(ValidationSeverity.WARNING),
-    TMS_RATIO(ValidationSeverity.WARNING);
+    TMS_RATIO(ValidationSeverity.WARNING),
+    /** Daily Volume was empty, so Daily sizing was not run. */
+    DAILY_SIZING_OMITTED(ValidationSeverity.WARNING);
 
     private final ValidationSeverity severity;
 

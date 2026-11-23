@@ -102,14 +102,19 @@ public class ForecastOrchestrationService {
     }
 
     /**
-     * Previews monthly then daily forecast without persisting.
+     * Previews monthly forecast, then daily forecast when the Exercise has Daily Actual Volume.
+     * Monthly is always required. An empty Daily Volume grid skips the daily model.
+     * When daily rows exist, both gates run before either model call.
      */
     @Transactional(readOnly = true)
     public ForecastBundleView previewMonthlyAndDailyForecast(
             String ownerCcgid, UUID exerciseId, UUID scenarioId) {
         requireForecastEnabled();
-        ForecastView monthly = executeMonthlyForecast(ownerCcgid, exerciseId, scenarioId);
-        ForecastView daily = executeDailyForecast(ownerCcgid, exerciseId, scenarioId);
+        PreparedForecast prepared = prepareForecast(ownerCcgid, exerciseId, scenarioId);
+        ForecastView monthly = forecastMonthly(ownerCcgid, scenarioId, prepared);
+        ForecastView daily = prepared.includeDaily()
+                ? forecastDaily(ownerCcgid, scenarioId, prepared)
+                : null;
         return new ForecastBundleView(monthly, daily);
     }
 
@@ -121,36 +126,79 @@ public class ForecastOrchestrationService {
     @Transactional
     public PersistedForecastIds persistForecastBundle(
             UUID scenarioId, String ownerCcgid, ForecastBundleView bundle) {
-        if (bundle == null || bundle.monthly() == null || bundle.daily() == null) {
+        if (bundle == null || bundle.monthly() == null) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "forecast-bundle-required",
-                    "Monthly and daily forecast results are required to persist.");
+                    "Monthly forecast results are required to persist.");
         }
         Scenario scenario = scenarios.findById(scenarioId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "scenario-not-found", "The Scenario was not found."));
         RstExercise exercise = exercises.requireOwned(ownerCcgid, scenario.getExerciseId());
         String monthlyHash = ToolkitVolumeService.hashPoints(volumeTraining.assembleMonthly(exercise));
-        String dailyHash = ToolkitVolumeService.hashPoints(volumeTraining.assembleDaily(exercise));
         ForecastRun monthly = forecastRuns.save(toEntity(scenarioId, ownerCcgid, bundle.monthly(), 1, monthlyHash));
-        ForecastRun daily = forecastRuns.save(toEntity(scenarioId, ownerCcgid, bundle.daily(), 2, dailyHash));
-        return new PersistedForecastIds(monthly.getId(), daily.getId());
+        UUID dailyId = null;
+        if (bundle.daily() != null) {
+            String dailyHash = ToolkitVolumeService.hashPoints(volumeTraining.assembleDaily(exercise));
+            ForecastRun daily = forecastRuns.save(toEntity(scenarioId, ownerCcgid, bundle.daily(), 2, dailyHash));
+            dailyId = daily.getId();
+        }
+        return new PersistedForecastIds(monthly.getId(), dailyId);
+    }
+
+    /**
+     * Loads monthly training, and daily training only when the Exercise has Daily Actual Volume.
+     * The sizing-month monthly gate always runs before a model call. The daily last-day gate
+     * runs in the same step when daily rows exist.
+     */
+    private PreparedForecast prepareForecast(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
+        RstExercise exercise = requireEditableDraft(ownerCcgid, exerciseId, scenarioId);
+        YearMonth sizingMonth = YearMonth.from(exercise.getSizingMonth());
+        YearMonth forecastMonth = sizingMonth.plusMonths(1);
+        CalendarContext calendar = loadCalendar(exerciseId);
+
+        List<TrainingPoint> monthlyAssembled = volumeTraining.assembleMonthly(exercise);
+        List<MonthlyActual> monthlyHistory = buildMonthlyHistory(
+                sizingMonth, monthlyAssembled, calendar.weekendCode(), calendar.nonWorkingHolidays());
+        List<MonthlyFuture> monthlyFuture = buildMonthlyFuture(
+                sizingMonth, calendar.weekendCode(), calendar.nonWorkingHolidays());
+
+        boolean includeDaily = volumeTraining.hasExerciseDailyActual(exercise.getId());
+        List<TrainingPoint> dailyAssembled = List.of();
+        List<DailyActual> dailyHistory = List.of();
+        List<DailyFuture> dailyFuture = List.of();
+        if (includeDaily) {
+            dailyAssembled = volumeTraining.assembleDaily(exercise);
+            dailyHistory = buildDailyHistory(
+                    exercise.getSizingMonth(),
+                    dailyAssembled,
+                    calendar.weekendCode(),
+                    calendar.kinds());
+            dailyFuture = buildDailyFuture(
+                    dailyHistory.getLast().date(),
+                    forecastMonth,
+                    calendar.weekendCode(),
+                    calendar.kinds());
+        }
+        return new PreparedForecast(
+                includeDaily,
+                monthlyAssembled,
+                dailyAssembled,
+                monthlyHistory,
+                monthlyFuture,
+                dailyHistory,
+                dailyFuture,
+                forecastMonth);
     }
 
     /**
      * Builds monthly forecast for a DRAFT scenario (not persisted).
      */
-    private ForecastView executeMonthlyForecast(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
-        RstExercise exercise = requireEditableDraft(ownerCcgid, exerciseId, scenarioId);
-        YearMonth sizingMonth = YearMonth.from(exercise.getSizingMonth());
-        CalendarContext calendar = loadCalendar(exerciseId);
-
-        List<TrainingPoint> assembled = volumeTraining.assembleMonthly(exercise);
-        List<MonthlyActual> history = buildMonthlyHistory(
-                sizingMonth, assembled, calendar.weekendCode(), calendar.nonWorkingHolidays());
-        List<MonthlyFuture> future = buildMonthlyFuture(
-                sizingMonth, calendar.weekendCode(), calendar.nonWorkingHolidays());
+    private ForecastView forecastMonthly(String ownerCcgid, UUID scenarioId, PreparedForecast prepared) {
+        List<TrainingPoint> assembled = prepared.monthlyAssembled();
+        List<MonthlyActual> history = prepared.monthlyHistory();
+        List<MonthlyFuture> future = prepared.monthlyFuture();
 
         MonthlyForecastRequest request = new MonthlyForecastRequest(
                 history, future, properties.confidenceLevel());
@@ -190,24 +238,11 @@ public class ForecastOrchestrationService {
     /**
      * Builds daily forecast for a DRAFT scenario (not persisted).
      */
-    private ForecastView executeDailyForecast(String ownerCcgid, UUID exerciseId, UUID scenarioId) {
-        RstExercise exercise = requireEditableDraft(ownerCcgid, exerciseId, scenarioId);
-        YearMonth sizingMonth = YearMonth.from(exercise.getSizingMonth());
-        YearMonth forecastMonth = sizingMonth.plusMonths(1);
-        CalendarContext calendar = loadCalendar(exerciseId);
-
-        List<TrainingPoint> assembled = volumeTraining.assembleDaily(exercise);
-        List<DailyActual> history = buildDailyHistory(
-                exercise.getSizingMonth(),
-                assembled,
-                calendar.weekendCode(),
-                calendar.kinds());
-        LocalDate lastHistory = history.getLast().date();
-        List<DailyFuture> future = buildDailyFuture(
-                lastHistory,
-                forecastMonth,
-                calendar.weekendCode(),
-                calendar.kinds());
+    private ForecastView forecastDaily(String ownerCcgid, UUID scenarioId, PreparedForecast prepared) {
+        YearMonth forecastMonth = prepared.forecastMonth();
+        List<TrainingPoint> assembled = prepared.dailyAssembled();
+        List<DailyActual> history = prepared.dailyHistory();
+        List<DailyFuture> future = prepared.dailyFuture();
 
         DailyForecastRequest request = new DailyForecastRequest(
                 history, future, properties.confidenceLevel());
@@ -354,8 +389,9 @@ public class ForecastOrchestrationService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_CONTENT,
                     "forecast-sizing-actual-required",
-                    "Enter Actual Volume for the sizing month in Associated Data → Volume Input → Monthly "
-                            + "before forecast.");
+                    "Enter Actual Volume for " + sizingMonth
+                            + " in Associated Data → Volume Input → Monthly. Months before "
+                            + sizingMonth + " do not replace the sizing month.");
         }
 
         List<MonthlyActual> history = new ArrayList<>();
@@ -409,8 +445,11 @@ public class ForecastOrchestrationService {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_CONTENT,
                     "forecast-daily-train-end-actual-required",
-                    "Enter Actual Volume for the last day of Daily train (" + trainEnd
-                            + ") in Associated Data → Volume Input → Daily before forecast.");
+                    "Enter Actual Volume for " + trainEnd
+                            + " in Associated Data → Volume Input → Daily. That is the last day of sizing month "
+                            + YearMonth.from(sizingMonth)
+                            + ". Dates in " + YearMonth.from(sizingMonth).plusMonths(1)
+                            + " are forecast and cannot be entered.");
         }
 
         List<DailyActual> history = new ArrayList<>();
@@ -538,6 +577,17 @@ public class ForecastOrchestrationService {
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException("SHA-256 not available", ex);
         }
+    }
+
+    private record PreparedForecast(
+            boolean includeDaily,
+            List<TrainingPoint> monthlyAssembled,
+            List<TrainingPoint> dailyAssembled,
+            List<MonthlyActual> monthlyHistory,
+            List<MonthlyFuture> monthlyFuture,
+            List<DailyActual> dailyHistory,
+            List<DailyFuture> dailyFuture,
+            YearMonth forecastMonth) {
     }
 
     private record CalendarContext(

@@ -138,6 +138,24 @@ public interface OrgSeatRepository
     List<OrgSeat> findActiveMyHrByPositionId(@Param("positionId") String positionId);
 
     /**
+     * Seats of these positions in the ACTIVE MyHR snapshot.
+     *
+     * @param positionIds MyHR position codes
+     * @return seats
+     */
+    @Query("""
+            select o
+            from OrgSeat o, SourceSnapshot r
+            where o.id.syncRunId = r.id
+              and r.kind = 'MYHR'
+              and r.status = 'ACTIVE'
+              and o.id.positionId in :positionIds
+            order by o.id.positionId, o.id.roleType, o.id.ccgid
+            """)
+    List<OrgSeat> findActiveMyHrByPositionIdIn(
+            @Param("positionIds") Collection<String> positionIds);
+
+    /**
      * Positions this person holds for one role in the ACTIVE MyHR snapshot.
      *
      * @param ccgid identity

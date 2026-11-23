@@ -556,7 +556,7 @@ public class TmsSessionQueryService {
             Map<UUID, AuditActorView> created,
             Map<UUID, AuditActorView> updated) {
         String agentName = names.computeIfAbsent(
-                session.getAgentCcgid(), timesheet::displayNameByCcgid);
+                session.getAgentCcgid(), workforce::displayNameByCcgid);
         AuditActorView createdBy = created.get(session.getId());
         if (createdBy == null && created.isEmpty()) {
             createdBy = audits.createdBy(AuditEntityType.TMS_SESSION, session.getId());

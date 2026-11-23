@@ -156,6 +156,22 @@ public class SourceSnapshot {
     }
 
     /**
+     * Keeps a successful upload in history without making it current.
+     *
+     * @param rowCount source row count
+     * @param dataHash content hash
+     * @param completedAt completion time
+     */
+    public void markKept(int rowCount, String dataHash, Instant completedAt) {
+        this.status = "ARCHIVED";
+        this.rowCount = rowCount;
+        this.dataHash = dataHash;
+        this.completedAt = completedAt;
+        this.errorCode = null;
+        this.errorMessage = null;
+    }
+
+    /**
      * Archives a previously ACTIVE run.
      *
      * @param completedAt archive time

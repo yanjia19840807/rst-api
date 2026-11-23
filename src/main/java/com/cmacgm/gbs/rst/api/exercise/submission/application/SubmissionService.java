@@ -361,6 +361,15 @@ public class SubmissionService {
     private List<ValidationResult> evaluateFindings(RstExercise exercise, String actorCcgid) {
         List<ValidationResult> findings = new ArrayList<>();
         findings.add(evaluateDailyVsMonthly(exercise, actorCcgid));
+        if (!dailyVolumes.hasActualVolume(exercise.getId())) {
+            findings.add(ValidationResult.create(
+                    exercise.getId(),
+                    ValidationRule.DAILY_SIZING_OMITTED,
+                    false,
+                    ValidationResult.Detail.dailySizingOmitted(),
+                    actorCcgid,
+                    clock.instant()));
+        }
         ValidationResult tmsRatio = evaluateTmsRatio(exercise, actorCcgid);
         if (tmsRatio != null) {
             findings.add(tmsRatio);
