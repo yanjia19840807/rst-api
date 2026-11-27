@@ -89,9 +89,9 @@ JUnit uses `application-test.yml` only.
 
 Host, SSO callback, `SSO_ENV`, cookie `secure`, forecast base URL
 (`http://rst-forecast-svc.rightsizingtool-{dev,uat,pre,prd}.svc.cluster.local:8000`), and the Timesheet folder
-(`4.RST/0.DEV` / `2.UAT` / `2.5.PRE` / `3.Production`) are written in the profile file.
-SharePoint site, library, GBS Process list, mail from-address, `mail.redirect-to`, and sync cron are fixed in `application.yml`.
-`mail.redirect-to` is empty, so mail goes to the real recipients.
+Dev and UAT read `4.RST/3.Production`. Pre reads `4.RST/2.5.PRE`. Prod reads `4.RST/3.Production`.
+SharePoint site, library, GBS Process list, mail from-address, and sync cron are fixed in `application.yml`.
+`mail.redirect-to` is empty in the shared file. Dev and UAT set it to `yanjiafelix@gmail.com`, so those environments send every message there and put the original recipient in the subject. Pre and prod leave it empty, so mail goes to the real recipients.
 
 dev / uat / pre / prod authenticate with Azure authorization-code + HttpOnly session.
 This machine uses profile `uat` as well. `./scripts/run-local-sso.sh` keeps the
@@ -177,7 +177,7 @@ Recurring sync uses Quartz when `timesheet.sync.daily.enabled` or
 | --- | --- | --- |
 | `timesheet.sharepoint.site` | `…/sites/CMA-SharedKPIAutomation` | Timesheet document-library site |
 | `timesheet.sharepoint.library` | `Timesheet` | Document library display name |
-| `timesheet.sharepoint.root` | `4.RST/0.DEV` / `1.SIT` / `2.UAT` / `2.5.PRE` / `3.Production` | RST folder (`Daily`, `Monthly`, `Manual/{Timesheet,Volume,Calendar,Support,CycleTime}`, `Template`) |
+| `timesheet.sharepoint.root` | dev/uat/prod `4.RST/3.Production`, pre `4.RST/2.5.PRE` | RST folder (`Daily`, `Monthly`, `Manual/{Timesheet,Volume,Calendar,Support,CycleTime}`, `Template`) |
 | `timesheet.sync.daily.enabled` | `false` | Register Daily Quartz job |
 | `timesheet.sync.daily.cron` | `0 0 6 * * ?` | Daily Quartz cron |
 | `timesheet.sync.monthly.enabled` | `false` | Register Monthly Quartz job |

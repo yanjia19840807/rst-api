@@ -122,4 +122,21 @@ class TimesheetReportParserTests {
 
         assertThat(row.empJobRole()).isEqualTo("Billing Clerk");
     }
+
+    @Test
+    void foldsNumberedCustomerCountryOntoTheBaseName() {
+        String csv = HEADERS
+                + "\n202607" + BODY.replace(",MY,", ",MALAYSIA 1,")
+                + "\n202607" + BODY.replace(",MY,", ",MALAYSIA,")
+                + "\n202607" + BODY.replace(",MY,", ",BOLLORE CHINA 6,")
+                + "\n202607" + BODY.replace(",MY,", ",\"HONG KONG SAR, CHINA\",")
+                + "\n";
+
+        List<TimesheetReportParser.ReportRow> rows = parser.parse(
+                new ByteArrayInputStream(csv.getBytes(StandardCharsets.UTF_8)), "monthly.csv");
+
+        assertThat(rows)
+                .extracting(TimesheetReportParser.ReportRow::customerCountry)
+                .containsExactly("MALAYSIA", "MALAYSIA", "BOLLORE CHINA", "HONG KONG SAR, CHINA");
+    }
 }

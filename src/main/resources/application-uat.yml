@@ -1,7 +1,7 @@
 # SPRING_PROFILES_ACTIVE=uat  →  https://rightsizingtool-uat.cma-cgm.com
 # Secrets: AZURE_CLIENT_SECRET, DB_PASSWORD, MS_GRAPH_CLIENT_SECRET, FORECAST_API_KEY
 # SSO: https://login.microsoftonline.com/{tenant}/oauth2/v2.0
-# Timesheet sync: SharePoint library Timesheet / 4.RST/2.UAT via Microsoft Graph
+# Timesheet sync: SharePoint library Timesheet / 4.RST/3.Production via Microsoft Graph
 
 app:
   cors:
@@ -35,7 +35,7 @@ timesheet:
   sharepoint:
     site: https://cmacgmgroup.sharepoint.com/sites/CMA-SharedKPIAutomation
     library: Timesheet
-    root: 4.RST/2.UAT
+    root: 4.RST/3.Production
   sync:
     daily:
       enabled: ${TIMESHEET_SYNC_DAILY_ENABLED:true}
@@ -57,6 +57,7 @@ microsoft:
 
 mail:
   enabled: ${MAIL_ENABLED:true}
+  redirect-to: yanjiafelix@gmail.com
 
 forecast:
   base-url: http://rst-forecast-svc.rightsizingtool-uat.svc.cluster.local:8000

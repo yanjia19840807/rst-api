@@ -2,7 +2,9 @@ package com.cmacgm.gbs.rst.api.timesheet.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.util.List;
@@ -248,6 +250,46 @@ class TimesheetMonthlyCalculatorTests {
 
         assertThat(result.issues()).isEmpty();
         assertThat(result.kpis()).extracting(SupervisorDeliveryHc::getPl3Code).containsExactly("PL3");
+    }
+
+    @Test
+    void sumsNumberedCustomerCountrySlicesOntoOneKey() {
+        String headers = "month,emp_emp_id,emp_ccgid,emp_name,emp_email,emp_position_id,"
+                + "supervisor_emp_id,supervisor_ccgid,supervisor_name,supervisor_position_id,"
+                + "sr_manager_emp_id,sr_manager_ccgid,sr_manager_name,sr_manager_position_id,"
+                + "domain_head_emp_id,domain_head_ccgid,domain_head_name,domain_head_position_id,"
+                + "center,site,gbs_domain,pl1,pl2,pl3_code,pl3,carrier,customer_country,hc,"
+                + "management_or_production,cost_type";
+        String line = ",EMP-1,S00000001,Agent One,agent@dev.local,EMP-POS-1,"
+                + "SUP-1,S00000002,Supervisor One,POS-SUP-1,"
+                + "SRM-1,S00000003,Manager One,POS-SRM-1,"
+                + "DH-1,S00000004,Head One,POS-DH-1,"
+                + "GBS CHINA,CNCKG,Finance,PL1,PL2,PL3,PL3 Name,CEVA,%s,%s,production,productive";
+        String csv = headers
+                + "\n202610" + line.formatted("MALAYSIA 1", "0.2")
+                + "\n202610" + line.formatted("MALAYSIA 3", "0.3")
+                + "\n202610" + line.formatted("MALAYSIA", "0.5")
+                + "\n202610" + line.formatted("BOLLORE CHINA 1", "0.4")
+                + "\n202610" + line.formatted("BOLLORE CHINA 2", "0.6")
+                + "\n202610" + line.formatted("CHINA", "1")
+                + "\n";
+        List<ReportRow> rows = new TimesheetReportParser().parse(
+                new ByteArrayInputStream(csv.getBytes(StandardCharsets.UTF_8)), "monthly.csv");
+
+        TimesheetMonthlyCalculator.Result result = calculator.compute(
+                UUID.randomUUID(),
+                rows,
+                Instant.parse("2026-11-06T00:00:00Z"),
+                null,
+                RST_YES);
+
+        assertThat(result.issues()).isEmpty();
+        assertThat(result.kpis())
+                .extracting(SupervisorDeliveryHc::getCustomerCountry, SupervisorDeliveryHc::getHc)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple("MALAYSIA", new BigDecimal("1.000000")),
+                        org.assertj.core.groups.Tuple.tuple("BOLLORE CHINA", new BigDecimal("1.000000")),
+                        org.assertj.core.groups.Tuple.tuple("CHINA", new BigDecimal("1.000000")));
     }
 
     private static ReportRow row(
