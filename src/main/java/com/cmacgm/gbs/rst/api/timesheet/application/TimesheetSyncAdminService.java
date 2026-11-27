@@ -10,14 +10,20 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -47,6 +53,7 @@ import com.cmacgm.gbs.rst.api.timesheet.persistence.SourceSnapshotSpecification;
 @Service
 public class TimesheetSyncAdminService {
 
+    private static final Logger log = LoggerFactory.getLogger(TimesheetSyncAdminService.class);
     private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
     private static final Pattern MISSING_FIELD = Pattern.compile("(?i)^Missing (.+)\\.$");
     private static final int MAX_RECIPIENTS = 20;
@@ -60,6 +67,7 @@ public class TimesheetSyncAdminService {
     private final MicrosoftGraphService graph;
     private final Clock clock;
     private final CenterSourceService centerSources;
+    private final AtomicBoolean sharePointSyncRunning = new AtomicBoolean(false);
 
     /**
      * @param syncRuns run headers
@@ -237,6 +245,70 @@ public class TimesheetSyncAdminService {
                 principal == null ? "SYSTEM" : principal.ccgid());
         alerts.save(row);
         return new AlertConfig(row.isEnabled(), recipients);
+    }
+
+    /**
+     * Starts a SharePoint Daily then Monthly sync for every center. Returns while the
+     * work continues. The signed-in user stays on the worker thread so each run is
+     * audited as that person, not {@code SYSTEM}.
+     *
+     * @param principal global admin
+     * @return running status
+     */
+    public SharePointSyncStatus startSharePointSync(RstPrincipal principal) {
+        SourceDataAccess.requireGlobal(principal);
+        if (!sharePointSyncRunning.compareAndSet(false, true)) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    TimesheetSyncErrorCode.SYNC_IN_PROGRESS.code(),
+                    "A SharePoint Timesheet sync is already running.");
+        }
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String actor = principal == null ? "SYSTEM" : principal.ccgid();
+        try {
+            Thread.ofVirtual().name("timesheet-sharepoint-sync").start(() -> runSharePointSync(authentication, actor));
+        } catch (RuntimeException ex) {
+            sharePointSyncRunning.set(false);
+            throw ex;
+        }
+        return new SharePointSyncStatus(true);
+    }
+
+    /**
+     * @param principal global admin
+     * @return whether a manual SharePoint sync is still in progress
+     */
+    public SharePointSyncStatus sharePointSyncStatus(RstPrincipal principal) {
+        SourceDataAccess.requireGlobal(principal);
+        return new SharePointSyncStatus(sharePointSyncRunning.get());
+    }
+
+    private void runSharePointSync(Authentication authentication, String actor) {
+        SecurityContext context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(authentication);
+        SecurityContextHolder.setContext(context);
+        log.info("Manual SharePoint Timesheet sync starting: actor={}", actor);
+        try {
+            runSharePointKind("DAILY", actor);
+            runSharePointKind("MONTHLY", actor);
+            log.info("Manual SharePoint Timesheet sync finished: actor={}", actor);
+        } finally {
+            SecurityContextHolder.clearContext();
+            sharePointSyncRunning.set(false);
+        }
+    }
+
+    private void runSharePointKind(String kind, String actor) {
+        try {
+            syncService.syncFromSharePoint(kind);
+        } catch (RuntimeException ex) {
+            log.error(
+                    "Manual SharePoint Timesheet sync failed: kind={} actor={} {}",
+                    kind,
+                    actor,
+                    ex.getMessage(),
+                    ex);
+        }
     }
 
     /**
@@ -533,6 +605,12 @@ public class TimesheetSyncAdminService {
     }
 
     public record Overview(List<RunHeader> daily, List<RunHeader> monthly, PageResponse<RunHeader> runs) {
+    }
+
+    /**
+     * @param running true while a manual SharePoint sync is in progress
+     */
+    public record SharePointSyncStatus(boolean running) {
     }
 
     public record AlertConfig(boolean enabled, List<String> recipients) {

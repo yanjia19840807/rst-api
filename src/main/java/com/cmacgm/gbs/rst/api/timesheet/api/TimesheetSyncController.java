@@ -17,10 +17,12 @@ import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSnapshotBrowseServi
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSnapshotBrowseService.SnapshotFilters;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSyncAdminService;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSyncAdminService.AlertConfig;
+import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSyncAdminService.SharePointSyncStatus;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSyncAdminService.Overview;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSyncAdminService.RunDetail;
 import com.cmacgm.gbs.rst.api.timesheet.application.TimesheetSyncAdminService.RunHeader;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -30,6 +32,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -158,6 +161,25 @@ public class TimesheetSyncController {
             @AuthenticationPrincipal RstPrincipal principal, @RequestBody AlertConfig request) {
         SourceDataAccess.requireGlobal(principal);
         return admin.saveAlert(principal, request);
+    }
+
+    /**
+     * Pulls the latest Daily and Monthly files from the configured SharePoint folder.
+     * Admin only. The call returns while each center is still syncing.
+     */
+    @PostMapping("/sharepoint")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public SharePointSyncStatus startSharePoint(@AuthenticationPrincipal RstPrincipal principal) {
+        return admin.startSharePointSync(principal);
+    }
+
+    /**
+     * @param principal global admin
+     * @return whether the manual SharePoint sync is still running
+     */
+    @GetMapping("/sharepoint")
+    public SharePointSyncStatus sharePoint(@AuthenticationPrincipal RstPrincipal principal) {
+        return admin.sharePointSyncStatus(principal);
     }
 
     @GetMapping("/{id}/file")

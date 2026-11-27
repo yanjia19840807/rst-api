@@ -1,7 +1,7 @@
 # SPRING_PROFILES_ACTIVE=uat  →  https://rightsizingtool-uat.cma-cgm.com
 # Secrets: AZURE_CLIENT_SECRET, DB_PASSWORD, MS_GRAPH_CLIENT_SECRET, FORECAST_API_KEY
 # SSO: https://login.microsoftonline.com/{tenant}/oauth2/v2.0
-# Timesheet sync: SharePoint library Timesheet / 4.RST/3.Production via Microsoft Graph
+# Timesheet sync: SharePoint library Timesheet / 4.RST/2.UAT via Microsoft Graph
 
 app:
   cors:
@@ -35,13 +35,13 @@ timesheet:
   sharepoint:
     site: https://cmacgmgroup.sharepoint.com/sites/CMA-SharedKPIAutomation
     library: Timesheet
-    root: 4.RST/3.Production
+    root: 4.RST/2.UAT
   sync:
     daily:
-      enabled: ${TIMESHEET_SYNC_DAILY_ENABLED:true}
+      enabled: true
       cron: "0 0 6 * * ?"
     monthly:
-      enabled: ${TIMESHEET_SYNC_MONTHLY_ENABLED:true}
+      enabled: true
       cron: "0 30 6 * * ?"
 
 process:

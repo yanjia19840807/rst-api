@@ -89,7 +89,7 @@ JUnit uses `application-test.yml` only.
 
 Host, SSO callback, `SSO_ENV`, cookie `secure`, forecast base URL
 (`http://rst-forecast-svc.rightsizingtool-{dev,uat,pre,prd}.svc.cluster.local:8000`), and the Timesheet folder
-Dev and UAT read `4.RST/3.Production`. Pre reads `4.RST/2.5.PRE`. Prod reads `4.RST/3.Production`.
+Dev and UAT read `4.RST/2.UAT`. Pre reads `4.RST/2.5.PRE`. Prod reads `4.RST/3.Production`.
 SharePoint site, library, GBS Process list, mail from-address, and sync cron are fixed in `application.yml`.
 `mail.redirect-to` is empty in the shared file. Dev and UAT set it to `yanjiafelix@gmail.com`, so those environments send every message there and put the original recipient in the subject. Pre and prod leave it empty, so mail goes to the real recipients.
 
@@ -169,15 +169,19 @@ Automatic sync picks the file whose **name** has the latest business date
 `Monthly Report of yyyyMM(GBS CHINA).xlsx`). Two files on the same date fail
 with `AMBIGUOUS_SOURCE`. LTH uploads land in `{root}/Manual/Timesheet` and activate
 immediately when valid; they do not pause the Quartz schedule.
+An admin can start the same SharePoint pull from Source Data → Timesheet
+(`POST /api/v1/timesheet/sync/sharepoint`). The request returns while each center
+is still syncing, and the audit actor is the signed-in user.
 
 Recurring sync uses Quartz when `timesheet.sync.daily.enabled` or
-`timesheet.sync.monthly.enabled` is true. Cron is system configuration only.
+`timesheet.sync.monthly.enabled` is true. The uat profile turns both on and reads
+`4.RST/2.UAT`. Cron is system configuration only.
 
 | Property | Default | Purpose |
 | --- | --- | --- |
 | `timesheet.sharepoint.site` | `…/sites/CMA-SharedKPIAutomation` | Timesheet document-library site |
 | `timesheet.sharepoint.library` | `Timesheet` | Document library display name |
-| `timesheet.sharepoint.root` | dev/uat/prod `4.RST/3.Production`, pre `4.RST/2.5.PRE` | RST folder (`Daily`, `Monthly`, `Manual/{Timesheet,Volume,Calendar,Support,CycleTime}`, `Template`) |
+| `timesheet.sharepoint.root` | dev/uat `4.RST/2.UAT`, pre `4.RST/2.5.PRE`, prod `4.RST/3.Production` | RST folder (`Daily`, `Monthly`, `Manual/{Timesheet,Volume,Calendar,Support,CycleTime}`, `Template`) |
 | `timesheet.sync.daily.enabled` | `false` | Register Daily Quartz job |
 | `timesheet.sync.daily.cron` | `0 0 6 * * ?` | Daily Quartz cron |
 | `timesheet.sync.monthly.enabled` | `false` | Register Monthly Quartz job |
