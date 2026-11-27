@@ -60,7 +60,7 @@ public class SsoUserResolver {
         String tokenEmail = firstClaim(jwt, "email", "preferred_username");
 
         Set<String> productRoles = new LinkedHashSet<>();
-        if (ssoNames.contains("LOCAL_TRANSFORMATION_HEAD")) {
+        if (ssoNames.contains("LTH")) {
             productRoles.add(RstRoles.LOCAL_TRANSFORMATION_HEAD);
         }
         if (ssoNames.contains("GOVERNANCE")) {

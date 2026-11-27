@@ -73,7 +73,7 @@ class SsoUserResolverTests {
 
         var principal = resolver.resolve(token(
                 "S001",
-                List.of("CMACGM_APP_RST_LOCAL_TRANSFORMATION_HEAD_UAT"),
+                List.of("CMACGM_APP_RST_LTH_UAT"),
                 "LTH One",
                 "lth@cma-cgm.com",
                 "GBS PHILIPPINES"));
@@ -210,7 +210,7 @@ class SsoUserResolverTests {
         var principal = resolver.resolve(token(
                 "S001",
                 List.of(
-                        "CMACGM_APP_RST_LOCAL_TRANSFORMATION_HEAD_UAT",
+                        "CMACGM_APP_RST_LTH_UAT",
                         "CMACGM_APP_RST_GOVERNANCE_UAT"),
                 "LTH Gov",
                 "lthgov@cma-cgm.com",
@@ -294,7 +294,7 @@ class SsoUserResolverTests {
 
         assertThatThrownBy(() -> resolver.resolve(token(
                         "S001",
-                        List.of("CMACGM_APP_RST_LOCAL_TRANSFORMATION_HEAD_UAT"),
+                        List.of("CMACGM_APP_RST_LTH_UAT"),
                         "LTH One",
                         "lth@cma-cgm.com",
                         "Kuala Lumpur")))
